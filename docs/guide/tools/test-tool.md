@@ -13,9 +13,8 @@ For the general Tool/Core/Standard-Library/runtime boundary, start with
 [`TOOL002`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL002/TOOL002_TEST_TOOL.md).
 
 > **Current-surface note:** this chapter documents the executable Test Tool that
-> exists now. `TOOL005` is separately extending repository-wide corpus routing.
-> Its ratified suite-graph architecture is not described here as though it were
-> already an invokable user feature.
+> exists now. The repository suite graph that orders its plans is an internal
+> routing structure, not a public CLI selection surface.
 
 ## First use
 
@@ -30,24 +29,21 @@ installed/repository toolchain. It does **not** recursively discover arbitrary
 `*.protos` files from the current working directory, and the current CLI does not
 take a user-supplied test-root or manifest path.
 
-Today the bundled entry point executes four explicit plans, in this logical
-order:
+Today the bundled entry point executes the leaves of the repository suite graph
+([`RepositorySuite.protos`](../../../protos/tools/test/RepositorySuite.protos))
+in their fixed logical order. Each leaf is reported under a phase label such as
+`main`, `actor`, `group` or `package-toml`; the complete label list lives in
+[`Main.protos`](../../../protos/tools/test/Main.protos). The first phase, `main`,
+is the primary language/runtime/library conformance corpus rooted at
+`protos/tests/conformance`.
 
-| Phase | Current corpus root | Purpose |
-|---|---|---|
-| `main` | `protos/tests/conformance` | Primary language/runtime/library conformance corpus retained by the Test Tool |
-| `actor` | `protos/tests/conformance/actor` | Actor-specific corpus with its selected module environment |
-| `group` | `protos/tests/conformance/group` | Actor Group-specific corpus with its selected module environment |
-| `package-toml` | `protos/tests/package-tool/toml-syntax` | Retained Package Tool TOML syntax corpus |
-
-This four-plan routing is a **current implementation boundary**, not a design
-recommendation for future corpus composition. [`TOOL005`](https://github.com/guillermomolina/protos/issues/468)
-owns the migration away from hard-coded repository corpus roots.
+This routing is a **current implementation boundary**, not a design
+recommendation for future corpus composition.
 
 ## The corpus is manifest-driven
 
-Each current plan has a `manifest.tsv`. For the ordinary conformance-style
-plans, every non-empty, non-comment line has three tab-separated fields:
+Manifest-backed plans, such as `main`, have a `manifest.tsv`. For the ordinary
+conformance-style plans, every non-empty, non-comment line has three tab-separated fields:
 
 ```text
 path<TAB>expectation<TAB>expected
@@ -245,8 +241,8 @@ part of the portable `--jobs` contract.
 ## Progress is separate from case completion order
 
 The current Test Tool reports phase progress independently from guest case
-streams. Phases are named `main`, `actor`, `group` and `package-toml`, and the
-progress layer can report failed cases plus phase/invocation summaries.
+streams. Phases use the suite-graph labels described in [First use](#first-use),
+and the progress layer can report failed cases plus phase/invocation summaries.
 
 Detailed failure classes, final diagnostics and public exit-status meaning are
 covered by the DOC005 results/diagnostics slice. The important fundamental rule
@@ -321,10 +317,6 @@ With the current published executable surface:
 - it does not expose the D122 suite graph as a public CLI selection surface;
 - `--jobs` does not mean "number of Actors" or "number of host threads";
 - manifest ordering remains semantically relevant even when cases overlap.
-
-Repository-wide Test Tool corpus routing is active work under TOOL005. This
-guide should be updated when that owning implementation is actually published,
-not when an architectural candidate merely exists.
 
 ## Results and exit status
 
@@ -565,29 +557,19 @@ and infrastructure evidence.
 
 ## Resource-guide status
 
-The public `protos test` path now applies the already-ratified
-`resource-requirements.toml` join to manifest-backed corpus plans before progress
-counting and D108 scheduling. True absence preserves the complete plan unchanged;
-a present sidecar remains fail-closed under the existing D094 acquisition,
-schema and D091 referential-join rules.
+For manifest-backed and `package-toml` plans, the Test Tool still applies the
+ratified `resource-requirements.toml` join while planning. True absence of the
+sidecar leaves the plan without added requirements; a present sidecar remains
+fail-closed under the existing D094 acquisition, schema and D091
+referential-join rules. This is retained planning/validation behavior only.
 
-[`TOOL006 / #473`](https://github.com/guillermomolina/protos/issues/473)
-restores this public wiring; it does not introduce new resource syntax, catalog,
-provider, reservation or scheduling semantics.
-
-A complete resource-backed user recipe remains owned by DOC005-C. This chapter
-does not invent that documentation surface merely because the implementation
-blocker has been removed.
+The current Test Tool does not execute resource-backed Cases. Every scheduled
+Case runs through the logical Case runner, which fails closed if a Case carries
+resource requirements. A parsed `--resource-catalog PATH` does not feed that
+execution path, and no public resource provider, binding or reservation path
+exists. This chapter therefore documents no resource-aware recipe.
 
 ## Where to go next
 
 This chapter now covers the current Test Tool fundamentals plus the published
 result/diagnostic/exit-status and CI surface.
-
-Resource requirements/catalogs and provider/profile semantics remain the next
-user-facing documentation layer under DOC005-C. TOOL006 removes the public
-wiring blocker so that owning documentation slice can now describe the
-resource-backed command path from executable evidence.
-
-Repository-wide suite/corpus routing remains separate work under TOOL005 and will
-be reconciled only after its implementation is published.
