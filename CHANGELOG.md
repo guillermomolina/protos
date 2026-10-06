@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.228-SNAPSHOT
+
+- `AUD006-A4` (guillermomolina/protos#453) makes `std:cli/CommandLine.parse`
+  Array accumulation linear, restoring the D115 time bound for the option,
+  raw-positional and positional builders. No specification change, no public
+  API change and no observable CommandLine semantic change.
+  - Replaced the balanced-chunk builder (Theta(N log N) through repeated
+    `Array(...left, ...chunk)` copies) with the private D101-style
+    `ProtosCommandLineArrayConstructionFacility`: N amortized O(1) appends to
+    an invocation-local host buffer and one O(N) materialization of a single
+    ordinary standard Array; no zero-copy ownership transfer.
+  - The frozen stateless builder factory is a standard initial member of the
+    exact `std:cli/CommandLine` module only; `parse` captures it lexically and
+    module initialization removes the bootstrap slot, so the published module
+    surface remains `option`, `positional`, `command`, `parse`, `renderHelp`.
+  - The facility is classified as an audited non-Core native-Closure provider;
+    added focal facility evidence tests.
+
 ## 0.3.227-SNAPSHOT
 
 - `DOC008-B` (guillermomolina/protos#560) completes the safe D067 Standard

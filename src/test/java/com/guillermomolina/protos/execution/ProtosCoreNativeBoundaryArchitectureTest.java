@@ -87,6 +87,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
             Map.ofEntries(
+                    Map.entry("execution/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
                     Map.entry("execution/ProtosTestToolCatalogAcquisitionFacility.java", 1),
                     Map.entry("execution/ProtosTestToolFileSelectionFacility.java", 2),
@@ -111,7 +112,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             || relative.equals(
                                     "execution/ProtosTestToolFileSelectionFacility.java")
                             || relative.equals(
-                                    "execution/ProtosTestToolStalledCaseDiagnosticFacility.java")) {
+                                    "execution/ProtosTestToolStalledCaseDiagnosticFacility.java")
+                            || relative.equals(
+                                    "execution/ProtosCommandLineArrayConstructionFacility.java")) {
                         actualNonCore.put(relative, count);
                     } else {
                         actualCore.put(relative, count);

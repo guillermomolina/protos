@@ -437,7 +437,7 @@ public final class ProtosCoreBootstrap {
     }
 
     /**
-     * Exact runtime-owned initial members of standard modules (D172, D167).
+     * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -455,7 +455,11 @@ public final class ProtosCoreBootstrap {
                 new ProtosModuleKey("std:io/BufferedReader"),
                 Map.of("BufferedReader", bufferedReaderFactory),
                 new ProtosModuleKey("std:io/BufferedWriter"),
-                Map.of("BufferedWriter", bufferedWriterFactory));
+                Map.of("BufferedWriter", bufferedWriterFactory),
+                ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
+                Map.of(
+                        ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT,
+                        ProtosCommandLineArrayConstructionFacility.createFactory()));
     }
 
 
