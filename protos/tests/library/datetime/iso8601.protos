@@ -1,0 +1,228 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+Offset: import("std:datetime/Offset")
+Instant: import("std:datetime/Instant")
+OffsetDateTime: import("std:datetime/OffsetDateTime")
+ISO8601: import("std:datetime/ISO8601")
+
+second: 1000000000
+day: 86400 * second
+
+odt: (year, month, dayOfMonth, hour, minute, seconds, nanosecond, offsetSeconds) => {
+    OffsetDateTime(
+        LocalDateTime(Date(year, month, dayOfMonth), Time(hour, minute, seconds, nanosecond)),
+        Offset(offsetSeconds)
+    )
+}
+
+// Requires every text in `texts` to be rejected by `parse`.
+requireRejected: (parse, texts) => {
+    texts.each((text) => {
+        Assertions.signals(Error, () => {
+            parse(text)
+        })
+    })
+    true
+}
+
+tests: [
+    Test("dates format canonically and parse back", () => {
+        cases: [
+            [Date(2024, 2, 29), "2024-02-29"],
+            [Date(1970, 1, 1), "1970-01-01"],
+            [Date(1, 1, 1), "0001-01-01"],
+            [Date(0, 2, 29), "0000-02-29"],
+            [Date(-1, 12, 31), "-0001-12-31"],
+            [Date(-400, 3, 1), "-0400-03-01"],
+            [Date(-9999, 1, 1), "-9999-01-01"],
+            [Date(9999, 12, 31), "9999-12-31"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.formatDate(entry[0]) == entry[1])
+            Assertions.require(ISO8601.parseDate(entry[1]) == entry[0])
+            Assertions.require(ISO8601.parseDate(ISO8601.formatDate(entry[0])) == entry[0])
+        })
+        null
+    }),
+    Test("unsupported date forms are rejected", () => {
+        requireRejected((text) => ISO8601.parseDate(text), [
+            "20240229", "2024-060", "2024-W09-4", "2024-02", "2024",
+            "+2024-02-29", "+0001-01-01", "-0000-01-01", "24-02-29", "024-02-29",
+            "02024-02-29", "10000-01-01", "-10000-01-01", "2024-2-29", "2024-02-9",
+            "2024-13-01", "2024-00-01", "2024-02-30", "2023-02-29", "2024-04-31",
+            " 2024-02-29", "2024-02-29 ", "2024-02-29T00:00:00", "2024_02_29",
+            "2024-02-2x", "", "-"
+        ])
+        Assertions.signals(Error, () => {
+            ISO8601.parseDate(20240229)
+        })
+        Assertions.signals(Error, () => {
+            ISO8601.formatDate(Time(0, 0, 0, 0))
+        })
+    }),
+    Test("times format canonical fractions and parse back", () => {
+        cases: [
+            [Time(0, 0, 0, 0), "00:00:00"],
+            [Time(12, 34, 56, 0), "12:34:56"],
+            [Time(23, 59, 59, 999999999), "23:59:59.999999999"],
+            [Time(1, 2, 3, 100000000), "01:02:03.1"],
+            [Time(1, 2, 3, 120000000), "01:02:03.12"],
+            [Time(1, 2, 3, 123456789), "01:02:03.123456789"],
+            [Time(1, 2, 3, 1), "01:02:03.000000001"],
+            [Time(1, 2, 3, 1000), "01:02:03.000001"],
+            [Time(1, 2, 3, 500000), "01:02:03.0005"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.formatTime(entry[0]) == entry[1])
+            Assertions.require(ISO8601.parseTime(entry[1]) == entry[0])
+            Assertions.require(ISO8601.parseTime(ISO8601.formatTime(entry[0])) == entry[0])
+        })
+        null
+    }),
+    Test("accepted non-canonical fractions format shortened", () => {
+        Assertions.require(ISO8601.parseTime("01:02:03.120000000") == Time(1, 2, 3, 120000000))
+        Assertions.require(ISO8601.formatTime(ISO8601.parseTime("01:02:03.120000000")) == "01:02:03.12")
+        Assertions.require(ISO8601.formatTime(ISO8601.parseTime("01:02:03.000000000")) == "01:02:03")
+        Assertions.require(ISO8601.formatTime(ISO8601.parseTime("01:02:03.10")) == "01:02:03.1")
+    }),
+    Test("unsupported time forms are rejected", () => {
+        requireRejected((text) => ISO8601.parseTime(text), [
+            "24:00:00", "23:59:60", "12:34", "123456", "12:34:56,5", "12:34:56.",
+            "12:34:56.1234567890", "12:34:56.-1", "12:34:56Z", "12:34:56+01:00",
+            " 12:34:56", "12:34:56 ", "1:02:03", "12:60:00", "12:34:5x", "T12:34:56", ""
+        ])
+        Assertions.signals(Error, () => {
+            ISO8601.formatTime(Date(2024, 1, 1))
+        })
+    }),
+    Test("local date-times use an uppercase T", () => {
+        value: LocalDateTime(Date(2024, 2, 29), Time(12, 34, 56, 123000000))
+        Assertions.require(ISO8601.formatLocalDateTime(value) == "2024-02-29T12:34:56.123")
+        Assertions.require(ISO8601.parseLocalDateTime("2024-02-29T12:34:56.123") == value)
+        cases: [
+            [LocalDateTime(Date(0, 1, 1), Time(0, 0, 0, 0)), "0000-01-01T00:00:00"],
+            [LocalDateTime(Date(-1, 12, 31), Time(23, 59, 59, 999999999)), "-0001-12-31T23:59:59.999999999"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.formatLocalDateTime(entry[0]) == entry[1])
+            Assertions.require(ISO8601.parseLocalDateTime(ISO8601.formatLocalDateTime(entry[0])) == entry[0])
+        })
+        requireRejected((text) => ISO8601.parseLocalDateTime(text), [
+            "2024-02-29t12:34:56", "2024-02-29 12:34:56", "2024-02-2912:34:56",
+            "2024-02-29T12:34:56Z", "2024-02-29T12:34:56+01:00", "2024-02-29T12:34:56[UTC]",
+            "2024-02-29T24:00:00", "2024-02-29T", "T12:34:56", "2024-02-29TT12:34:56", ""
+        ])
+        Assertions.signals(Error, () => {
+            ISO8601.formatLocalDateTime(Date(2024, 1, 1))
+        })
+    }),
+    Test("offset date-times format exact stored offsets", () => {
+        cases: [
+            [odt(1970, 1, 1, 0, 0, 0, 0, 0), "1970-01-01T00:00:00Z"],
+            [odt(2024, 2, 29, 12, 34, 56, 123000000, 3600), "2024-02-29T12:34:56.123+01:00"],
+            [odt(2024, 2, 29, 12, 34, 56, 0, -19800), "2024-02-29T12:34:56-05:30"],
+            [odt(2024, 2, 29, 12, 34, 56, 0, 1), "2024-02-29T12:34:56+00:00:01"],
+            [odt(2024, 2, 29, 12, 34, 56, 0, -3661), "2024-02-29T12:34:56-01:01:01"],
+            [odt(2024, 2, 29, 12, 34, 56, 0, 64800), "2024-02-29T12:34:56+18:00"],
+            [odt(2024, 2, 29, 12, 34, 56, 0, -64800), "2024-02-29T12:34:56-18:00"],
+            [odt(-1, 12, 31, 23, 59, 59, 999999999, -19800), "-0001-12-31T23:59:59.999999999-05:30"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.formatOffsetDateTime(entry[0]) == entry[1])
+            Assertions.require(ISO8601.parseOffsetDateTime(entry[1]) == entry[0])
+            Assertions.require(ISO8601.parseOffsetDateTime(ISO8601.formatOffsetDateTime(entry[0])) == entry[0])
+        })
+        // The same instant through different offsets keeps its own text.
+        utc: odt(1970, 1, 1, 0, 0, 0, 0, 0)
+        shifted: OffsetDateTime.withOffsetSameInstant(utc, Offset(3600))
+        Assertions.require(ISO8601.formatOffsetDateTime(shifted) == "1970-01-01T01:00:00+01:00")
+        Assertions.require(ISO8601.formatOffsetDateTime(utc) == "1970-01-01T00:00:00Z")
+    }),
+    Test("offset spellings parse to exact offsets", () => {
+        local: "2024-02-29T12:34:56"
+        cases: [
+            ["Z", 0], ["+00:00", 0], ["+00:00:00", 0], ["+01:00", 3600], ["-05:30", -19800],
+            ["+00:00:01", 1], ["-00:00:01", -1], ["+18:00", 64800], ["-18:00:00", -64800]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.parseOffsetDateTime(local + entry[0]).offset == Offset(entry[1]))
+        })
+        // Accepted non-canonical spellings format canonically.
+        Assertions.require(ISO8601.formatOffsetDateTime(ISO8601.parseOffsetDateTime(local + "+00:00")) == local + "Z")
+        Assertions.require(ISO8601.formatOffsetDateTime(ISO8601.parseOffsetDateTime(local + "+01:00:00")) == local + "+01:00")
+        Assertions.require(ISO8601.formatOffsetDateTime(ISO8601.parseOffsetDateTime(local + ".120000000Z")) == local + ".12Z")
+    }),
+    Test("malformed and out-of-range offsets are rejected", () => {
+        local: "2024-02-29T12:34:56"
+        suffixes: [
+            "", "z", "-00:00", "-00:00:00", "+18:00:01", "-18:00:01", "+19:00", "+0100",
+            "+01", "+1:00", "+01:0", "+01:00:0", "+01:60", "+01:00:60", "+01:00:00.5",
+            "Z ", " Z", "ZZ", "Z+01:00", "+01:00Z", "+01:00 ", "UTC", "[Europe/Paris]"
+        ]
+        suffixes.each((suffix) => {
+            Assertions.signals(Error, () => {
+                ISO8601.parseOffsetDateTime(local + suffix)
+            })
+        })
+        requireRejected((text) => ISO8601.parseOffsetDateTime(text), [
+            " 2024-02-29T12:34:56Z", "2024-02-29t12:34:56Z", "2024-02-29 12:34:56Z",
+            "2024-02-29T24:00:00Z", "2024-02-29T23:59:60Z", "2024-02-29T12:34Z",
+            "2024-02-29T12:34:56.1234567890Z", "2024-02-29T12:34:56,1Z", "10000-01-01T00:00:00Z", ""
+        ])
+        Assertions.signals(Error, () => {
+            ISO8601.formatOffsetDateTime(LocalDateTime(Date(2024, 1, 1), Time(0, 0, 0, 0)))
+        })
+    }),
+    Test("instants format as UTC text and parse back", () => {
+        cases: [
+            [Instant(0), "1970-01-01T00:00:00Z"],
+            [Instant(-1), "1969-12-31T23:59:59.999999999Z"],
+            [Instant(1), "1970-01-01T00:00:00.000000001Z"],
+            [Instant(11016 * day + 45296 * second), "2000-02-29T12:34:56Z"],
+            [Instant(-4371587 * day), "-9999-01-01T00:00:00Z"],
+            [Instant(2932897 * day - 1), "9999-12-31T23:59:59.999999999Z"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(ISO8601.formatInstant(entry[0]) == entry[1])
+            Assertions.require(ISO8601.parseInstant(entry[1]) == entry[0])
+            Assertions.require(ISO8601.parseInstant(ISO8601.formatInstant(entry[0])) == entry[0])
+        })
+        // Any offset form identifies its instant; formatting always uses Z.
+        Assertions.require(ISO8601.parseInstant("1970-01-01T01:00:00+01:00") == Instant(0))
+        Assertions.require(ISO8601.parseInstant("1969-12-31T23:59:59-00:00:01") == Instant(0))
+        Assertions.require(ISO8601.formatInstant(ISO8601.parseInstant("1970-01-01T01:00:00+01:00")) == "1970-01-01T00:00:00Z")
+    }),
+    Test("instants outside the civil date range have no text", () => {
+        Assertions.signals(Error, () => {
+            ISO8601.formatInstant(Instant(-4371587 * day - 1))
+        })
+        Assertions.signals(Error, () => {
+            ISO8601.formatInstant(Instant(2932897 * day))
+        })
+        Assertions.signals(Error, () => {
+            ISO8601.formatInstant(OffsetDateTime(LocalDateTime(Date(1970, 1, 1), Time(0, 0, 0, 0)), Offset(0)))
+        })
+        requireRejected((text) => ISO8601.parseInstant(text), ["1970-01-01T00:00:00", "1970-01-01T00:00:00-00:00", "0", ""])
+        Assertions.signals(Error, () => {
+            ISO8601.parseInstant(0)
+        })
+    })
+]

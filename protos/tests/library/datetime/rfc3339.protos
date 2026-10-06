@@ -1,0 +1,116 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+Offset: import("std:datetime/Offset")
+OffsetDateTime: import("std:datetime/OffsetDateTime")
+ISO8601: import("std:datetime/ISO8601")
+RFC3339: import("std:datetime/RFC3339")
+
+odt: (year, month, dayOfMonth, hour, minute, seconds, nanosecond, offsetSeconds) => {
+    OffsetDateTime(
+        LocalDateTime(Date(year, month, dayOfMonth), Time(hour, minute, seconds, nanosecond)),
+        Offset(offsetSeconds)
+    )
+}
+
+tests: [
+    Test("representative timestamps parse exactly", () => {
+        Assertions.require(RFC3339.parseOffsetDateTime("1985-04-12T23:20:50.52Z") == odt(1985, 4, 12, 23, 20, 50, 520000000, 0))
+        Assertions.require(RFC3339.parseOffsetDateTime("1996-12-19T16:39:57-08:00") == odt(1996, 12, 19, 16, 39, 57, 0, -28800))
+        Assertions.require(RFC3339.parseOffsetDateTime("1937-01-01T12:00:27.87+00:20") == odt(1937, 1, 1, 12, 0, 27, 870000000, 1200))
+        Assertions.require(RFC3339.parseOffsetDateTime("0000-01-01T00:00:00+00:00") == odt(0, 1, 1, 0, 0, 0, 0, 0))
+        Assertions.require(RFC3339.parseOffsetDateTime("9999-12-31T23:59:59.999999999+18:00") == odt(9999, 12, 31, 23, 59, 59, 999999999, 64800))
+        Assertions.require(RFC3339.parseOffsetDateTime("2024-02-29T00:00:00.000000001-18:00") == odt(2024, 2, 29, 0, 0, 0, 1, -64800))
+    }),
+    Test("timestamps format canonically and parse back", () => {
+        cases: [
+            [odt(1985, 4, 12, 23, 20, 50, 520000000, 0), "1985-04-12T23:20:50.52Z"],
+            [odt(1996, 12, 19, 16, 39, 57, 0, -28800), "1996-12-19T16:39:57-08:00"],
+            [odt(1937, 1, 1, 12, 0, 27, 870000000, 1200), "1937-01-01T12:00:27.87+00:20"],
+            [odt(0, 2, 29, 0, 0, 0, 0, 0), "0000-02-29T00:00:00Z"],
+            [odt(9999, 12, 31, 23, 59, 59, 999999999, -64800), "9999-12-31T23:59:59.999999999-18:00"],
+            [odt(2024, 2, 29, 12, 34, 56, 1, 19800), "2024-02-29T12:34:56.000000001+05:30"]
+        ]
+        cases.each((entry) => {
+            Assertions.require(RFC3339.formatOffsetDateTime(entry[0]) == entry[1])
+            Assertions.require(RFC3339.parseOffsetDateTime(entry[1]) == entry[0])
+            Assertions.require(RFC3339.parseOffsetDateTime(RFC3339.formatOffsetDateTime(entry[0])) == entry[0])
+        })
+        // Accepted non-canonical spellings format canonically.
+        Assertions.require(RFC3339.formatOffsetDateTime(RFC3339.parseOffsetDateTime("2024-01-01T00:00:00.120000000+00:00")) == "2024-01-01T00:00:00.12Z")
+        // The stored local date-time and offset are written without UTC normalization.
+        shifted: OffsetDateTime.withOffsetSameInstant(odt(1970, 1, 1, 0, 0, 0, 0, 0), Offset(-3600))
+        Assertions.require(RFC3339.formatOffsetDateTime(shifted) == "1969-12-31T23:00:00-01:00")
+    }),
+    Test("timestamps outside the bounded profile are rejected", () => {
+        texts: [
+            "2024-01-01T00:00:00-00:00",
+            "1990-12-31T23:59:60Z", "1990-12-31T15:59:60-08:00",
+            "2024-01-01T00:00:00.1234567890Z",
+            "2024-01-01t00:00:00Z", "2024-01-01T00:00:00z", "2024-01-01 00:00:00Z",
+            "2024-01-01T00:00:00+0100", "2024-01-01T00:00:00+01:00:00", "2024-01-01T00:00:00+00:00:01",
+            "2024-01-01T00:00:00+18:01", "2024-01-01T00:00:00-19:00",
+            "-0001-01-01T00:00:00Z", "+2024-01-01T00:00:00Z", "02024-01-01T00:00:00Z",
+            "024-01-01T00:00:00Z", "10000-01-01T00:00:00Z",
+            "2024-01-01T00:00:00", "2024-01-01T00:00Z", "2024-01-01T00:00+01:00",
+            "2023-02-29T00:00:00Z", "2024-13-01T00:00:00Z", "2024-01-01T24:00:00Z",
+            "2024-01-01T00:00:00Zjunk", "2024-01-01T00:00:00+01:00x",
+            " 2024-01-01T00:00:00Z", "2024-01-01T00:00:00Z ",
+            "2024-01-01T00:00:00.Z", "2024-01-01T00:00:00,5Z", "2024-01-01", ""
+        ]
+        texts.each((text) => {
+            Assertions.signals(Error, () => {
+                RFC3339.parseOffsetDateTime(text)
+            })
+        })
+        Assertions.signals(Error, () => {
+            RFC3339.parseOffsetDateTime(0)
+        })
+    }),
+    Test("values without RFC 3339 text cannot be formatted", () => {
+        Assertions.signals(Error, () => {
+            RFC3339.formatOffsetDateTime(odt(-1, 12, 31, 0, 0, 0, 0, 0))
+        })
+        Assertions.signals(Error, () => {
+            RFC3339.formatOffsetDateTime(odt(2024, 1, 1, 0, 0, 0, 0, 1))
+        })
+        Assertions.signals(Error, () => {
+            RFC3339.formatOffsetDateTime(odt(2024, 1, 1, 0, 0, 0, 0, -3601))
+        })
+        Assertions.signals(Error, () => {
+            RFC3339.formatOffsetDateTime(LocalDateTime(Date(2024, 1, 1), Time(0, 0, 0, 0)))
+        })
+    }),
+    Test("ISO8601 and RFC3339 are distinct profiles", () => {
+        secondOffset: odt(2024, 1, 1, 0, 0, 0, 0, 1)
+        Assertions.require(ISO8601.formatOffsetDateTime(secondOffset) == "2024-01-01T00:00:00+00:00:01")
+        Assertions.require(ISO8601.parseOffsetDateTime("2024-01-01T00:00:00+00:00:01") == secondOffset)
+        Assertions.signals(Error, () => {
+            RFC3339.parseOffsetDateTime("2024-01-01T00:00:00+00:00:01")
+        })
+        negativeYear: odt(-1, 12, 31, 0, 0, 0, 0, 0)
+        Assertions.require(ISO8601.formatOffsetDateTime(negativeYear) == "-0001-12-31T00:00:00Z")
+        Assertions.require(ISO8601.parseOffsetDateTime("-0001-12-31T00:00:00Z") == negativeYear)
+        Assertions.signals(Error, () => {
+            RFC3339.parseOffsetDateTime("-0001-12-31T00:00:00Z")
+        })
+        Assertions.require(RFC3339 !== ISO8601)
+    })
+]

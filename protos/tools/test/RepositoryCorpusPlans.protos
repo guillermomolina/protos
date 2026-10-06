@@ -146,7 +146,9 @@ load: (corpusId) => {
             Array("arithmetic.protos", "suite-native", "-"),
             Array("instants.protos", "suite-native", "-"),
             Array("conversions.protos", "suite-native", "-"),
-            Array("families.protos", "suite-native", "-")
+            Array("families.protos", "suite-native", "-"),
+            Array("iso8601.protos", "suite-native", "-"),
+            Array("rfc3339.protos", "suite-native", "-")
             )
         )
         matched = true

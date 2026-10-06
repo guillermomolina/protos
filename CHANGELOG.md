@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.251-SNAPSHOT
+
+- `LIB013-D` (guillermomolina/protos#430) adds explicit temporal text profiles:
+  `std:datetime/ISO8601` and `std:datetime/RFC3339`. There is no
+  specification change, and the datetime value modules are unchanged.
+  - `ISO8601` is a deliberately bounded canonical LIB013 profile inspired by
+    ISO 8601 extended representations, not full ISO 8601 acceptance. It parses
+    and formats `Date`, `Time`, `LocalDateTime`, `OffsetDateTime`, and
+    `Instant`. Years are `YYYY` (`0000`..`9999`) or `-YYYY` (`-0001`..`-9999`).
+    Fractions have one to nine digits, and excess precision is rejected, never
+    rounded. There are no leap seconds and no hour `24`. Offsets are `Z`,
+    `±HH:MM`, or `±HH:MM:SS` within ±18:00, and `-00:00` is rejected.
+    Formatting is canonical and is not normalized to UTC. `formatInstant`
+    writes UTC `Z` text and signals an Error outside `Date`'s supported years.
+  - `RFC3339` is a bounded adapter for `OffsetDateTime` only. It requires
+    four-digit non-negative years, uppercase `T`/`Z`, and minute-resolution
+    `±HH:MM` offsets. It rejects `-00:00` (unknown local offset), leap-second
+    `:60`, and ten or more fraction digits. Formatting signals an Error for
+    negative years and for offsets that are not whole minutes.
+  - Neither profile has time-zone, time-zone database, clock, or locale
+    authority. The `library/datetime` corpus gains `iso8601.protos` and
+    `rfc3339.protos`.
+
 ## 0.3.249-SNAPSHOT
 
 - `BUG020` (guillermomolina/protos#812) keeps the Test Tool running when one

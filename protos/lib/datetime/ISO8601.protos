@@ -1,0 +1,426 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! A deliberately bounded canonical text profile for LIB013 date-time values,
+//! inspired by the ISO 8601 extended representations. This is not full ISO
+//! 8601 acceptance: only the forms below are accepted, and other valid ISO
+//! 8601 representations (basic format, ordinal and week dates, reduced or
+//! truncated precision, comma fractions, expanded years, durations) signal an
+//! Error. The value modules remain the semantic authority; every parse
+//! constructs its result through `std:datetime/Date`, `std:datetime/Time`,
+//! `std:datetime/LocalDateTime`, `std:datetime/Offset`, and
+//! `std:datetime/OffsetDateTime`, and this profile defines no value semantics.
+//!
+//! Grammar, with every numeric field made of exactly the stated count of ASCII
+//! decimal digits:
+//!
+//! - `YEAR` is `YYYY` for years `0` through `9999`, or `-YYYY` holding the
+//!   absolute value for years `-1` through `-9999`. `-0000`, a `+` sign, and
+//!   any other digit count are rejected.
+//! - `DATE` is `YEAR-MM-DD`.
+//! - `TIME` is `HH:MM:SS` optionally followed by `.` and one through nine
+//!   digits, the decimal fraction of one second. Precision is exactly
+//!   nanoseconds; ten or more fraction digits signal an Error and are never
+//!   rounded. There are no leap seconds, so second `60` is rejected, and hour
+//!   `24` is rejected.
+//! - `LOCAL` is `DATE` `T` `TIME` with an uppercase `T`.
+//! - `OFFSET` is `Z`, `+HH:MM`, `-HH:MM`, `+HH:MM:SS`, or `-HH:MM:SS`. Fixed
+//!   offsets keep one-second resolution and must lie within
+//!   `std:datetime/Offset`'s `-18:00:00` through `+18:00:00`. The negative
+//!   zero spellings `-00:00` and `-00:00:00` are rejected.
+//! - An offset date-time is `LOCAL` immediately followed by `OFFSET`.
+//!
+//! No whitespace, trailing text, or other characters are accepted. Formatting
+//! writes exactly these forms: the fraction is omitted for zero nanoseconds
+//! and otherwise is the nine-digit fraction with trailing zeros removed; a
+//! zero offset is written `Z`, and a nonzero offset `±HH:MM`, or `±HH:MM:SS`
+//! when it is not a whole number of minutes. Parsing a formatted value answers
+//! an equal value.
+//!
+//! An offset here is only the fixed `std:datetime/Offset`; the profile has no
+//! time-zone, time-zone database, locale, or clock authority and reads no host
+//! state.
+
+/// Parses `text` as exactly `YEAR-MM-DD` and answers a fresh
+/// `std:datetime/Date`. A non-String argument, any other form, or a date that
+/// `std:datetime/Date` rejects signals an Error.
+parseDate: (text) => {
+    Date: import("std:datetime/Date")
+
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    digits: Map()
+    d: 0
+    (() => d < 10).whileTrue() {
+        digits["0123456789"[d]] = d
+        d = d + 1
+    }
+
+    // Reads exactly `count` decimal digits starting at `start`.
+    number: (start, count) => {
+        value: 0
+        index: start
+        (() => index < (start + count)).whileTrue() {
+            digits.containsKey(text[index]).ifFalse(() => {
+                Error().signal()
+            })
+            value = value * 10 + digits[text[index]]
+            index = index + 1
+        }
+        value
+    }
+
+    negative: (text.size() > 0) && (text[0] == "-")
+    start: 0
+    negative.ifTrue(() => {
+        start = 1
+    })
+    (text.size() == (start + 10)).ifFalse(() => {
+        Error().signal()
+    })
+    ((text[start + 4] == "-") && (text[start + 7] == "-")).ifFalse(() => {
+        Error().signal()
+    })
+    year: number(start, 4)
+    negative.ifTrue(() => {
+        (year == 0).ifTrue(() => {
+            Error().signal()
+        })
+        year = 0 - year
+    })
+    Date(year, number(start + 5, 2), number(start + 8, 2))
+}
+
+/// Answers the canonical `YEAR-MM-DD` text of `date`, a value recognized by
+/// `std:datetime/Date`. Any other argument signals an Error.
+formatDate: (date) => {
+    Date: import("std:datetime/Date")
+
+    Date.recognizes(date).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Writes `value`, which must be non-negative, as exactly `width` digits.
+    pad: (value, width) => {
+        text: ""
+        remaining: value
+        count: 0
+        (() => count < width).whileTrue() {
+            text = "0123456789"[remaining % 10] + text
+            remaining = remaining.div(10)
+            count = count + 1
+        }
+        text
+    }
+
+    sign: ""
+    year: date.year
+    (year < 0).ifTrue(() => {
+        sign = "-"
+        year = 0 - year
+    })
+    sign.concat(pad(year, 4), "-", pad(date.month, 2), "-", pad(date.day, 2))
+}
+
+/// Parses `text` as exactly `HH:MM:SS` with an optional `.` and one through
+/// nine fraction digits, and answers a fresh `std:datetime/Time`. Shorter
+/// fractions are right-padded with zeros to nanoseconds. A non-String
+/// argument, any other form, ten or more fraction digits, or a time that
+/// `std:datetime/Time` rejects (including hour `24` and second `60`) signals
+/// an Error.
+parseTime: (text) => {
+    Time: import("std:datetime/Time")
+
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    digits: Map()
+    d: 0
+    (() => d < 10).whileTrue() {
+        digits["0123456789"[d]] = d
+        d = d + 1
+    }
+
+    // Reads exactly `count` decimal digits starting at `start`.
+    number: (start, count) => {
+        value: 0
+        index: start
+        (() => index < (start + count)).whileTrue() {
+            digits.containsKey(text[index]).ifFalse(() => {
+                Error().signal()
+            })
+            value = value * 10 + digits[text[index]]
+            index = index + 1
+        }
+        value
+    }
+
+    size: text.size()
+    ((size == 8) || ((size >= 10) && (size <= 18))).ifFalse(() => {
+        Error().signal()
+    })
+    ((text[2] == ":") && (text[5] == ":")).ifFalse(() => {
+        Error().signal()
+    })
+    nanosecond: 0
+    (size > 8).ifTrue(() => {
+        (text[8] == ".").ifFalse(() => {
+            Error().signal()
+        })
+        fractionDigits: size - 9
+        nanosecond = number(9, fractionDigits)
+        (() => fractionDigits < 9).whileTrue() {
+            nanosecond = nanosecond * 10
+            fractionDigits = fractionDigits + 1
+        }
+    })
+    Time(number(0, 2), number(3, 2), number(6, 2), nanosecond)
+}
+
+/// Answers the canonical `HH:MM:SS[.fraction]` text of `time`, a value
+/// recognized by `std:datetime/Time`. The fraction is omitted when the
+/// nanosecond is zero and is otherwise the nine-digit nanosecond with trailing
+/// zeros removed. Any other argument signals an Error.
+formatTime: (time) => {
+    Time: import("std:datetime/Time")
+
+    Time.recognizes(time).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Writes `value`, which must be non-negative, as exactly `width` digits.
+    pad: (value, width) => {
+        text: ""
+        remaining: value
+        count: 0
+        (() => count < width).whileTrue() {
+            text = "0123456789"[remaining % 10] + text
+            remaining = remaining.div(10)
+            count = count + 1
+        }
+        text
+    }
+
+    text: pad(time.hour, 2).concat(":", pad(time.minute, 2), ":", pad(time.second, 2))
+    (time.nanosecond > 0).ifTrue(() => {
+        fraction: time.nanosecond
+        width: 9
+        (() => (fraction % 10) == 0).whileTrue() {
+            fraction = fraction.div(10)
+            width = width - 1
+        }
+        text = text.concat(".", pad(fraction, width))
+    })
+    text
+}
+
+/// Parses `text` as exactly `DATE` `T` `TIME` with an uppercase `T` and
+/// answers a fresh `std:datetime/LocalDateTime` built from `parseDate` and
+/// `parseTime`. A non-String argument, a missing or different separator, an
+/// offset or other suffix, or an invalid date or time signals an Error.
+parseLocalDateTime: (text) => {
+    ISO8601: import("std:datetime/ISO8601")
+    LocalDateTime: import("std:datetime/LocalDateTime")
+
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Answers the scalars of `text` from `from` up to, excluding, `to`.
+    slice: (from, to) => {
+        result: ""
+        index: from
+        (() => index < to).whileTrue() {
+            result = result + text[index]
+            index = index + 1
+        }
+        result
+    }
+
+    separator: 0
+    (() => (separator < text.size()) && (text[separator] != "T")).whileTrue() {
+        separator = separator + 1
+    }
+    (separator < text.size()).ifFalse(() => {
+        Error().signal()
+    })
+    LocalDateTime(
+        ISO8601.parseDate(slice(0, separator)),
+        ISO8601.parseTime(slice(separator + 1, text.size()))
+    )
+}
+
+/// Answers the canonical `DATE` `T` `TIME` text of `dateTime`, a value
+/// recognized by `std:datetime/LocalDateTime`. Any other argument signals an
+/// Error.
+formatLocalDateTime: (dateTime) => {
+    ISO8601: import("std:datetime/ISO8601")
+    LocalDateTime: import("std:datetime/LocalDateTime")
+
+    LocalDateTime.recognizes(dateTime).ifFalse(() => {
+        Error().signal()
+    })
+    ISO8601.formatDate(dateTime.date).concat("T", ISO8601.formatTime(dateTime.time))
+}
+
+/// Parses `text` as a local date-time immediately followed by `Z`, `±HH:MM`,
+/// or `±HH:MM:SS`, and answers a fresh `std:datetime/OffsetDateTime` holding
+/// the local date-time and offset exactly as written; nothing is normalized to
+/// UTC. A non-String argument, a missing or malformed offset, `-00:00` or
+/// `-00:00:00`, an offset outside `std:datetime/Offset`'s range, trailing
+/// text, or an invalid local date-time signals an Error.
+parseOffsetDateTime: (text) => {
+    ISO8601: import("std:datetime/ISO8601")
+    Offset: import("std:datetime/Offset")
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Answers the scalars of `text` from `from` up to, excluding, `to`.
+    slice: (from, to) => {
+        result: ""
+        index: from
+        (() => index < to).whileTrue() {
+            result = result + text[index]
+            index = index + 1
+        }
+        result
+    }
+
+    size: text.size()
+    // The offset starts at the first `Z`, `+`, or `-` after the `T`; the
+    // local time itself contains none of them.
+    start: 0
+    (() => (start < size) && (text[start] != "T")).whileTrue() {
+        start = start + 1
+    }
+    isOffsetStart: (scalar) => {
+        (scalar == "Z") || (scalar == "+") || (scalar == "-")
+    }
+    (() => (start < size) && (isOffsetStart(text[start]) == false)).whileTrue() {
+        start = start + 1
+    }
+    (start < size).ifFalse(() => {
+        Error().signal()
+    })
+
+    dateTime: ISO8601.parseLocalDateTime(slice(0, start))
+    offset: null
+    (text[start] == "Z").ifTrue(() => {
+        (size == (start + 1)).ifFalse(() => {
+            Error().signal()
+        })
+        offset = Offset(0)
+    })
+    (offset === null).ifTrue(() => {
+        // The magnitude is `HH:MM` or `HH:MM:SS`; `parseTime` checks the
+        // two-digit fields, and minutes and seconds are at most 59.
+        magnitude: slice(start + 1, size)
+        (magnitude.size() == 5).ifTrue(() => {
+            magnitude = magnitude + ":00"
+        })
+        (magnitude.size() == 8).ifFalse(() => {
+            Error().signal()
+        })
+        fields: ISO8601.parseTime(magnitude)
+        seconds: fields.hour * 3600 + fields.minute * 60 + fields.second
+        (text[start] == "-").ifTrue(() => {
+            (seconds == 0).ifTrue(() => {
+                Error().signal()
+            })
+            seconds = 0 - seconds
+        })
+        offset = Offset(seconds)
+    })
+    OffsetDateTime(dateTime, offset)
+}
+
+/// Answers the canonical text of `value`, a value recognized by
+/// `std:datetime/OffsetDateTime`: its stored local date-time as written by
+/// `formatLocalDateTime`, followed by `Z` for a zero offset, `±HH:MM` for a
+/// whole number of minutes, or `±HH:MM:SS` otherwise. The local date-time and
+/// offset are written exactly as stored; nothing is normalized to UTC or
+/// rounded. Any other argument signals an Error.
+formatOffsetDateTime: (value) => {
+    ISO8601: import("std:datetime/ISO8601")
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+    OffsetDateTime.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Writes `value`, which must be non-negative, as exactly `width` digits.
+    pad: (amount, width) => {
+        text: ""
+        remaining: amount
+        count: 0
+        (() => count < width).whileTrue() {
+            text = "0123456789"[remaining % 10] + text
+            remaining = remaining.div(10)
+            count = count + 1
+        }
+        text
+    }
+
+    offsetText: "Z"
+    seconds: value.offset.seconds
+    (seconds != 0).ifTrue(() => {
+        offsetText = "+"
+        (seconds < 0).ifTrue(() => {
+            offsetText = "-"
+            seconds = 0 - seconds
+        })
+        offsetText = offsetText.concat(pad(seconds.div(3600), 2), ":", pad(seconds.div(60) % 60, 2))
+        ((seconds % 60) != 0).ifTrue(() => {
+            offsetText = offsetText.concat(":", pad(seconds % 60, 2))
+        })
+    })
+    ISO8601.formatLocalDateTime(value.dateTime) + offsetText
+}
+
+/// Parses `text` with `parseOffsetDateTime` and answers the
+/// `std:datetime/Instant` it identifies through
+/// `std:datetime/OffsetDateTime.toInstant`. Any offset form of this profile is
+/// accepted. Invalid text signals an Error.
+parseInstant: (text) => {
+    ISO8601: import("std:datetime/ISO8601")
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+    OffsetDateTime.toInstant(ISO8601.parseOffsetDateTime(text))
+}
+
+/// Answers the canonical UTC text of `instant`, a value recognized by
+/// `std:datetime/Instant`: the offset date-time
+/// `std:datetime/OffsetDateTime.fromInstant(instant, Offset(0))` as written by
+/// `formatOffsetDateTime`, which always ends in `Z`. Instants are unbounded,
+/// but an instant whose UTC date lies outside `std:datetime/Date`'s supported
+/// years has no text in this profile and signals an Error; there is no other
+/// fallback representation. Any other argument signals an Error.
+formatInstant: (instant) => {
+    ISO8601: import("std:datetime/ISO8601")
+    Instant: import("std:datetime/Instant")
+    Offset: import("std:datetime/Offset")
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+    Instant.recognizes(instant).ifFalse(() => {
+        Error().signal()
+    })
+    ISO8601.formatOffsetDateTime(OffsetDateTime.fromInstant(instant, Offset(0)))
+}
