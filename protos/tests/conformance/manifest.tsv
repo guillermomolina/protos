@@ -86,6 +86,13 @@ library/json/event-writer-positive.protos	suite-native	-
 library/json/event-writer-errors.protos	suite-native	-
 library/json/text-adapter-reader.protos	suite-native	-
 library/json/text-adapter-writer.protos	suite-native	-
+library/toml/data-model.protos	suite-native	-
+library/toml/data-model-errors.protos	suite-native	-
+library/toml/parser-positive.protos	suite-native	-
+library/toml/parser-errors.protos	suite-native	-
+library/toml/encoder-positive.protos	suite-native	-
+library/toml/encoder-errors.protos	suite-native	-
+library/toml/roundtrip.protos	suite-native	-
 library/json/final-deep-stress.protos	suite-native	-
 library/json/final-large-materialization.protos	suite-native	-
 library/json/final-streaming-roundtrip.protos	suite-native	-

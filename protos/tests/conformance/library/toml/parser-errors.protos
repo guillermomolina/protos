@@ -1,0 +1,168 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("parse leading zero integer error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 01\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse float without fraction digits error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 1.\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse float without exponent digits error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 1e\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse invalid calendar date error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 1979-02-30\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse invalid second error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 23:59:61\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse invalid string escape error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = \"\\q\"\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse duplicate key error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = 1\nx = 2\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse duplicate table error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "[a]\n[a]\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse dotted key extending inline table error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = { a = 1 }\nx.b = 2\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse multiline inline table without separators error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "x = {\n  a = 1\n  b = 2\n}\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse malformed assignment line error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "good = 1\nthis is not an assignment\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    }),
+    Test("parse non-String input error", () => {
+        TOML: import("std:toml/TOML")
+
+        Assertions.signals(Error, () => {
+            TOML.parse(1)
+        })
+    }),
+    Test("parse TOML 1.1 comment control characters error", () => {
+        TOML: import("std:toml/TOML")
+
+        // Every C0 control except TAB, LF and CR, plus DEL, is forbidden
+        // inside a comment. Latin1 maps each octet to the same code point.
+        octets: Encoding.Latin1.encode("")
+        octet: 0
+        (() => octet < 32).whileTrue(() => {
+            ((octet == 9) || (octet == 10) || (octet == 13)).ifFalse(() => {
+                octets.add(octet)
+            })
+            octet = octet + 1
+        })
+        octets.add(127)
+        controls: Encoding.Latin1.decode(octets)
+
+        Assertions.require(controls.size() == 30)
+        index: 0
+        (() => index < controls.size()).whileTrue(() => {
+            input: "value = 1 # forbidden" + controls[index] + "control\n"
+
+            Assertions.signals(Error, () => {
+                TOML.parse(input)
+            })
+            index = index + 1
+        })
+    }),
+    Test("parse adversarial nine quote run error", () => {
+        TOML: import("std:toml/TOML")
+
+        // Nine quotes are the smallest malformed run that opens a multiline
+        // string with three quotes and then exercises the run > 5 rejection.
+        input: "value = \"\"\"\"\"\"\"\"\"\n"
+
+        Assertions.require(input.size() == 18)
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
+    })
+]
+tests.freeze()

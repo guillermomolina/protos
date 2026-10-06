@@ -1,0 +1,94 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("official style TOML 1.1 document round-trips semantically", () => {
+        TOML: import("std:toml/TOML")
+
+        input:
+            "title = \"TOML Example\"\n" +
+            "escape = \"\\x41\\e\"\n" +
+            "[owner]\n" +
+            "name = \"Tom Preston-Werner\"\n" +
+            "dob = 1979-05-27T07:32:00Z\n" +
+            "[database]\n" +
+            "enabled = true\n" +
+            "ports = [8000, 8001, 8002]\n" +
+            "targets = {\n" +
+            "  cpu = 79.5,\n" +
+            "  case = 72.0,\n" +
+            "}\n" +
+            "[[products]]\n" +
+            "name = \"Hammer\"\n" +
+            "sku = 738594937\n" +
+            "[[products]]\n" +
+            "name = \"Nail\"\n" +
+            "sku = 284758393\n" +
+            "color = \"gray\"\n"
+
+        first: TOML.parse(input)
+        encoded: TOML.encode(first)
+        second: TOML.parse(encoded)
+
+        products: second.value["products"]
+        database: second.value["database"]
+
+        Assertions.require(second.value["title"].value == "TOML Example")
+        Assertions.require(second.value["escape"].value.size() == 2)
+        Assertions.require(
+            second.value["owner"].value["name"].value == "Tom Preston-Werner"
+        )
+        Assertions.require(
+            second.value["owner"].value["dob"].kind === "offsetDateTime"
+        )
+        Assertions.require(database.value["enabled"].value === true)
+        Assertions.require(database.value["ports"].value.size() == 3)
+        Assertions.require(database.value["targets"].value["cpu"].value == 79.5)
+        Assertions.require(database.value["targets"].value["case"].value == 72.0)
+        Assertions.require(products.kind === "array")
+        Assertions.require(products.value.size() == 2)
+        Assertions.require(products.value[0].value["name"].value == "Hammer")
+        Assertions.require(products.value[1].value["name"].value == "Nail")
+        Assertions.require(products.value[1].value["color"].value == "gray")
+    }),
+    Test("mutating parsed semantic data is local to that parse result", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parse("value = 1\n")
+        root.value["extra"] = TOML.integer(99)
+
+        Assertions.require(root.value.containsKey("extra"))
+    }),
+    Test("fresh parse does not observe semantic state from earlier mutation", () => {
+        TOML: import("std:toml/TOML")
+
+        // Re-parse through the same imported module after mutating an
+        // earlier result: no parser or semantic state may be shared.
+        mutated: TOML.parse("value = 1\n")
+        mutated.value["extra"] = TOML.integer(99)
+        Assertions.require(mutated.value.containsKey("extra"))
+
+        root: TOML.parse("value = 1\n")
+
+        Assertions.require(root.value.containsKey("extra") === false)
+        Assertions.require(root.value["value"].value == 1)
+    })
+]
+tests.freeze()

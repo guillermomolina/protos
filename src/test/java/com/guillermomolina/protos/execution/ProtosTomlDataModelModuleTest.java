@@ -20,12 +20,10 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -64,123 +62,6 @@ final class ProtosTomlDataModelModuleTest {
                         "parse",
                         "encode"),
                 module.localSlotsSnapshot().keySet());
-    }
-
-    @Test
-    void semanticConstructorsPreserveApprovedTomlKindsAndPayloads() throws Exception {
-        Object result =
-                evaluate(
-                        """
-                        TOML: import("std:toml/TOML")
-
-                        text: TOML.string("hello")
-                        huge: TOML.integer(123456789012345678901234567890)
-                        negativeZero: TOML.float(-0.0)
-                        flag: TOML.boolean(true)
-                        date: TOML.localDate(2024, 2, 29)
-                        time: TOML.localTime(23, 59, 58, 123400, 6)
-                        local: TOML.localDateTime(2025, 12, 31, 7, 32, 0, 5, 1)
-                        offset: TOML.offsetDateTime(
-                            1979, 5, 27, 0, 32, 0, 999999, 6, -420
-                        )
-                        values: TOML.array(text, huge, negativeZero, flag, date, time)
-                        root: TOML.table(
-                            "name", text,
-                            "values", values,
-                            "local", local,
-                            "offset", offset
-                        )
-
-                        (text.kind === "string") &&
-                            (text.value == "hello") &&
-                            (huge.kind === "integer") &&
-                            (huge.value == 123456789012345678901234567890) &&
-                            (negativeZero.kind === "float") &&
-                            (negativeZero.value === -0.0) &&
-                            (flag.kind === "boolean") &&
-                            (flag.value === true) &&
-                            (date.kind === "localDate") &&
-                            (date.value.year == 2024) &&
-                            (date.value.month == 2) &&
-                            (date.value.day == 29) &&
-                            (time.kind === "localTime") &&
-                            (time.value.hour == 23) &&
-                            (time.value.minute == 59) &&
-                            (time.value.second == 58) &&
-                            (time.value.fraction.coefficient == 123400) &&
-                            (time.value.fraction.digits == 6) &&
-                            (local.kind === "localDateTime") &&
-                            (local.value.year == 2025) &&
-                            (local.value.fraction.coefficient == 5) &&
-                            (local.value.fraction.digits == 1) &&
-                            (offset.kind === "offsetDateTime") &&
-                            (offset.value.offsetMinutes == -420) &&
-                            (offset.value.fraction.coefficient == 999999) &&
-                            (offset.value.fraction.digits == 6) &&
-                            (values.kind === "array") &&
-                            (values.value.size() == 6) &&
-                            (root.kind === "table") &&
-                            (root.value.size() == 4) &&
-                            (root.value["name"].value == "hello") &&
-                            (root.value["values"] === values)
-                        """);
-
-        assertSame(ProtosBooleanValue.TRUE, result);
-    }
-
-    @Test
-    void constructorsFailClosedOnWrongFamiliesAndInvalidTemporalData() throws Exception {
-        assertSignalsTogether(
-                "TOML.string(1)",
-                "TOML.integer(1.0)",
-                "TOML.float(1)",
-                "TOML.boolean(\"true\")",
-                "TOML.localDate(0, 1, 1)",
-                "TOML.localDate(10000, 1, 1)",
-                "TOML.localDate(2023, 2, 29)",
-                "TOML.localDate(2024, 4, 31)",
-                "TOML.localTime(24, 0, 0, 0, 0)",
-                "TOML.localTime(0, 60, 0, 0, 0)",
-                "TOML.localTime(0, 0, 61, 0, 0)",
-                "TOML.localDateTime(2026, 1, 1, 0, 0, 61, 0, 0)",
-                "TOML.offsetDateTime(2026, 1, 1, 0, 0, 61, 0, 0, 0)",
-                "TOML.localTime(0, 0, 0, 1, 0)",
-                "TOML.localTime(0, 0, 0, 10, 1)",
-                "TOML.offsetDateTime(2024, 1, 1, 0, 0, 0, 0, 0, 1440)",
-                "TOML.array({\n"
-                        + "    kind: \"unknown\"\n"
-                        + "    value: null\n"
-                        + "})",
-                "TOML.table(\"x\", TOML.integer(1), \"x\", TOML.integer(2))",
-                "TOML.table(\"dangling\")",
-                "TOML.table(1, TOML.integer(1))");
-    }
-
-    @Test
-    void d104PreservesSecondSixtyAsTomlSemanticDataWithoutEventValidation() throws Exception {
-        Object result =
-                evaluate(
-                        """
-                        TOML: import("std:toml/TOML")
-
-                        time: TOML.localTime(12, 34, 60, 0, 0)
-                        local: TOML.localDateTime(2025, 2, 3, 4, 5, 60, 0, 0)
-                        offset: TOML.offsetDateTime(
-                            2025, 2, 3, 4, 5, 60, 123, 3, 137
-                        )
-
-                        (time.kind === "localTime") &&
-                            (time.value.second == 60) &&
-                            (local.kind === "localDateTime") &&
-                            (local.value.second == 60) &&
-                            (offset.kind === "offsetDateTime") &&
-                            (offset.value.second == 60) &&
-                            (offset.value.offsetMinutes == 137) &&
-                            (offset.value.fraction.coefficient == 123) &&
-                            (offset.value.fraction.digits == 3)
-                        """);
-
-        assertSame(ProtosBooleanValue.TRUE, result);
     }
 
     @Test
@@ -237,53 +118,6 @@ final class ProtosTomlDataModelModuleTest {
 
         assertNotSame(source, copied);
         assertEquals("table", stringSlot(copied, "kind"));
-    }
-
-    private static void assertSignalsTogether(String... expressions) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        StringBuilder source =
-                new StringBuilder(
-                        """
-                        TOML: import("std:toml/TOML")
-                        passed: true
-                        """);
-
-        for (String expression : expressions) {
-            source.append(
-                    """
-                    Error.handle(
-                        () => {
-                    """);
-            source.append(expression).append("\n");
-            source.append(
-                    """
-                            passed = false
-                        },
-                        (error) => { null }
-                    )
-                    """);
-        }
-
-        source.append("passed\n");
-
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                ProtosTestExecutionSupport.evaluate(
-                        source.toString(),
-                        activation));
-    }
-
-    private static Object evaluate(String source) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return ProtosTestExecutionSupport.evaluate(
-                source,
-                prelude.newModuleActivation());
     }
 
     private static String stringSlot(ProtosObjectValue value, String slot) {

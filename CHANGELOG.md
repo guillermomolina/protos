@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.225-SNAPSHOT
+
+- `TEST002-A3` (child of TEST002, guillermomolina/protos#538) migrates the
+  legacy Java/JUnit semantic ownership of the public `std:toml/TOML` module
+  to suite-native Protos Test Tool coverage. No semantic change and no
+  specification change.
+  - New `protos/tests/conformance/library/toml/` cohort (data model,
+    data-model errors, parser positive/errors, encoder positive/errors,
+    round-trip), registered as `suite-native` in the conformance manifest.
+  - Removed `ProtosTomlParserModuleTest` and `ProtosTomlEncoderModuleTest`;
+    `ProtosTomlClosureConformanceTest` retains only the source-level D087 and
+    host-runtime boundary check, and `ProtosTomlDataModelModuleTest` retains
+    only the exact export-surface and Actor-transfer identity checks.
+
 ## 0.3.224-SNAPSHOT
 
 - `TEST009-Q` (child of TEST009, guillermomolina/protos#795) fully reverts
