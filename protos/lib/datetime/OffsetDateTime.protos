@@ -1,0 +1,205 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Local civil date-times paired with one fixed offset. An offset date-time is
+//! a frozen ordinary object with a `dateTime` slot holding a
+//! `std:datetime/LocalDateTime` and an `offset` slot holding a
+//! `std:datetime/Offset`, both stored exactly as given. It carries no time
+//! zone, zone rules, time-zone database version, daylight-saving
+//! disambiguation, or clock state.
+//!
+//! An offset date-time identifies the `std:datetime/Instant` reached by
+//! subtracting its offset from its local date-time read on the proleptic
+//! Gregorian timeline of uniform 86400-second days. The conversions are pure
+//! Integer arithmetic and consult no host time-zone, clock, or text service.
+//!
+//! Every offset date-time's immediate delegation parent is this module, the
+//! canonical offset date-time factory and prototype. `recognizes` accepts
+//! exactly the offset date-times of this family: objects whose immediate
+//! parent is this module, whose local slots are exactly the offset date-time
+//! state and behavior slots, and whose components are a recognized local
+//! date-time and offset.
+//!
+//! Equality is structural: two offset date-times are `==` when their local
+//! date-times are equal and their offsets are equal. Values that identify the
+//! same instant through different local date-times and offsets are therefore
+//! not equal; `sameInstant` compares instants explicitly. `hash` is coherent
+//! with structural equality, so equal values work as the same Map key. `===`
+//! remains ordinary object identity. Offset date-times have no natural total
+//! order, and this module deliberately provides no `compare`.
+
+/// Answers a fresh frozen offset date-time composing `dateTime`, a value
+/// recognized by `std:datetime/LocalDateTime`, and `offset`, a value
+/// recognized by `std:datetime/Offset`. The components are stored as given.
+/// Any other argument signals an Error.
+call: (dateTime, offset) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    behavior: {
+        equals: (other) => {
+            value: this
+            OffsetDateTime.recognizes(other) &&
+                (value.dateTime == other.dateTime) &&
+                (value.offset == other.offset)
+        }
+
+        hash: () => {
+            value: this
+            mix(mix(17, value.dateTime.hash()), value.offset.hash())
+        }
+    }
+
+    result: (OffsetDateTime) {
+        dateTime: dateTime
+        offset: offset
+        ...behavior.alias("equals", "==")
+    }
+    result.freeze()
+
+    OffsetDateTime.recognizes(result).ifFalse(() => {
+        Error().signal()
+    })
+    result
+}
+
+/// Answers `true` exactly when `value` is an offset date-time of this family:
+/// its immediate delegation parent is this module, its local slots are exactly
+/// `dateTime`, `offset`, `equals`, `==`, and `hash`, `dateTime` is recognized
+/// by `std:datetime/LocalDateTime`, and `offset` is recognized by
+/// `std:datetime/Offset`. Answers `false` for any other value.
+recognizes: (value) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+    LocalDateTime: import("std:datetime/LocalDateTime")
+    Offset: import("std:datetime/Offset")
+
+    (value !== null) &&
+        (value.parent() === OffsetDateTime) &&
+        (value.slotNames().size() == 5) &&
+        value.hasSlot("dateTime") &&
+        value.hasSlot("offset") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        LocalDateTime.recognizes(value.dateTime) &&
+        Offset.recognizes(value.offset)
+}
+
+/// Answers the `std:datetime/Instant` identified by `value`: the exact uniform
+/// nanoseconds of `value.dateTime` from `1970-01-01T00:00:00` on the proleptic
+/// Gregorian calendar, minus `value.offset.seconds` seconds. A non-offset
+/// date-time argument signals an Error.
+toInstant: (value) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+    Instant: import("std:datetime/Instant")
+
+    OffsetDateTime.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Integer `div` truncates toward zero; calendar indices need the floor for
+    // a positive divisor.
+    floorDiv: (dividend, divisor) => {
+        quotient: dividend.div(divisor)
+        ((dividend - quotient * divisor) < 0).ifTrue(() => {
+            quotient = quotient - 1
+        })
+        quotient
+    }
+
+    // Days from 1970-01-01, counted in 400-year eras of 146097 days with years
+    // starting on 1 March, the same proleptic Gregorian day numbering as
+    // `std:datetime/Period`; 719468 is the day number of 1970-01-01 from
+    // 0000-03-01.
+    date: value.dateTime.date
+    shiftedYear: date.year
+    shiftedMonth: date.month - 3
+    (date.month <= 2).ifTrue(() => {
+        shiftedYear = date.year - 1
+        shiftedMonth = date.month + 9
+    })
+    era: floorDiv(shiftedYear, 400)
+    yearOfEra: shiftedYear - era * 400
+    dayOfYear: (153 * shiftedMonth + 2).div(5) + date.day - 1
+    dayOfEra: yearOfEra * 365 + yearOfEra.div(4) - yearOfEra.div(100) + dayOfYear
+    days: era * 146097 + dayOfEra - 719468
+
+    time: value.dateTime.time
+    seconds: days * 86400 + time.hour * 3600 + time.minute * 60 + time.second - value.offset.seconds
+    Instant(seconds * 1000000000 + time.nanosecond)
+}
+
+/// Answers the offset date-time with `offset` that identifies `instant`: the
+/// local date-time `offset.seconds` seconds after `instant`, read on the
+/// proleptic Gregorian calendar from `1970-01-01T00:00:00`, paired with the
+/// same `offset` object. Negative positions are normalized with floor
+/// division, so every time field lies in its ordinary range. A local date
+/// outside `std:datetime/Date`'s supported years, or arguments that are not an
+/// instant and an offset, signal an Error; nothing is wrapped or saturated.
+fromInstant: (instant, offset) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+    Instant: import("std:datetime/Instant")
+    Offset: import("std:datetime/Offset")
+    Period: import("std:datetime/Period")
+    Date: import("std:datetime/Date")
+    Time: import("std:datetime/Time")
+    LocalDateTime: import("std:datetime/LocalDateTime")
+
+    (Instant.recognizes(instant) && Offset.recognizes(offset)).ifFalse(() => {
+        Error().signal()
+    })
+
+    nanosecondsPerDay: 86400000000000
+    local: instant.nanoseconds + offset.seconds * 1000000000
+    // Floor division keeps the time of day non-negative before the epoch.
+    days: local.div(nanosecondsPerDay)
+    ((local - days * nanosecondsPerDay) < 0).ifTrue(() => {
+        days = days - 1
+    })
+    ofDay: local - days * nanosecondsPerDay
+
+    // Period application owns the exact day-to-date arithmetic and signals an
+    // Error when the date leaves the supported years.
+    date: Period.addToDate(Period(0, 0, days), Date(1970, 1, 1))
+    time: Time(
+        ofDay.div(3600000000000),
+        ofDay.div(60000000000) % 60,
+        ofDay.div(1000000000) % 60,
+        ofDay % 1000000000
+    )
+    OffsetDateTime(LocalDateTime(date, time), offset)
+}
+
+/// Answers `true` exactly when offset date-times `left` and `right` identify
+/// the same instant, that is when `toInstant(left) == toInstant(right)`, and
+/// `false` otherwise. Structural `==` is unaffected. Non-offset date-time
+/// arguments signal an Error.
+sameInstant: (left, right) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+    OffsetDateTime.toInstant(left) == OffsetDateTime.toInstant(right)
+}
+
+/// Answers the offset date-time with `offset` that identifies the same instant
+/// as `value`; exactly `fromInstant(toInstant(value), offset)`. The local
+/// date-time is recomputed and the given `offset` object is kept. A local date
+/// outside the supported years, or invalid arguments, signal an Error.
+withOffsetSameInstant: (value, offset) => {
+    OffsetDateTime: import("std:datetime/OffsetDateTime")
+    OffsetDateTime.fromInstant(OffsetDateTime.toInstant(value), offset)
+}

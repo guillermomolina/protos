@@ -11,6 +11,7 @@
 //
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 //! Civil dates in the proleptic Gregorian calendar with astronomical year
 //! numbering: year `0` and negative years exist, the Gregorian leap-year rule
@@ -19,8 +20,14 @@
 //! Integer `year`, `month`, and `day` slots; it carries no time, offset, zone,
 //! or clock state.
 //!
-//! Dates answer semantic equality through `==`: two dates are equal when their
-//! year, month, and day are equal. `hash` is coherent with that equality, so
+//! Every date's immediate delegation parent is this module, the canonical
+//! date factory and prototype. `recognizes` accepts exactly the dates of this
+//! family: objects whose immediate parent is this module and whose local slots
+//! are exactly the date state and behavior slots with a valid state. Matching
+//! slots under another parent are not a date.
+//!
+//! Dates answer semantic equality through `==`: two dates are equal when both
+//! are dates and their year, month, and day are equal. `hash` is coherent with that equality, so
 //! independently constructed equal dates work as the same Map key. `===`
 //! remains ordinary object identity. `compare` is the natural chronological
 //! order and answers `0` exactly for equal dates.
@@ -31,56 +38,17 @@
 /// An invalid or out-of-range field signals an Error; no field is clamped,
 /// wrapped, or normalized.
 call: (year, month, day) => {
-    (Integer.recognizes(year) && Integer.recognizes(month) && Integer.recognizes(day)).ifFalse(() => {
-        Error().signal()
-    })
-    ((year >= -9999) && (year <= 9999)).ifFalse(() => {
-        Error().signal()
-    })
-    ((month >= 1) && (month <= 12)).ifFalse(() => {
-        Error().signal()
-    })
-
-    // Divisibility by 4, 100, and 400 is sign-independent, so the rule applies
-    // unchanged to year zero and negative years.
-    leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
-    length: 31
-    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
-        length = 30
-    })
-    (month == 2).ifTrue(() => {
-        length = 28
-        leap.ifTrue(() => {
-            length = 29
-        })
-    })
-    ((day >= 1) && (day <= length)).ifFalse(() => {
-        Error().signal()
-    })
-
-    isDate: (value) => {
-        (value !== null) &&
-            value.hasSlot("year") &&
-            value.hasSlot("month") &&
-            value.hasSlot("day") &&
-            Integer.recognizes(value.year) &&
-            Integer.recognizes(value.month) &&
-            Integer.recognizes(value.day)
-    }
+    Date: import("std:datetime/Date")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
     mix: (accumulated, value) => {
         (accumulated * 31 + value) % 2305843009213693951
     }
 
-    date: {
-        year: year
-        month: month
-        day: day
-
+    behavior: {
         equals: (other) => {
             date: this
-            isDate(other) &&
+            Date.recognizes(other) &&
                 (date.year == other.year) &&
                 (date.month == other.month) &&
                 (date.day == other.day)
@@ -92,28 +60,78 @@ call: (year, month, day) => {
         }
     }
 
-    date.alias("equals", "==").freeze()
+    date: (Date) {
+        year: year
+        month: month
+        day: day
+        ...behavior.alias("equals", "==")
+    }
+    date.freeze()
+
+    // Recognition owns field validation, so construction and recognition
+    // accept exactly the same states.
+    Date.recognizes(date).ifFalse(() => {
+        Error().signal()
+    })
+    date
+}
+
+/// Answers `true` exactly when `value` is a date of this family: its immediate
+/// delegation parent is this module, its local slots are exactly `year`,
+/// `month`, `day`, `equals`, `==`, and `hash`, and its fields form a valid
+/// date. Answers `false` for any other value.
+recognizes: (value) => {
+    Date: import("std:datetime/Date")
+
+    shaped: (value !== null) &&
+        (value.parent() === Date) &&
+        (value.slotNames().size() == 6) &&
+        value.hasSlot("year") &&
+        value.hasSlot("month") &&
+        value.hasSlot("day") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.year) &&
+        Integer.recognizes(value.month) &&
+        Integer.recognizes(value.day) &&
+        (value.year >= -9999) &&
+        (value.year <= 9999) &&
+        (value.month >= 1) &&
+        (value.month <= 12)
+
+    valid: false
+    shaped.ifTrue(() => {
+        year: value.year
+        month: value.month
+        // Divisibility by 4, 100, and 400 is sign-independent, so the rule
+        // applies unchanged to year zero and negative years.
+        leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
+        length: 31
+        ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+            length = 30
+        })
+        (month == 2).ifTrue(() => {
+            length = 28
+            leap.ifTrue(() => {
+                length = 29
+            })
+        })
+        valid = (value.day >= 1) && (value.day <= length)
+    })
+    valid
 }
 
 /// Answers `-1`, `0`, or `1` as date `left` is chronologically before, equal
 /// to, or after date `right`, ordering by year, then month, then day. The
 /// result is `0` exactly when `left == right`. Arguments must be dates
-/// answered by this module's constructor; otherwise an Error is signalled.
+/// recognized by this module; otherwise an Error is signalled.
 compare: (left, right) => {
-    requireDate: (value) => {
-        ((value !== null) &&
-            value.hasSlot("year") &&
-            value.hasSlot("month") &&
-            value.hasSlot("day") &&
-            Integer.recognizes(value.year) &&
-            Integer.recognizes(value.month) &&
-            Integer.recognizes(value.day)).ifFalse(() => {
-            Error().signal()
-        })
-    }
+    Date: import("std:datetime/Date")
 
-    requireDate(left)
-    requireDate(right)
+    (Date.recognizes(left) && Date.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
 
     compareIntegers: (first, second) => {
         result: 0

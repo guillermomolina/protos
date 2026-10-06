@@ -1,0 +1,233 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+Duration: import("std:datetime/Duration")
+Period: import("std:datetime/Period")
+Offset: import("std:datetime/Offset")
+Instant: import("std:datetime/Instant")
+OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+// Every family answers `true` only for its own values.
+families: [Date, Time, LocalDateTime, Duration, Period, Offset, Instant, OffsetDateTime]
+
+samples: () => {
+    date: Date(2024, 2, 29)
+    time: Time(12, 0, 0, 5)
+    dateTime: LocalDateTime(date, time)
+    [date, time, dateTime, Duration(5), Period(1, 2, 3), Offset(5), Instant(5), OffsetDateTime(dateTime, Offset(5))]
+}
+
+tests: [
+    Test("each value is recognized exactly by its own family", () => {
+        values: samples()
+        i: 0
+        (() => i < families.size()).whileTrue() {
+            j: 0
+            (() => j < values.size()).whileTrue() {
+                Assertions.require(families[i].recognizes(values[j]) === (i == j))
+                j = j + 1
+            }
+            Assertions.require(values[i].parent() === families[i])
+            Assertions.require(families[i].recognizes(null) === false)
+            Assertions.require(families[i].recognizes(5) === false)
+            Assertions.require(families[i].recognizes(families[i]) === false)
+            i = i + 1
+        }
+    }),
+    Test("durations and instants are distinct families", () => {
+        duration: Duration(5)
+        instant: Instant(5)
+        Assertions.require((duration == instant) === false)
+        Assertions.require((instant == duration) === false)
+        Assertions.require((duration != instant) === true)
+        Assertions.require(duration.hash() == Duration(5).hash())
+        Assertions.require(instant.hash() == Instant(5).hash())
+
+        m: Map()
+        m[duration] = "duration"
+        m[instant] = "instant"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Duration(5)] == "duration")
+        Assertions.require(m[Instant(5)] == "instant")
+
+        Assertions.signals(Error, () => {
+            Duration.compare(duration, instant)
+        })
+        Assertions.signals(Error, () => {
+            Duration.add(duration, instant)
+        })
+        Assertions.signals(Error, () => {
+            Duration.subtract(duration, instant)
+        })
+        Assertions.signals(Error, () => {
+            Duration.negate(instant)
+        })
+        Assertions.signals(Error, () => {
+            Instant.compare(instant, duration)
+        })
+        Assertions.signals(Error, () => {
+            Instant.addDuration(duration, duration)
+        })
+        Assertions.signals(Error, () => {
+            Instant.addDuration(instant, instant)
+        })
+        Assertions.signals(Error, () => {
+            Instant.subtractDuration(instant, instant)
+        })
+        Assertions.signals(Error, () => {
+            Instant.durationBetween(duration, instant)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(duration, Offset(0))
+        })
+    }),
+    Test("matching shapes under another parent are not family members", () => {
+        behavior: {
+            equals: (other) => {
+                false
+            }
+
+            hash: () => {
+                0
+            }
+        }
+
+        plain: {
+            nanoseconds: 5
+            ...behavior.alias("equals", "==")
+        }
+        plain.freeze()
+        Assertions.require(Duration.recognizes(plain) === false)
+        Assertions.require(Instant.recognizes(plain) === false)
+        Assertions.require((Duration(5) == plain) === false)
+        Assertions.require((Instant(5) == plain) === false)
+        Assertions.signals(Error, () => {
+            Duration.add(Duration(1), plain)
+        })
+        Assertions.signals(Error, () => {
+            Instant.addDuration(Instant(1), plain)
+        })
+
+        // A Duration-parented object is still not an Instant.
+        crossed: (Duration) {
+            nanoseconds: 5
+            ...behavior.alias("equals", "==")
+        }
+        crossed.freeze()
+        Assertions.require(Instant.recognizes(crossed) === false)
+        Assertions.require((Instant(5) == crossed) === false)
+
+        // Transitive ancestry does not suffice.
+        grandchild: (Duration(5)) {
+            nanoseconds: 5
+            ...behavior.alias("equals", "==")
+        }
+        grandchild.freeze()
+        Assertions.require(Duration.recognizes(grandchild) === false)
+        Assertions.require((Duration(5) == grandchild) === false)
+
+        date: {
+            year: 2024
+            month: 2
+            day: 29
+            ...behavior.alias("equals", "==")
+        }
+        date.freeze()
+        Assertions.require(Date.recognizes(date) === false)
+        Assertions.require((Date(2024, 2, 29) == date) === false)
+        Assertions.signals(Error, () => {
+            Date.compare(Date(2024, 2, 29), date)
+        })
+        Assertions.signals(Error, () => {
+            Period.addToDate(Period(0, 0, 1), date)
+        })
+
+        dateTime: {
+            date: Date(2024, 2, 29)
+            time: Time(0, 0, 0, 0)
+            ...behavior.alias("equals", "==")
+        }
+        dateTime.freeze()
+        Assertions.require(LocalDateTime.recognizes(dateTime) === false)
+        Assertions.require((LocalDateTime(Date(2024, 2, 29), Time(0, 0, 0, 0)) == dateTime) === false)
+        Assertions.signals(Error, () => {
+            LocalDateTime.compare(dateTime, dateTime)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime(dateTime, Offset(0))
+        })
+
+        offsetDateTime: {
+            dateTime: LocalDateTime(Date(2024, 2, 29), Time(0, 0, 0, 0))
+            offset: Offset(0)
+            ...behavior.alias("equals", "==")
+        }
+        offsetDateTime.freeze()
+        Assertions.require(OffsetDateTime.recognizes(offsetDateTime) === false)
+        Assertions.signals(Error, () => {
+            OffsetDateTime.toInstant(offsetDateTime)
+        })
+    }),
+    Test("ordinary objects with the exact family shape are recognized", () => {
+        behavior: {
+            equals: (other) => {
+                false
+            }
+
+            hash: () => {
+                0
+            }
+        }
+
+        structural: (Duration) {
+            nanoseconds: 7
+            ...behavior.alias("equals", "==")
+        }
+        structural.freeze()
+        Assertions.require(Duration.recognizes(structural) === true)
+        Assertions.require((Duration(7) == structural) === true)
+        Assertions.require(Duration.compare(Duration(7), structural) == 0)
+
+        // Invalid state or extra slots under the right parent are rejected.
+        invalid: (Offset) {
+            seconds: 64801
+            ...behavior.alias("equals", "==")
+        }
+        invalid.freeze()
+        Assertions.require(Offset.recognizes(invalid) === false)
+
+        extra: (Instant) {
+            nanoseconds: 7
+            label: "extra"
+            ...behavior.alias("equals", "==")
+        }
+        extra.freeze()
+        Assertions.require(Instant.recognizes(extra) === false)
+
+        badDate: (Date) {
+            year: 2023
+            month: 2
+            day: 29
+            ...behavior.alias("equals", "==")
+        }
+        badDate.freeze()
+        Assertions.require(Date.recognizes(badDate) === false)
+    })
+]

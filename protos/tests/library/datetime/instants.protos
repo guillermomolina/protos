@@ -1,0 +1,208 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Offset: import("std:datetime/Offset")
+Instant: import("std:datetime/Instant")
+Duration: import("std:datetime/Duration")
+
+// Requires `a` and `b` to be semantically equal, distinct identities, and
+// hash-coherent.
+requireEqual: (a, b) => {
+    Assertions.require((a == b) === true)
+    Assertions.require((b == a) === true)
+    Assertions.require((a != b) === false)
+    Assertions.require((a === b) == false)
+    Assertions.require(Integer.recognizes(a.hash()))
+    Assertions.require(a.hash() == b.hash())
+    true
+}
+
+requireUnequal: (a, b) => {
+    Assertions.require((a == b) === false)
+    Assertions.require((b == a) === false)
+    Assertions.require((a != b) === true)
+    true
+}
+
+// 2^70 + 1 nanoseconds: beyond any 64-bit carrier and beyond exact Float
+// representation.
+large: 1180591620717411303425
+
+tests: [
+    Test("offset construction accepts whole seconds within eighteen hours", () => {
+        Assertions.require(Offset(0).seconds == 0)
+        Assertions.require(Offset(3600).seconds == 3600)
+        Assertions.require(Offset(-18000).seconds == -18000)
+        Assertions.require(Offset(1).seconds == 1)
+        Assertions.require(Offset(-1).seconds == -1)
+        Assertions.require(Offset(64800).seconds == 64800)
+        Assertions.require(Offset(-64800).seconds == -64800)
+        Assertions.signals(Error, () => {
+            Offset(64801)
+        })
+        Assertions.signals(Error, () => {
+            Offset(-64801)
+        })
+        Assertions.signals(Error, () => {
+            Offset(3600.0)
+        })
+        Assertions.signals(Error, () => {
+            Offset(null)
+        })
+        Assertions.signals(Error, () => {
+            Offset("+01:00")
+        })
+        Assertions.signals(Error, () => {
+            Offset(large)
+        })
+    }),
+    Test("offset equality, Map keys, and ordering", () => {
+        requireEqual(Offset(0), Offset(0))
+        requireEqual(Offset(-64800), Offset(-64800))
+        requireEqual(Offset(3600), Offset(60 * 60))
+        requireUnequal(Offset(1), Offset(-1))
+        requireUnequal(Offset(3600), Offset(3601))
+        Assertions.require((Offset(0) == 0) === false)
+        Assertions.require((Offset(0) == null) === false)
+
+        m: Map()
+        m[Offset(3600)] = "plus one"
+        m[Offset(-3600)] = "minus one"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Offset(3600)] == "plus one")
+        m[Offset(3600)] = "replaced"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Offset(3600)] == "replaced")
+        Assertions.require(m.containsKey(Offset(3599)) == false)
+
+        Assertions.require(Offset.compare(Offset(-64800), Offset(64800)) == -1)
+        Assertions.require(Offset.compare(Offset(1), Offset(0)) == 1)
+        Assertions.require(Offset.compare(Offset(-1), Offset(-1)) == 0)
+        Assertions.signals(Error, () => {
+            Offset.compare(Offset(0), 0)
+        })
+    }),
+    Test("instant construction keeps exact nanoseconds", () => {
+        Assertions.require(Instant(0).nanoseconds == 0)
+        Assertions.require(Instant(1).nanoseconds == 1)
+        Assertions.require(Instant(-1).nanoseconds == -1)
+        Assertions.require(Instant(large).nanoseconds == large)
+        Assertions.require(Instant(large.negated()).nanoseconds == large.negated())
+        Assertions.signals(Error, () => {
+            Instant(0.0)
+        })
+        Assertions.signals(Error, () => {
+            Instant(null)
+        })
+        Assertions.signals(Error, () => {
+            Instant("1970-01-01T00:00:00Z")
+        })
+    }),
+    Test("instant equality, Map keys, and ordering", () => {
+        requireEqual(Instant(0), Instant(0))
+        requireEqual(Instant(-1), Instant(-1))
+        requireEqual(Instant(large), Instant(large))
+        requireUnequal(Instant(1), Instant(-1))
+        requireUnequal(Instant(large), Instant(large + 1))
+        Assertions.require((Instant(0) == 0) === false)
+        Assertions.require((Instant(0) == null) === false)
+
+        m: Map()
+        m[Instant(-1)] = "before"
+        m[Instant(large)] = "large"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Instant(-1)] == "before")
+        Assertions.require(m[Instant(large)] == "large")
+        Assertions.require(m.containsKey(Instant(1)) == false)
+
+        Assertions.require(Instant.compare(Instant(-1), Instant(0)) == -1)
+        Assertions.require(Instant.compare(Instant(1), Instant(0)) == 1)
+        Assertions.require(Instant.compare(Instant(large), Instant(large)) == 0)
+        Assertions.require(Instant.compare(Instant(large.negated()), Instant(-1)) == -1)
+        Assertions.require(Instant.compare(Instant(large + 1), Instant(large)) == 1)
+        Assertions.signals(Error, () => {
+            Instant.compare(Instant(0), null)
+        })
+    }),
+    Test("instant and duration arithmetic is exact", () => {
+        Assertions.require(Instant.addDuration(Instant(0), Duration(1)) == Instant(1))
+        Assertions.require(Instant.addDuration(Instant(0), Duration(-1)) == Instant(-1))
+        Assertions.require(Instant.addDuration(Instant(large), Duration(large)) == Instant(large * 2))
+        Assertions.require(Instant.subtractDuration(Instant(0), Duration(1)) == Instant(-1))
+        Assertions.require(Instant.subtractDuration(Instant(large), Duration(large + 1)) == Instant(-1))
+        Assertions.require(Instant.subtractDuration(Instant(5), Duration(-5)) == Instant(10))
+
+        Assertions.require(Instant.durationBetween(Instant(-1), Instant(1)) == Duration(2))
+        Assertions.require(Instant.durationBetween(Instant(1), Instant(-1)) == Duration(-2))
+        Assertions.require(Instant.durationBetween(Instant(large.negated()), Instant(large)) == Duration(large * 2))
+
+        a: Instant(large.negated() - 7)
+        b: Instant(large + 3)
+        Assertions.require(Instant.addDuration(a, Instant.durationBetween(a, b)) == b)
+        Assertions.require(Instant.addDuration(b, Instant.durationBetween(b, a)) == a)
+        Assertions.require(Instant.durationBetween(a, a) == Duration(0))
+
+        start: Instant(9)
+        moved: Instant.addDuration(start, Duration(0))
+        Assertions.require(moved == start)
+        Assertions.require((moved === start) == false)
+        Assertions.require(start.nanoseconds == 9)
+
+        Assertions.signals(Error, () => {
+            Instant.addDuration(Instant(0), 1)
+        })
+        Assertions.signals(Error, () => {
+            Instant.subtractDuration(Instant(0), null)
+        })
+        Assertions.signals(Error, () => {
+            Instant.durationBetween(Instant(0), 1)
+        })
+    }),
+    Test("offsets and instants are frozen", () => {
+        offset: Offset(3600)
+        instant: Instant(5)
+        Assertions.signals(Error, () => {
+            offset.seconds = 0
+        })
+        Assertions.signals(Error, () => {
+            offset.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            offset.removeSlot("seconds")
+        })
+        Assertions.signals(Error, () => {
+            instant.nanoseconds = 0
+        })
+        Assertions.signals(Error, () => {
+            instant.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            instant.removeSlot("nanoseconds")
+        })
+        Assertions.require(offset == Offset(3600))
+        Assertions.require(instant == Instant(5))
+    }),
+    Test("offsets carry no zone identity and instants no clock", () => {
+        offset: Offset(3600)
+        Assertions.require(offset.hasSlot("zone") == false)
+        Assertions.require(offset.hasSlot("zoneId") == false)
+        Assertions.require(offset.hasSlot("rules") == false)
+        Assertions.require(Instant.hasSlot("now") == false)
+        Assertions.require(Offset.hasSlot("hours") == false)
+        Assertions.require(Instant.hasSlot("ofEpochSecond") == false)
+    })
+]

@@ -25,8 +25,15 @@
 //! `std:datetime/Date`, `std:datetime/Time`, or `std:datetime/LocalDateTime`;
 //! calendar-relative amounts are `std:datetime/Period` values.
 //!
+//! Every duration's immediate delegation parent is this module, the canonical
+//! duration factory and prototype. `recognizes` accepts exactly the durations
+//! of this family: objects whose immediate parent is this module and whose
+//! local slots are exactly the duration state and behavior slots with an
+//! Integer amount. A `nanoseconds` slot under another parent, such as a
+//! `std:datetime/Instant`, is not a duration.
+//!
 //! Durations answer semantic equality through `==`: two durations are equal
-//! when their total amounts are equal. `hash` is coherent with that equality,
+//! when both are durations and their total amounts are equal. `hash` is coherent with that equality,
 //! so independently constructed equal durations work as the same Map key.
 //! `===` remains ordinary object identity. `compare` is the natural total
 //! order of the amounts and answers `0` exactly for equal durations.
@@ -35,25 +42,21 @@
 /// `nanoseconds` must be an Integer and may be positive, zero, or negative;
 /// any other argument signals an Error.
 call: (nanoseconds) => {
+    Duration: import("std:datetime/Duration")
+
     Integer.recognizes(nanoseconds).ifFalse(() => {
         Error().signal()
     })
-
-    isDuration: (value) => {
-        (value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)
-    }
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
     mix: (accumulated, value) => {
         (accumulated * 31 + value) % 2305843009213693951
     }
 
-    duration: {
-        nanoseconds: nanoseconds
-
+    behavior: {
         equals: (other) => {
             duration: this
-            isDuration(other) && (duration.nanoseconds == other.nanoseconds)
+            Duration.recognizes(other) && (duration.nanoseconds == other.nanoseconds)
         }
 
         hash: () => {
@@ -62,22 +65,40 @@ call: (nanoseconds) => {
         }
     }
 
-    duration.alias("equals", "==").freeze()
+    duration: (Duration) {
+        nanoseconds: nanoseconds
+        ...behavior.alias("equals", "==")
+    }
+    duration.freeze()
+}
+
+/// Answers `true` exactly when `value` is a duration of this family: its
+/// immediate delegation parent is this module, its local slots are exactly
+/// `nanoseconds`, `equals`, `==`, and `hash`, and `nanoseconds` is an Integer.
+/// Answers `false` for any other value.
+recognizes: (value) => {
+    Duration: import("std:datetime/Duration")
+
+    (value !== null) &&
+        (value.parent() === Duration) &&
+        (value.slotNames().size() == 4) &&
+        value.hasSlot("nanoseconds") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.nanoseconds)
 }
 
 /// Answers `-1`, `0`, or `1` as duration `left` is shorter than, equal to, or
 /// longer than duration `right`, comparing signed total amounts. The result is
-/// `0` exactly when `left == right`. Arguments must be durations answered by
-/// this module's constructor; otherwise an Error is signalled.
+/// `0` exactly when `left == right`. Arguments must be durations recognized by
+/// this module; otherwise an Error is signalled.
 compare: (left, right) => {
-    requireDuration: (value) => {
-        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
-            Error().signal()
-        })
-    }
+    Duration: import("std:datetime/Duration")
 
-    requireDuration(left)
-    requireDuration(right)
+    (Duration.recognizes(left) && Duration.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
 
     result: 0
     (left.nanoseconds < right.nanoseconds).ifTrue(() => {
@@ -93,14 +114,10 @@ compare: (left, right) => {
 /// durations `left` and `right`. Non-duration arguments signal an Error.
 add: (left, right) => {
     Duration: import("std:datetime/Duration")
-    requireDuration: (value) => {
-        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
-            Error().signal()
-        })
-    }
 
-    requireDuration(left)
-    requireDuration(right)
+    (Duration.recognizes(left) && Duration.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
     Duration(left.nanoseconds + right.nanoseconds)
 }
 
@@ -116,12 +133,9 @@ subtract: (left, right) => {
 /// A non-duration argument signals an Error.
 negate: (duration) => {
     Duration: import("std:datetime/Duration")
-    requireDuration: (value) => {
-        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
-            Error().signal()
-        })
-    }
 
-    requireDuration(duration)
+    Duration.recognizes(duration).ifFalse(() => {
+        Error().signal()
+    })
     Duration(duration.nanoseconds.negated())
 }

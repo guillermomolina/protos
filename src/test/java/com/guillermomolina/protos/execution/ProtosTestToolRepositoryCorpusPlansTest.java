@@ -29,7 +29,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
-        assertPlan("protos/corpus/library/datetime", 5, "datetime/construction.protos", "datetime/arithmetic.protos");
+        assertPlan("protos/corpus/library/datetime", 8, "datetime/construction.protos", "datetime/families.protos");
         assertPlan("protos/corpus/library/regex", 4, "regex/compile.protos", "regex/escape.protos");
     }
 

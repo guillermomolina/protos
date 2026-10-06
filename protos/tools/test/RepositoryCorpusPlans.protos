@@ -143,7 +143,10 @@ load: (corpusId) => {
             Array("equality.protos", "suite-native", "-"),
             Array("ordering.protos", "suite-native", "-"),
             Array("amounts.protos", "suite-native", "-"),
-            Array("arithmetic.protos", "suite-native", "-")
+            Array("arithmetic.protos", "suite-native", "-"),
+            Array("instants.protos", "suite-native", "-"),
+            Array("conversions.protos", "suite-native", "-"),
+            Array("families.protos", "suite-native", "-")
             )
         )
         matched = true

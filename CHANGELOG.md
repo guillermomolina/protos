@@ -7,6 +7,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.246-SNAPSHOT
+
+- `LIB013-C` (guillermomolina/protos#430) adds the instant and fixed-offset
+  domain: `std:datetime/Offset`, `std:datetime/Instant`, and
+  `std:datetime/OffsetDateTime`. There is no specification change.
+  - `Offset(seconds)` is a fixed displacement in whole seconds from `-64800`
+    through `64800`, not a time-zone identity. It has `compare`.
+  - `Instant(nanoseconds)` is an exact signed Integer count of uniform
+    nanoseconds from `1970-01-01T00:00:00Z`, with no artificial range and no
+    leap seconds. It has `compare`, `addDuration`, `subtractDuration`, and
+    `durationBetween`, which answers a `Duration`.
+  - `OffsetDateTime(dateTime, offset)` pairs a `LocalDateTime` with an
+    `Offset`. Its equality is structural, and it has no `compare`.
+    `sameInstant` compares instants explicitly. `toInstant`, `fromInstant`, and
+    `withOffsetSameInstant` convert with exact proleptic Gregorian Integer
+    arithmetic and floor normalization before the epoch. A local date outside
+    `-9999..9999` signals `Error`.
+  - Every datetime family (`Date`, `Time`, `LocalDateTime`, `Duration`,
+    `Period`, and the new families) now uses the D048 canonical
+    factory/prototype discipline. A value's immediate parent is its module, and
+    the new `recognizes(value)` checks that parent, the exact local slot set,
+    and a valid state. Equality and every operation use it, so
+    `Duration(5) != Instant(5)` and objects with matching slots under another
+    parent are rejected. Recognition cannot observe frozenness because Core has
+    no frozenness predicate; constructors always freeze. The A/B data contracts
+    and API are unchanged. Values remain non-transferable across Actors.
+  - No time zones, clocks, parsing, formatting, or symbolic operators are added.
+  - `Date.protos`, `Time.protos`, and `LocalDateTime.protos` regain the missing
+    last line of their license notice.
+  - Tests: `instants.protos`, `conversions.protos`, and `families.protos` are
+    added to the `library/datetime` corpus.
+
 ## 0.3.245-SNAPSHOT
 
 - `LIB014-1` (guillermomolina/protos#431) adds `std:regex/Regex` compilation and

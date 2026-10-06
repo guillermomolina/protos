@@ -11,6 +11,7 @@
 //
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 //! Local civil date-times: exactly a civil date from `std:datetime/Date`
 //! combined with a local time from `std:datetime/Time`. A local date-time is a
@@ -18,42 +19,36 @@
 //! values. It does not identify an instant and carries no offset, zone, or
 //! clock state.
 //!
+//! Every local date-time's immediate delegation parent is this module, the
+//! canonical local date-time factory and prototype. `recognizes` accepts
+//! exactly the local date-times of this family: objects whose immediate parent
+//! is this module, whose local slots are exactly the local date-time state and
+//! behavior slots, and whose components are a recognized date and time.
+//! Matching slots under another parent are not a local date-time.
+//!
 //! Local date-times answer semantic equality through `==`: two are equal when
-//! their dates and their times are equal. `hash` is coherent with that
+//! both are local date-times and their dates and their times are equal. `hash` is coherent with that
 //! equality, so independently constructed equal local date-times work as the
 //! same Map key. `===` remains ordinary object identity. `compare` is the
 //! natural order, dates first and then times, and answers `0` exactly for
 //! equal local date-times.
 
-/// Answers a fresh frozen local date-time composing `date`, a value answered
-/// by `std:datetime/Date`, and `time`, a value answered by
+/// Answers a fresh frozen local date-time composing `date`, a value recognized
+/// by `std:datetime/Date`, and `time`, a value recognized by
 /// `std:datetime/Time`. The components are stored as given. Any other argument
 /// signals an Error.
 call: (date, time) => {
-    Date: import("std:datetime/Date")
-    Time: import("std:datetime/Time")
-
-    // Comparing a component with itself validates its representation through
-    // the owning module.
-    Date.compare(date, date)
-    Time.compare(time, time)
-
-    isLocalDateTime: (value) => {
-        (value !== null) && value.hasSlot("date") && value.hasSlot("time")
-    }
+    LocalDateTime: import("std:datetime/LocalDateTime")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
     mix: (accumulated, value) => {
         (accumulated * 31 + value) % 2305843009213693951
     }
 
-    dateTime: {
-        date: date
-        time: time
-
+    behavior: {
         equals: (other) => {
             dateTime: this
-            isLocalDateTime(other) &&
+            LocalDateTime.recognizes(other) &&
                 (dateTime.date == other.date) &&
                 (dateTime.time == other.time)
         }
@@ -64,26 +59,54 @@ call: (date, time) => {
         }
     }
 
-    dateTime.alias("equals", "==").freeze()
+    dateTime: (LocalDateTime) {
+        date: date
+        time: time
+        ...behavior.alias("equals", "==")
+    }
+    dateTime.freeze()
+
+    LocalDateTime.recognizes(dateTime).ifFalse(() => {
+        Error().signal()
+    })
+    dateTime
+}
+
+/// Answers `true` exactly when `value` is a local date-time of this family:
+/// its immediate delegation parent is this module, its local slots are exactly
+/// `date`, `time`, `equals`, `==`, and `hash`, `date` is recognized by
+/// `std:datetime/Date`, and `time` is recognized by `std:datetime/Time`.
+/// Answers `false` for any other value.
+recognizes: (value) => {
+    LocalDateTime: import("std:datetime/LocalDateTime")
+    Date: import("std:datetime/Date")
+    Time: import("std:datetime/Time")
+
+    (value !== null) &&
+        (value.parent() === LocalDateTime) &&
+        (value.slotNames().size() == 5) &&
+        value.hasSlot("date") &&
+        value.hasSlot("time") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Date.recognizes(value.date) &&
+        Time.recognizes(value.time)
 }
 
 /// Answers `-1`, `0`, or `1` as local date-time `left` is before, equal to, or
 /// after local date-time `right`, ordering by `Date.compare` of the dates and
 /// then `Time.compare` of the times. The result is `0` exactly when
-/// `left == right`. Arguments must be local date-times answered by this
-/// module's constructor; otherwise an Error is signalled.
+/// `left == right`. Arguments must be local date-times recognized by this
+/// module; otherwise an Error is signalled.
 compare: (left, right) => {
+    LocalDateTime: import("std:datetime/LocalDateTime")
     Date: import("std:datetime/Date")
     Time: import("std:datetime/Time")
 
-    requireLocalDateTime: (value) => {
-        ((value !== null) && value.hasSlot("date") && value.hasSlot("time")).ifFalse(() => {
-            Error().signal()
-        })
-    }
-
-    requireLocalDateTime(left)
-    requireLocalDateTime(right)
+    (LocalDateTime.recognizes(left) && LocalDateTime.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
 
     result: Date.compare(left.date, right.date)
     (result == 0).ifTrue(() => {

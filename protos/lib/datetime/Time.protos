@@ -11,6 +11,7 @@
 //
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 //! Local civil times of day with nanosecond precision. A time is a frozen
 //! ordinary object with Integer `hour` (`0` through `23`), `minute` (`0`
@@ -18,8 +19,14 @@
 //! `999999999`) slots; it carries no date, offset, zone, or clock state.
 //! Leap-second labels (`second == 60`) are not supported.
 //!
-//! Times answer semantic equality through `==`: two times are equal when their
-//! hour, minute, second, and nanosecond are equal. `hash` is coherent with that
+//! Every time's immediate delegation parent is this module, the canonical
+//! time factory and prototype. `recognizes` accepts exactly the times of this
+//! family: objects whose immediate parent is this module and whose local slots
+//! are exactly the time state and behavior slots with a valid state. Matching
+//! slots under another parent are not a time.
+//!
+//! Times answer semantic equality through `==`: two times are equal when both
+//! are times and their hour, minute, second, and nanosecond are equal. `hash` is coherent with that
 //! equality, so independently constructed equal times work as the same Map
 //! key. `===` remains ordinary object identity. `compare` is the natural
 //! time-of-day order and answers `0` exactly for equal times.
@@ -29,51 +36,17 @@
 /// otherwise an Error is signalled. No field is clamped, wrapped, or
 /// normalized, and `second == 60` is rejected.
 call: (hour, minute, second, nanosecond) => {
-    (Integer.recognizes(hour) &&
-        Integer.recognizes(minute) &&
-        Integer.recognizes(second) &&
-        Integer.recognizes(nanosecond)).ifFalse(() => {
-        Error().signal()
-    })
-    ((hour >= 0) && (hour <= 23)).ifFalse(() => {
-        Error().signal()
-    })
-    ((minute >= 0) && (minute <= 59)).ifFalse(() => {
-        Error().signal()
-    })
-    ((second >= 0) && (second <= 59)).ifFalse(() => {
-        Error().signal()
-    })
-    ((nanosecond >= 0) && (nanosecond <= 999999999)).ifFalse(() => {
-        Error().signal()
-    })
-
-    isTime: (value) => {
-        (value !== null) &&
-            value.hasSlot("hour") &&
-            value.hasSlot("minute") &&
-            value.hasSlot("second") &&
-            value.hasSlot("nanosecond") &&
-            Integer.recognizes(value.hour) &&
-            Integer.recognizes(value.minute) &&
-            Integer.recognizes(value.second) &&
-            Integer.recognizes(value.nanosecond)
-    }
+    Time: import("std:datetime/Time")
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
     mix: (accumulated, value) => {
         (accumulated * 31 + value) % 2305843009213693951
     }
 
-    time: {
-        hour: hour
-        minute: minute
-        second: second
-        nanosecond: nanosecond
-
+    behavior: {
         equals: (other) => {
             time: this
-            isTime(other) &&
+            Time.recognizes(other) &&
                 (time.hour == other.hour) &&
                 (time.minute == other.minute) &&
                 (time.second == other.second) &&
@@ -87,31 +60,64 @@ call: (hour, minute, second, nanosecond) => {
         }
     }
 
-    time.alias("equals", "==").freeze()
+    time: (Time) {
+        hour: hour
+        minute: minute
+        second: second
+        nanosecond: nanosecond
+        ...behavior.alias("equals", "==")
+    }
+    time.freeze()
+
+    // Recognition owns field validation, so construction and recognition
+    // accept exactly the same states.
+    Time.recognizes(time).ifFalse(() => {
+        Error().signal()
+    })
+    time
+}
+
+/// Answers `true` exactly when `value` is a time of this family: its immediate
+/// delegation parent is this module, its local slots are exactly `hour`,
+/// `minute`, `second`, `nanosecond`, `equals`, `==`, and `hash`, and every
+/// field is an Integer within its range. Answers `false` for any other value.
+recognizes: (value) => {
+    Time: import("std:datetime/Time")
+
+    (value !== null) &&
+        (value.parent() === Time) &&
+        (value.slotNames().size() == 7) &&
+        value.hasSlot("hour") &&
+        value.hasSlot("minute") &&
+        value.hasSlot("second") &&
+        value.hasSlot("nanosecond") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.hour) &&
+        Integer.recognizes(value.minute) &&
+        Integer.recognizes(value.second) &&
+        Integer.recognizes(value.nanosecond) &&
+        (value.hour >= 0) &&
+        (value.hour <= 23) &&
+        (value.minute >= 0) &&
+        (value.minute <= 59) &&
+        (value.second >= 0) &&
+        (value.second <= 59) &&
+        (value.nanosecond >= 0) &&
+        (value.nanosecond <= 999999999)
 }
 
 /// Answers `-1`, `0`, or `1` as time `left` is earlier than, equal to, or later
 /// than time `right` within a day, ordering by hour, minute, second, then
 /// nanosecond. The result is `0` exactly when `left == right`. Arguments must
-/// be times answered by this module's constructor; otherwise an Error is
-/// signalled.
+/// be times recognized by this module; otherwise an Error is signalled.
 compare: (left, right) => {
-    requireTime: (value) => {
-        ((value !== null) &&
-            value.hasSlot("hour") &&
-            value.hasSlot("minute") &&
-            value.hasSlot("second") &&
-            value.hasSlot("nanosecond") &&
-            Integer.recognizes(value.hour) &&
-            Integer.recognizes(value.minute) &&
-            Integer.recognizes(value.second) &&
-            Integer.recognizes(value.nanosecond)).ifFalse(() => {
-            Error().signal()
-        })
-    }
+    Time: import("std:datetime/Time")
 
-    requireTime(left)
-    requireTime(right)
+    (Time.recognizes(left) && Time.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
 
     compareIntegers: (first, second) => {
         result: 0

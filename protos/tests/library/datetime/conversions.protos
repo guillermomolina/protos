@@ -1,0 +1,264 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+Period: import("std:datetime/Period")
+Offset: import("std:datetime/Offset")
+Instant: import("std:datetime/Instant")
+OffsetDateTime: import("std:datetime/OffsetDateTime")
+
+second: 1000000000
+day: 86400 * second
+
+odt: (year, month, dayOfMonth, hour, minute, seconds, nanosecond, offsetSeconds) => {
+    OffsetDateTime(
+        LocalDateTime(Date(year, month, dayOfMonth), Time(hour, minute, seconds, nanosecond)),
+        Offset(offsetSeconds)
+    )
+}
+
+// Requires `value` to identify `instant` and to be reproduced from it.
+requireConversion: (value, instant) => {
+    Assertions.require(OffsetDateTime.toInstant(value) == instant)
+    Assertions.require(OffsetDateTime.fromInstant(instant, value.offset) == value)
+    true
+}
+
+// Days from 1970-01-01 spanning negative years, year zero, leap days, era
+// boundaries, and the supported extremes.
+dayNumbers: [
+    -4371587, -719529, -719528, -719469, -719468, -146097, -36525, -366, -1,
+    0, 1, 31, 59, 10957, 11016, 11017, 20088, 20089, 146097, 2932896
+]
+
+offsets: [-64800, -18000, -3661, -1, 0, 1, 3600, 20700, 64800]
+
+tests: [
+    Test("epoch anchors convert exactly", () => {
+        requireConversion(odt(1970, 1, 1, 0, 0, 0, 0, 0), Instant(0))
+        requireConversion(odt(1970, 1, 1, 0, 0, 0, 1, 0), Instant(1))
+        requireConversion(odt(1969, 12, 31, 23, 59, 59, 999999999, 0), Instant(-1))
+        requireConversion(odt(1970, 1, 1, 1, 0, 0, 0, 3600), Instant(0))
+        requireConversion(odt(1969, 12, 31, 19, 0, 0, 0, -18000), Instant(0))
+        requireConversion(odt(1970, 1, 1, 0, 0, 1, 0, 1), Instant(0))
+        requireConversion(odt(1969, 12, 31, 23, 59, 59, 0, -1), Instant(0))
+        requireConversion(odt(1970, 1, 1, 18, 0, 0, 0, 64800), Instant(0))
+        requireConversion(odt(1969, 12, 31, 6, 0, 0, 0, -64800), Instant(0))
+    }),
+    Test("conversions cross calendar boundaries", () => {
+        requireConversion(odt(1970, 1, 2, 0, 0, 0, 0, 0), Instant(day))
+        requireConversion(odt(1970, 1, 31, 23, 59, 59, 999999999, 0), Instant(31 * day - 1))
+        requireConversion(odt(1970, 2, 1, 0, 0, 0, 0, 0), Instant(31 * day))
+        requireConversion(odt(2000, 2, 29, 0, 0, 0, 0, 0), Instant(11016 * day))
+        requireConversion(odt(2000, 3, 1, 0, 0, 0, 0, 0), Instant(11017 * day))
+        requireConversion(odt(2024, 12, 31, 23, 59, 59, 999999999, 0), Instant(20089 * day - 1))
+        requireConversion(odt(2025, 1, 1, 0, 0, 0, 0, 0), Instant(20089 * day))
+        requireConversion(odt(0, 1, 1, 0, 0, 0, 0, 0), Instant(-719528 * day))
+        requireConversion(odt(-1, 12, 31, 23, 59, 59, 999999999, 0), Instant(-719528 * day - 1))
+        requireConversion(odt(0, 2, 29, 0, 0, 0, 0, 0), Instant(-719469 * day))
+        requireConversion(odt(0, 3, 1, 0, 0, 0, 0, 0), Instant(-719468 * day))
+        requireConversion(odt(-9999, 1, 1, 0, 0, 0, 0, 0), Instant(-4371587 * day))
+        requireConversion(odt(9999, 12, 31, 23, 59, 59, 999999999, 0), Instant(2932897 * day - 1))
+        // A local date-time just after midnight on 1 January 2025 at +01:00
+        // is still 2024 on the reference timeline.
+        requireConversion(odt(2025, 1, 1, 0, 30, 0, 0, 3600), Instant(20089 * day - 1800 * second))
+    }),
+    Test("negative instants normalize to ordinary time fields", () => {
+        before: OffsetDateTime.fromInstant(Instant(-1), Offset(0))
+        Assertions.require(before.dateTime.date == Date(1969, 12, 31))
+        Assertions.require(before.dateTime.time == Time(23, 59, 59, 999999999))
+        Assertions.require(before.offset == Offset(0))
+
+        dayBefore: OffsetDateTime.fromInstant(Instant(0 - day), Offset(0))
+        Assertions.require(dayBefore.dateTime == LocalDateTime(Date(1969, 12, 31), Time(0, 0, 0, 0)))
+
+        shifted: OffsetDateTime.fromInstant(Instant(-1), Offset(-1))
+        Assertions.require(shifted.dateTime == LocalDateTime(Date(1969, 12, 31), Time(23, 59, 58, 999999999)))
+    }),
+    Test("day numbering agrees with period arithmetic", () => {
+        epoch: Date(1970, 1, 1)
+        dayNumbers.each((days) => {
+            date: Period.addToDate(Period(0, 0, days), epoch)
+            midnight: OffsetDateTime(LocalDateTime(date, Time(0, 0, 0, 0)), Offset(0))
+            Assertions.require(OffsetDateTime.toInstant(midnight) == Instant(days * day))
+            Assertions.require(OffsetDateTime.fromInstant(Instant(days * day), Offset(0)) == midnight)
+            Assertions.require(OffsetDateTime.fromInstant(Instant(days * day + day - 1), Offset(0)).dateTime.date == date)
+        })
+        Assertions.require(dayNumbers.size() == 20)
+    }),
+    Test("round trips preserve values and instants", () => {
+        values: [
+            odt(1970, 1, 1, 0, 0, 0, 0, 0),
+            odt(2024, 2, 29, 23, 59, 59, 999999999, 64800),
+            odt(1969, 12, 31, 0, 0, 0, 1, -64800),
+            odt(0, 2, 29, 12, 34, 56, 789, 3661),
+            odt(-1, 12, 31, 23, 59, 59, 0, -1),
+            odt(-400, 3, 1, 0, 0, 0, 5, 20700),
+            odt(-9999, 1, 1, 18, 0, 0, 0, 64800),
+            odt(9999, 12, 31, 5, 0, 0, 0, -64800)
+        ]
+        values.each((value) => {
+            Assertions.require(OffsetDateTime.fromInstant(OffsetDateTime.toInstant(value), value.offset) == value)
+        })
+
+        instants: [
+            Instant(0), Instant(1), Instant(-1), Instant(951782400 * second + 123456789),
+            Instant(-62167219200 * second - 1), Instant(-4371586 * day + 7)
+        ]
+        instants.each((instant) => {
+            offsets.each((seconds) => {
+                value: OffsetDateTime.fromInstant(instant, Offset(seconds))
+                Assertions.require(OffsetDateTime.toInstant(value) == instant)
+                Assertions.require(value.offset == Offset(seconds))
+            })
+        })
+        // Test bodies must not answer the non-transferable values above.
+        Assertions.require(instants.size() == 6)
+    }),
+    Test("structural equality is separate from same-instant comparison", () => {
+        a: odt(1970, 1, 1, 1, 0, 0, 0, 3600)
+        b: odt(1970, 1, 1, 0, 0, 0, 0, 0)
+        c: odt(1970, 1, 1, 0, 0, 0, 0, 3600)
+        d: odt(1970, 1, 1, 1, 0, 0, 0, 3600)
+
+        Assertions.require((a == d) === true)
+        Assertions.require((a === d) == false)
+        Assertions.require(a.hash() == d.hash())
+        Assertions.require(OffsetDateTime.sameInstant(a, d) === true)
+
+        Assertions.require((a == b) === false)
+        Assertions.require((a != b) === true)
+        Assertions.require(OffsetDateTime.sameInstant(a, b) === true)
+        Assertions.require(OffsetDateTime.sameInstant(b, a) === true)
+
+        Assertions.require((b == c) === false)
+        Assertions.require(OffsetDateTime.sameInstant(b, c) === false)
+        Assertions.require((a == a.dateTime) === false)
+        Assertions.require((a == null) === false)
+
+        m: Map()
+        m[a] = "plus one"
+        m[b] = "zero"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[d] == "plus one")
+        Assertions.require(m[odt(1970, 1, 1, 0, 0, 0, 0, 0)] == "zero")
+        Assertions.require(m.containsKey(c) == false)
+
+        Assertions.signals(Error, () => {
+            OffsetDateTime.sameInstant(a, a.dateTime)
+        })
+    }),
+    Test("changing the offset keeps the instant", () => {
+        plusOne: Offset(3600)
+        start: odt(1970, 1, 1, 0, 0, 0, 0, 0)
+        moved: OffsetDateTime.withOffsetSameInstant(start, plusOne)
+        Assertions.require(moved == odt(1970, 1, 1, 1, 0, 0, 0, 3600))
+        Assertions.require(moved.offset === plusOne)
+        Assertions.require(OffsetDateTime.sameInstant(moved, start))
+        Assertions.require(OffsetDateTime.toInstant(moved) == OffsetDateTime.toInstant(start))
+
+        minusFive: Offset(-18000)
+        early: OffsetDateTime.withOffsetSameInstant(odt(1970, 1, 1, 2, 0, 0, 0, 0), minusFive)
+        Assertions.require(early == odt(1969, 12, 31, 21, 0, 0, 0, -18000))
+        Assertions.require(early.offset === minusFive)
+
+        leap: OffsetDateTime.withOffsetSameInstant(odt(2024, 3, 1, 0, 0, 0, 7, 3600), Offset(-1))
+        Assertions.require(leap == odt(2024, 2, 29, 22, 59, 59, 7, -1))
+
+        back: OffsetDateTime.withOffsetSameInstant(leap, Offset(3600))
+        Assertions.require(back == odt(2024, 3, 1, 0, 0, 0, 7, 3600))
+
+        Assertions.signals(Error, () => {
+            OffsetDateTime.withOffsetSameInstant(start, 3600)
+        })
+    }),
+    Test("local dates outside the supported years signal errors", () => {
+        lastHour: Instant(2932897 * day - 3600 * second)
+        Assertions.require(OffsetDateTime.fromInstant(lastHour, Offset(3599)).dateTime.date == Date(9999, 12, 31))
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(lastHour, Offset(3600))
+        })
+
+        first: Instant(-4371587 * day)
+        Assertions.require(OffsetDateTime.fromInstant(first, Offset(0)).dateTime.date == Date(-9999, 1, 1))
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(first, Offset(-1))
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.withOffsetSameInstant(odt(-9999, 1, 1, 0, 0, 0, 0, 0), Offset(-1))
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.withOffsetSameInstant(odt(9999, 12, 31, 23, 0, 0, 0, 0), Offset(3600))
+        })
+
+        // The instant itself has no range; only its civil representation does.
+        far: Instant(1180591620717411303425)
+        Assertions.require(far.nanoseconds == 1180591620717411303425)
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(far, Offset(0))
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(Instant(far.nanoseconds.negated()), Offset(0))
+        })
+    }),
+    Test("offset date-time construction and shape", () => {
+        dateTime: LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 0))
+        offset: Offset(-3661)
+        value: OffsetDateTime(dateTime, offset)
+        Assertions.require(value.dateTime === dateTime)
+        Assertions.require(value.offset === offset)
+        Assertions.require(value.hasSlot("zone") == false)
+        Assertions.require(value.hasSlot("zoneId") == false)
+        Assertions.require(value.hasSlot("timezone") == false)
+        Assertions.require(value.hasSlot("rules") == false)
+        Assertions.require(value.hasSlot("tzdbVersion") == false)
+        Assertions.require(OffsetDateTime.hasSlot("compare") == false)
+        Assertions.require(OffsetDateTime.hasSlot("now") == false)
+
+        Assertions.signals(Error, () => {
+            OffsetDateTime(dateTime, -3661)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime(dateTime.date, offset)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime(null, offset)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.toInstant(dateTime)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(0, offset)
+        })
+        Assertions.signals(Error, () => {
+            OffsetDateTime.fromInstant(Instant(0), 0)
+        })
+
+        Assertions.signals(Error, () => {
+            value.offset = Offset(0)
+        })
+        Assertions.signals(Error, () => {
+            value.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            value.removeSlot("dateTime")
+        })
+        Assertions.require(value == OffsetDateTime(dateTime, offset))
+    })
+]

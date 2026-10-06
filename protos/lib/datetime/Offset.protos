@@ -1,0 +1,114 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Fixed offsets from the reference timeline, in whole seconds. An offset is
+//! a frozen ordinary object with one Integer `seconds` slot holding the exact
+//! signed displacement, from `-64800` (`-18:00:00`) through `64800`
+//! (`+18:00:00`) inclusive, with one-second resolution. Local civil time is
+//! the reference timeline plus the offset.
+//!
+//! An offset is a fixed displacement, not a time-zone identity: it carries no
+//! zone name, no historical or future rules, no daylight-saving information,
+//! and no time-zone database authority. `Offset(0)` is an ordinary known zero
+//! offset.
+//!
+//! Every offset's immediate delegation parent is this module, the canonical
+//! offset factory and prototype. `recognizes` accepts exactly the offsets of
+//! this family: objects whose immediate parent is this module and whose local
+//! slots are exactly the offset state and behavior slots with a valid state.
+//!
+//! Offsets answer semantic equality through `==`: two offsets are equal when
+//! both are offsets and their displacements are equal. `hash` is coherent with
+//! that equality, so independently constructed equal offsets work as the same
+//! Map key. `===` remains ordinary object identity. `compare` is the natural
+//! numeric order of the displacements and answers `0` exactly for equal
+//! offsets.
+
+/// Answers a fresh frozen offset of exactly `seconds` seconds. `seconds` must
+/// be an Integer from `-64800` through `64800`; any other argument signals an
+/// Error. The value is never clamped or wrapped.
+call: (seconds) => {
+    Offset: import("std:datetime/Offset")
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    behavior: {
+        equals: (other) => {
+            offset: this
+            Offset.recognizes(other) && (offset.seconds == other.seconds)
+        }
+
+        hash: () => {
+            offset: this
+            mix(17, offset.seconds.hash())
+        }
+    }
+
+    offset: (Offset) {
+        seconds: seconds
+        ...behavior.alias("equals", "==")
+    }
+    offset.freeze()
+
+    // Recognition owns range validation, so construction and recognition
+    // accept exactly the same states.
+    Offset.recognizes(offset).ifFalse(() => {
+        Error().signal()
+    })
+    offset
+}
+
+/// Answers `true` exactly when `value` is an offset of this family: its
+/// immediate delegation parent is this module, its local slots are exactly
+/// `seconds`, `equals`, `==`, and `hash`, and `seconds` is an Integer from
+/// `-64800` through `64800`. Answers `false` for any other value.
+recognizes: (value) => {
+    Offset: import("std:datetime/Offset")
+
+    (value !== null) &&
+        (value.parent() === Offset) &&
+        (value.slotNames().size() == 4) &&
+        value.hasSlot("seconds") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.seconds) &&
+        (value.seconds >= -64800) &&
+        (value.seconds <= 64800)
+}
+
+/// Answers `-1`, `0`, or `1` as offset `left` is numerically less than, equal
+/// to, or greater than offset `right`, comparing total seconds. The result is
+/// `0` exactly when `left == right`. Arguments must be offsets recognized by
+/// this module; otherwise an Error is signalled.
+compare: (left, right) => {
+    Offset: import("std:datetime/Offset")
+
+    (Offset.recognizes(left) && Offset.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
+
+    result: 0
+    (left.seconds < right.seconds).ifTrue(() => {
+        result = -1
+    })
+    (left.seconds > right.seconds).ifTrue(() => {
+        result = 1
+    })
+    result
+}

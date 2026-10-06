@@ -21,8 +21,14 @@
 //! period is not a fixed elapsed amount; elapsed amounts are
 //! `std:datetime/Duration` values.
 //!
+//! Every period's immediate delegation parent is this module, the canonical
+//! period factory and prototype. `recognizes` accepts exactly the periods of
+//! this family: objects whose immediate parent is this module and whose local
+//! slots are exactly the period state and behavior slots with Integer
+//! components. Matching slots under another parent are not a period.
+//!
 //! Periods answer structural equality through `==`: two periods are equal when
-//! their years, their months, and their days are equal, so `(1, 0, 0)` and
+//! both are periods and their years, their months, and their days are equal, so `(1, 0, 0)` and
 //! `(0, 12, 0)` are different periods. `hash` is coherent with that equality,
 //! so independently constructed equal periods work as the same Map key. `===`
 //! remains ordinary object identity. Periods have no natural total order, and
@@ -47,33 +53,21 @@
 /// argument must be an Integer and may be positive, zero, or negative; any
 /// other argument signals an Error. The components are stored as given.
 call: (years, months, days) => {
+    Period: import("std:datetime/Period")
+
     (Integer.recognizes(years) && Integer.recognizes(months) && Integer.recognizes(days)).ifFalse(() => {
         Error().signal()
     })
-
-    isPeriod: (value) => {
-        (value !== null) &&
-            value.hasSlot("years") &&
-            value.hasSlot("months") &&
-            value.hasSlot("days") &&
-            Integer.recognizes(value.years) &&
-            Integer.recognizes(value.months) &&
-            Integer.recognizes(value.days)
-    }
 
     // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
     mix: (accumulated, value) => {
         (accumulated * 31 + value) % 2305843009213693951
     }
 
-    period: {
-        years: years
-        months: months
-        days: days
-
+    behavior: {
         equals: (other) => {
             period: this
-            isPeriod(other) &&
+            Period.recognizes(other) &&
                 (period.years == other.years) &&
                 (period.months == other.months) &&
                 (period.days == other.days)
@@ -85,7 +79,34 @@ call: (years, months, days) => {
         }
     }
 
-    period.alias("equals", "==").freeze()
+    period: (Period) {
+        years: years
+        months: months
+        days: days
+        ...behavior.alias("equals", "==")
+    }
+    period.freeze()
+}
+
+/// Answers `true` exactly when `value` is a period of this family: its
+/// immediate delegation parent is this module, its local slots are exactly
+/// `years`, `months`, `days`, `equals`, `==`, and `hash`, and every component
+/// is an Integer. Answers `false` for any other value.
+recognizes: (value) => {
+    Period: import("std:datetime/Period")
+
+    (value !== null) &&
+        (value.parent() === Period) &&
+        (value.slotNames().size() == 6) &&
+        value.hasSlot("years") &&
+        value.hasSlot("months") &&
+        value.hasSlot("days") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.years) &&
+        Integer.recognizes(value.months) &&
+        Integer.recognizes(value.days)
 }
 
 /// Answers a fresh period with exactly the negated years, months, and days of
@@ -94,10 +115,7 @@ call: (years, months, days) => {
 negate: (period) => {
     Period: import("std:datetime/Period")
 
-    ((period !== null) &&
-        period.hasSlot("years") &&
-        period.hasSlot("months") &&
-        period.hasSlot("days")).ifFalse(() => {
+    Period.recognizes(period).ifFalse(() => {
         Error().signal()
     })
 
@@ -110,20 +128,12 @@ negate: (period) => {
 /// date outside the supported years, or an argument that is not a period or
 /// a date, signals an Error.
 addToDate: (period, date) => {
+    Period: import("std:datetime/Period")
     Date: import("std:datetime/Date")
 
-    ((period !== null) &&
-        period.hasSlot("years") &&
-        period.hasSlot("months") &&
-        period.hasSlot("days") &&
-        Integer.recognizes(period.years) &&
-        Integer.recognizes(period.months) &&
-        Integer.recognizes(period.days)).ifFalse(() => {
+    (Period.recognizes(period) && Date.recognizes(date)).ifFalse(() => {
         Error().signal()
     })
-    // Comparing the date with itself validates its representation through
-    // the owning module.
-    Date.compare(date, date)
 
     // Integer `div` truncates toward zero; calendar indices need the floor for
     // a positive divisor.
@@ -215,7 +225,9 @@ addToLocalDateTime: (period, dateTime) => {
     Period: import("std:datetime/Period")
     LocalDateTime: import("std:datetime/LocalDateTime")
 
-    LocalDateTime.compare(dateTime, dateTime)
+    LocalDateTime.recognizes(dateTime).ifFalse(() => {
+        Error().signal()
+    })
     LocalDateTime(Period.addToDate(period, dateTime.date), dateTime.time)
 }
 

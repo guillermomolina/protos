@@ -1,0 +1,149 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Instants on a uniform timeline with nanosecond precision. An instant is a
+//! frozen ordinary object with one Integer `nanoseconds` slot holding the
+//! exact signed count of uniform nanoseconds from the conceptual reference
+//! `1970-01-01T00:00:00Z`: `Instant(0)` is that reference, `Instant(-1)` is
+//! one nanosecond before it, and `Instant(1)` one nanosecond after it.
+//! Integers are exact and unbounded, so no host timestamp, machine-word, or
+//! other artificial range applies.
+//!
+//! The timeline is Unix-like: every day has exactly 86400 uniform seconds.
+//! Leap seconds, TAI, and GPS time are not represented, and this is not a
+//! claim of physically exact UTC. An instant carries no offset, zone, or clock
+//! state, and nothing here reads a current time.
+//!
+//! Every instant's immediate delegation parent is this module, the canonical
+//! instant factory and prototype. `recognizes` accepts exactly the instants of
+//! this family: objects whose immediate parent is this module and whose local
+//! slots are exactly the instant state and behavior slots with an Integer
+//! position. A `nanoseconds` slot under another parent, such as a
+//! `std:datetime/Duration`, is not an instant.
+//!
+//! Instants answer semantic equality through `==`: two instants are equal when
+//! both are instants at the same timeline position. `hash` is coherent with
+//! that equality, so independently constructed equal instants work as the
+//! same Map key. `===` remains ordinary object identity. `compare` is the
+//! natural timeline order and answers `0` exactly for equal instants.
+
+/// Answers a fresh frozen instant `nanoseconds` uniform nanoseconds from
+/// `1970-01-01T00:00:00Z`. `nanoseconds` must be an Integer and may be
+/// positive, zero, or negative; any other argument signals an Error.
+call: (nanoseconds) => {
+    Instant: import("std:datetime/Instant")
+
+    Integer.recognizes(nanoseconds).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    behavior: {
+        equals: (other) => {
+            instant: this
+            Instant.recognizes(other) && (instant.nanoseconds == other.nanoseconds)
+        }
+
+        hash: () => {
+            instant: this
+            mix(17, instant.nanoseconds.hash())
+        }
+    }
+
+    instant: (Instant) {
+        nanoseconds: nanoseconds
+        ...behavior.alias("equals", "==")
+    }
+    instant.freeze()
+}
+
+/// Answers `true` exactly when `value` is an instant of this family: its
+/// immediate delegation parent is this module, its local slots are exactly
+/// `nanoseconds`, `equals`, `==`, and `hash`, and `nanoseconds` is an Integer.
+/// Answers `false` for any other value.
+recognizes: (value) => {
+    Instant: import("std:datetime/Instant")
+
+    (value !== null) &&
+        (value.parent() === Instant) &&
+        (value.slotNames().size() == 4) &&
+        value.hasSlot("nanoseconds") &&
+        value.hasSlot("equals") &&
+        value.hasSlot("==") &&
+        value.hasSlot("hash") &&
+        Integer.recognizes(value.nanoseconds)
+}
+
+/// Answers `-1`, `0`, or `1` as instant `left` is before, equal to, or after
+/// instant `right` on the timeline. The result is `0` exactly when
+/// `left == right`. Arguments must be instants recognized by this module;
+/// otherwise an Error is signalled.
+compare: (left, right) => {
+    Instant: import("std:datetime/Instant")
+
+    (Instant.recognizes(left) && Instant.recognizes(right)).ifFalse(() => {
+        Error().signal()
+    })
+
+    result: 0
+    (left.nanoseconds < right.nanoseconds).ifTrue(() => {
+        result = -1
+    })
+    (left.nanoseconds > right.nanoseconds).ifTrue(() => {
+        result = 1
+    })
+    result
+}
+
+/// Answers a fresh instant exactly `duration.nanoseconds` after `instant`
+/// (before it for a negative duration). Arguments that are not an instant and
+/// a `std:datetime/Duration` signal an Error.
+addDuration: (instant, duration) => {
+    Instant: import("std:datetime/Instant")
+    Duration: import("std:datetime/Duration")
+
+    (Instant.recognizes(instant) && Duration.recognizes(duration)).ifFalse(() => {
+        Error().signal()
+    })
+    Instant(instant.nanoseconds + duration.nanoseconds)
+}
+
+/// Answers a fresh instant exactly `duration.nanoseconds` before `instant`;
+/// equivalent to `addDuration(instant, Duration.negate(duration))`. Arguments
+/// that are not an instant and a `std:datetime/Duration` signal an Error.
+subtractDuration: (instant, duration) => {
+    Instant: import("std:datetime/Instant")
+    Duration: import("std:datetime/Duration")
+    Instant.addDuration(instant, Duration.negate(duration))
+}
+
+/// Answers the `std:datetime/Duration` of exactly
+/// `end.nanoseconds - start.nanoseconds`, so that
+/// `addDuration(start, durationBetween(start, end)) == end`. The duration is
+/// negative when `end` is before `start`. Non-instant arguments signal an
+/// Error.
+durationBetween: (start, end) => {
+    Instant: import("std:datetime/Instant")
+    Duration: import("std:datetime/Duration")
+
+    (Instant.recognizes(start) && Instant.recognizes(end)).ifFalse(() => {
+        Error().signal()
+    })
+    Duration(end.nanoseconds - start.nanoseconds)
+}
