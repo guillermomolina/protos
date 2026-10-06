@@ -15,7 +15,7 @@
 # the specific language governing rights and limitations under the License.
 
 
-"""Harness tests for the TEST009-V single-root Truffle/Graal diagnostic (no JVM is started)."""
+"""Harness tests for the TEST009-V/V2 single-root Truffle/Graal diagnostic (no JVM is started)."""
 
 from __future__ import print_function
 
@@ -140,7 +140,16 @@ class InputTest(unittest.TestCase):
 
 class ClassifyTest(unittest.TestCase):
 
-    BGV = ["dump.bgv"]
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.dumps = Path(directory.name)
+        self.BGV = [self.bgv("TruffleHotSpotCompilation-1.bgv", b"BIGV")]
+
+    def bgv(self, name, content):
+        path = self.dumps / name
+        path.write_bytes(content)
+        return str(path)
 
     def classify(self, lines, expansion="method", bgv=None, exit_code=0):
         output = "\n".join(lines + [SUMMARY]) + "\n"
@@ -178,6 +187,21 @@ class ClassifyTest(unittest.TestCase):
         evidence = self.classify([start(NAME), tree(NAME), failed(NAME, CODE_TOO_LARGE)], bgv=[])
         self.assertEqual(evidence["result"], diag.ACQUISITION_FAILED)
         self.assertTrue(evidence["problems"][0].startswith("MISSING_BGV"))
+
+    def test_empty_or_vanished_bgv_is_not_capture_evidence(self):
+        lines = [start(NAME), tree(NAME), failed(NAME, CODE_TOO_LARGE)]
+        empty = self.classify(lines, bgv=self.BGV + [self.bgv("empty.bgv", b"")])
+        self.assertEqual((empty["result"], empty["capture_ready"]), (diag.ACQUISITION_FAILED, False))
+        self.assertTrue(empty["problems"][0].startswith("EMPTY_BGV"))
+        vanished = self.classify(lines, bgv=[str(self.dumps / "gone.bgv")])
+        self.assertEqual(vanished["result"], diag.ACQUISITION_FAILED)
+        self.assertTrue(vanished["problems"][0].startswith("MISSING_BGV"))
+
+    def test_only_evidence_results_are_capture_ready(self):
+        self.assertTrue(self.classify([start(NAME), tree(NAME), failed(NAME, CODE_TOO_LARGE)])["capture_ready"])
+        self.assertTrue(self.classify([start(NAME), tree(NAME), done(NAME)])["capture_ready"])
+        self.assertFalse(self.classify([])["capture_ready"])
+        self.assertFalse(self.classify([start(NAME), done(NAME), start(CONTINUATION)])["capture_ready"])
 
     def test_missing_requested_expansion_tree_fails_closed(self):
         self.assertEqual(self.classify([start(NAME), done(NAME)])["result"], diag.ACQUISITION_FAILED)
@@ -305,6 +329,37 @@ class DiagnoseTest(unittest.TestCase):
         status, _, out, _ = self.run_diagnose(output)
         self.assertEqual(status, 1)
         self.assertIn("TRUFFLE_ROOT_DIAGNOSTIC=%s" % diag.AMBIGUOUS, out.splitlines())
+
+
+    def test_capture_handoff_names_the_fresh_bgv_and_stops_at_it(self):
+        output = "\n".join([start(NAME), tree(NAME), failed(NAME, CODE_TOO_LARGE), SUMMARY])
+        _, _, out, root = self.run_diagnose(output)
+        lines = out.splitlines()
+        dumps = root / "target" / "truffle-compilation" / "root-diagnostic" / "0123456789abcdef" / "graal_dumps"
+        self.assertEqual(lines[-4:], ["TRUFFLE_ROOT_DIAGNOSTIC=%s" % diag.CODE_TOO_LARGE,
+                                      "TRUFFLE_ROOT_CAPTURE_READY=YES", "TRUFFLE_ROOT_CAPTURE_BOUNDARY=BGV",
+                                      "TRUFFLE_ROOT_BGV=%s" % (dumps / "TruffleHotSpotCompilation-1.bgv")])
+        self.assertNotIn("IGV", out.replace("BGV", ""))
+
+    def test_non_evidence_results_hand_off_nothing(self):
+        for output in (SUMMARY, "\n".join([start(NAME), tree(NAME), done(NAME), start(CONTINUATION), SUMMARY])):
+            _, _, out, _ = self.run_diagnose(output)
+            self.assertIn("TRUFFLE_ROOT_CAPTURE_READY=NO", out.splitlines())
+            self.assertNotIn("TRUFFLE_ROOT_BGV=", out)
+            self.assertNotIn("TRUFFLE_ROOT_CAPTURE_BOUNDARY=", out)
+        _, _, out, _ = self.run_diagnose("\n".join([start(NAME), tree(NAME), done(NAME), SUMMARY]), write_bgv=False)
+        self.assertIn("TRUFFLE_ROOT_CAPTURE_READY=NO", out.splitlines())
+
+
+class BoundaryTest(unittest.TestCase):
+
+    def test_tool_neither_parses_bgv_nor_runs_external_analysis(self):
+        source = Path(diag.__file__).read_text(encoding="utf-8")
+        code = source.split('"""', 2)[2].lower()
+        for forbidden in ("igv", "docker", "subprocess.run", "subprocess.popen", "subprocess.call",
+                          "check_output", "os.system", "read_bytes", "open("):
+            self.assertNotIn(forbidden, code, forbidden)
+        self.assertNotIn("IGV", source.replace("BGV", ""))
 
 
 class MainTest(unittest.TestCase):

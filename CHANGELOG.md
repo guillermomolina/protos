@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.237-SNAPSHOT
+
+- `TEST009-V2` (guillermomolina/protos#795) corrects the TEST009 diagnostic
+  boundary: `make diagnose-truffle-root` stops at the BGV capture. There is
+  no semantic, specification, compiler-policy or strict-gate change.
+  - The diagnostic no longer tells the caller to open the BGV in IGV. The
+    retained BGV is the handoff artifact for downstream Graal graph
+    analysis, and BGV interpretation is outside the Protos tool contract.
+  - A `TARGET_COMPILATION_*` result now also requires every reported BGV to
+    exist and be non-empty (`EMPTY_BGV`/`MISSING_BGV` otherwise fail closed).
+    The output ends with `TRUFFLE_ROOT_CAPTURE_READY=YES|NO`. When it is
+    `YES`, it also prints `TRUFFLE_ROOT_CAPTURE_BOUNDARY=BGV` and one
+    `TRUFFLE_ROOT_BGV=<path>` per dump. `report.json` records
+    `capture_ready`.
+  - Harness tests pin the handoff, the empty/missing BGV rejection and the
+    absence of IGV, Docker, extra process launches and BGV parsing. The
+    Makefile help and the optimization investigation reference describe the
+    same boundary.
+
 ## 0.3.236-SNAPSHOT
 
 - `TEST009-V` (guillermomolina/protos#795) replaces the TEST009-T global

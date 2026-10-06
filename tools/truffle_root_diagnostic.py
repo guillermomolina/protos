@@ -38,8 +38,8 @@ never changes product code or compiler policy; it only observes.
    CompilationFailureAction=Print, TraceCompilation), with at most one
    per-compilation expansion view (TraceMethodExpansion or TraceNodeExpansion,
    never both, never the run-aggregate expansion statistics) and
-   -Djdk.graal.Dump=Truffle:<level> into a fresh directory under target/. Open the
-   retained .bgv in any IGV and inspect "After TruffleTier". The result is one of:
+   -Djdk.graal.Dump=Truffle:<level> into a fresh directory under target/. The result
+   is one of:
 
      TARGET_COMPILATION_SUCCEEDED
      TARGET_COMPILATION_FAILED_CODE_TOO_LARGE   valid evidence, not a tool failure
@@ -54,12 +54,24 @@ never changes product code or compiler policy; it only observes.
    "(resume_bci=<n>)", so a root with continuations is reported as ambiguous with
    all matching names listed. The exit status is 0 only for the three
    TARGET_COMPILATION_* results.
+
+   The tool stops at the capture boundary. A TARGET_COMPILATION_* result requires
+   the requested trace evidence and at least one fresh non-empty .bgv, and ends with
+
+     TRUFFLE_ROOT_CAPTURE_READY=YES
+     TRUFFLE_ROOT_CAPTURE_BOUNDARY=BGV
+     TRUFFLE_ROOT_BGV=<path>          one line per retained graph dump
+
+   Every other result prints TRUFFLE_ROOT_CAPTURE_READY=NO and no BGV handoff. BGV
+   interpretation is intentionally outside this tool: the retained BGV is the
+   handoff artifact for downstream Graal graph analysis.
 """
 
 from __future__ import print_function
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -81,6 +93,7 @@ TARGET_NAME = re.compile(r"protos-root:[0-9a-f]{16}\[[^\]\s]*\](?:\(resume_bci=[
 ENGINE_COMPILATION_EVENT = re.compile(r"^\s*\[engine\] opt \w+")
 EXPANSION_TREE = "Expansion tree for "
 CODE_TOO_LARGE_MARKER = "code is too large"
+CAPTURE_BOUNDARY = "BGV"
 
 EXPANSION_OPTIONS = OrderedDict([
     ("method", (COMPILER + "TraceMethodExpansion=truffleTier",)),
@@ -270,6 +283,11 @@ def classify(output: str, exit_code: Optional[int], selector: str, expansion: st
     if result in EVIDENCE_RESULTS:
         if not bgv:
             problems.append("MISSING_BGV no .bgv graph dump was produced")
+        for path in bgv:
+            if not os.path.isfile(path):
+                problems.append("MISSING_BGV %s does not exist" % path)
+            elif os.path.getsize(path) == 0:
+                problems.append("EMPTY_BGV %s is empty" % path)
         # A failure before the Truffle tier completes legitimately prints no expansion tree.
         if expansion != "none" and result != FAILED_OTHER and expansion_trees == 0:
             problems.append("MISSING_EXPANSION_TREE no '%s<target> after truffleTier' trace" % EXPANSION_TREE)
@@ -282,6 +300,7 @@ def classify(output: str, exit_code: Optional[int], selector: str, expansion: st
     evidence["expansion_trees"] = expansion_trees
     evidence["bgv_files"] = list(bgv)
     evidence["problems"] = problems
+    evidence["capture_ready"] = result in EVIDENCE_RESULTS
     return evidence
 
 
@@ -300,6 +319,7 @@ def diagnose(root: Path, java: str, selector: str, expansion: str, dump_level: s
     if problems:
         report.update(classify("", None, selector or "", expansion, []))
         report["result"], report["problems"] = ACQUISITION_FAILED, problems
+        report["capture_ready"] = False
         return finish(report, None, out, usage=True)
     dumps = directory / "graal_dumps"
     if directory.exists():
@@ -327,6 +347,7 @@ def diagnose(root: Path, java: str, selector: str, expansion: str, dump_level: s
     if launch_problem is not None:
         report["result"] = ACQUISITION_FAILED
         report["problems"] = [launch_problem] + report["problems"]
+        report["capture_ready"] = False
     return finish(report, directory, out)
 
 
@@ -342,16 +363,18 @@ def finish(report, directory: Optional[Path], out, usage: bool = False) -> int:
         print("  " + record.splitlines()[0].strip(), file=out)
     if "log" in report:
         print("TRUFFLE_ROOT_DIAGNOSTIC_LOG=%s" % report["log"], file=out)
-    for bgv in report.get("bgv_files", []):
-        print("TRUFFLE_ROOT_BGV=%s" % bgv, file=out)
     for problem in report["problems"]:
         print("  " + problem, file=out)
     if usage:
         print(USAGE, file=out)
-    if report["result"] in EVIDENCE_RESULTS:
-        print("Open the BGV in IGV and inspect the 'After TruffleTier' graph.", file=out)
+    ready = report["capture_ready"]
     print("TRUFFLE_ROOT_DIAGNOSTIC=%s" % report["result"], file=out)
-    return 0 if report["result"] in EVIDENCE_RESULTS else 1
+    print("TRUFFLE_ROOT_CAPTURE_READY=%s" % ("YES" if ready else "NO"), file=out)
+    if ready:
+        print("TRUFFLE_ROOT_CAPTURE_BOUNDARY=%s" % CAPTURE_BOUNDARY, file=out)
+        for bgv in report["bgv_files"]:
+            print("TRUFFLE_ROOT_BGV=%s" % bgv, file=out)
+    return 0 if ready else 1
 
 
 def main(argv=None) -> int:

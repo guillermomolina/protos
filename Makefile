@@ -96,8 +96,8 @@ help:
 		"                      TRUFFLE_ROOT_TEST_ARGS='--case <ref>' (no compilation)" \
 		'  make diagnose-truffle-root  Compile only TRUFFLE_ROOT_SELECTOR (CompileOnly) with' \
 		'                      TRUFFLE_ROOT_EXPANSION=method|node|none and a Graal' \
-		'                      Dump=Truffle:TRUFFLE_ROOT_DUMP_LEVEL BGV under target/;' \
-		"                      open it in IGV at 'After TruffleTier'" \
+		'                      Dump=Truffle:TRUFFLE_ROOT_DUMP_LEVEL; stops at the fresh' \
+		'                      BGV capture under target/ (handoff for external analysis)' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Run compilerability / PE bailout checks only:' \

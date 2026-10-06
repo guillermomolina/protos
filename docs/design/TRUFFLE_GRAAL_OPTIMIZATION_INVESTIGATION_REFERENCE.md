@@ -144,16 +144,31 @@ Diagnose one compilation unit at a time instead:
    compiles only that root (`engine.CompileOnly`, synchronous,
    `CompilationFailureAction=Print`), with one expansion view and
    `-Djdk.graal.Dump=Truffle:1` (`TRUFFLE_ROOT_DUMP_LEVEL=2` for phase-by-phase
-   graphs) retained under `target/truffle-compilation/root-diagnostic/`;
-4. open the `.bgv` in any IGV installation and inspect `After TruffleTier` (and
-   `After PartialEscape` when needed) for unexpected `Invoke` nodes,
-   implementation-generated control-flow splits, `Load`/`LoadIndexed`
-   indirections and dominant expanded host machinery.
+   graphs) retained under `target/truffle-compilation/root-diagnostic/`.
 
-A `CodeTooLarge` failure of the selected root is valid evidence. The tool fails
-closed when the selector matches no target or several distinct target names, or
-when the trace or BGV evidence is missing. It never changes compiler limits,
-inlining, splitting or boundaries.
+The Protos side of the workflow ends there, at a fresh BGV plus the
+trace/expansion evidence retained under `target/`. A usable capture prints
+
+```text
+TRUFFLE_ROOT_DIAGNOSTIC=<TARGET_COMPILATION_* result>
+TRUFFLE_ROOT_CAPTURE_READY=YES
+TRUFFLE_ROOT_CAPTURE_BOUNDARY=BGV
+TRUFFLE_ROOT_BGV=<path>
+```
+
+with one `TRUFFLE_ROOT_BGV` line per retained dump. The retained BGV is the
+handoff artifact for downstream Graal graph analysis; BGV interpretation is
+intentionally outside the Protos repository/tool contract. BGV files can be
+inspected by compatible Graal graph-analysis tooling, but no particular tool is
+required by, or invoked from, Protos.
+
+A `CodeTooLarge` failure of the selected root is valid evidence and, with a
+fresh non-empty BGV, a valid capture. The tool fails closed
+(`TRUFFLE_ROOT_CAPTURE_READY=NO`) when the selector matches no target or several
+distinct target names, or when the trace evidence is missing or no fresh
+non-empty BGV was produced. It never changes compiler limits, inlining,
+splitting or boundaries. Candidate roots are chosen from the catalog by source
+and span attribution, never by compiling a whole Case without `CompileOnly`.
 
 ### Controlled falsification evidence
 
