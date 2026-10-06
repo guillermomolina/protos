@@ -40,6 +40,7 @@ final class ProtosTestToolI8D4C2ResourcefulInspectionFacilityTest {
     private static final Path RUNNER = Path.of("protos", "tools", "test", "Runner.protos");
     private static final Path MAIN = Path.of("protos", "tools", "test", "Main.protos");
 
+    @SuppressWarnings("try")
     @Test
     void liveFutureInspectionRunsInsideTheResourcefulProcessAndPreservesD108Completion()
             throws Exception {
@@ -163,6 +164,7 @@ activation);
         assertFalse(main.contains("runInfrastructureFailed"));
     }
 
+    @SuppressWarnings("try")
     @Test
     void malformedInspectionBindingSnapshotFailsAtPrivateProtocolBoundary()
             throws Exception {

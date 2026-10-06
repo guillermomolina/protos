@@ -53,6 +53,7 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
                     + "    (environment1.get(\"A\") == environment2.get(\"A\")) &&\n"
                     + "    (environment1.get(\"A\") == otherEnvironment.get(\"A\"))";
 
+    @SuppressWarnings("try")
     @Test
     void completionReturnsThroughCallerDomainWithD135Bootstrap() throws Exception {
         ManualSubmission submission = new ManualSubmission();

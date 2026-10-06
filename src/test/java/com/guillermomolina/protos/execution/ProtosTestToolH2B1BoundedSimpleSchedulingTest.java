@@ -46,6 +46,7 @@ final class ProtosTestToolH2B1BoundedSimpleSchedulingTest {
                     "tooling",
                     "tool002-h2b1-bounded-simple-scheduling.protos");
 
+    @SuppressWarnings("try")
     @Test
     void protosPolicyBoundsDirectAsyncAdmissionAndRetainsPlanOrder() throws Exception {
         try (TrackingSubmission submission = new TrackingSubmission();

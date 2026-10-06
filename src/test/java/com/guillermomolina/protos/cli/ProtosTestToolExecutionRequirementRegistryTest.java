@@ -31,6 +31,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
 
+    @SuppressWarnings("try")
     @Test
     void registryIsExactInvocationScopedFrozenAndSourceFree() throws Exception {
         Fixture fixture = fixture();
@@ -80,6 +81,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void ordinaryBindingCarriesSuiteNativeLogicalCaseExecutionRouteWhenInstalled()
             throws Exception {

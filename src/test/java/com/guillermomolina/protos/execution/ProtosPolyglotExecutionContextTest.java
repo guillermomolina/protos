@@ -312,7 +312,6 @@ class ProtosPolyglotExecutionContextTest {
         return new ProtosPrelude(bindings, contextPrototype);
     }
 
-    @SafeVarargs
     private static void awaitLatchOrPropagate(
             CountDownLatch latch, String message, Future<?>... work) throws Exception {
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS);

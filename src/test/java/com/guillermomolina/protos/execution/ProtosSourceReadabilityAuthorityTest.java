@@ -104,6 +104,7 @@ class ProtosSourceReadabilityAuthorityTest {
         return path.toAbsolutePath().normalize();
     }
 
+    @SuppressWarnings("try")
     private static void assertReadable(
             ProtosSourceReadabilityAuthority authority, Path path) throws IOException {
         try (SeekableByteChannel ignored =

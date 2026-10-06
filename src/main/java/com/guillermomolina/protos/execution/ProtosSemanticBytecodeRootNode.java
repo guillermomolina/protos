@@ -1609,7 +1609,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static ProtosObjectValue perform(
                 ProtosActivation activation,
                 Object sourceValue,
-                java.util.List<String> reservedNames) {
+                ProtosBytecodeRootNode.ComposeReservedNames reservedNames) {
             return ProtosBytecodeRootNode.ComposeLocalSlots.perform(
                     activation, sourceValue, reservedNames);
         }

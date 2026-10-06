@@ -46,6 +46,7 @@ final class ProtosTestToolH2B2BoundedDCaseSchedulingTest {
                     "tooling",
                     "tool002-h2b2-bounded-d-scheduling.protos");
 
+    @SuppressWarnings("try")
     @Test
     void oneProtosBoundCoversExecutionWrappingAndInspectionRoutes() throws Exception {
         try (TrackingSubmission submission = new TrackingSubmission();

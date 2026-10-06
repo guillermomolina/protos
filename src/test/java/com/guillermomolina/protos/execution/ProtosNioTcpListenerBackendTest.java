@@ -50,6 +50,7 @@ final class ProtosNioTcpListenerBackendTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Duration WAIT = Duration.ofSeconds(10);
 
+    @SuppressWarnings("try")
     @Test
     void ipv4ListenerKeepsMultipleAcceptsIndependentAndCancellationDoesNotConsumeNextPeer()
             throws Exception {

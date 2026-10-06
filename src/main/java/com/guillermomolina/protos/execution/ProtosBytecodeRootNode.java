@@ -1661,20 +1661,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Immutable reserved local-slot names of a composition item, carried as a
+     * Bytecode constant operand of {@link ComposeLocalSlots}. A non-generic
+     * carrier keeps the DSL-generated operand read a checked cast; a
+     * parameterized {@code List<String>} operand forces an erased unchecked
+     * cast in the generated interpreter.
+     */
+    public record ComposeReservedNames(java.util.List<String> names) {
+        public ComposeReservedNames {
+            names = java.util.List.copyOf(names);
+        }
+    }
+
     @Operation
     public static final class ComposeLocalSlots {
         @Specialization
         public static ProtosObjectValue perform(
                 ProtosActivation activation,
                 Object sourceValue,
-                java.util.List<String> reservedNames) {
+                ComposeReservedNames reservedNames) {
             if (!(sourceValue instanceof ProtosObjectValue source)) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
 
             ProtosObjectValue target = activation.context();
             try {
-                target.composeLocalSlotsFrom(source, reservedNames);
+                target.composeLocalSlotsFrom(source, reservedNames.names());
             } catch (IllegalStateException failure) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }

@@ -15,6 +15,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -163,7 +164,7 @@ final class ProtosNioTcpConnectionWriteTest {
                 ProtosActivation a,ProtosTcpConnectionValue c){
             poller=p;server=s;peer=q;prelude=pr;activation=a;connection=c;
         }
-        public void close()throws Exception{
+        public void close()throws IOException{
             try{peer.close();}finally{try{server.close();}finally{poller.close();}}
         }
     }

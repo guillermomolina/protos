@@ -308,6 +308,7 @@ final class ProtosPerf006Plat031BufferedWriterCPrimeTest {
         System.out.println("D117_BUFFERED_CPRIME_POST_COMMIT_LOWER_CANCEL=FAILURE");
     }
 
+    @SuppressWarnings("try")
     @Test
     void bufferedFlushIsSuspensionCapableWhileWriteAndCloseRemainOrdinary()
             throws Exception {

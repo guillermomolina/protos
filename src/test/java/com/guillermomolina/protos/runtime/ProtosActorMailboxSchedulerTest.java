@@ -136,6 +136,7 @@ final class ProtosActorMailboxSchedulerTest {
         assertEquals(List.of("a1", "b1", "a2", "b2", "a3", "b3"), order);
     }
 
+    @SuppressWarnings("try")
     @Test
     void oneActorNeverRunsTwoSegmentsConcurrently() throws Exception {
         try (CarrierPool carriers = new CarrierPool(4)) {
@@ -187,6 +188,7 @@ final class ProtosActorMailboxSchedulerTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void distinctActorsCanMakeProgressOnDifferentCarriers() throws Exception {
         try (CarrierPool carriers = new CarrierPool(2)) {
@@ -262,6 +264,9 @@ final class ProtosActorMailboxSchedulerTest {
         }
     }
 
+    // close() deliberately propagates InterruptedException from awaiting carrier
+    // termination; the "try" lint flags that contract on every resource use.
+    @SuppressWarnings("try")
     private static final class CarrierPool implements AutoCloseable {
         private final AtomicReference<Throwable> uncaughtFailure =
                 new AtomicReference<>();

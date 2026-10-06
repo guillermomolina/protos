@@ -120,6 +120,7 @@ final class ProtosTestToolPerf017AdmissionTest {
         assertEquals(17L, terminal.getLong("lifecycleToken"));
     }
 
+    @SuppressWarnings("try")
     @Test
     void ordinaryLogicalCaseEmitsTheOperationAdmissionSequence(@TempDir Path root)
             throws Exception {
@@ -174,6 +175,7 @@ final class ProtosTestToolPerf017AdmissionTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void processSnapshotUsesTheSameOperationAdmissionSchema(@TempDir Path root)
             throws Exception {
@@ -231,6 +233,7 @@ final class ProtosTestToolPerf017AdmissionTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void lifecycleSeamUsesTheCurrentLaneAndAddsNoDiagnosticOutput(@TempDir Path root)
             throws Exception {

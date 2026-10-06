@@ -39,6 +39,7 @@ final class ProtosTestToolI8D5AHostRegistryBootstrapTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
 
+    @SuppressWarnings("try")
     @Test
     void productionHostScopeInstallsC1C2WithExplicitEmptyRegistryAndUnknownProviderFailsClosed()
             throws Exception {

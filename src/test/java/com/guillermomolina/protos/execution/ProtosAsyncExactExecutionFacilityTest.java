@@ -44,6 +44,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
 
+    @SuppressWarnings("try")
     @Test
     void hostCompletionRemainsInertUntilCallerDomainDispatch() throws Exception {
         ManualSubmission submission = new ManualSubmission();
@@ -76,6 +77,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void cancellationBeforeHostStartWithdrawsWorkAndTerminalizesFuture() throws Exception {
         ManualSubmission submission = new ManualSubmission();
@@ -97,6 +99,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void twoAcceptedOperationsCanProgressIndependentlyWithPrivateOutput() throws Exception {
         try (ConcurrentSubmission submission = new ConcurrentSubmission(2);
@@ -177,6 +180,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
     }
 
 
+    @SuppressWarnings("try")
     @Test
     void inspectionAsyncPreservesLiveSourceCompositionAndCallerDomainMaterialization()
             throws Exception {
@@ -207,6 +211,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void cancellationAfterCapturedHostCompletionDiscardsLateCallerResult()
             throws Exception {

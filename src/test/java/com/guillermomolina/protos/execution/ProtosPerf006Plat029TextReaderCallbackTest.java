@@ -177,6 +177,7 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
         System.out.println("PLAT029_TEXT_READER_LATE_CALLBACK_GUEST_REENTRY=NO");
     }
 
+    @SuppressWarnings("try")
     @Test
     void readOperationsAreSuspensionCapableButCloseRemainsOutsideThisSlice()
             throws Exception {

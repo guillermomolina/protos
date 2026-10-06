@@ -307,7 +307,6 @@ final class ProtosI026EDebuggerIntegrationTest {
                 .build();
     }
 
-    @SafeVarargs
     private static void awaitLatchOrPropagate(
             CountDownLatch latch,
             String message,

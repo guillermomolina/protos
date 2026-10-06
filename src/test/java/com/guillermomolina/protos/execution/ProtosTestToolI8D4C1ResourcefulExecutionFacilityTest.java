@@ -40,6 +40,7 @@ final class ProtosTestToolI8D4C1ResourcefulExecutionFacilityTest {
     private static final Path RUNNER = Path.of("protos", "tools", "test", "Runner.protos");
     private static final Path MAIN = Path.of("protos", "tools", "test", "Main.protos");
 
+    @SuppressWarnings("try")
     @Test
     void resourcefulCompletionRematerializesWithoutTurningInfrastructureIntoGuestError()
             throws Exception {
@@ -210,6 +211,7 @@ activation);
         assertFalse(main.contains("runInfrastructureFailed"));
     }
 
+    @SuppressWarnings("try")
     @Test
     void malformedBindingSnapshotFailsAtPrivateProtocolBoundary() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);

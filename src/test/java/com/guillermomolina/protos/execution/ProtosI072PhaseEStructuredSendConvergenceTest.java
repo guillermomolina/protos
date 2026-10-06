@@ -282,6 +282,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
      * structured selection for exactly the five Boolean callbacks, with the
      * canonical behavior/home provenance of the generic D013 selection.
      */
+    @SuppressWarnings("try")
     @Test
     void canonicalBooleanReceiversAreAdmittedToGuardedStructuredSelection() throws Exception {
         try (LanguageScope scope = languageScope()) {

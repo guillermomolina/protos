@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.223-SNAPSHOT
+
+- `I070` (guillermomolina/protos#712) completes the remaining warning
+  reconciliation: `I070-B` (#714) test sources and `I070-C` (#715)
+  generated/annotation-processing output. Under `-Xlint:all`, the clean
+  `mvn clean package -DskipTests` baseline (89 javac warnings: 0 main,
+  62 test, 24 generated, 3 processing) now has 0 actionable Protos-owned
+  warnings; handwritten main remains at 0. No semantic change and no
+  specification change.
+  - Tests: 33 deliberately unreferenced lifetime-only try-with-resources
+    resources carry method-level `@SuppressWarnings("try")`; five fixtures
+    whose `close()` declared `throws Exception` but can only throw
+    `IOException` declare `throws IOException`; the actor `CarrierPool`
+    fixture keeps propagating `InterruptedException` from awaiting carrier
+    termination under a narrow `"try"` suppression; two redundant
+    `@SafeVarargs` on reifiable `Future<?>` varargs are removed.
+  - Generated: the `ComposeLocalSlots` Bytecode operand is the immutable
+    non-generic `ProtosBytecodeRootNode.ComposeReservedNames` carrier instead
+    of `List<String>`, eliminating the 8 DSL-generated unchecked casts.
+  - Processing: test compilation runs with `<proc>none</proc>`; test sources
+    declare no Truffle DSL elements and the processor generated nothing for
+    them.
+  - Retained, not Protos-owned (18): 16 `java.lang.ThreadDeath`
+    deprecation-for-removal warnings emitted by the Truffle Bytecode DSL
+    generator's exception-handling template (`resolveThrowable`,
+    `handleException`) for every `@GenerateBytecode` root; 2 javac
+    "No processor claimed any of these annotations" warnings for main
+    compilation, inherent to javac's `processing` lint over runtime and
+    nested DSL annotations. No global lint category is disabled.
+
 ## 0.3.222-SNAPSHOT
 
 - `I070-A` (child of I070, guillermomolina/protos#713) eliminates every

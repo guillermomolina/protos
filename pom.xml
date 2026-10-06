@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.222-SNAPSHOT</version>
+    <version>0.3.223-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -115,6 +115,16 @@
                         <arg>-Xlint:all</arg>
                     </compilerArgs>
                 </configuration>
+                <executions>
+                    <!-- Test sources declare no Truffle DSL elements, so the
+                         processor has nothing to generate for them. -->
+                    <execution>
+                        <id>default-testCompile</id>
+                        <configuration>
+                            <proc>none</proc>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

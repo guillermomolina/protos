@@ -47,6 +47,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
     private static final Path SHARED_ROOT =
             Path.of("protos", "tools", "shared");
 
+    @SuppressWarnings("try")
     @Test
     void completionRemainsInertUntilCallerDispatch(
             @TempDir Path root) throws Exception {
@@ -168,6 +169,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void preservesRematerializationErrorAsPhaseNotFutureFailure(
             @TempDir Path root) throws Exception {
@@ -269,6 +271,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
         }
     }
 
+    @SuppressWarnings("try")
     @Test
     void readsFreshSourceOnHostCarrierAfterAdmission(
             @TempDir Path root) throws Exception {

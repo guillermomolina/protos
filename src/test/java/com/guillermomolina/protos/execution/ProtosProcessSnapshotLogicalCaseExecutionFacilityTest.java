@@ -198,6 +198,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
         assertSame(ProtosBooleanValue.TRUE, observation.readLocalSlot("value").orElseThrow());
     }
 
+    @SuppressWarnings("try")
     @Test
     void independentLogicalCasesRematerializeIndependentProcesses(
             @org.junit.jupiter.api.io.TempDir Path root) throws Exception {
@@ -289,6 +290,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
 
     private record ProtosCompletion(String phase, ProtosObjectValue observation) {}
 
+    @SuppressWarnings("try")
     private static ProtosCompletion runCase(
             String source, List<String> signature, String selector) throws Exception {
         ManualSubmission submission = new ManualSubmission();

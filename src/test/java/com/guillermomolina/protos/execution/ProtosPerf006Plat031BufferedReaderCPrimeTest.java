@@ -181,6 +181,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
         System.out.println("PLAT031_BUFFERED_READER_LATE_CALLBACK_GUEST_REENTRY=NO");
     }
 
+    @SuppressWarnings("try")
     @Test
     void bufferedReadIsSuspensionCapableButCloseRemainsOutsideThisSlice()
             throws Exception {

@@ -2740,7 +2740,8 @@ final class CanonicalToBytecodeLowerer {
         builder.beginComposeLocalSlots();
         emitCurrentActivation(builder);
         builder.emitLoadLocal(sourceValue);
-        builder.emitLoadConstant(composeReservedNames(compose));
+        builder.emitLoadConstant(
+                new ProtosBytecodeRootNode.ComposeReservedNames(composeReservedNames(compose)));
         builder.endComposeLocalSlots();
         builder.endStoreLocal();
     }

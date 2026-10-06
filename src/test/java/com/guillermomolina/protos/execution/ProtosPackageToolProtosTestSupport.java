@@ -349,7 +349,7 @@ abstract class ProtosPackageToolProtosTestSupport {
         }
 
         @Override
-        public void close() throws Exception {
+        public void close() throws IOException {
             try {
                 hosted.close();
             } finally {

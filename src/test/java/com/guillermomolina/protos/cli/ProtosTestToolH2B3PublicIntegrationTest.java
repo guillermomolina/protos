@@ -110,6 +110,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                 () -> assertFailedError(duplicate, "duplicate"));
     }
 
+    @SuppressWarnings("try")
     @Test
     void productionScopeInstallsAllRoutesAndCarriesGenericExecutionAndInspection()
             throws Exception {

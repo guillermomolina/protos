@@ -309,6 +309,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     // once. This is the current authoritative owner of what the removed
     // whole-source CaseAuthority execution facility used to cover before its
     // removal.
+    @SuppressWarnings("try")
     @Test
     void resolvesProjectTreeDescriptorAndProvisionsPhysicalAuthorityExactlyOnce()
             throws Exception {
