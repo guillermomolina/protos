@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.231-SNAPSHOT
+
+- `AUD006-B2` (guillermomolina/protos#453) removes the recursive
+  `canonicalizeCommand` from `std:cli/CommandLine.command`, so canonicalization
+  execution-stack depth no longer grows with command-tree depth. No
+  specification change, no public API change, no canonical CommandSpec shape
+  change and no public depth limit.
+  - Traversal now uses explicit linked heap frames in Protos (`enterCommand` /
+    `exitCommand` plus an iterative loop). Each child is canonicalized
+    completely before the parent's duplicate-name check, registration and
+    storage, preserving validation and failure ordering.
+  - `visiting` remains an active-path identity set: self and indirect ancestor
+    cycles are rejected, completed shared descriptors are accepted, and every
+    occurrence yields a fresh canonical result (no memoization).
+  - Added retained regressions in `ProtosCommandLineSpecModuleTest`: a
+    4096-level single-child chain (test scale only; it overflowed the stack on
+    the previous recursive implementation), an indirect ancestor cycle, and a
+    shared descriptor reused across two branches.
+  - `parseScope` recursion is unchanged and remains for AUD006-B3.
+
 ## 0.3.230-SNAPSHOT
 
 - `LIB010-E2-A` (AUD005, guillermomolina/protos#451) makes the

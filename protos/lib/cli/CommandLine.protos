@@ -279,10 +279,13 @@ command: (descriptor) => {
         value
     }
 
+    // Active-path identities only: a descriptor leaves `visiting` when its own
+    // canonicalization completes, so completed shared descriptors are reused.
     visiting: IdentityMap()
-    canonicalizeCommand: null
 
-    canonicalizeCommand = (candidate) => {
+    // Validates one command descriptor and canonicalizes its options and
+    // positionals, returning an explicit heap frame suspended before its children.
+    enterCommand: (candidate, parentFrame) => {
         visiting.containsKey(candidate).ifTrue(() => {
             fail()
         })
@@ -356,37 +359,71 @@ command: (descriptor) => {
         })
         canonicalPositionals.freeze()
 
-        canonicalSubcommands: Array(...subcommandDescriptors)
-        subcommandNames: Map()
-        subcommandIndex: 0
-        subcommandDescriptors.each((entry) => {
-            spec: canonicalizeCommand(entry)
-
-            subcommandNames.containsKey(spec.name).ifTrue(() => {
-                fail()
-            })
-            subcommandNames[spec.name] = true
-
-            canonicalSubcommands[subcommandIndex] = spec
-            subcommandIndex = subcommandIndex + 1
-        })
-        canonicalSubcommands.freeze()
-
-        visiting.remove(candidate)
-
-        canonical: {
-            kind: "command"
+        suspended: {
+            parent: parentFrame
+            candidate: candidate
             name: nameValue
             help: helpValue
             options: canonicalOptions
             positionals: canonicalPositionals
-            subcommands: canonicalSubcommands
+            subcommandDescriptors: subcommandDescriptors
+            subcommands: Array(...subcommandDescriptors)
+            subcommandNames: Map()
+            childIndex: 0
+        }
+        suspended
+    }
+
+    // Completes a frame whose children are all canonicalized.
+    exitCommand: (frame) => {
+        frame.subcommands.freeze()
+
+        visiting.remove(frame.candidate)
+
+        canonical: {
+            kind: "command"
+            name: frame.name
+            help: frame.help
+            options: frame.options
+            positionals: frame.positionals
+            subcommands: frame.subcommands
         }
 
         canonical.freeze()
     }
 
-    canonicalizeCommand(descriptor)
+    // Depth-first traversal over explicit linked frames keeps execution-stack
+    // depth independent of command depth. Each child is canonicalized completely
+    // before its parent's duplicate-name check, registration and storage.
+    frame: enterCommand(descriptor, null)
+    result: null
+    (() => result === null).whileTrue() {
+        (frame.childIndex < frame.subcommandDescriptors.size()).ifTrueIfFalse(
+            () => {
+                frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
+            },
+            () => {
+                spec: exitCommand(frame)
+                parentFrame: frame.parent
+                (parentFrame === null).ifTrueIfFalse(
+                    () => {
+                        result = spec
+                    },
+                    () => {
+                        parentFrame.subcommandNames.containsKey(spec.name).ifTrue(() => {
+                            fail()
+                        })
+                        parentFrame.subcommandNames[spec.name] = true
+
+                        parentFrame.subcommands[parentFrame.childIndex] = spec
+                        parentFrame.childIndex = parentFrame.childIndex + 1
+                        frame = parentFrame
+                    }
+                )
+            }
+        )
+    }
+    result
 }
 
 /// Parses a canonical CommandSpec tree into a fresh frozen lossless result.

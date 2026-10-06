@@ -550,6 +550,139 @@ final class ProtosCommandLineSpecModuleTest {
                 """);
     }
 
+    @Test
+    void commandRejectsActivePathCyclesButAcceptsCompletedSharedDescriptors() throws Exception {
+        assertSignals(
+                """
+                first: {
+                    name: "first"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array(null)
+                }
+                second: {
+                    name: "second"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array(first)
+                }
+                root: {
+                    name: "tool"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array(second)
+                }
+                first.subcommands[0] = root
+                CommandLine.command(root)
+                """);
+
+        Object result =
+                evaluate(
+                        """
+                        CommandLine: import("std:cli/CommandLine")
+
+                        shared: {
+                            name: "shared"
+                            help: null
+                            options: Array()
+                            positionals: Array()
+                            subcommands: Array()
+                        }
+                        root: CommandLine.command({
+                            name: "tool"
+                            help: null
+                            options: Array()
+                            positionals: Array()
+                            subcommands: Array(
+                                {
+                                    name: "left"
+                                    help: null
+                                    options: Array()
+                                    positionals: Array()
+                                    subcommands: Array(shared)
+                                },
+                                {
+                                    name: "right"
+                                    help: null
+                                    options: Array()
+                                    positionals: Array()
+                                    subcommands: Array(shared)
+                                }
+                            )
+                        })
+                        leftShared: root.subcommands[0].subcommands[0]
+                        rightShared: root.subcommands[1].subcommands[0]
+
+                        (leftShared.name == "shared") &&
+                            (rightShared.name == "shared") &&
+                            (leftShared !== rightShared) &&
+                            (leftShared !== shared) &&
+                            (leftShared.subcommands !== rightShared.subcommands)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void commandCanonicalizesDeepSingleChildChainWithoutDepthLimit() throws Exception {
+        // Test scale only: not a public maximum depth or a claimed safe bound.
+        int depth = 4096;
+        Object result =
+                evaluate(
+                        """
+                        CommandLine: import("std:cli/CommandLine")
+
+                        depth: %d
+                        current: {
+                            name: "leaf"
+                            help: null
+                            options: Array()
+                            positionals: Array()
+                            subcommands: Array()
+                        }
+                        level: 0
+                        (() => level < depth).whileTrue() {
+                            current = {
+                                name: "node"
+                                help: null
+                                options: Array()
+                                positionals: Array()
+                                subcommands: Array(current)
+                            }
+                            level = level + 1
+                        }
+                        CommandLine.command(current)
+                        """
+                                .formatted(depth));
+
+        ProtosObjectValue node = assertInstanceOf(ProtosObjectValue.class, result);
+        int level = 0;
+        while (level < depth) {
+            assertCanonicalCommandShape(node, "node");
+            ProtosArrayValue subcommands = arraySlot(node, "subcommands");
+            assertEquals(BigInteger.ONE, subcommands.indexedSize());
+            node = assertInstanceOf(ProtosObjectValue.class, subcommands.indexedAt(BigInteger.ZERO));
+            level++;
+        }
+        assertCanonicalCommandShape(node, "leaf");
+        assertEquals(BigInteger.ZERO, arraySlot(node, "subcommands").indexedSize());
+    }
+
+    private static void assertCanonicalCommandShape(ProtosObjectValue command, String name) {
+        assertTrue(command.isFrozen());
+        assertEquals(
+                Set.of("kind", "name", "help", "options", "positionals", "subcommands"),
+                command.localSlotsSnapshot().keySet());
+        assertEquals("command", stringSlot(command, "kind"));
+        assertEquals(name, stringSlot(command, "name"));
+        assertTrue(arraySlot(command, "options").isFrozen());
+        assertTrue(arraySlot(command, "positionals").isFrozen());
+        assertTrue(arraySlot(command, "subcommands").isFrozen());
+    }
+
     private static void assertSignals(String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
