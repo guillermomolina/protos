@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.235-SNAPSHOT
+
+- `TOOL011-B` (guillermomolina/protos#803) replaces the positional Test Tool
+  progress phases with repository progress groups owned by
+  `RepositorySuite`. There is no specification, SuiteId, CorpusId,
+  ExecutionRequirementId, CaseRef, selection, `--list-cases`, scheduling,
+  result-classification or exit-code change; only progress presentation
+  changes.
+  - `Main.protos` no longer carries the `phaseNames` label array; the
+    `[main]` group is gone. Grouping is a presentation projection over the
+    final retained Logical Cases, computed after `CaseSelection` completes
+    and never on the `--list-cases` path. Groups without a retained Case are
+    omitted, and failures are attributed to the Case's own group.
+  - Ordinary repository leaves present under their SuiteId without the
+    `protos/` prefix (for example `library/uri`, `package-tool/version`),
+    replacing the historical labels (`uri`, `package-tool-version`, ...).
+  - `protos/conformance` is presented as ten ordered groups classified by
+    the directory of `Manifest.casePath`: `values`, `object-model`,
+    `control-concurrency`, `io`, `standard-library/toml-official`,
+    `standard-library/toml`, `standard-library/collections`,
+    `standard-library/data-text-test`, `language-surface` and
+    `regression-maturity`, all under `conformance/`. A path matching no
+    group or more than one fails closed; there is no catch-all group.
+  - New `ProtosTestToolTool011ProgressGroupingTest`; existing progress-label
+    and `Main.protos` source-anchor assertions updated accordingly.
+
 ## 0.3.234-SNAPSHOT
 
 - `LIB010-E2-D` is the final corrective closure for `AUD005`

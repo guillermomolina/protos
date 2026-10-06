@@ -105,10 +105,16 @@ prelude.newModuleActivation());
                 main.indexOf("startProgress(", progressBinding);
         assertTrue(progressBinding >= 0);
         assertTrue(progressStart > progressBinding);
-        assertTrue(main.contains("\"main\""));
-        assertTrue(main.contains("\"actor\""));
-        assertTrue(main.contains("\"group\""));
-        assertTrue(main.contains("\"package-toml\""));
+        // TOOL011: repository progress labels come from RepositorySuite policy,
+        // not from a positional label array in Main; there is no [main] group.
+        assertTrue(!main.contains("phaseNames"));
+        assertTrue(!main.contains("\"main\""));
+        assertTrue(main.contains("RepositorySuite.progressGroupNames(suite.leaf)"));
+        String repositorySuite =
+                Files.readString(TOOL_ROOT.resolve("RepositorySuite.protos"), StandardCharsets.UTF_8);
+        assertTrue(repositorySuite.contains("\"conformance/values\""));
+        assertTrue(repositorySuite.contains("\"conformance/regression-maturity\""));
+        assertTrue(repositorySuite.contains("repositoryLeafIdPrefix: \"protos/\""));
     }
 
     private static int occurrences(String text, String needle) {

@@ -39,11 +39,11 @@ final class ProtosTestToolFileSelectionPublicIntegrationTest {
                     + "test\n";
 
     private static final String EXPECTED_URI_PROGRESS =
-            "[uri] 0/4\n"
-                    + "[uri] 1/4\n"
-                    + "[uri] 2/4\n"
-                    + "[uri] 3/4\n"
-                    + "[uri] 4/4 passed\n"
+            "[library/uri] 0/4\n"
+                    + "[library/uri] 1/4\n"
+                    + "[library/uri] 2/4\n"
+                    + "[library/uri] 3/4\n"
+                    + "[library/uri] 4/4 passed\n"
                     + "4 passed, 0 failed\n";
 
     @Test

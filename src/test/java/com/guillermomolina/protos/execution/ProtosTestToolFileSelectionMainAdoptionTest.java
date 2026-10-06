@@ -138,6 +138,6 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "planned: executionSuites[suiteIndex]"));
+                        "names: suiteGroupNames[suiteIndex]"));
     }
 }

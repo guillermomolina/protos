@@ -77,7 +77,9 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest {
 
         assertEquals(0, result.code());
         assertEquals(EXPECTED_BOOTSTRAP_STDOUT, result.out());
-        assertEquals("[uri] 0/1\n" + "[uri] 1/1 passed\n" + "1 passed, 0 failed\n", result.err());
+        assertEquals(
+                "[library/uri] 0/1\n" + "[library/uri] 1/1 passed\n" + "1 passed, 0 failed\n",
+                result.err());
     }
 
     @Test
@@ -88,7 +90,10 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest {
         assertEquals(0, result.code());
         assertEquals(EXPECTED_BOOTSTRAP_STDOUT, result.out());
         assertEquals(
-                "[uri] 0/2\n" + "[uri] 1/2\n" + "[uri] 2/2 passed\n" + "2 passed, 0 failed\n",
+                "[library/uri] 0/2\n"
+                        + "[library/uri] 1/2\n"
+                        + "[library/uri] 2/2 passed\n"
+                        + "2 passed, 0 failed\n",
                 result.err());
     }
 
@@ -147,7 +152,7 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest {
     private static void assertFailsBeforeScheduling(R result) {
         assertEquals(1, result.code());
         assertEquals("", result.out());
-        assertFalse(result.err().contains("[uri]"), result::err);
+        assertFalse(result.err().contains("[library/uri]"), result::err);
     }
 
     private static String parseRef(int index) {

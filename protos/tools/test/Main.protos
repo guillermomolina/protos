@@ -21,6 +21,7 @@ FileSelection: import("self:FileSelection")
 ResourceCatalog: import("self:ResourceCatalog")
 ResourceRequirements: import("self:ResourceRequirements")
 SuiteGraph: import("self:SuiteGraph")
+Arrays: import("std:collections/Array")
 RepositorySuite: import("self:RepositorySuite")
 RepositoryCorpusPlans: import("self:RepositoryCorpusPlans")
 Discovery: import("self:Discovery")
@@ -56,11 +57,11 @@ emitProgress: (line) => {
 progressPhases: Array()
 
 startProgress: (
-    phaseName,
+    groupName,
     totalLogicalCases
 ) => {
     state: Progress.begin(
-        phaseName,
+        groupName,
         totalLogicalCases,
         emitProgress
     )
@@ -68,37 +69,7 @@ startProgress: (
     state
 }
 
-// Presentation stays separate from D123 SuiteId, D126 CorpusId and D125
-// ExecutionRequirementId authority. These four historical labels are retained
-// only for exact output compatibility while execution order comes from the graph.
-phaseNames: Array(
-    "main",
-    "process-snapshot",
-    "actor",
-    "group",
-    "package-toml",
-    "uri",
-    "csv",
-    "cli",
-    "math-integer",
-    "crypto-sha256",
-    "network-ip-addresses",
-    "network-ip-endpoints",
-    "package-tool-version",
-    "package-tool-lock",
-    "package-tool-resolution-input",
-    "package-tool-content-identity",
-    "package-tool-resolution-input-lock",
-    "package-tool-resolution-root",
-    "package-tool-execution-plan",
-    "package-tool-project-projection"
-)
-phaseNames.freeze()
-
 leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)
-(leaves.size() == phaseNames.size()).ifFalse(() => {
-    Error().signal()
-})
 
 // D126/D125: resolve and validate the complete invocation corpus + execution
 // binding set before any TestPlan case may be scheduled. SuiteId selects neither
@@ -160,7 +131,6 @@ resolveIndex: 0
 
     resolved: {
         leaf: leaf
-        phaseName: phaseNames[resolveIndex]
         corpusBinding: corpusBinding
         binding: binding
     }
@@ -218,7 +188,6 @@ planIndex: 0
 
     planned: {
         leaf: resolved.leaf
-        phaseName: resolved.phaseName
         corpusBinding: corpusBinding
         binding: resolved.binding
         plan: suitePlan
@@ -311,7 +280,6 @@ selectorsActive.ifTrue(() => {
         (Manifest.planCases(selectedPlan).size() > 0).ifTrue(() => {
             selected: {
                 leaf: planned.leaf
-                phaseName: planned.phaseName
                 corpusBinding: planned.corpusBinding
                 binding: planned.binding
                 plan: selectedPlan
@@ -514,7 +482,6 @@ executionSuites.each((planned) => {
     retainSuite.ifTrue(() => {
         suite: {
             leaf: planned.leaf
-            phaseName: planned.phaseName
             corpusBinding: planned.corpusBinding
             binding: planned.binding
             logicalCaseCount: logicalCaseCount
@@ -556,35 +523,89 @@ listCases.ifTrue(() => {
 })
 
 listCases.ifFalse(() => {
-    // BUG010: every suite's D120 progress state/observer is created here, before
-    // any logical Case is scheduled, so the first "[phase] 0/N" line and every
+    // TOOL011: progress groups are a presentation projection over the final
+    // retained Logical Cases, established only after selection completed and
+    // only outside --list-cases. RepositorySuite owns the grouping policy;
+    // executionSuiteIndex in logicalCaseMetadata remains the sole execution
+    // authority, and the progress-group index below is presentation only.
+    suiteGroupNames: Arrays.map(
+        executionSuites,
+        (suite) => RepositorySuite.progressGroupNames(suite.leaf)
+    )
+    suiteGroupTotals: Arrays.map(
+        suiteGroupNames,
+        (names) => Arrays.map(names, (ignored) => 0)
+    )
+
+    logicalGroupKeys: Arrays.map(logicalCaseMetadata, (metadata) => {
+        (caseSuiteIndex, spec): metadata
+        localIndex:
+            RepositorySuite.progressGroupIndex(
+                executionSuites[caseSuiteIndex].leaf,
+                Manifest.casePath(spec)
+            )
+        totals: suiteGroupTotals[caseSuiteIndex]
+        totals[localIndex] = totals[localIndex] + 1
+        Array(caseSuiteIndex, localIndex)
+    })
+
+    // BUG010: every progress group's D120 state/observer is created here, before
+    // any logical Case is scheduled, so the first "[group] 0/N" line and every
     // later milestone are observable while the invocation is still running
-    // rather than only after the logical Case runner has fully drained.
-    suiteProgressStates: Array()
-    suiteObservers: Array()
-    suiteInfrastructureFailed: Array()
+    // rather than only after the logical Case runner has fully drained. Groups
+    // are emitted in repository leaf order, then RepositorySuite group order;
+    // groups without a retained Logical Case are omitted.
+    groupProgressStates: Array()
+    groupObservers: Array()
+    groupInfrastructureFailed: Array()
+    suiteProgressGroupIndexes: Array()
 
     suiteIndex: 0
     (() => suiteIndex < executionSuites.size()).whileTrue() {
-        planned: executionSuites[suiteIndex]
-        suiteProgress:
-            startProgress(
-                planned.phaseName,
-                planned.logicalCaseCount
-            )
+        names: suiteGroupNames[suiteIndex]
+        totals: suiteGroupTotals[suiteIndex]
+        progressGroupIndexes: Array()
 
-        suiteProgressStates =
-            Array(...suiteProgressStates, suiteProgress)
-        suiteObservers =
-            Array(
-                ...suiteObservers,
-                Progress.observer(suiteProgress)
-            )
-        suiteInfrastructureFailed =
-            Array(...suiteInfrastructureFailed, false)
+        localIndex: 0
+        (() => localIndex < names.size()).whileTrue() {
+            progressGroupIndex: null
 
+            (totals[localIndex] > 0).ifTrue(() => {
+                suiteProgress:
+                    startProgress(
+                        names[localIndex],
+                        totals[localIndex]
+                    )
+
+                progressGroupIndex = groupProgressStates.size()
+                groupProgressStates =
+                    Array(...groupProgressStates, suiteProgress)
+                groupObservers =
+                    Array(
+                        ...groupObservers,
+                        Progress.observer(suiteProgress)
+                    )
+                groupInfrastructureFailed =
+                    Array(...groupInfrastructureFailed, false)
+            })
+
+            progressGroupIndexes =
+                Array(...progressGroupIndexes, progressGroupIndex)
+            localIndex = localIndex + 1
+        }
+
+        suiteProgressGroupIndexes =
+            Array(...suiteProgressGroupIndexes, progressGroupIndexes)
         suiteIndex = suiteIndex + 1
     }
+
+    // Aligned with logicalCaseMetadata: every retained Logical Case belongs to
+    // exactly one created progress group.
+    logicalProgressGroupIndexes: Arrays.map(logicalGroupKeys, (key) => {
+        (caseSuiteIndex, localIndex): key
+        suiteProgressGroupIndexes[caseSuiteIndex][localIndex]
+    })
+    logicalProgressGroupIndexes.freeze()
 
     logicalResults: Array()
     logicalResults.freeze()
@@ -614,11 +635,13 @@ listCases.ifFalse(() => {
     // D174 lifecycle observer. It fires the instant one logical Case's physical
     // execution crosses the terminal barrier, at that Case's stable logical
     // index, independently of when the remaining Cases complete. It only
-    // classifies that one completion and forwards it to its suite's already-
-    // created D120 observer; it never reorders or reprojects `logicalResults`.
+    // classifies that one completion and forwards it to its progress group's
+    // already-created D120 observer; it never reorders or reprojects
+    // `logicalResults`.
     logicalCompletionObserver: (index, completion) => {
         metadata: logicalCaseMetadata[index]
-        (targetSuiteIndex, spec): metadata
+        (ignoredSuiteIndex, spec): metadata
+        targetGroupIndex: logicalProgressGroupIndexes[index]
 
         projected: LogicalCaseResult.project(completion)
         classification: LogicalCaseResult.classification(projected)
@@ -644,10 +667,10 @@ listCases.ifFalse(() => {
 
         (classification == "tool-error").ifTrue(() => {
             resultInfrastructureFailed = true
-            suiteInfrastructureFailed[targetSuiteIndex] = true
+            groupInfrastructureFailed[targetGroupIndex] = true
         })
 
-        suiteObservers[targetSuiteIndex](
+        groupObservers[targetGroupIndex](
             spec,
             evaluation,
             resultInfrastructureFailed
@@ -683,17 +706,17 @@ listCases.ifFalse(() => {
         Error().signal()
     })
 
-    // Every suite's D120 progress state was already driven to completion above,
+    // Every progress group's D120 state was already driven to completion above,
     // incrementally, by logicalCompletionObserver as each logical Case reached
-    // its terminal event. Only the per-phase terminal summary remains.
-    suiteFinishIndex: 0
-    (() => suiteFinishIndex < executionSuites.size()).whileTrue() {
+    // its terminal event. Only the per-group terminal summary remains.
+    groupFinishIndex: 0
+    (() => groupFinishIndex < groupProgressStates.size()).whileTrue() {
         Progress.finishPhase(
-            suiteProgressStates[suiteFinishIndex],
-            suiteInfrastructureFailed[suiteFinishIndex]
+            groupProgressStates[groupFinishIndex],
+            groupInfrastructureFailed[groupFinishIndex]
         )
 
-        suiteFinishIndex = suiteFinishIndex + 1
+        groupFinishIndex = groupFinishIndex + 1
     }
 
     (Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {

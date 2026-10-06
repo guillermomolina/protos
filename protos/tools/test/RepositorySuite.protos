@@ -2,9 +2,11 @@
 // ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina.
 // See LICENSE.TXT for the complete terms.
 
-//! TOOL005-B2 explicit repository suite membership.
+//! TOOL005-B2 explicit repository suite membership and TOOL011 repository
+//! progress grouping policy.
 
 SuiteGraph: import("self:SuiteGraph")
+Arrays: import("std:collections/Array")
 
 root: SuiteGraph.suite(
     "protos/repository",
@@ -111,3 +113,252 @@ root: SuiteGraph.suite(
         )
     )
 )
+
+// TOOL011 repository progress presentation policy. Progress groups are a
+// presentation projection over final retained Logical Cases only: they never
+// select a CorpusId, ExecutionRequirementId, schedule, Process or Case identity.
+// Every policy violation fails closed; there is no catch-all group.
+
+repositoryLeafIdPrefix: "protos/"
+conformanceLeafId: "protos/conformance"
+
+policyError: () => {
+    Error().signal()
+}
+
+// One conformance progress group. A casePath belongs to it when the path's
+// directory equals or lies below one of `subtrees`, or equals exactly one of
+// `directories`.
+conformanceProgressGroup: (name, subtrees, directories) => {
+    subtreeValues: Array(...subtrees)
+    subtreeValues.freeze()
+    directoryValues: Array(...directories)
+    directoryValues.freeze()
+
+    descriptor: {
+        name: name
+        subtrees: subtreeValues
+        directories: directoryValues
+    }
+    descriptor.freeze()
+}
+
+// The single ordered source of truth for both conformance group order and
+// membership by the directory of the authoritative Manifest.casePath. Every
+// conformance casePath must match exactly one descriptor.
+conformanceProgressGroups: Array(
+    conformanceProgressGroup(
+        "conformance/values",
+        Array(
+            "integer",
+            "float",
+            "numeric-conversion",
+            "boolean",
+            "numeric-equality",
+            "equality",
+            "collections",
+            "number",
+            "string",
+            "bytes"
+        ),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/object-model",
+        Array(
+            "call",
+            "object",
+            "reflection",
+            "object-structural",
+            "matching",
+            "execution-context"
+        ),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/control-concurrency",
+        Array("error", "control", "future"),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/io",
+        Array("path", "encoding", "text-reader", "text-writer", "network"),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/standard-library/toml-official",
+        Array("library/toml/official"),
+        Array()
+    ),
+    // Only sources directly in library/toml; library/toml/official has its own
+    // group, and any other library/toml subdirectory fails closed.
+    conformanceProgressGroup(
+        "conformance/standard-library/toml",
+        Array(),
+        Array("library/toml")
+    ),
+    conformanceProgressGroup(
+        "conformance/standard-library/collections",
+        Array("library/collections"),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/standard-library/data-text-test",
+        Array("library/json", "library/text", "library/test"),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/language-surface",
+        Array("core-surface", "surface-sugar"),
+        Array()
+    ),
+    conformanceProgressGroup(
+        "conformance/regression-maturity",
+        Array("regression", "maturity"),
+        Array()
+    )
+)
+conformanceProgressGroups.freeze()
+
+isConformanceLeaf: (leaf) => {
+    leaf.id == conformanceLeafId
+}
+
+// No Standard Library String prefix facility exists, so the scalar comparison
+// mirrors FileSelection.pathWithinDirectory.
+hasPrefix: (text, prefix) => {
+    matches: text.size() >= prefix.size()
+    index: 0
+    (() => matches && (index < prefix.size())).whileTrue() {
+        matches = text[index] == prefix[index]
+        index = index + 1
+    }
+    matches
+}
+
+substringFrom: (text, start) => {
+    result: ""
+    index: start
+    (() => index < text.size()).whileTrue() {
+        result = result + text[index]
+        index = index + 1
+    }
+    result
+}
+
+// An ordinary repository leaf presents under its SuiteId without the exact
+// "protos/" prefix.
+ordinaryProgressGroupName: (leaf) => {
+    id: leaf.id
+    (id.size() > repositoryLeafIdPrefix.size()).ifFalse(() => {
+        policyError()
+    })
+    hasPrefix(id, repositoryLeafIdPrefix).ifFalse(() => {
+        policyError()
+    })
+    substringFrom(id, repositoryLeafIdPrefix.size())
+}
+
+// A conformance casePath must contain a non-empty directory.
+pathDirectory: (casePath) => {
+    directory: ""
+    pending: ""
+    separatorFound: false
+
+    index: 0
+    (() => index < casePath.size()).whileTrue() {
+        character: casePath[index]
+        (character == "/").ifTrue(() => {
+            (pending.size() == 0).ifTrue(() => {
+                policyError()
+            })
+            separatorFound.ifTrue(() => {
+                directory = directory + "/"
+            })
+            directory = directory + pending
+            pending = ""
+            separatorFound = true
+        })
+        (character == "/").ifFalse(() => {
+            pending = pending + character
+        })
+        index = index + 1
+    }
+
+    separatorFound.ifFalse(() => {
+        policyError()
+    })
+    directory
+}
+
+groupOwnsDirectory: (group, directory) => {
+    owns: false
+    group.subtrees.each((subtree) => {
+        (directory == subtree).ifTrue(() => {
+            owns = true
+        })
+        hasPrefix(directory, subtree + "/").ifTrue(() => {
+            owns = true
+        })
+    })
+    group.directories.each((exact) => {
+        (directory == exact).ifTrue(() => {
+            owns = true
+        })
+    })
+    owns
+}
+
+/// Answers the ordered progress group names one repository leaf may present.
+progressGroupNames: (leaf) => {
+    names: null
+
+    isConformanceLeaf(leaf).ifTrue(() => {
+        names = Arrays.map(
+            conformanceProgressGroups,
+            (group) => group.name
+        )
+    })
+    isConformanceLeaf(leaf).ifFalse(() => {
+        names = Array(ordinaryProgressGroupName(leaf))
+    })
+
+    names.freeze()
+    names
+}
+
+/// Answers the index, within progressGroupNames(leaf), of the progress group
+/// owning one Case of that leaf identified by its authoritative casePath.
+/// A conformance casePath must match exactly one descriptor.
+progressGroupIndex: (leaf, casePath) => {
+    groupIndex: null
+
+    isConformanceLeaf(leaf).ifTrue(() => {
+        directory: pathDirectory(casePath)
+        matches: Array()
+        descriptorIndex: 0
+
+        conformanceProgressGroups.each((group) => {
+            groupOwnsDirectory(group, directory).ifTrue(() => {
+                matches = Array(...matches, descriptorIndex)
+            })
+            descriptorIndex = descriptorIndex + 1
+        })
+
+        (matches.size() == 1).ifFalse(() => {
+            policyError()
+        })
+        groupIndex = matches[0]
+    })
+    isConformanceLeaf(leaf).ifFalse(() => {
+        ordinaryProgressGroupName(leaf)
+        groupIndex = 0
+    })
+
+    groupIndex
+}
+
+/// Answers the name of the progress group owning one Case of a leaf.
+progressGroupName: (leaf, casePath) => {
+    progressGroupNames(leaf)[progressGroupIndex(leaf, casePath)]
+}
