@@ -246,9 +246,13 @@ The package `ReleaseVersion` contract intentionally narrows SemVer 2.0.0 to:
 MAJOR.MINOR.PATCH[-PRERELEASE]
 ```
 
-and rejects build metadata. A future reusable SemVer library may reasonably own
-the general SemVer value/parser/precedence mechanism while Package Tool keeps a
-thin `ReleaseVersion` policy layer that applies its package-specific restrictions.
+and rejects build metadata. Since LIB012-C, `std:semver/SemVer` owns the general
+SemVer parser and precedence mechanism, and Package Tool keeps only a thin
+`ReleaseVersion` policy layer (`protos/tools/package/ReleaseVersion.protos`) that
+rejects build metadata and projects the generic value onto the Package record
+shape consumed by lock rendering and the ExecutionPlanV2 host boundary. The
+Package Tool imports `std:semver/SemVer` from the toolchain-installed Standard
+Library, never through project package resolution.
 
 Likewise, these remain Package Tool policy unless an independent use case proves
 otherwise:
@@ -258,7 +262,7 @@ otherwise:
 - `RetainedVersionSelection`;
 - resolver/yank/update/lock semantics.
 
-Conceptually, a future refactor could become:
+The realized layering (LIB012-C) is:
 
 ```text
 reusable SemVer library

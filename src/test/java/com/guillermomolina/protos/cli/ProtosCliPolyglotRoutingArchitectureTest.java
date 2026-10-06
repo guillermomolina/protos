@@ -64,6 +64,21 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("ProtosStandaloneHostedExecution.executeDirectFile("));
         assertFalse(source.contains("processContext.executeFile("));
         assertTrue(source.contains("processContext.executeModuleSource("));
+
+        // TEST009-W: Session teardown must wait for semantic Process termination and
+        // deferred Polyglot Context disposition before closing their shared RuntimeHost.
+        assertTrue(
+                source.matches(
+                        "(?s).*void terminate\\(\\) \\{"
+                                + "\\s*process\\.requestTerminationForRuntime\\(\\);"
+                                + "\\s*process\\.awaitTerminationForRuntime\\(\\);"
+                                + "\\s*if \\(processContext != null\\) \\{"
+                                + "\\s*processContext\\.awaitTerminalDispositionForRuntime\\(\\);"
+                                + "\\s*\\}"
+                                + "\\s*if \\(runtimeHost != null\\) \\{"
+                                + "\\s*runtimeHost\\.close\\(\\);"
+                                + ".*"));
+
         assertFalse(source.contains("private static Source sourceFromPath("));
         assertFalse(source.contains(".uri(exact.toUri())"));
 

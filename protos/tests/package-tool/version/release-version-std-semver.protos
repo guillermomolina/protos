@@ -1,0 +1,83 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("release-version-build-metadata-is-package-policy", () => {
+        Version: import("self:ReleaseVersion")
+        SemVer: import("std:semver/SemVer")
+        generic: SemVer.parse("1.2.3+build")
+        Assertions.require(generic.build.size() == 1)
+        Assertions.signals(Error, () => {
+            Version.parse("1.2.3+build")
+        })
+        Assertions.signals(Error, () => {
+            Version.parse("1.2.3-alpha+build")
+        })
+    }),
+    Test("release-version-agrees-with-std-semver-precedence", () => {
+        Version: import("self:ReleaseVersion")
+        SemVer: import("std:semver/SemVer")
+        texts: Array(
+            "1.0.0-alpha",
+            "1.0.0-alpha.1",
+            "1.0.0-alpha.beta",
+            "1.0.0-beta.11",
+            "1.0.0-rc.1",
+            "1.0.0",
+            "123456789012345678901234567890.0.0-99999999999999999999"
+        )
+        ok: true
+        texts.each((left) => {
+            texts.each((right) => {
+                expected: SemVer.comparePrecedence(SemVer.parse(left), SemVer.parse(right))
+                (Version.compareText(left, right) == expected).ifFalse(() => { ok = false })
+            })
+        })
+        Assertions.require(ok)
+    }),
+    Test("release-version-large-prerelease-identifier", () => {
+        Version: import("self:ReleaseVersion")
+        v: Version.parse("1.0.0-alpha.123456789012345678901234567890")
+        ok: true
+        (v.prerelease[1].numeric === true).ifFalse(() => { ok = false })
+        (v.prerelease[1].number == 123456789012345678901234567890).ifFalse(() => { ok = false })
+        (v.prerelease[1].text == "123456789012345678901234567890").ifFalse(() => { ok = false })
+        (v.text == "1.0.0-alpha.123456789012345678901234567890").ifFalse(() => { ok = false })
+        (Version.compareText(
+            "1.0.0-alpha.123456789012345678901234567889",
+            "1.0.0-alpha.123456789012345678901234567890"
+        ) == -1).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("release-version-compares-internal-core-bound", () => {
+        Version: import("self:ReleaseVersion")
+        bound: {
+            major: 1
+            minor: 0
+            patch: 0
+            prerelease: null
+            text: null
+        }
+        ok: true
+        (Version.compare(Version.parse("1.0.0-rc.1"), bound) == -1).ifFalse(() => { ok = false })
+        (Version.compare(Version.parse("1.0.0"), bound) == 0).ifFalse(() => { ok = false })
+        (Version.compare(Version.parse("0.9.9"), bound) == -1).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

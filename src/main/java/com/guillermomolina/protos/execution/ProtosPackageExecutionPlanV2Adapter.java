@@ -205,8 +205,9 @@ public final class ProtosPackageExecutionPlanV2Adapter {
 
     /**
      * Copies one exact ReleaseVersion record. ReleaseVersion grammar remains owned by bundled
-     * {@code self:ReleaseVersion}; this only requires that the canonical text is exactly the
-     * rendering of the copied components, so identity by text and by components cannot diverge.
+     * {@code self:ReleaseVersion} over {@code std:semver/SemVer}; this only requires that the
+     * canonical text is exactly the rendering of the copied components, so identity by text and
+     * by components cannot diverge.
      */
     private static ProtosPackageExecutionPlanV2.ReleaseVersion detachVersion(Object value)
             throws IOException {

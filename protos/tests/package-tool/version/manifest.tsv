@@ -8,3 +8,4 @@ constraint-interval.protos	suite-native
 constraint-prerelease-policy.protos	suite-native
 selection-fresh.protos	suite-native
 selection-retained.protos	suite-native
+release-version-std-semver.protos	suite-native

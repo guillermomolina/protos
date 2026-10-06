@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.241-SNAPSHOT
+
+- `LIB012-C` (guillermomolina/protos#429) converges the Package Tool on
+  `std:semver/SemVer`. There is no specification change.
+  - `self:ReleaseVersion` is now a thin policy adapter. It parses through
+    `SemVer.parse`, rejects build metadata, and compares through
+    `SemVer.comparePrecedence`. The duplicate Package Tool SemVer parser and
+    precedence comparator are removed. The Package record shape and
+    DependencyConstraint policy are unchanged.
+  - Tests: new `package-tool/version/release-version-std-semver.protos`.
+
 ## 0.3.240-SNAPSHOT
 
 - `LIB012-B` (guillermomolina/protos#429) completes the `std:semver/SemVer`

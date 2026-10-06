@@ -1691,6 +1691,10 @@ public final class ProtosCli {
 
         void terminate() {
             process.requestTerminationForRuntime();
+            process.awaitTerminationForRuntime();
+            if (processContext != null) {
+                processContext.awaitTerminalDispositionForRuntime();
+            }
             if (runtimeHost != null) {
                 runtimeHost.close();
             }

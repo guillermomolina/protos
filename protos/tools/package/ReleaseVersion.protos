@@ -13,350 +13,97 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-emptyBytes: () => {
-    Encoding.UTF8.encode("")
-}
+// Package ReleaseVersion policy over the Standard Library SemVer value
+// (LIB012-C). std:semver/SemVer owns the SemVer 2.0.0 grammar and precedence;
+// this module only narrows the accepted domain to
+// MAJOR.MINOR.PATCH[-PRERELEASE] (build metadata is rejected) and projects the
+// generic value onto the Package record shape consumed by lock rendering and
+// the host ExecutionPlanV2 boundary: Integer major/minor/patch, prerelease null
+// or an Array of {numeric, number, text} identifiers, and the source text.
 
-isDigit: (octet) => {
-    result: octet >= 48
-    (octet > 57).ifTrue(() => {
-        result = false
-    })
-    result
-}
-
-isAsciiLetter: (octet) => {
-    result: octet >= 65
-    (octet > 90).ifTrue(() => {
-        result = false
-    })
-
-    result.ifFalse(() => {
-        result = octet >= 97
-        (octet > 122).ifTrue(() => {
-            result = false
-        })
-    })
-
-    result
-}
-
-isPrereleaseOctet: (octet) => {
-    result: isDigit(octet)
-    result.ifFalse(() => {
-        result = isAsciiLetter(octet)
-    })
-    result.ifFalse(() => {
-        result = octet == 45
-    })
-    result
-}
-
-parseDecimal: (bytes) => {
-    (bytes.size() == 0).ifTrue(() => {
-        fail()
-    })
-
-    (bytes.size() > 1).ifTrue(() => {
-        (bytes[0] == 48).ifTrue(() => {
-            fail()
-        })
-    })
-
-    value: 0
-    bytes.each((octet) => {
-        isDigit(octet).ifFalse(() => {
-            fail()
-        })
-        value = value * 10 + (octet - 48)
-    })
-    value
-}
-
-parsePrereleaseIdentifier: (bytes) => {
-    (bytes.size() == 0).ifTrue(() => {
-        fail()
-    })
-
-    numeric: true
-    bytes.each((octet) => {
-        isPrereleaseOctet(octet).ifFalse(() => {
-            fail()
-        })
-        isDigit(octet).ifFalse(() => {
-            numeric = false
-        })
-    })
-
-    text: Encoding.UTF8.decode(bytes)
-    number: null
-
-    numeric.ifTrue(() => {
-        (bytes.size() > 1).ifTrue(() => {
-            (bytes[0] == 48).ifTrue(() => {
-                fail()
-            })
-        })
-        number = parseDecimal(bytes)
-    })
-
-    {
-        numeric: numeric
-        number: number
-        text: text
-    }
-}
+SemVer: import("std:semver/SemVer")
 
 parse: (text) => {
-    source: Encoding.UTF8.encode(text)
+    generic: SemVer.parse(text)
+    (generic.build.size() > 0).ifTrue(() => {
+        fail()
+    })
 
-    major: null
-    minor: null
-    patch: null
     prerelease: null
-
-    coreIndex: 0
-    inPrerelease: false
-    current: emptyBytes()
-
-    storeCore: (bytes) => {
-        value: parseDecimal(bytes)
-
-        (coreIndex == 0).ifTrue(() => {
-            major = value
-        })
-        (coreIndex == 1).ifTrue(() => {
-            minor = value
-        })
-        (coreIndex == 2).ifTrue(() => {
-            patch = value
-        })
-
-        (coreIndex > 2).ifTrue(() => {
-            fail()
-        })
-    }
-
-    appendPrerelease: (bytes) => {
-        identifier: parsePrereleaseIdentifier(bytes)
-        (prerelease === null).ifTrue(() => {
-            prerelease = Array()
-        })
-        prerelease = Array(...prerelease, identifier)
-    }
-
-    source.each((octet) => {
-        handled: false
-
-        inPrerelease.ifTrue(() => {
-            (octet == 46).ifTrue(() => {
-                appendPrerelease(current)
-                current = emptyBytes()
-                handled = true
-            })
-
-            handled.ifFalse(() => {
-                isPrereleaseOctet(octet).ifFalse(() => {
-                    fail()
+    (generic.prerelease.size() > 0).ifTrue(() => {
+        // The text is already validated and carries no build metadata, so the
+        // prerelease spelling is every octet after the first "-", and its
+        // "."-separated pieces are the identifiers in order.
+        pieces: Array()
+        current: Encoding.UTF8.encode("")
+        inPrerelease: false
+        Encoding.UTF8.encode(text).each((octet) => {
+            inPrerelease.ifTrue(() => {
+                (octet == 46).ifTrue(() => {
+                    pieces = Array(...pieces, Encoding.UTF8.decode(current))
+                    current = Encoding.UTF8.encode("")
                 })
-                current.add(octet)
-            })
-        })
-
-        inPrerelease.ifFalse(() => {
-            (octet == 46).ifTrue(() => {
-                (coreIndex >= 2).ifTrue(() => {
-                    fail()
-                })
-                storeCore(current)
-                coreIndex = coreIndex + 1
-                current = emptyBytes()
-                handled = true
-            })
-
-            handled.ifFalse(() => {
-                (octet == 45).ifTrue(() => {
-                    (coreIndex == 2).ifFalse(() => {
-                        fail()
-                    })
-                    storeCore(current)
-                    current = emptyBytes()
-                    inPrerelease = true
-                    handled = true
+                (octet == 46).ifFalse(() => {
+                    current.add(octet)
                 })
             })
-
-            handled.ifFalse(() => {
-                isDigit(octet).ifFalse(() => {
-                    fail()
-                })
-                current.add(octet)
+            inPrerelease.ifFalse(() => {
+                inPrerelease = octet == 45
             })
         })
-    })
+        pieces = Array(...pieces, Encoding.UTF8.decode(current))
 
-    inPrerelease.ifTrue(() => {
-        appendPrerelease(current)
-    })
-
-    inPrerelease.ifFalse(() => {
-        (coreIndex == 2).ifFalse(() => {
-            fail()
+        prerelease = Array()
+        index: 0
+        generic.prerelease.each((identifier) => {
+            numeric: Integer.recognizes(identifier)
+            number: null
+            numeric.ifTrue(() => {
+                number = identifier
+            })
+            prerelease = Array(...prerelease, {
+                numeric: numeric
+                number: number
+                text: pieces[index]
+            })
+            index = index + 1
         })
-        storeCore(current)
     })
 
     {
-        major: major
-        minor: minor
-        patch: patch
+        major: generic.major
+        minor: generic.minor
+        patch: generic.patch
         prerelease: prerelease
         text: text
     }
 }
 
-compareAsciiText: (leftText, rightText) => {
-    left: Encoding.UTF8.encode(leftText)
-    right: Encoding.UTF8.encode(rightText)
-
-    limit: left.size()
-    (right.size() < limit).ifTrue(() => {
-        limit = right.size()
-    })
-
-    result: 0
-    index: 0
-    left.each((octet) => {
-        (index < limit).ifTrue(() => {
-            (result == 0).ifTrue(() => {
-                other: right[index]
-                (octet < other).ifTrue(() => {
-                    result = -1
-                })
-                (octet > other).ifTrue(() => {
-                    result = 1
-                })
+// Projects a Package record (including internally built core bounds whose
+// text is null) onto the representation SemVer.comparePrecedence requires.
+semVerValue: (version) => {
+    identifiers: Array()
+    (version.prerelease === null).ifFalse(() => {
+        version.prerelease.each((identifier) => {
+            value: identifier.text
+            identifier.numeric.ifTrue(() => {
+                value = identifier.number
             })
-        })
-        index = index + 1
-    })
-
-    (result == 0).ifTrue(() => {
-        (left.size() < right.size()).ifTrue(() => {
-            result = -1
-        })
-        (left.size() > right.size()).ifTrue(() => {
-            result = 1
+            identifiers = Array(...identifiers, value)
         })
     })
 
-    result
-}
-
-compareIdentifier: (left, right) => {
-    result: 0
-
-    left.numeric.ifTrue(() => {
-        right.numeric.ifTrue(() => {
-            (left.number < right.number).ifTrue(() => {
-                result = -1
-            })
-            (left.number > right.number).ifTrue(() => {
-                result = 1
-            })
-        })
-        right.numeric.ifFalse(() => {
-            result = -1
-        })
-    })
-
-    left.numeric.ifFalse(() => {
-        right.numeric.ifTrue(() => {
-            result = 1
-        })
-        right.numeric.ifFalse(() => {
-            result = compareAsciiText(left.text, right.text)
-        })
-    })
-
-    result
+    {
+        major: version.major
+        minor: version.minor
+        patch: version.patch
+        prerelease: identifiers
+        build: Array()
+    }
 }
 
 compare: (left, right) => {
-    result: 0
-
-    (left.major < right.major).ifTrue(() => {
-        result = -1
-    })
-    (left.major > right.major).ifTrue(() => {
-        result = 1
-    })
-
-    (result == 0).ifTrue(() => {
-        (left.minor < right.minor).ifTrue(() => {
-            result = -1
-        })
-        (left.minor > right.minor).ifTrue(() => {
-            result = 1
-        })
-    })
-
-    (result == 0).ifTrue(() => {
-        (left.patch < right.patch).ifTrue(() => {
-            result = -1
-        })
-        (left.patch > right.patch).ifTrue(() => {
-            result = 1
-        })
-    })
-
-    (result == 0).ifTrue(() => {
-        leftStable: left.prerelease === null
-        rightStable: right.prerelease === null
-
-        leftStable.ifTrue(() => {
-            rightStable.ifFalse(() => {
-                result = 1
-            })
-        })
-
-        leftStable.ifFalse(() => {
-            rightStable.ifTrue(() => {
-                result = -1
-            })
-
-            rightStable.ifFalse(() => {
-                limit: left.prerelease.size()
-                (right.prerelease.size() < limit).ifTrue(() => {
-                    limit = right.prerelease.size()
-                })
-
-                index: 0
-                left.prerelease.each((identifier) => {
-                    (index < limit).ifTrue(() => {
-                        (result == 0).ifTrue(() => {
-                            result = compareIdentifier(
-                                identifier,
-                                right.prerelease[index]
-                            )
-                        })
-                    })
-                    index = index + 1
-                })
-
-                (result == 0).ifTrue(() => {
-                    (left.prerelease.size() < right.prerelease.size()).ifTrue(() => {
-                        result = -1
-                    })
-                    (left.prerelease.size() > right.prerelease.size()).ifTrue(() => {
-                        result = 1
-                    })
-                })
-            })
-        })
-    })
-
-    result
+    SemVer.comparePrecedence(semVerValue(left), semVerValue(right))
 }
 
 compareText: (leftText, rightText) => {
