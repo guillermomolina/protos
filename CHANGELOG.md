@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.243-SNAPSHOT
+
+- `LIB013-B` (guillermomolina/protos#430) adds temporal amounts and calendar
+  arithmetic: `std:datetime/Duration` and `std:datetime/Period`. There is no
+  specification change.
+  - `Duration(nanoseconds)` is a fixed elapsed amount with one signed Integer
+    `nanoseconds` slot holding the exact total amount. It has no calendar, zone,
+    or clock meaning. The module provides `compare`, `add`, `subtract`, and
+    `negate`. No Float, unit factories, parsing, or formatting are added.
+  - `Period(years, months, days)` is a calendar-relative amount whose signed
+    Integer components are structural and never normalized, so
+    `Period(1, 0, 0) != Period(0, 12, 0)`. It has no natural order and no
+    `compare`. `Period.negate` negates each component.
+  - `Period.addToDate`, `Period.subtractFromDate`,
+    `Period.addToLocalDateTime`, and `Period.subtractFromLocalDateTime` apply
+    a period in this order: combine the year and month displacement, clamp the
+    day once to the end of the resulting month, then add the days.
+    Subtraction applies the negated period. Local date-times keep their `time`
+    object unchanged. A final date outside `-9999..9999` signals `Error`.
+  - `Date + Duration`, symbolic operators, Instant, Offset, zones, clocks,
+    parsing, and formatting are not added. Values are frozen, use semantic `==`
+    and a coherent `hash` as in LIB013-A, and are non-transferable across
+    Actors under the same current limitation.
+  - Tests: `amounts.protos` and `arithmetic.protos` are added to the
+    `library/datetime` corpus.
+
 ## 0.3.242-SNAPSHOT
 
 - `LIB013-A` (guillermomolina/protos#430) adds the pure civil temporal kernel

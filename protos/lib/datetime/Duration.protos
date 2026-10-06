@@ -1,0 +1,127 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Fixed elapsed amounts of time with nanosecond precision. A duration is a
+//! frozen ordinary object with one Integer `nanoseconds` slot holding the
+//! exact signed total amount; zero and negative durations exist. Integers are
+//! exact and unbounded, so no host integer limit applies and no Float is
+//! involved.
+//!
+//! A duration is independent of calendars, months, years, offsets, zones, and
+//! clocks: one day of 24 hours is exactly 86400 seconds of elapsed time. It is
+//! not a calendar amount, so no operation applies a duration to a
+//! `std:datetime/Date`, `std:datetime/Time`, or `std:datetime/LocalDateTime`;
+//! calendar-relative amounts are `std:datetime/Period` values.
+//!
+//! Durations answer semantic equality through `==`: two durations are equal
+//! when their total amounts are equal. `hash` is coherent with that equality,
+//! so independently constructed equal durations work as the same Map key.
+//! `===` remains ordinary object identity. `compare` is the natural total
+//! order of the amounts and answers `0` exactly for equal durations.
+
+/// Answers a fresh frozen duration of exactly `nanoseconds` nanoseconds.
+/// `nanoseconds` must be an Integer and may be positive, zero, or negative;
+/// any other argument signals an Error.
+call: (nanoseconds) => {
+    Integer.recognizes(nanoseconds).ifFalse(() => {
+        Error().signal()
+    })
+
+    isDuration: (value) => {
+        (value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    duration: {
+        nanoseconds: nanoseconds
+
+        equals: (other) => {
+            duration: this
+            isDuration(other) && (duration.nanoseconds == other.nanoseconds)
+        }
+
+        hash: () => {
+            duration: this
+            mix(17, duration.nanoseconds.hash())
+        }
+    }
+
+    duration.alias("equals", "==").freeze()
+}
+
+/// Answers `-1`, `0`, or `1` as duration `left` is shorter than, equal to, or
+/// longer than duration `right`, comparing signed total amounts. The result is
+/// `0` exactly when `left == right`. Arguments must be durations answered by
+/// this module's constructor; otherwise an Error is signalled.
+compare: (left, right) => {
+    requireDuration: (value) => {
+        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireDuration(left)
+    requireDuration(right)
+
+    result: 0
+    (left.nanoseconds < right.nanoseconds).ifTrue(() => {
+        result = -1
+    })
+    (left.nanoseconds > right.nanoseconds).ifTrue(() => {
+        result = 1
+    })
+    result
+}
+
+/// Answers a fresh duration whose amount is exactly the sum of the amounts of
+/// durations `left` and `right`. Non-duration arguments signal an Error.
+add: (left, right) => {
+    Duration: import("std:datetime/Duration")
+    requireDuration: (value) => {
+        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireDuration(left)
+    requireDuration(right)
+    Duration(left.nanoseconds + right.nanoseconds)
+}
+
+/// Answers a fresh duration whose amount is exactly the amount of `left` minus
+/// the amount of `right`; equivalent to `add(left, negate(right))`.
+/// Non-duration arguments signal an Error.
+subtract: (left, right) => {
+    Duration: import("std:datetime/Duration")
+    Duration.add(left, Duration.negate(right))
+}
+
+/// Answers a fresh duration with the exact opposite amount of `duration`.
+/// A non-duration argument signals an Error.
+negate: (duration) => {
+    Duration: import("std:datetime/Duration")
+    requireDuration: (value) => {
+        ((value !== null) && value.hasSlot("nanoseconds") && Integer.recognizes(value.nanoseconds)).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireDuration(duration)
+    Duration(duration.nanoseconds.negated())
+}

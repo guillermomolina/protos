@@ -1,0 +1,227 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Calendar-relative amounts made of signed Integer `years`, `months`, and
+//! `days`. A period is a frozen ordinary object with exactly those three
+//! slots. The components are structural and are never normalized: twelve
+//! months are not one year, and days are never converted to or from months,
+//! because those relations depend on the date a period is applied to. A
+//! period is not a fixed elapsed amount; elapsed amounts are
+//! `std:datetime/Duration` values.
+//!
+//! Periods answer structural equality through `==`: two periods are equal when
+//! their years, their months, and their days are equal, so `(1, 0, 0)` and
+//! `(0, 12, 0)` are different periods. `hash` is coherent with that equality,
+//! so independently constructed equal periods work as the same Map key. `===`
+//! remains ordinary object identity. Periods have no natural total order, and
+//! this module deliberately provides no `compare`.
+//!
+//! Applying a period to a civil date is pure proleptic Gregorian arithmetic,
+//! with no offset, zone, or clock authority:
+//!
+//! 1. `years` and `months` are combined into one month displacement and
+//!    applied to the date's year and month;
+//! 2. the day of month is clamped once to the last day of the resulting month,
+//!    so 31 January plus one month is the last day of February;
+//! 3. `days` are then added as whole calendar days.
+//!
+//! Years and months are never clamped separately, and application is not
+//! repeated one-month steps: applying one month twice may differ from applying
+//! two months once. Only the final date must lie in `std:datetime/Date`'s
+//! supported years; a final date outside them signals an Error and is never
+//! wrapped or saturated.
+
+/// Answers a fresh frozen period of `years`, `months`, and `days`. Every
+/// argument must be an Integer and may be positive, zero, or negative; any
+/// other argument signals an Error. The components are stored as given.
+call: (years, months, days) => {
+    (Integer.recognizes(years) && Integer.recognizes(months) && Integer.recognizes(days)).ifFalse(() => {
+        Error().signal()
+    })
+
+    isPeriod: (value) => {
+        (value !== null) &&
+            value.hasSlot("years") &&
+            value.hasSlot("months") &&
+            value.hasSlot("days") &&
+            Integer.recognizes(value.years) &&
+            Integer.recognizes(value.months) &&
+            Integer.recognizes(value.days)
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    period: {
+        years: years
+        months: months
+        days: days
+
+        equals: (other) => {
+            period: this
+            isPeriod(other) &&
+                (period.years == other.years) &&
+                (period.months == other.months) &&
+                (period.days == other.days)
+        }
+
+        hash: () => {
+            period: this
+            mix(mix(mix(17, period.years.hash()), period.months.hash()), period.days.hash())
+        }
+    }
+
+    period.alias("equals", "==").freeze()
+}
+
+/// Answers a fresh period with exactly the negated years, months, and days of
+/// `period`, without any other normalization. A non-period argument signals
+/// an Error.
+negate: (period) => {
+    Period: import("std:datetime/Period")
+
+    ((period !== null) &&
+        period.hasSlot("years") &&
+        period.hasSlot("months") &&
+        period.hasSlot("days")).ifFalse(() => {
+        Error().signal()
+    })
+
+    Period(period.years.negated(), period.months.negated(), period.days.negated())
+}
+
+/// Answers the `std:datetime/Date` reached by applying `period` to `date`:
+/// the combined year and month displacement first, then one clamp of the day
+/// to the last day of the resulting month, then the day displacement. A final
+/// date outside the supported years, or an argument that is not a period or
+/// a date, signals an Error.
+addToDate: (period, date) => {
+    Date: import("std:datetime/Date")
+
+    ((period !== null) &&
+        period.hasSlot("years") &&
+        period.hasSlot("months") &&
+        period.hasSlot("days") &&
+        Integer.recognizes(period.years) &&
+        Integer.recognizes(period.months) &&
+        Integer.recognizes(period.days)).ifFalse(() => {
+        Error().signal()
+    })
+    // Comparing the date with itself validates its representation through
+    // the owning module.
+    Date.compare(date, date)
+
+    // Integer `div` truncates toward zero; calendar indices need the floor for
+    // a positive divisor.
+    floorDiv: (dividend, divisor) => {
+        quotient: dividend.div(divisor)
+        ((dividend - quotient * divisor) < 0).ifTrue(() => {
+            quotient = quotient - 1
+        })
+        quotient
+    }
+
+    // Months are counted from month 1 of year 0. The intermediate year may lie
+    // outside Date's supported years when the day displacement brings the
+    // final date back inside them, so the calendar facts below are computed
+    // here for any Integer year rather than through Date construction. They
+    // use the same proleptic Gregorian rule as `std:datetime/Date`.
+    monthIndex: (date.year + period.years) * 12 + (date.month - 1) + period.months
+    year: floorDiv(monthIndex, 12)
+    month: monthIndex - year * 12 + 1
+
+    leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
+    length: 31
+    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        length = 30
+    })
+    (month == 2).ifTrue(() => {
+        length = 28
+        leap.ifTrue(() => {
+            length = 29
+        })
+    })
+    // The single clamp of the ratified application order.
+    day: date.day
+    (day > length).ifTrue(() => {
+        day = length
+    })
+
+    // Days are counted in 400-year eras of 146097 days, with years starting on
+    // 1 March so that the leap day ends each year.
+    shiftedYear: year
+    (month <= 2).ifTrue(() => {
+        shiftedYear = year - 1
+    })
+    shiftedMonth: month - 3
+    (month <= 2).ifTrue(() => {
+        shiftedMonth = month + 9
+    })
+    era: floorDiv(shiftedYear, 400)
+    yearOfEra: shiftedYear - era * 400
+    dayOfYear: (153 * shiftedMonth + 2).div(5) + day - 1
+    dayOfEra: yearOfEra * 365 + yearOfEra.div(4) - yearOfEra.div(100) + dayOfYear
+    dayNumber: era * 146097 + dayOfEra + period.days
+
+    resultEra: floorDiv(dayNumber, 146097)
+    resultDayOfEra: dayNumber - resultEra * 146097
+    resultYearOfEra: (resultDayOfEra -
+        resultDayOfEra.div(1460) +
+        resultDayOfEra.div(36524) -
+        resultDayOfEra.div(146096)).div(365)
+    resultDayOfYear: resultDayOfEra - (365 * resultYearOfEra + resultYearOfEra.div(4) - resultYearOfEra.div(100))
+    resultShiftedMonth: (5 * resultDayOfYear + 2).div(153)
+    resultDay: resultDayOfYear - (153 * resultShiftedMonth + 2).div(5) + 1
+    resultMonth: resultShiftedMonth + 3
+    (resultShiftedMonth >= 10).ifTrue(() => {
+        resultMonth = resultShiftedMonth - 9
+    })
+    resultYear: resultYearOfEra + resultEra * 400
+    (resultMonth <= 2).ifTrue(() => {
+        resultYear = resultYear + 1
+    })
+
+    // Date construction performs the final range check.
+    Date(resultYear, resultMonth, resultDay)
+}
+
+/// Answers the `std:datetime/Date` reached by applying the negation of
+/// `period` to `date`; exactly `addToDate(negate(period), date)`.
+subtractFromDate: (period, date) => {
+    Period: import("std:datetime/Period")
+    Period.addToDate(Period.negate(period), date)
+}
+
+/// Answers a fresh `std:datetime/LocalDateTime` whose date is
+/// `addToDate(period, dateTime.date)` and whose time is the same
+/// `dateTime.time` object, unchanged. Arguments that are not a period and a
+/// local date-time, or a final date outside the supported years, signal an
+/// Error.
+addToLocalDateTime: (period, dateTime) => {
+    Period: import("std:datetime/Period")
+    LocalDateTime: import("std:datetime/LocalDateTime")
+
+    LocalDateTime.compare(dateTime, dateTime)
+    LocalDateTime(Period.addToDate(period, dateTime.date), dateTime.time)
+}
+
+/// Answers the local date-time reached by applying the negation of `period`
+/// to `dateTime`; exactly `addToLocalDateTime(negate(period), dateTime)`.
+subtractFromLocalDateTime: (period, dateTime) => {
+    Period: import("std:datetime/Period")
+    Period.addToLocalDateTime(Period.negate(period), dateTime)
+}

@@ -141,7 +141,9 @@ load: (corpusId) => {
             Array(
             Array("construction.protos", "suite-native", "-"),
             Array("equality.protos", "suite-native", "-"),
-            Array("ordering.protos", "suite-native", "-")
+            Array("ordering.protos", "suite-native", "-"),
+            Array("amounts.protos", "suite-native", "-"),
+            Array("arithmetic.protos", "suite-native", "-")
             )
         )
         matched = true

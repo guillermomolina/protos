@@ -1,0 +1,208 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Duration: import("std:datetime/Duration")
+Period: import("std:datetime/Period")
+Date: import("std:datetime/Date")
+
+// Requires `a` and `b` to be semantically equal, distinct identities, and
+// hash-coherent.
+requireEqual: (a, b) => {
+    Assertions.require((a == b) === true)
+    Assertions.require((b == a) === true)
+    Assertions.require((a != b) === false)
+    Assertions.require((a === b) == false)
+    Assertions.require(Integer.recognizes(a.hash()))
+    Assertions.require(a.hash() == b.hash())
+    true
+}
+
+requireUnequal: (a, b) => {
+    Assertions.require((a == b) === false)
+    Assertions.require((b == a) === false)
+    Assertions.require((a != b) === true)
+    true
+}
+
+requirePeriod: (period, years, months, days) => {
+    Assertions.require(period.years == years)
+    Assertions.require(period.months == months)
+    Assertions.require(period.days == days)
+    true
+}
+
+// 2^70 + 1 nanoseconds: beyond any 64-bit carrier and beyond exact Float
+// representation.
+large: 1180591620717411303425
+
+tests: [
+    Test("duration construction", () => {
+        Assertions.require(Duration(0).nanoseconds == 0)
+        Assertions.require(Duration(1).nanoseconds == 1)
+        Assertions.require(Duration(-1).nanoseconds == -1)
+        Assertions.require(Duration(86400000000000).nanoseconds == 86400000000000)
+        Assertions.require(Duration(large).nanoseconds == large)
+        Assertions.signals(Error, () => {
+            Duration(1.5)
+        })
+        Assertions.signals(Error, () => {
+            Duration("1")
+        })
+        Assertions.signals(Error, () => {
+            Duration(null)
+        })
+    }),
+    Test("duration equality and Map keys", () => {
+        requireEqual(Duration(0), Duration(0))
+        requireEqual(Duration(-7), Duration(-7))
+        requireEqual(Duration(large), Duration(large))
+        // 24 hours of elapsed time are exactly 86400 seconds.
+        requireEqual(Duration(24 * 3600 * 1000000000), Duration(86400 * 1000000000))
+        requireUnequal(Duration(1), Duration(-1))
+        requireUnequal(Duration(large), Duration(large - 1))
+        requireUnequal(Duration(0), Period(0, 0, 0))
+        Assertions.require((Duration(0) == 0) === false)
+        Assertions.require((Duration(0) == null) === false)
+
+        m: Map()
+        m[Duration(5)] = "five"
+        m[Duration(large)] = "large"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Duration(5)] == "five")
+        Assertions.require(m[Duration(large)] == "large")
+        Assertions.require(m.containsKey(Duration(large + 1)) == false)
+        m[Duration(5)] = "replaced"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Duration(5)] == "replaced")
+    }),
+    Test("duration ordering", () => {
+        Assertions.require(Duration.compare(Duration(-1), Duration(0)) == -1)
+        Assertions.require(Duration.compare(Duration(0), Duration(-1)) == 1)
+        Assertions.require(Duration.compare(Duration(3), Duration(3)) == 0)
+        Assertions.require(Duration.compare(Duration(large), Duration(large - 1)) == 1)
+        Assertions.require(Duration.compare(Duration(large.negated()), Duration(-1)) == -1)
+        Assertions.signals(Error, () => {
+            Duration.compare(Duration(1), 1)
+        })
+        Assertions.signals(Error, () => {
+            Duration.compare(null, Duration(1))
+        })
+    }),
+    Test("duration arithmetic is exact", () => {
+        Assertions.require(Duration.add(Duration(1), Duration(2)) == Duration(3))
+        Assertions.require(Duration.add(Duration(5), Duration(-8)) == Duration(-3))
+        Assertions.require(Duration.add(Duration(large), Duration(1)) == Duration(large + 1))
+        Assertions.require(Duration.subtract(Duration(1), Duration(3)) == Duration(-2))
+        Assertions.require(Duration.subtract(Duration(large), Duration(large - 1)) == Duration(1))
+        Assertions.require(Duration.negate(Duration(4)) == Duration(-4))
+        Assertions.require(Duration.negate(Duration(-4)) == Duration(4))
+        Assertions.require(Duration.negate(Duration(0)) == Duration(0))
+        Assertions.require(Duration.negate(Duration(large)).nanoseconds == large.negated())
+
+        d: Duration(9)
+        sum: Duration.add(d, Duration(0))
+        Assertions.require(sum == d)
+        Assertions.require((sum === d) == false)
+        Assertions.require(d.nanoseconds == 9)
+
+        Assertions.signals(Error, () => {
+            Duration.add(Duration(1), 1)
+        })
+        Assertions.signals(Error, () => {
+            Duration.subtract(1, Duration(1))
+        })
+        Assertions.signals(Error, () => {
+            Duration.negate(Period(0, 0, 1))
+        })
+    }),
+    Test("period construction keeps components", () => {
+        requirePeriod(Period(0, 0, 0), 0, 0, 0)
+        requirePeriod(Period(1, 2, 3), 1, 2, 3)
+        requirePeriod(Period(-1, -2, -3), -1, -2, -3)
+        requirePeriod(Period(0, 12, 0), 0, 12, 0)
+        requirePeriod(Period(0, 0, 400), 0, 0, 400)
+        requirePeriod(Period(2, -30, 45), 2, -30, 45)
+        Assertions.signals(Error, () => {
+            Period(1, 0)
+        })
+        Assertions.signals(Error, () => {
+            Period(0, 1.0, 0)
+        })
+        Assertions.signals(Error, () => {
+            Period(0, 0, null)
+        })
+    }),
+    Test("period equality is structural", () => {
+        requireEqual(Period(0, 0, 0), Period(0, 0, 0))
+        requireEqual(Period(1, -2, 3), Period(1, -2, 3))
+        requireUnequal(Period(1, 0, 0), Period(0, 12, 0))
+        requireUnequal(Period(0, 1, 0), Period(0, 0, 30))
+        requireUnequal(Period(0, 1, 0), Period(0, 0, 31))
+        requireUnequal(Period(1, 0, 0), Period(0, 0, 365))
+        requireUnequal(Period(1, 2, 3), Period(1, 2, -3))
+        requireUnequal(Period(0, 0, 1), Duration(86400000000000))
+        requireUnequal(Period(2000, 1, 1), Date(2000, 1, 1))
+        Assertions.require((Period(0, 0, 0) == null) === false)
+
+        m: Map()
+        m[Period(1, 0, 0)] = "year"
+        m[Period(0, 12, 0)] = "months"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Period(1, 0, 0)] == "year")
+        Assertions.require(m[Period(0, 12, 0)] == "months")
+        m[Period(1, 0, 0)] = "replaced"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Period(1, 0, 0)] == "replaced")
+    }),
+    Test("period negation is componentwise", () => {
+        requirePeriod(Period.negate(Period(1, -2, 3)), -1, 2, -3)
+        requirePeriod(Period.negate(Period(0, 12, 0)), 0, -12, 0)
+        Assertions.require(Period.negate(Period(0, 0, 0)) == Period(0, 0, 0))
+        Assertions.require(Period.negate(Period.negate(Period(4, 5, -6))) == Period(4, 5, -6))
+        Assertions.signals(Error, () => {
+            Period.negate(Duration(1))
+        })
+    }),
+    Test("periods have no natural order", () => {
+        Assertions.require(Period.hasSlot("compare") == false)
+        Assertions.require(Duration.hasSlot("compare") == true)
+    }),
+    Test("amounts are frozen", () => {
+        duration: Duration(10)
+        period: Period(1, 2, 3)
+        Assertions.signals(Error, () => {
+            duration.nanoseconds = 0
+        })
+        Assertions.signals(Error, () => {
+            duration.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            duration.removeSlot("nanoseconds")
+        })
+        Assertions.signals(Error, () => {
+            period.months = 0
+        })
+        Assertions.signals(Error, () => {
+            period.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            period.removeSlot("days")
+        })
+        Assertions.require(duration == Duration(10))
+        Assertions.require(period == Period(1, 2, 3))
+    })
+]
