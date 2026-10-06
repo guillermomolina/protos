@@ -1,0 +1,130 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+
+// Requires `a` and `b` to be semantically equal, distinct identities, and
+// hash-coherent.
+requireEqual: (a, b) => {
+    Assertions.require((a == b) === true)
+    Assertions.require((b == a) === true)
+    Assertions.require((a != b) === false)
+    Assertions.require((a == a) === true)
+    Assertions.require((a === b) == false)
+    Assertions.require(Integer.recognizes(a.hash()))
+    Assertions.require(a.hash() == b.hash())
+    Assertions.require(a.hash() == a.hash())
+    true
+}
+
+requireUnequal: (a, b) => {
+    Assertions.require((a == b) === false)
+    Assertions.require((b == a) === false)
+    Assertions.require((a != b) === true)
+    true
+}
+
+// `assign` attempts to reassign an existing temporal slot of `value`.
+requireFrozen: (value, name, assign) => {
+    Assertions.signals(Error, assign)
+    Assertions.signals(Error, () => {
+        value.extra = 1
+    })
+    Assertions.signals(Error, () => {
+        value.removeSlot(name)
+    })
+    true
+}
+
+tests: [
+    Test("date equality", () => {
+        requireEqual(Date(2000, 2, 29), Date(2000, 2, 29))
+        requireEqual(Date(-9999, 1, 1), Date(-9999, 1, 1))
+        requireEqual(Date(0, 1, 1), Date(0, 1, 1))
+        requireUnequal(Date(2000, 1, 1), Date(2001, 1, 1))
+        requireUnequal(Date(2000, 1, 1), Date(2000, 2, 1))
+        requireUnequal(Date(2000, 1, 1), Date(2000, 1, 2))
+        requireUnequal(Date(-1, 1, 1), Date(1, 1, 1))
+    }),
+    Test("time equality", () => {
+        requireEqual(Time(0, 0, 0, 0), Time(0, 0, 0, 0))
+        requireEqual(Time(23, 59, 59, 999999999), Time(23, 59, 59, 999999999))
+        requireUnequal(Time(1, 0, 0, 0), Time(2, 0, 0, 0))
+        requireUnequal(Time(1, 1, 0, 0), Time(1, 2, 0, 0))
+        requireUnequal(Time(1, 1, 1, 0), Time(1, 1, 2, 0))
+        requireUnequal(Time(1, 1, 1, 0), Time(1, 1, 1, 1))
+    }),
+    Test("local date-time equality", () => {
+        requireEqual(
+            LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 5)),
+            LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 5))
+        )
+        requireUnequal(
+            LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 5)),
+            LocalDateTime(Date(2024, 2, 28), Time(12, 0, 0, 5))
+        )
+        requireUnequal(
+            LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 5)),
+            LocalDateTime(Date(2024, 2, 29), Time(12, 0, 0, 6))
+        )
+    }),
+    Test("equality across families and non-values is false", () => {
+        date: Date(2000, 1, 1)
+        time: Time(0, 0, 0, 0)
+        dateTime: LocalDateTime(date, time)
+        requireUnequal(date, time)
+        requireUnequal(date, dateTime)
+        requireUnequal(time, dateTime)
+        Assertions.require((date == null) === false)
+        Assertions.require((date == "2000-01-01") === false)
+        Assertions.require((time == 0) === false)
+        Assertions.require((dateTime == null) === false)
+    }),
+    Test("values work as Map keys", () => {
+        m: Map()
+        m[Date(2000, 2, 29)] = "date"
+        m[Time(23, 59, 59, 999999999)] = "time"
+        m[LocalDateTime(Date(2000, 2, 29), Time(0, 0, 0, 0))] = "dateTime"
+        Assertions.require(m.size() == 3)
+        Assertions.require(m[Date(2000, 2, 29)] == "date")
+        Assertions.require(m[Time(23, 59, 59, 999999999)] == "time")
+        Assertions.require(m[LocalDateTime(Date(2000, 2, 29), Time(0, 0, 0, 0))] == "dateTime")
+        Assertions.require(m.containsKey(Date(2000, 3, 1)) == false)
+        m[Date(2000, 2, 29)] = "replaced"
+        Assertions.require(m.size() == 3)
+        Assertions.require(m[Date(2000, 2, 29)] == "replaced")
+    }),
+    Test("values are frozen", () => {
+        date: Date(2024, 1, 31)
+        time: Time(10, 20, 30, 40)
+        dateTime: LocalDateTime(date, time)
+        requireFrozen(date, "day", () => {
+            date.day = 1
+        })
+        requireFrozen(time, "nanosecond", () => {
+            time.nanosecond = 0
+        })
+        requireFrozen(dateTime, "date", () => {
+            dateTime.date = Date(2000, 1, 1)
+        })
+        Assertions.require(date == Date(2024, 1, 31))
+        Assertions.require(time == Time(10, 20, 30, 40))
+        Assertions.require(dateTime.date === date)
+        Assertions.require(dateTime.time === time)
+    })
+]

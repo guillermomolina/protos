@@ -1,0 +1,93 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+//! Local civil date-times: exactly a civil date from `std:datetime/Date`
+//! combined with a local time from `std:datetime/Time`. A local date-time is a
+//! frozen ordinary object with `date` and `time` slots holding those frozen
+//! values. It does not identify an instant and carries no offset, zone, or
+//! clock state.
+//!
+//! Local date-times answer semantic equality through `==`: two are equal when
+//! their dates and their times are equal. `hash` is coherent with that
+//! equality, so independently constructed equal local date-times work as the
+//! same Map key. `===` remains ordinary object identity. `compare` is the
+//! natural order, dates first and then times, and answers `0` exactly for
+//! equal local date-times.
+
+/// Answers a fresh frozen local date-time composing `date`, a value answered
+/// by `std:datetime/Date`, and `time`, a value answered by
+/// `std:datetime/Time`. The components are stored as given. Any other argument
+/// signals an Error.
+call: (date, time) => {
+    Date: import("std:datetime/Date")
+    Time: import("std:datetime/Time")
+
+    // Comparing a component with itself validates its representation through
+    // the owning module.
+    Date.compare(date, date)
+    Time.compare(time, time)
+
+    isLocalDateTime: (value) => {
+        (value !== null) && value.hasSlot("date") && value.hasSlot("time")
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    dateTime: {
+        date: date
+        time: time
+
+        equals: (other) => {
+            dateTime: this
+            isLocalDateTime(other) &&
+                (dateTime.date == other.date) &&
+                (dateTime.time == other.time)
+        }
+
+        hash: () => {
+            dateTime: this
+            mix(mix(17, dateTime.date.hash()), dateTime.time.hash())
+        }
+    }
+
+    dateTime.alias("equals", "==").freeze()
+}
+
+/// Answers `-1`, `0`, or `1` as local date-time `left` is before, equal to, or
+/// after local date-time `right`, ordering by `Date.compare` of the dates and
+/// then `Time.compare` of the times. The result is `0` exactly when
+/// `left == right`. Arguments must be local date-times answered by this
+/// module's constructor; otherwise an Error is signalled.
+compare: (left, right) => {
+    Date: import("std:datetime/Date")
+    Time: import("std:datetime/Time")
+
+    requireLocalDateTime: (value) => {
+        ((value !== null) && value.hasSlot("date") && value.hasSlot("time")).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireLocalDateTime(left)
+    requireLocalDateTime(right)
+
+    result: Date.compare(left.date, right.date)
+    (result == 0).ifTrue(() => {
+        result = Time.compare(left.time, right.time)
+    })
+    result
+}

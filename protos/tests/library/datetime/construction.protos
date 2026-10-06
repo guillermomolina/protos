@@ -1,0 +1,158 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+
+requireDate: (year, month, day) => {
+    date: Date(year, month, day)
+    Assertions.require(date.year == year)
+    Assertions.require(date.month == month)
+    Assertions.require(date.day == day)
+    true
+}
+
+rejectsDate: (year, month, day) => {
+    Assertions.signals(Error, () => {
+        Date(year, month, day)
+    })
+    true
+}
+
+requireTime: (hour, minute, second, nanosecond) => {
+    time: Time(hour, minute, second, nanosecond)
+    Assertions.require(time.hour == hour)
+    Assertions.require(time.minute == minute)
+    Assertions.require(time.second == second)
+    Assertions.require(time.nanosecond == nanosecond)
+    true
+}
+
+rejectsTime: (hour, minute, second, nanosecond) => {
+    Assertions.signals(Error, () => {
+        Time(hour, minute, second, nanosecond)
+    })
+    true
+}
+
+tests: [
+    Test("date year range boundaries", () => {
+        requireDate(-9999, 1, 1)
+        requireDate(9999, 12, 31)
+        requireDate(0, 1, 1)
+        requireDate(-1, 6, 15)
+        rejectsDate(-10000, 12, 31)
+        rejectsDate(10000, 1, 1)
+    }),
+    Test("proleptic Gregorian leap years", () => {
+        requireDate(2024, 2, 29)
+        requireDate(2000, 2, 29)
+        requireDate(1600, 2, 29)
+        requireDate(0, 2, 29)
+        requireDate(-4, 2, 29)
+        requireDate(-400, 2, 29)
+        requireDate(-9996, 2, 29)
+        requireDate(9996, 2, 29)
+        rejectsDate(1900, 2, 29)
+        rejectsDate(2100, 2, 29)
+        rejectsDate(2023, 2, 29)
+        rejectsDate(-1, 2, 29)
+        rejectsDate(-100, 2, 29)
+        rejectsDate(-9999, 2, 29)
+        rejectsDate(9999, 2, 29)
+        rejectsDate(2000, 2, 30)
+        requireDate(2023, 2, 28)
+    }),
+    Test("month lengths", () => {
+        requireDate(2023, 1, 31)
+        requireDate(2023, 3, 31)
+        requireDate(2023, 5, 31)
+        requireDate(2023, 7, 31)
+        requireDate(2023, 8, 31)
+        requireDate(2023, 10, 31)
+        requireDate(2023, 12, 31)
+        requireDate(2023, 4, 30)
+        requireDate(2023, 6, 30)
+        requireDate(2023, 9, 30)
+        requireDate(2023, 11, 30)
+        rejectsDate(2023, 4, 31)
+        rejectsDate(2023, 6, 31)
+        rejectsDate(2023, 9, 31)
+        rejectsDate(2023, 11, 31)
+        rejectsDate(2023, 1, 32)
+        rejectsDate(2023, 12, 32)
+    }),
+    Test("date rejects invalid fields", () => {
+        rejectsDate(2023, 0, 1)
+        rejectsDate(2023, 13, 1)
+        rejectsDate(2023, -1, 1)
+        rejectsDate(2023, 1, 0)
+        rejectsDate(2023, 1, -1)
+        rejectsDate("2023", 1, 1)
+        rejectsDate(2023, 1.0, 1)
+        rejectsDate(2023, 1, null)
+    }),
+    Test("time field boundaries", () => {
+        requireTime(0, 0, 0, 0)
+        requireTime(23, 59, 59, 999999999)
+        requireTime(12, 30, 45, 1)
+        rejectsTime(24, 0, 0, 0)
+        rejectsTime(-1, 0, 0, 0)
+        rejectsTime(0, 60, 0, 0)
+        rejectsTime(0, -1, 0, 0)
+        rejectsTime(23, 59, 60, 0)
+        rejectsTime(0, 0, -1, 0)
+        rejectsTime(0, 0, 0, 1000000000)
+        rejectsTime(0, 0, 0, -1)
+        rejectsTime(0, 0, 0, null)
+        rejectsTime("0", 0, 0, 0)
+    }),
+    Test("local date-time composes date and time exactly", () => {
+        date: Date(-9999, 1, 1)
+        time: Time(0, 0, 0, 0)
+        earliest: LocalDateTime(date, time)
+        Assertions.require(earliest.date === date)
+        Assertions.require(earliest.time === time)
+        latest: LocalDateTime(Date(9999, 12, 31), Time(23, 59, 59, 999999999))
+        Assertions.require(latest.date == Date(9999, 12, 31))
+        Assertions.require(latest.time.nanosecond == 999999999)
+        leap: LocalDateTime(Date(0, 2, 29), Time(12, 0, 0, 1))
+        Assertions.require(leap.date.year == 0)
+        Assertions.require(leap.time.nanosecond == 1)
+    }),
+    Test("local date-time carries no offset, zone, or clock state", () => {
+        value: LocalDateTime(Date(2024, 3, 10), Time(2, 30, 0, 0))
+        Assertions.require(value.slotNames().size() == 5)
+        Assertions.require(value.hasSlot("date"))
+        Assertions.require(value.hasSlot("time"))
+        Assertions.require(value.hasSlot("offset") == false)
+        Assertions.require(value.hasSlot("zone") == false)
+    }),
+    Test("local date-time rejects non-components", () => {
+        date: Date(2024, 1, 1)
+        time: Time(0, 0, 0, 0)
+        Assertions.signals(Error, () => {
+            LocalDateTime(time, date)
+        })
+        Assertions.signals(Error, () => {
+            LocalDateTime(date, null)
+        })
+        Assertions.signals(Error, () => {
+            LocalDateTime({ year: 2024 }, time)
+        })
+    })
+]

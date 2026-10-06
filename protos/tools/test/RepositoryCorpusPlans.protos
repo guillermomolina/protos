@@ -135,6 +135,18 @@ load: (corpusId) => {
         matched = true
     })
 
+    (corpusId == "protos/corpus/library/datetime").ifTrue(() => {
+        selected = planFromEntries(
+            "datetime/",
+            Array(
+            Array("construction.protos", "suite-native", "-"),
+            Array("equality.protos", "suite-native", "-"),
+            Array("ordering.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    })
+
     matched.ifFalse(() => {
         fail()
     })

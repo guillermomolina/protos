@@ -29,6 +29,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
+        assertPlan("protos/corpus/library/datetime", 3, "datetime/construction.protos", "datetime/ordering.protos");
     }
 
     @Test

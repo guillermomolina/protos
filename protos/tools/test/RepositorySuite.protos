@@ -77,6 +77,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/library/datetime",
+            "protos/corpus/library/datetime",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
             "protos/package-tool/version",
             "protos/corpus/package-tool/version",
             "protos/test/package"

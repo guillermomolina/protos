@@ -1,0 +1,137 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+//! Civil dates in the proleptic Gregorian calendar with astronomical year
+//! numbering: year `0` and negative years exist, the Gregorian leap-year rule
+//! extends backward without a Julian cutover, and the supported years are
+//! `-9999` through `9999` inclusive. A date is a frozen ordinary object with
+//! Integer `year`, `month`, and `day` slots; it carries no time, offset, zone,
+//! or clock state.
+//!
+//! Dates answer semantic equality through `==`: two dates are equal when their
+//! year, month, and day are equal. `hash` is coherent with that equality, so
+//! independently constructed equal dates work as the same Map key. `===`
+//! remains ordinary object identity. `compare` is the natural chronological
+//! order and answers `0` exactly for equal dates.
+
+/// Answers a fresh frozen date for `year`, `month` (`1` through `12`), and
+/// `day` (`1` through the number of days of that month in that year). Every
+/// argument must be an Integer and `year` must lie in `-9999` through `9999`.
+/// An invalid or out-of-range field signals an Error; no field is clamped,
+/// wrapped, or normalized.
+call: (year, month, day) => {
+    (Integer.recognizes(year) && Integer.recognizes(month) && Integer.recognizes(day)).ifFalse(() => {
+        Error().signal()
+    })
+    ((year >= -9999) && (year <= 9999)).ifFalse(() => {
+        Error().signal()
+    })
+    ((month >= 1) && (month <= 12)).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Divisibility by 4, 100, and 400 is sign-independent, so the rule applies
+    // unchanged to year zero and negative years.
+    leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
+    length: 31
+    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        length = 30
+    })
+    (month == 2).ifTrue(() => {
+        length = 28
+        leap.ifTrue(() => {
+            length = 29
+        })
+    })
+    ((day >= 1) && (day <= length)).ifFalse(() => {
+        Error().signal()
+    })
+
+    isDate: (value) => {
+        (value !== null) &&
+            value.hasSlot("year") &&
+            value.hasSlot("month") &&
+            value.hasSlot("day") &&
+            Integer.recognizes(value.year) &&
+            Integer.recognizes(value.month) &&
+            Integer.recognizes(value.day)
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    date: {
+        year: year
+        month: month
+        day: day
+
+        equals: (other) => {
+            date: this
+            isDate(other) &&
+                (date.year == other.year) &&
+                (date.month == other.month) &&
+                (date.day == other.day)
+        }
+
+        hash: () => {
+            date: this
+            mix(mix(mix(17, date.year.hash()), date.month.hash()), date.day.hash())
+        }
+    }
+
+    date.alias("equals", "==").freeze()
+}
+
+/// Answers `-1`, `0`, or `1` as date `left` is chronologically before, equal
+/// to, or after date `right`, ordering by year, then month, then day. The
+/// result is `0` exactly when `left == right`. Arguments must be dates
+/// answered by this module's constructor; otherwise an Error is signalled.
+compare: (left, right) => {
+    requireDate: (value) => {
+        ((value !== null) &&
+            value.hasSlot("year") &&
+            value.hasSlot("month") &&
+            value.hasSlot("day") &&
+            Integer.recognizes(value.year) &&
+            Integer.recognizes(value.month) &&
+            Integer.recognizes(value.day)).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireDate(left)
+    requireDate(right)
+
+    compareIntegers: (first, second) => {
+        result: 0
+        (first < second).ifTrue(() => {
+            result = -1
+        })
+        (first > second).ifTrue(() => {
+            result = 1
+        })
+        result
+    }
+
+    result: compareIntegers(left.year, right.year)
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.month, right.month)
+    })
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.day, right.day)
+    })
+    result
+}

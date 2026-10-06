@@ -114,7 +114,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(21, registry.localSlotsSnapshot().size());
+            assertEquals(22, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -176,6 +176,12 @@ final class ProtosTestToolCorpusRegistryTest {
                     fixture.activation(),
                     registry,
                     "protos/corpus/library/semver",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/datetime",
                     "repository-explicit",
                     "libraryFilesystem");
             assertCaseOutcomesBinding(

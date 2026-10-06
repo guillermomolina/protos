@@ -1,0 +1,107 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Date: import("std:datetime/Date")
+Time: import("std:datetime/Time")
+LocalDateTime: import("std:datetime/LocalDateTime")
+
+// Requires `values` to be strictly increasing under `compare`, checking
+// reflexivity, sign antisymmetry, transitivity, and equality coherence over
+// every pair.
+requireIncreasing: (compare, values) => {
+    i: 0
+    (() => i < values.size()).whileTrue() {
+        j: 0
+        (() => j < values.size()).whileTrue() {
+            expected: 0
+            (i < j).ifTrue(() => {
+                expected = -1
+            })
+            (i > j).ifTrue(() => {
+                expected = 1
+            })
+            Assertions.require(compare(values[i], values[j]) == expected)
+            Assertions.require(compare(values[j], values[i]) == (0 - expected))
+            Assertions.require((values[i] == values[j]) == (expected == 0))
+            j = j + 1
+        }
+        i = i + 1
+    }
+    true
+}
+
+tests: [
+    Test("dates order chronologically", () => {
+        requireIncreasing(Date.compare, [
+            Date(-9999, 1, 1),
+            Date(-400, 12, 31),
+            Date(-1, 12, 31),
+            Date(0, 1, 1),
+            Date(0, 2, 29),
+            Date(0, 3, 1),
+            Date(1, 1, 1),
+            Date(1999, 12, 31),
+            Date(2000, 1, 1),
+            Date(2000, 1, 2),
+            Date(2000, 2, 1),
+            Date(9999, 12, 31)
+        ])
+        Assertions.require(Date.compare(Date(2000, 1, 1), Date(2000, 1, 1)) == 0)
+    }),
+    Test("times order within the day", () => {
+        requireIncreasing(Time.compare, [
+            Time(0, 0, 0, 0),
+            Time(0, 0, 0, 1),
+            Time(0, 0, 0, 999999999),
+            Time(0, 0, 1, 0),
+            Time(0, 0, 59, 999999999),
+            Time(0, 1, 0, 0),
+            Time(0, 59, 59, 999999999),
+            Time(1, 0, 0, 0),
+            Time(23, 59, 59, 999999998),
+            Time(23, 59, 59, 999999999)
+        ])
+        Assertions.require(Time.compare(Time(5, 6, 7, 8), Time(5, 6, 7, 8)) == 0)
+    }),
+    Test("local date-times order by date then time", () => {
+        requireIncreasing(LocalDateTime.compare, [
+            LocalDateTime(Date(-9999, 1, 1), Time(0, 0, 0, 0)),
+            LocalDateTime(Date(1999, 12, 31), Time(23, 59, 59, 999999999)),
+            LocalDateTime(Date(2000, 1, 1), Time(0, 0, 0, 0)),
+            LocalDateTime(Date(2000, 1, 1), Time(0, 0, 0, 1)),
+            LocalDateTime(Date(2000, 1, 1), Time(12, 0, 0, 0)),
+            LocalDateTime(Date(2000, 1, 2), Time(0, 0, 0, 0)),
+            LocalDateTime(Date(9999, 12, 31), Time(23, 59, 59, 999999999))
+        ])
+        Assertions.require(LocalDateTime.compare(
+            LocalDateTime(Date(2000, 1, 1), Time(1, 2, 3, 4)),
+            LocalDateTime(Date(2000, 1, 1), Time(1, 2, 3, 4))
+        ) == 0)
+    }),
+    Test("compare rejects foreign arguments", () => {
+        date: Date(2000, 1, 1)
+        time: Time(0, 0, 0, 0)
+        Assertions.signals(Error, () => {
+            Date.compare(date, time)
+        })
+        Assertions.signals(Error, () => {
+            Time.compare(null, time)
+        })
+        Assertions.signals(Error, () => {
+            LocalDateTime.compare(LocalDateTime(date, time), date)
+        })
+    })
+]

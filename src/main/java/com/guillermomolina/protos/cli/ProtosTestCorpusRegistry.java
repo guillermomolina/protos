@@ -91,6 +91,12 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/datetime",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/package-tool/version",
                 "case-outcomes",
                 "packageToolVersionFilesystem",

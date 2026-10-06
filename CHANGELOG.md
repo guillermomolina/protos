@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.242-SNAPSHOT
+
+- `LIB013-A` (guillermomolina/protos#430) adds the pure civil temporal kernel
+  `std:datetime/Date`, `std:datetime/Time`, and `std:datetime/LocalDateTime`.
+  There is no specification change.
+  - `Date(year, month, day)` uses the proleptic Gregorian calendar with
+    astronomical year numbering (year `0` and negative years exist). Supported
+    years are `-9999` through `9999`. `Time(hour, minute, second, nanosecond)`
+    has nanosecond precision and rejects `second == 60`.
+    `LocalDateTime(date, time)` composes exactly one Date and one Time, with no
+    offset, zone, or clock state.
+  - Invalid or out-of-range fields signal `Error`. Nothing is clamped,
+    wrapped, or normalized.
+  - Values are frozen and use the same approach as SemVer: semantic `==`
+    through `alias("equals", "==")`, with a coherent `hash` so equal values work
+    as Map keys. `===` stays object identity. Each module provides
+    `compare(left, right)`, which answers `-1`, `0`, or `1` in natural order and
+    `0` exactly for `==` values. Values with local Closure slots remain
+    non-transferable across Actors under the current pass-by-value rules.
+  - No clocks, zones, parsing, formatting, or arithmetic are added.
+  - Tests: new `library/datetime` corpus with `construction.protos`,
+    `equality.protos`, and `ordering.protos`, registered in the test tool and
+    CLI.
+
 ## 0.3.241-SNAPSHOT
 
 - `LIB012-C` (guillermomolina/protos#429) converges the Package Tool on

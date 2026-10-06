@@ -1,0 +1,138 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+
+//! Local civil times of day with nanosecond precision. A time is a frozen
+//! ordinary object with Integer `hour` (`0` through `23`), `minute` (`0`
+//! through `59`), `second` (`0` through `59`), and `nanosecond` (`0` through
+//! `999999999`) slots; it carries no date, offset, zone, or clock state.
+//! Leap-second labels (`second == 60`) are not supported.
+//!
+//! Times answer semantic equality through `==`: two times are equal when their
+//! hour, minute, second, and nanosecond are equal. `hash` is coherent with that
+//! equality, so independently constructed equal times work as the same Map
+//! key. `===` remains ordinary object identity. `compare` is the natural
+//! time-of-day order and answers `0` exactly for equal times.
+
+/// Answers a fresh frozen time for `hour`, `minute`, `second`, and
+/// `nanosecond`. Every argument must be an Integer within its field range;
+/// otherwise an Error is signalled. No field is clamped, wrapped, or
+/// normalized, and `second == 60` is rejected.
+call: (hour, minute, second, nanosecond) => {
+    (Integer.recognizes(hour) &&
+        Integer.recognizes(minute) &&
+        Integer.recognizes(second) &&
+        Integer.recognizes(nanosecond)).ifFalse(() => {
+        Error().signal()
+    })
+    ((hour >= 0) && (hour <= 23)).ifFalse(() => {
+        Error().signal()
+    })
+    ((minute >= 0) && (minute <= 59)).ifFalse(() => {
+        Error().signal()
+    })
+    ((second >= 0) && (second <= 59)).ifFalse(() => {
+        Error().signal()
+    })
+    ((nanosecond >= 0) && (nanosecond <= 999999999)).ifFalse(() => {
+        Error().signal()
+    })
+
+    isTime: (value) => {
+        (value !== null) &&
+            value.hasSlot("hour") &&
+            value.hasSlot("minute") &&
+            value.hasSlot("second") &&
+            value.hasSlot("nanosecond") &&
+            Integer.recognizes(value.hour) &&
+            Integer.recognizes(value.minute) &&
+            Integer.recognizes(value.second) &&
+            Integer.recognizes(value.nanosecond)
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    time: {
+        hour: hour
+        minute: minute
+        second: second
+        nanosecond: nanosecond
+
+        equals: (other) => {
+            time: this
+            isTime(other) &&
+                (time.hour == other.hour) &&
+                (time.minute == other.minute) &&
+                (time.second == other.second) &&
+                (time.nanosecond == other.nanosecond)
+        }
+
+        hash: () => {
+            time: this
+            result: mix(mix(17, time.hour.hash()), time.minute.hash())
+            mix(mix(result, time.second.hash()), time.nanosecond.hash())
+        }
+    }
+
+    time.alias("equals", "==").freeze()
+}
+
+/// Answers `-1`, `0`, or `1` as time `left` is earlier than, equal to, or later
+/// than time `right` within a day, ordering by hour, minute, second, then
+/// nanosecond. The result is `0` exactly when `left == right`. Arguments must
+/// be times answered by this module's constructor; otherwise an Error is
+/// signalled.
+compare: (left, right) => {
+    requireTime: (value) => {
+        ((value !== null) &&
+            value.hasSlot("hour") &&
+            value.hasSlot("minute") &&
+            value.hasSlot("second") &&
+            value.hasSlot("nanosecond") &&
+            Integer.recognizes(value.hour) &&
+            Integer.recognizes(value.minute) &&
+            Integer.recognizes(value.second) &&
+            Integer.recognizes(value.nanosecond)).ifFalse(() => {
+            Error().signal()
+        })
+    }
+
+    requireTime(left)
+    requireTime(right)
+
+    compareIntegers: (first, second) => {
+        result: 0
+        (first < second).ifTrue(() => {
+            result = -1
+        })
+        (first > second).ifTrue(() => {
+            result = 1
+        })
+        result
+    }
+
+    result: compareIntegers(left.hour, right.hour)
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.minute, right.minute)
+    })
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.second, right.second)
+    })
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.nanosecond, right.nanosecond)
+    })
+    result
+}
