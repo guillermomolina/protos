@@ -27,17 +27,31 @@ CasePlan: import("self:LogicalCasePlan")
 // `results` to be complete and without changing the stable logical index
 // each completion is stored at.
 //
-// BUG020: `failureObserver`, when supplied, is called `(index, entry, error)`
-// when one logical Case's execution Future fails instead of producing a
-// completion. It only lets the caller attribute the failure to its Case; the
-// same Error is then re-signaled unchanged.
+// BUG020: a logical Case whose execution Future fails instead of producing a
+// completion still crosses the terminal barrier, as an "execution-error"
+// completion carrying that Error, so the Case stays attributable and the
+// remaining Cases keep running. Cancellation is not a Case outcome and
+// propagates unchanged.
+executionErrorCompletion: (error) => {
+    observation: {
+        state: "failed"
+        error: error
+    }
+    observation.freeze()
+
+    completion: {
+        phase: "execution-error"
+        observation: observation
+    }
+    completion.freeze()
+}
+
 run: (
     projections,
     executorAsync,
     maxInFlight,
     lifecycleObserver = null,
-    completionObserver = null,
-    failureObserver = null
+    completionObserver = null
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         fail()
@@ -107,14 +121,11 @@ run: (
                         CasePlan.selector(entry)
                     ).value()
             }, (error) => {
-                (failureObserver === null).ifFalse(() => {
-                    failureObserver(
-                        index,
-                        entry,
-                        error
-                    )
+                (error.parent() === Cancelled).ifTrue(() => {
+                    error.signal()
                 })
-                error.signal()
+
+                completion = executionErrorCompletion(error)
             })
 
             (lifecycleObserver === null).ifFalse(() => {

@@ -49,6 +49,11 @@ classificationForCompletion: (completion) => {
         classification = "tool-error"
     })
 
+    // BUG020: the logical Case's execution itself failed (LogicalCaseRunner).
+    (phase == "execution-error").ifTrue(() => {
+        classification = "tool-error"
+    })
+
     (phase == "case-execution").ifTrue(() => {
         (state == "completed").ifTrue(() => {
             classification = "pass"

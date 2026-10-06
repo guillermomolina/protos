@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.249-SNAPSHOT
+
+- `BUG020` (guillermomolina/protos#812) keeps the Test Tool running when one
+  logical Case's execution fails without producing a Case completion. There is
+  no specification change.
+  - Such a Case is now recorded as a D155 Tool error for that Case and reported
+    as `INFRA <case>`. The remaining Cases still run, and the invocation ends
+    with exit code 3. It no longer aborts with an unattributed
+    `Test tool error`. Cancellation still propagates unchanged.
+  - Progress `FAIL`/`INFRA` lines name the exact logical Case
+    (`<corpus>:<source>::<selector>`) instead of only its source file.
+  - After the run, every `FAIL`/`INFRA` Case is listed again before the final
+    totals, so failures stay identifiable in parallel (`--jobs`) output.
+  - The 0.3.248 `Test case error:` line is removed. Passing Cases still
+    produce no per-Case output, and scheduling is unchanged.
+
 ## 0.3.248-SNAPSHOT
 
 - `BUG020` (guillermomolina/protos#812) makes the Test Tool name the failing

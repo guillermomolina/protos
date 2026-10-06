@@ -253,8 +253,10 @@ lifecycleObserver: (state, displayReference = null) => {
     }
 }
 
+// BUG020: `caseReference`, when supplied, is the exact logical Case reference
+// a failure line names instead of the source-level `Manifest.caseId(spec)`.
 observer: (state) => {
-    (spec, evaluation, infrastructureFailed) => {
+    (spec, evaluation, infrastructureFailed, caseReference = null) => {
         (phaseName, total): state
         completed: state[2] + 1
         failed: infrastructureFailed
@@ -275,10 +277,15 @@ observer: (state) => {
                 kind = "INFRA"
             })
 
+            reference: caseReference
+            (reference === null).ifTrue(() => {
+                reference = Manifest.caseId(spec)
+            })
+
             state[6](
                 "[" + phaseName + "] " +
                 kind + " " +
-                Manifest.caseId(spec)
+                reference
             )
         })
 

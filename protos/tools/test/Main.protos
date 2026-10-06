@@ -311,6 +311,9 @@ selectorsActive.ifTrue(() => {
 logicalExecutionSuites: Array()
 logicalProjections: Array()
 logicalCaseMetadata: Array()
+// BUG020: aligned with logicalCaseMetadata; the exact Case reference each
+// failure report names.
+logicalCaseReferences: Array()
 logicalSourceSpecs: Map()
 
 // TOOL009-D: the D125 ExecutionRequirementId a logical Case must execute
@@ -453,7 +456,13 @@ executionSuites.each((planned) => {
                 )
         })
 
-        retainedCases.each((ignored) => {
+        retainedCases.each((retainedCase) => {
+            logicalCaseReferences =
+                Array(
+                    ...logicalCaseReferences,
+                    CaseRef.display(retainedCase)
+                )
+
             metadata:
                 Array(
                     executionSuiteIndex,
@@ -504,6 +513,7 @@ CaseSelection.requireComplete(caseSelection)
 logicalExecutionSuites.freeze()
 logicalProjections.freeze()
 logicalCaseMetadata.freeze()
+logicalCaseReferences.freeze()
 executionSuites = logicalExecutionSuites
 
 finalOutcome: null
@@ -631,6 +641,10 @@ listCases.ifFalse(() => {
             logicalCaseDisplayReference
         )
 
+    // BUG020: every FAIL/INFRA Case, in completion order, listed again after
+    // the run so parallel progress output does not hide which Cases failed.
+    failedCaseLines: Array()
+
     // BUG010: the narrow completion hook LogicalCaseRunner exposes alongside its
     // D174 lifecycle observer. It fires the instant one logical Case's physical
     // execution crosses the terminal barrier, at that Case's stable logical
@@ -673,18 +687,23 @@ listCases.ifFalse(() => {
         groupObservers[targetGroupIndex](
             spec,
             evaluation,
-            resultInfrastructureFailed
+            resultInfrastructureFailed,
+            logicalCaseReferences[index]
         )
 
-        null
-    }
+        (classification == "pass").ifFalse(() => {
+            kind: "FAIL"
+            resultInfrastructureFailed.ifTrue(() => {
+                kind = "INFRA"
+            })
 
-    // BUG020: a logical Case whose execution fails outright, instead of
-    // producing a D155 completion, is named before the failure propagates.
-    logicalFailureObserver: (index, entry, error) => {
-        emitProgress(
-            "Test case error: " + CaseRef.display(entry)
-        )
+            failedCaseLines =
+                Array(
+                    ...failedCaseLines,
+                    kind + " " + logicalCaseReferences[index]
+                )
+        })
+
         null
     }
 
@@ -698,8 +717,7 @@ listCases.ifFalse(() => {
                 ),
                 jobs,
                 logicalLifecycleObserver,
-                logicalCompletionObserver,
-                logicalFailureObserver
+                logicalCompletionObserver
             ).value()
 
         logicalResults =
@@ -754,6 +772,10 @@ listCases.ifFalse(() => {
                 null,
                 logicalExitCode
             )
+    })
+
+    failedCaseLines.each((line) => {
+        emitProgress(line)
     })
 
     Progress.finishInvocation(
