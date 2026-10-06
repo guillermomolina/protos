@@ -17,13 +17,12 @@
 // protos/tests/package-tool/toml-syntax is now suite-native (Test/Assertions
 // declarations), so this legacy exact-execution E2A1 slice no longer sources
 // its subject from that corpus (its bare-boolean raw-execution contract no
-// longer applies there). It instead exercises the exact same
-// packageExecution/self:TomlSyntax resolution path against a dedicated
-// inline fixture, mirroring the corpus's own former key-bare-dotted.protos
-// behavior without depending on corpus content that now belongs to the
-// suite-native route.
+// longer applies there). It instead exercises the packageExecution resolution
+// path against a dedicated inline fixture: self:ManifestSchemaV1 resolves
+// through the bundled Package Tool closure and its TOML import resolves
+// std:toml/TOML through the bundled-tool Standard Library resolver (I079).
 observation: packageExecution(
-    "Toml: import(\"self:TomlSyntax\")\nparts: Toml.keyPath(\"dependencies . parser-core\")\nparts.size() == 2\n"
+    "Schema: import(\"self:ManifestSchemaV1\")\nmodel: Schema.parseBase(\"manifest-version = 1\\n[package]\\nid = 'p'\\nversion = '1.0.0'\\n\")\nmodel.package.id == \"p\"\n"
 )
 
 passed: observation.state === "completed"

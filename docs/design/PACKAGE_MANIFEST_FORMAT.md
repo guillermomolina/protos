@@ -349,9 +349,11 @@ build model so that the locked graph remains explainable and reproducible.
 The package manager must read the manifest before it can resolve/load Protos
 packages. Therefore manifest parsing is toolchain bootstrap functionality.
 
-A future `std:toml/...` library must not be required in order to parse
-`protos.toml`; that would create a package-resolution cycle. The host toolchain
-may:
+Manifest parsing must not require project package resolution; that would create
+a package-resolution cycle. A Standard Library module installed with the
+toolchain does not create that cycle: Package Tool now parses `protos.toml`
+with `std:toml/TOML` selecting TOML 1.0 (D087 as amended, I079). The format
+itself admits any strategy that preserves this boundary, for example:
 
 - embed a small conforming TOML parser;
 - depend on a normal host-language TOML parser as part of the toolchain build;

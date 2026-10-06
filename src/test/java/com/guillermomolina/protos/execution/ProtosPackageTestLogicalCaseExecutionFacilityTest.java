@@ -51,15 +51,15 @@ import org.junit.jupiter.api.io.TempDir;
  * {@link ProtosTestLogicalCaseAttemptBridge} machinery parameterized with a Package-specific
  * fallback resolver (the exact bundled Package Tool resolver construction {@code packagePrelude}
  * itself uses, overlaid with host-selected exact references to Package Tool's own
- * {@code RuntimeNames} module and to the finite Package TOML module graph
- * ({@code TomlSyntax}/{@code TomlDocument}/{@code ManifestSchemaV1} and the shared Toml10
- * modules they depend on) so a selected Test body can prove which bootstrap resolved it),
+ * {@code RuntimeNames} module and to the Package manifest schema module {@code ManifestSchemaV1}
+ * so a selected Test body can prove which bootstrap resolved it),
  * demonstrating that the suite-native route can resolve and execute Package-flavored suites
  * without a parallel Case authority and without touching the legacy {@code packageExecutionAsync}
- * facility or its {@code packagePrelude} bootstrap. The Package TOML module graph coverage below
- * invokes the real {@code protos/tools/package} and {@code protos/tools/shared/Toml10} module
- * files (not copies embedded in this test) so the resolver route is proven against the actual
- * corpus dependency graph. None of the 102 TOML corpus fixtures under
+ * facility or its {@code packagePrelude} bootstrap. The manifest schema coverage below invokes
+ * the real {@code protos/tools/package/ManifestSchemaV1.protos} module (not a copy embedded in
+ * this test), whose TOML 1.0 parsing resolves {@code std:toml/TOML} through the bundled-tool
+ * Standard Library resolver alone, never through project package resolution (I079). None of the
+ * TOML corpus fixtures under
  * {@code protos/tests/package-tool/toml-syntax} are used here; every suite source is a dedicated
  * inline fixture for this infrastructure, exercising the real modules through ordinary imports.
  *
@@ -120,54 +120,27 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             )
             """;
 
-    private static final String SOURCE_USES_TOML_SYNTAX =
-            """
-            TestValue: import("std:test/Test")
-            Toml: import("self:TomlSyntax")
-
-            tests: Array(
-                TestValue("resolvesTomlSyntax", () => {
-                    parts: Toml.keyPath("dependencies . parser-core")
-                    ok: parts.size() == 2
-                    (parts[0] == "dependencies").ifFalse(() => { ok = false })
-                    (parts[1] == "parser-core").ifFalse(() => { ok = false })
-                    ok
-                })
-            )
-            """;
-
-    private static final String SOURCE_USES_TOML_DOCUMENT =
-            """
-            TestValue: import("std:test/Test")
-            Document: import("self:TomlDocument")
-
-            tests: Array(
-                TestValue("resolvesTomlDocument", () => {
-                    root: Document.table("manifest-version = 1\\n[package]\\nid = \\"pkg-1\\"\\n")
-                    version: root.value["manifest-version"]
-                    package: root.value["package"]
-                    ok: root.kind == "table"
-                    (version.kind == "integer").ifFalse(() => { ok = false })
-                    (version.value == 1).ifFalse(() => { ok = false })
-                    (package.kind == "table").ifFalse(() => { ok = false })
-                    (package.value["id"].value == "pkg-1").ifFalse(() => { ok = false })
-                    ok
-                })
-            )
-            """;
-
     private static final String SOURCE_USES_MANIFEST_SCHEMA_V1 =
             """
             TestValue: import("std:test/Test")
             Schema: import("self:ManifestSchemaV1")
 
             tests: Array(
-                TestValue("resolvesManifestSchemaAndItsLazyTomlDocumentImport", () => {
+                TestValue("resolvesManifestSchemaAndItsLazyStandardTomlImport", () => {
                     model: Schema.parseBase(
                         "manifest-version = 1\\n[package]\\nid = \\"pkg-id\\"\\nversion = \\"1.2.3\\"\\n")
                     ok: model.package.id == "pkg-id"
                     (model.package.version == "1.2.3").ifFalse(() => { ok = false })
-                    ok
+                    rejectsToml11: false
+                    Error.handle(() => {
+                        Schema.parseBase(
+                            "manifest-version = 1\\npackage = { id = \\"p\\", version = \\"1\\", }\\n")
+                        null
+                    }, (error) => {
+                        rejectsToml11 = true
+                        null
+                    })
+                    ok && rejectsToml11
                 })
             )
             """;
@@ -390,96 +363,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     }
 
     @Test
-    void resolvesRealTomlSyntaxModuleAndItsSharedToml10Dependency(@TempDir Path root)
-            throws Exception {
-        writeSuite(root, SOURCE_USES_TOML_SYNTAX);
-
-        ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
-                ProtosTestLogicalCaseExecutionFacility facility =
-                        ProtosTestLogicalCaseExecutionFacility.install(
-                                activation,
-                                "packageLogicalCaseExecutionAsync",
-                                CORE,
-                                resolver,
-                                List.of(
-                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
-                                                "package-corpus", root)),
-                                runtimeHost,
-                                submission)) {
-
-            ProtosFutureValue future =
-                    invoke(
-                            facility,
-                            prelude,
-                            activation,
-                            SOURCE_USES_TOML_SYNTAX,
-                            List.of("resolvesTomlSyntax"),
-                            "resolvesTomlSyntax");
-
-            assertTrue(submission.runNext());
-            assertTrue(activation.executionDomain().dispatchOne());
-
-            // "self:TomlSyntax" resolves to the real protos/tools/package/TomlSyntax.protos,
-            // which itself imports "tool-shared:Toml10/TomlSyntax". A "true" observation is
-            // reachable only if both modules resolved and the real parser logic executed.
-            assertSame(
-                    ProtosBooleanValue.TRUE,
-                    assertCompletedObservationValue(future));
-        }
-    }
-
-    @Test
-    void resolvesRealTomlDocumentModuleAndItsTransitiveTomlSyntaxDependency(@TempDir Path root)
-            throws Exception {
-        writeSuite(root, SOURCE_USES_TOML_DOCUMENT);
-
-        ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
-                ProtosTestLogicalCaseExecutionFacility facility =
-                        ProtosTestLogicalCaseExecutionFacility.install(
-                                activation,
-                                "packageLogicalCaseExecutionAsync",
-                                CORE,
-                                resolver,
-                                List.of(
-                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
-                                                "package-corpus", root)),
-                                runtimeHost,
-                                submission)) {
-
-            ProtosFutureValue future =
-                    invoke(
-                            facility,
-                            prelude,
-                            activation,
-                            SOURCE_USES_TOML_DOCUMENT,
-                            List.of("resolvesTomlDocument"),
-                            "resolvesTomlDocument");
-
-            assertTrue(submission.runNext());
-            assertTrue(activation.executionDomain().dispatchOne());
-
-            // "self:TomlDocument" resolves to the real protos/tools/package/TomlDocument.protos,
-            // which imports "tool-shared:Toml10/TomlDocument", which in turn imports
-            // "tool-shared:Toml10/TomlSyntax". Parsing a real two-level TOML table and asserting
-            // its structure is only reachable if the whole chain resolved and executed.
-            assertSame(
-                    ProtosBooleanValue.TRUE,
-                    assertCompletedObservationValue(future));
-        }
-    }
-
-    @Test
-    void resolvesRealManifestSchemaV1AndItsLazyTomlDocumentImport(@TempDir Path root)
+    void resolvesRealManifestSchemaV1AndItsLazyStandardTomlImport(@TempDir Path root)
             throws Exception {
         writeSuite(root, SOURCE_USES_MANIFEST_SCHEMA_V1);
 
@@ -507,18 +391,20 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                             prelude,
                             activation,
                             SOURCE_USES_MANIFEST_SCHEMA_V1,
-                            List.of("resolvesManifestSchemaAndItsLazyTomlDocumentImport"),
-                            "resolvesManifestSchemaAndItsLazyTomlDocumentImport");
+                            List.of("resolvesManifestSchemaAndItsLazyStandardTomlImport"),
+                            "resolvesManifestSchemaAndItsLazyStandardTomlImport");
 
             assertTrue(submission.runNext());
             assertTrue(activation.executionDomain().dispatchOne());
 
             // "self:ManifestSchemaV1" resolves to the real
-            // protos/tools/package/ManifestSchemaV1.protos. Its "self:TomlDocument" import is
+            // protos/tools/package/ManifestSchemaV1.protos. Its "std:toml/TOML" import is
             // lazy: it lives inside the "parseBase" callable body, not at module top level. The
             // selected Test body calls "Schema.parseBase(...)", which is the only thing that
-            // forces that lazy import to actually resolve. A dormant, never-imported module
-            // would not produce this "true" observation.
+            // forces that lazy import to resolve through the Standard Library resolver; the
+            // overlay below carries no TOML entry and no project package resolver exists here.
+            // The body also requires a TOML 1.1-only inline-table trailing comma to be
+            // rejected, proving the schema selects TOML 1.0.
             assertSame(
                     ProtosBooleanValue.TRUE,
                     assertCompletedObservationValue(future));
@@ -997,17 +883,13 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         // Matches ProtosCli's packageLogicalCaseFallbackResolver construction: the
         // ordinary bundled Test Tool resolver is the base (its "self:Discovery"
         // selection machinery is what the suite-native bridge always needs), overlaid
-        // with the exact Package Tool modules the real TOML corpus depends on: the
-        // RuntimeNames proof-of-bootstrap module, the three Package-owned TOML modules
-        // (TomlSyntax/TomlDocument/ManifestSchemaV1), and the shared Toml10 modules they
-        // transitively import. The shared modules keep the same canonical
-        // "bundled-tool-shared:" ModuleKey that ProtosBundledToolModuleResolver would
-        // itself assign for the same specifier.
+        // with the exact Package Tool modules the real corpora depend on: the
+        // RuntimeNames proof-of-bootstrap module and the Package-owned modules, among
+        // them ManifestSchemaV1, whose std:toml/TOML import resolves through the
+        // Standard Library resolver without an overlay entry.
         ProtosModuleResolver ordinaryTestResolver =
                 new ProtosBundledToolModuleResolver(
                         "test", TOOL_ROOT, SHARED_ROOT, standardLibraryResolver);
-        // 13 overlay entries: past the 10-pair limit of Map.of(...), hence
-        // Map.ofEntries(Map.entry(...), ...) here (identical Map semantics).
         return new ProtosExactModuleOverlayResolver(
                 Map.ofEntries(
                         Map.entry(
@@ -1015,16 +897,6 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                                 new ProtosExactModuleOverlayResolver.ExactModule(
                                         new ProtosModuleKey("tool001-package:runtime-names"),
                                         PACKAGE_TOOL_ROOT.resolve("RuntimeNames.protos"))),
-                        Map.entry(
-                                "self:TomlSyntax",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:toml-syntax"),
-                                        PACKAGE_TOOL_ROOT.resolve("TomlSyntax.protos"))),
-                        Map.entry(
-                                "self:TomlDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:toml-document"),
-                                        PACKAGE_TOOL_ROOT.resolve("TomlDocument.protos"))),
                         Map.entry(
                                 "self:ManifestSchemaV1",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
@@ -1069,20 +941,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                                 "self:ResolutionInput",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
                                         new ProtosModuleKey("tool001-package:resolution-input"),
-                                        PACKAGE_TOOL_ROOT.resolve("ResolutionInput.protos"))),
-                        Map.entry(
-                                "tool-shared:Toml10/TomlSyntax",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlSyntax"),
-                                        SHARED_ROOT.resolve("Toml10").resolve("TomlSyntax.protos"))),
-                        Map.entry(
-                                "tool-shared:Toml10/TomlDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey(
-                                                "bundled-tool-shared:Toml10/TomlDocument"),
-                                        SHARED_ROOT
-                                                .resolve("Toml10")
-                                                .resolve("TomlDocument.protos")))),
+                                        PACKAGE_TOOL_ROOT.resolve("ResolutionInput.protos")))),
                 ordinaryTestResolver);
     }
 

@@ -16,10 +16,11 @@
 
 // TOOL002-I6C: pure D077 resource-requirements schema parser.
 //
-// The private shared TOML import is resolved while this bundled Test Tool module
-// is initialized. Exported Closures capture the imported Document module and do
-// not attempt a private import under an exact-source caller.
-Document: import("tool-shared:Toml10/TomlDocument")
+// D077 pins resource-requirements documents to TOML 1.0. The Standard Library
+// TOML import is resolved while this bundled Test Tool module is initialized;
+// exported Closures capture the imported module and do not import again under an
+// exact-source caller.
+TOML: import("std:toml/TOML")
 Manifest: import("self:Manifest")
 
 frozenTuple: (...items) => {
@@ -68,7 +69,7 @@ declarationRequirement: (declarationValue) => {
 }
 
 parse: (text) => {
-    rootEntries: tableEntries(Document.table(text))
+    rootEntries: tableEntries(TOML.parseDialect(text, "1.0"))
 
     rootAllowed: Map()
     rootAllowed["resource-requirements-version"] = true

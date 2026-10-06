@@ -19,16 +19,16 @@
 // its subject from that corpus (its bare-signal raw-execution contract no
 // longer applies there). Manifest.parsePackageTomlLine still validates the
 // unrelated CaseId/parser plumbing; the executed source is a dedicated
-// inline fixture mirroring the corpus's own former invalid-key-error.protos
-// behavior without depending on corpus content that now belongs to the
-// suite-native route.
+// inline fixture whose invalid TOML key fails inside std:toml/TOML as reached
+// from self:ManifestSchemaV1 (I079), without depending on corpus content that
+// now belongs to the suite-native route.
 Manifest: import("self:Manifest")
 
 spec: Manifest.parsePackageTomlLine(
     "invalid-key-error.protos\terror"
 )
 observation: packageExecution(
-    "Toml: import(\"self:TomlSyntax\")\nToml.keyPath(\"a..b\")\n"
+    "Schema: import(\"self:ManifestSchemaV1\")\nSchema.parseBase(\"a..b = 1\\n\")\n"
 )
 
 passed:

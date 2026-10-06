@@ -1,13 +1,4 @@
 # path	expectation
-key-and-scalars.protos	suite-native
-string-singleline.protos	suite-native
-string-multiline-basic.protos	suite-native
-string-multiline-literal.protos	suite-native
-arrays-and-inline-tables.protos	suite-native
-document-statements-and-stack.protos	suite-native
-document-tables.protos	suite-native
-document-table-conflicts.protos	suite-native
-array-of-tables.protos	suite-native
 manifest-schema-base.protos	suite-native
 manifest-schema-sections.protos	suite-native
 manifest-schema-workspace.protos	suite-native

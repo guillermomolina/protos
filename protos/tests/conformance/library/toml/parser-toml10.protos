@@ -1,0 +1,414 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+// I079: TOML 1.0 behavior of the Standard Library parser, as selected by the
+// persisted Package Manifest v1 and D077 Test Tool schemas through
+// `parseDialect(text, "1.0")`. These Tests replace the coverage formerly owned by
+// the retired private bundled-tool TOML 1.0 engine.
+
+tests: [
+    Test("TOML 1.0 bare and dotted keys", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect("dependencies . parser-core = 1\n", "1.0")
+
+        Assertions.require(root.value.size() == 1)
+        Assertions.require(root.value["dependencies"].kind === "table")
+        Assertions.require(root.value["dependencies"].value["parser-core"].value == 1)
+    }),
+    Test("TOML 1.0 quoted and Unicode keys", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect("\"site.name\" . 'ʞ' = 1\n", "1.0")
+
+        Assertions.require(root.value["site.name"].value["ʞ"].value == 1)
+    }),
+    Test("TOML 1.0 invalid key error", () => {
+        TOML: import("std:toml/TOML")
+
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("a..b = 1\n", "1.0")
+        })
+    }),
+    Test("TOML 1.0 integer radix forms", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "a = 1_000\nb = 0xDEAD_BEEF\nc = 0o755\nd = 0b1010\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value["a"].kind === "integer")
+        Assertions.require(root.value["a"].value == 1000)
+        Assertions.require(root.value["b"].value == 3735928559)
+        Assertions.require(root.value["c"].value == 493)
+        Assertions.require(root.value["d"].value == 10)
+    }),
+    Test("TOML 1.0 signed 64-bit integer boundaries", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "min = -9223372036854775808\nmax = 9223372036854775807\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value["min"].value == -9223372036854775808)
+        Assertions.require(root.value["max"].value == 9223372036854775807)
+    }),
+    Test("TOML 1.0 signed non-decimal integer error", () => {
+        TOML: import("std:toml/TOML")
+
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("a = +0x1\n", "1.0")
+        })
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("a = -0b1\n", "1.0")
+        })
+    }),
+    Test("TOML 1.0 float and temporal values keep their TOML kinds", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect("ratio = 1.5\ndate = 1979-05-27\n", "1.0")
+
+        Assertions.require(root.value["ratio"].kind === "float")
+        Assertions.require(root.value["ratio"].value == 1.5)
+        Assertions.require(root.value["date"].kind === "localDate")
+    }),
+    Test("TOML 1.0 basic string escapes", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect("v = \"A\\tB\\u00E9\\U0001F600\"\n", "1.0")
+
+        Assertions.require(root.value["v"].kind === "string")
+        Assertions.require(root.value["v"].value == "A\tBé😀")
+    }),
+    Test("TOML 1.0 literal string", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect("v = 'C:\\Users\\nodejs\\templates'\n", "1.0")
+
+        Assertions.require(root.value["v"].value == "C:\\Users\\nodejs\\templates")
+    }),
+    Test("TOML 1.0 string error cases", () => {
+        TOML: import("std:toml/TOML")
+
+        inputs: [
+            "v = \"\\x41\"\n",
+            "v = \"\\uD800\"\n",
+            "v = \"alpha\nbeta\"\n"
+        ]
+
+        inputs.each((input) => {
+            Assertions.signals(Error, () => {
+                TOML.parseDialect(input, "1.0")
+            })
+        })
+        null
+    }),
+    Test("TOML 1.0 multiline basic strings", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "a = \"\"\"\nalpha\nbeta\n\"\"\"\n" +
+            "b = \"\"\"one \" two\"\"\"\n" +
+            "c = \"\"\"one \"\" two\"\"\"\n" +
+            "d = \"\"\"x\"\"\"\"\n" +
+            "e = \"\"\"x\"\"\"\"\"\n" +
+            "f = \"\"\"alpha \\\n    beta\"\"\"\n" +
+            "g = \"\"\"\r\nalpha\r\nbeta\"\"\"\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value["a"].value == "alpha\nbeta\n")
+        Assertions.require(root.value["b"].value == "one \" two")
+        Assertions.require(root.value["c"].value == "one \"\" two")
+        Assertions.require(root.value["d"].value == "x\"")
+        Assertions.require(root.value["e"].value == "x\"\"")
+        Assertions.require(root.value["f"].value == "alpha beta")
+        Assertions.require(root.value["g"].value == "alpha\nbeta")
+    }),
+    Test("TOML 1.0 multiline literal strings", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "a = '''\nalpha\nbeta'''\n" +
+            "b = '''one ' two'''\n" +
+            "c = '''one '' two'''\n" +
+            "d = '''x''''\n" +
+            "e = '''x'''''\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value["a"].value == "alpha\nbeta")
+        Assertions.require(root.value["b"].value == "one ' two")
+        Assertions.require(root.value["c"].value == "one '' two")
+        Assertions.require(root.value["d"].value == "x'")
+        Assertions.require(root.value["e"].value == "x''")
+    }),
+    Test("TOML 1.0 multiline strings with too many closing quotes error", () => {
+        TOML: import("std:toml/TOML")
+
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("v = \"\"\"x\"\"\"\"\"\"\n", "1.0")
+        })
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("v = '''x''''''\n", "1.0")
+        })
+    }),
+    Test("TOML 1.0 arrays with comments, trailing commas, and nesting", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "a = [\n  \"a\", # first\n  'b',\n]\n" +
+            "b = [1, 2]\n" +
+            "c = [[1, 2], [3]]\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value["a"].kind === "array")
+        Assertions.require(root.value["a"].value.size() == 2)
+        Assertions.require(root.value["a"].value[0].value == "a")
+        Assertions.require(root.value["a"].value[1].value == "b")
+        Assertions.require(root.value["b"].value[1].value == 2)
+        Assertions.require(root.value["c"].value[0].value[1].value == 2)
+        Assertions.require(root.value["c"].value[1].value[0].value == 3)
+    }),
+    Test("TOML 1.0 inline table with dotted keys", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "v = { package = \"community/parser\", source.rev = 'abc', public = true }\n",
+            "1.0"
+        )
+        table: root.value["v"].value
+
+        Assertions.require(root.value["v"].kind === "table")
+        Assertions.require(table["package"].value == "community/parser")
+        Assertions.require(table["source"].value["rev"].value == "abc")
+        Assertions.require(table["public"].value === true)
+    }),
+    Test("TOML 1.0 inline table duplicate key error", () => {
+        TOML: import("std:toml/TOML")
+
+        Assertions.signals(Error, () => {
+            TOML.parseDialect("v = { a = 1, a = 2 }\n", "1.0")
+        })
+    }),
+    Test("TOML 1.0 document statements, comments, and CRLF", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "manifest-version = 1\n[package]\nid = \"pkg#1\"# trailing\nversion = \"1.0.0\"\n" +
+            "[nested]\nvalues = [1,\n# inside array\n2]\nmeta = { name = \"x#y\", enabled = true }\n" +
+            "text = \"\"\"\nalpha # data\nbeta\n\"\"\"\n" +
+            "[crlf]\r\na = 1\r\n# comment\r\nb = \"c\"\r\n",
+            "1.0"
+        )
+        nested: root.value["nested"].value
+
+        Assertions.require(root.value.size() == 4)
+        Assertions.require(root.value["manifest-version"].value == 1)
+        Assertions.require(root.value["package"].value["id"].value == "pkg#1")
+        Assertions.require(root.value["package"].value["version"].value == "1.0.0")
+        Assertions.require(nested["values"].value.size() == 2)
+        Assertions.require(nested["meta"].value["name"].value == "x#y")
+        Assertions.require(nested["meta"].value["enabled"].value === true)
+        Assertions.require(nested["text"].value == "alpha # data\nbeta\n")
+        Assertions.require(root.value["crlf"].value["a"].value == 1)
+        Assertions.require(root.value["crlf"].value["b"].value == "c")
+    }),
+    Test("TOML 1.0 unbalanced document error cases", () => {
+        TOML: import("std:toml/TOML")
+
+        inputs: [
+            "name = \"unterminated\n",
+            "values = [1, 2\n",
+            "values = 1]\n"
+        ]
+
+        inputs.each((input) => {
+            Assertions.signals(Error, () => {
+                TOML.parseDialect(input, "1.0")
+            })
+        })
+        null
+    }),
+    Test("TOML 1.0 long flat document", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "k0 = 0\nk1 = 1\nk2 = 2\nk3 = 3\nk4 = 4\nk5 = 5\nk6 = 6\nk7 = 7\nk8 = 8\nk9 = 9\nk10 = 10\nk11 = 11\nk12 = 12\nk13 = 13\nk14 = 14\nk15 = 15\nk16 = 16\nk17 = 17\nk18 = 18\nk19 = 19\nk20 = 20\nk21 = 21\nk22 = 22\nk23 = 23\nk24 = 24\nk25 = 25\nk26 = 26\nk27 = 27\nk28 = 28\nk29 = 29\nk30 = 30\nk31 = 31\nk32 = 32\nk33 = 33\nk34 = 34\nk35 = 35\nk36 = 36\nk37 = 37\nk38 = 38\nk39 = 39\nk40 = 40\nk41 = 41\nk42 = 42\nk43 = 43\nk44 = 44\nk45 = 45\nk46 = 46\nk47 = 47\nk48 = 48\nk49 = 49\nk50 = 50\nk51 = 51\nk52 = 52\nk53 = 53\nk54 = 54\nk55 = 55\nk56 = 56\nk57 = 57\nk58 = 58\nk59 = 59\nk60 = 60\nk61 = 61\nk62 = 62\nk63 = 63\nk64 = 64\nk65 = 65\nk66 = 66\nk67 = 67\nk68 = 68\nk69 = 69\nk70 = 70\nk71 = 71\nk72 = 72\nk73 = 73\nk74 = 74\nk75 = 75\nk76 = 76\nk77 = 77\nk78 = 78\nk79 = 79\nk80 = 80\nk81 = 81\nk82 = 82\nk83 = 83\nk84 = 84\nk85 = 85\nk86 = 86\nk87 = 87\nk88 = 88\nk89 = 89\nk90 = 90\nk91 = 91\nk92 = 92\nk93 = 93\nk94 = 94\nk95 = 95\n",
+            "1.0"
+        )
+
+        Assertions.require(root.value.size() == 96)
+        Assertions.require(root.value["k0"].value == 0)
+        Assertions.require(root.value["k95"].value == 95)
+    }),
+    Test("TOML 1.0 tables, dotted keys, and inline-table equivalence", () => {
+        TOML: import("std:toml/TOML")
+
+        basic: TOML.parseDialect(
+            "manifest-version = 1\n[package]\nid = \"pkg-1\"\nversion = \"1.2.3\"\n",
+            "1.0"
+        )
+        dotted: TOML.parseDialect(
+            "[dependencies]\nparser.authority = \"public\"\nparser.package = \"community/parser\"\nparser.version = \"^2.1.0\"\n",
+            "1.0"
+        )
+        inline: TOML.parseDialect(
+            "dependencies = { parser = { authority = \"public\", package = \"community/parser\", version = \"^2.1.0\" } }\n",
+            "1.0"
+        )
+        expanded: TOML.parseDialect(
+            "[dependencies.parser]\nauthority = \"public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n",
+            "1.0"
+        )
+
+        Assertions.require(basic.value["manifest-version"].kind === "integer")
+        Assertions.require(basic.value["package"].kind === "table")
+        Assertions.require(basic.value["package"].value["id"].value == "pkg-1")
+        Assertions.require(basic.value["package"].value["version"].value == "1.2.3")
+
+        e: expanded.value["dependencies"].value["parser"].value
+        [dotted, inline].each((candidate) => {
+            c: candidate.value["dependencies"].value["parser"].value
+            Assertions.require(c["authority"].value == e["authority"].value)
+            Assertions.require(c["package"].value == e["package"].value)
+            Assertions.require(c["version"].value == e["version"].value)
+        })
+        null
+    }),
+    Test("TOML 1.0 super-tables, sub-tables, and quoted keys", () => {
+        TOML: import("std:toml/TOML")
+
+        later: TOML.parseDialect("[x.y.z]\nleaf = 1\n[x]\nroot-value = 2\n", "1.0")
+        under: TOML.parseDialect(
+            "[fruit]\napple.color = \"red\"\napple.taste.sweet = true\n[fruit.apple.texture]\nsmooth = true\n",
+            "1.0"
+        )
+        quoted: TOML.parseDialect("site.\"a=b\" = \"x=y\"\n", "1.0")
+        x: later.value["x"].value
+        apple: under.value["fruit"].value["apple"].value
+
+        Assertions.require(x["root-value"].value == 2)
+        Assertions.require(x["y"].value["z"].value["leaf"].value == 1)
+        Assertions.require(apple["color"].value == "red")
+        Assertions.require(apple["taste"].value["sweet"].value === true)
+        Assertions.require(apple["texture"].value["smooth"].value === true)
+        Assertions.require(quoted.value["site"].value["a=b"].value == "x=y")
+    }),
+    Test("TOML 1.0 table conflict errors", () => {
+        TOML: import("std:toml/TOML")
+
+        inputs: [
+            "name = \"first\"\nname = \"second\"\n",
+            "[fruit]\napple = \"red\"\n[fruit]\norange = \"orange\"\n",
+            "fruit.apple.color = \"red\"\n[fruit.apple]\ntexture = \"smooth\"\n",
+            "[fruit.apple]\ncolor = \"red\"\n[fruit]\napple.taste = \"sweet\"\n",
+            "product = { type = { name = \"Nail\" } }\nproduct.type.edible = false\n",
+            "fruit = 1\n[fruit]\ncolor = \"red\"\n"
+        ]
+
+        inputs.each((input) => {
+            Assertions.signals(Error, () => {
+                TOML.parseDialect(input, "1.0")
+            })
+        })
+        null
+    }),
+    Test("TOML 1.0 arrays of tables", () => {
+        TOML: import("std:toml/TOML")
+
+        basic: TOML.parseDialect(
+            "[[products]]\nname = \"Hammer\"\n[[products]]\n[[products]]\nname = \"Nail\"\n",
+            "1.0"
+        )
+        products: basic.value["products"]
+
+        Assertions.require(products.kind === "array")
+        Assertions.require(products.value.size() == 3)
+        Assertions.require(products.value[0].kind === "table")
+        Assertions.require(products.value[0].value["name"].value == "Hammer")
+        Assertions.require(products.value[1].value.size() == 0)
+        Assertions.require(products.value[2].value["name"].value == "Nail")
+
+        superLater: TOML.parseDialect(
+            "[[catalog.products]]\nname = \"hammer\"\n[catalog]\nowner = \"tools\"\n",
+            "1.0"
+        )
+        catalog: superLater.value["catalog"]
+
+        Assertions.require(catalog.kind === "table")
+        Assertions.require(catalog.value["owner"].value == "tools")
+        Assertions.require(catalog.value["products"].kind === "array")
+        Assertions.require(catalog.value["products"].value.size() == 1)
+        Assertions.require(
+            catalog.value["products"].value[0].value["name"].value == "hammer"
+        )
+    }),
+    Test("TOML 1.0 nested arrays of tables select the latest element", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parseDialect(
+            "[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n" +
+            "[[fruits.varieties]]\nname = \"red delicious\"\n" +
+            "[[fruits.varieties]]\nname = \"granny smith\"\n" +
+            "[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n",
+            "1.0"
+        )
+        fruits: root.value["fruits"].value
+        (apple, banana): fruits
+        appleVarieties: apple.value["varieties"].value
+        bananaVarieties: banana.value["varieties"].value
+
+        Assertions.require(fruits.size() == 2)
+        Assertions.require(apple.value["name"].value == "apple")
+        Assertions.require(apple.value["physical"].value["color"].value == "red")
+        Assertions.require(appleVarieties.size() == 2)
+        Assertions.require(appleVarieties[0].value["name"].value == "red delicious")
+        Assertions.require(appleVarieties[1].value["name"].value == "granny smith")
+        Assertions.require(banana.value["name"].value == "banana")
+        Assertions.require(banana.value.containsKey("physical") === false)
+        Assertions.require(bananaVarieties.size() == 1)
+        Assertions.require(bananaVarieties[0].value["name"].value == "plantain")
+    }),
+    Test("TOML 1.0 array-of-tables conflict errors", () => {
+        TOML: import("std:toml/TOML")
+
+        inputs: [
+            "fruits = []\n[[fruits]]\nname = \"apple\"\n",
+            "[fruits]\nname = \"group\"\n[[fruits]]\nname = \"apple\"\n",
+            "[[fruits]]\nname = \"apple\"\n[fruits]\nowner = \"x\"\n",
+            "[fruit.physical]\ncolor = \"red\"\n[[fruit]]\nname = \"apple\"\n",
+            "[[fruits]]\nname = \"apple\"\n[[fruits.varieties]]\nname = \"red\"\n[fruits.varieties]\nname = \"green\"\n",
+            "[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.physical]]\ncolor = \"green\"\n",
+            "fruit = { name = \"apple\" }\n[[fruit.varieties]]\nname = \"red\"\n"
+        ]
+
+        inputs.each((input) => {
+            Assertions.signals(Error, () => {
+                TOML.parseDialect(input, "1.0")
+            })
+        })
+        null
+    })
+]
+tests.freeze()

@@ -201,31 +201,36 @@ language mechanisms and explicit capabilities.
 This section records reusable mechanism boundaries without turning every reusable
 component into a public library or a separate roadmap item.
 
-### TOML front-end — private shared bootstrap authority
+### TOML front-end — Standard Library `std:toml/TOML`
 
-D087 ratifies the schema-neutral TOML syntax/document machinery as one private
-shared bundled-tool bootstrap authority. The version-pinned TOML 1.0 implementation
-lives under `protos/tools/shared/Toml10/`; Package Tool reaches it through the
-private bundled-tool resolver boundary behind retained tool-local `self:` adapters.
-
-The ownership split remains:
+D087, as amended by the project owner on 2026-10-06 after AUD017, selects exactly
+one TOML implementation: the Standard Library module `std:toml/TOML`. I079
+retired the former private bundled-tool TOML 1.0 engine and its Package Tool
+adapters.
 
 ```text
-private shared TOML 1.0 syntax/document mechanism
+std:toml/TOML  (one parser; TOML 1.1 by default, TOML 1.0 on request)
         |
-        v
-Package Tool ManifestSchemaV1
+        +--> Package Tool ManifestSchemaV1      parseDialect(text, "1.0")
+        +--> Test Tool D077 requirements/catalog parseDialect(text, "1.0")
+        +--> ordinary Standard Library users    parse(text) = TOML 1.1
 ```
 
-The shared layer owns TOML lexical/syntactic/document mechanics only. Package
-Tool retains tiny tool-local `self:TomlSyntax` / `self:TomlDocument` adapters that
-carry no parser mechanics. Their shared imports are resolved once at authorized
-module initialization and captured lexically before exact-source callers enter the
-exported Closures; this preserves existing Package/bootstrap callers without
-granting ambient `tool-shared:` access. `ManifestSchemaV1`, package-manifest diagnostics,
-and package policy remain Package Tool responsibilities. D087 does not select a
-public Standard Library TOML API or data model, and Package Tool bootstrap remains
-independent from project package resolution.
+`TOML.parse(text)` keeps its TOML 1.1 meaning. Persisted tool schemas remain
+pinned to TOML 1.0 and select it explicitly through
+`TOML.parseDialect(text, "1.0")`, which runs the same parser with the TOML 1.0
+rules: no `\e` or `\xHH` escapes, single-line inline tables without trailing
+commas, and mandatory seconds in time values.
+
+The library owns TOML lexical/syntactic/document mechanics only.
+`ManifestSchemaV1`, package-manifest diagnostics, and package policy remain
+Package Tool responsibilities; a value the parser accepts is still rejected
+wherever schema v1 does not assign it meaning.
+
+Bootstrap: Package Tool depends on the Standard Library installed with the
+runtime, never on project package resolution. Bundled-tool resolution delegates
+`std:` to the selected Standard Library resolver without consulting
+`protos.toml`, `protos.lock`, package stores, or ambient module paths.
 
 ### Semantic Versioning core
 

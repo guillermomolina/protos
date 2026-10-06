@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.239-SNAPSHOT
+
+- `I079` (guillermomolina/protos#806) moves bundled-tool TOML parsing onto
+  `std:toml/TOML` and retires the private `tool-shared:Toml10` engine. This
+  follows D087 as amended after AUD017: there is now exactly one TOML
+  implementation. There is no specification change.
+  - `TOML.parseDialect(text, version)`, with `version` set to `"1.0"` or
+    `"1.1"`, runs the single Standard Library parser under the selected TOML
+    version. Any other `version` signals `Error`. `TOML.parse(text)` keeps
+    its TOML 1.1 meaning. Under TOML 1.0 the parser additionally rejects the
+    `\e` and `\xHH` escapes, inline tables that span lines, contain
+    comments or end with a trailing comma, and time values without seconds.
+  - The Package Tool `ManifestSchemaV1` and the Test Tool D077
+    `ResourceRequirements` and `ResourceCatalog` schemas now parse through
+    `TOML.parseDialect(text, "1.0")`. Their persisted schemas stay pinned to
+    TOML 1.0, and schema validation and diagnostics are unchanged. The
+    signed-64-bit Integer limit of the old engine is not carried over.
+    Manifest schema v1 accepts only `manifest-version = 1`, so it still
+    rejects every other Integer.
+  - Removed `protos/tools/shared/Toml10/`, the Package Tool
+    `self:TomlSyntax` and `self:TomlDocument` adapters, and their exact
+    module overlays in `ProtosCli`. The Package Tool still reaches
+    `std:toml/TOML` only through bundled-tool Standard Library resolution,
+    never through project package resolution. The generic `tool-shared:`
+    resolver namespace remains but is now unused.
+  - Tests: the parser-level tests of the retired engine now live in
+    `library/toml/parser-toml10.protos`, written against the public API in
+    TOML 1.0 mode. New tests in `library/toml/parser-dialects.protos`
+    compare TOML 1.0 and 1.1 on the same input. The Package manifest
+    schema corpus and the D077 schema tests are kept.
+
 ## 0.3.238-SNAPSHOT
 
 - `LIB012-A` (guillermomolina/protos#429) adds the Standard Library module

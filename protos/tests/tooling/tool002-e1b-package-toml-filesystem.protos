@@ -33,9 +33,9 @@ passed = passed &&
 
 passed = passed &&
     (Manifest.caseId(packageTomlFirst) ==
-        "package-tool/toml-syntax/key-and-scalars.protos")
+        "package-tool/toml-syntax/manifest-schema-base.protos")
 passed = passed &&
-    (Manifest.casePath(packageTomlFirst) == "key-and-scalars.protos")
+    (Manifest.casePath(packageTomlFirst) == "manifest-schema-base.protos")
 passed = passed &&
     (Manifest.caseExpectation(packageTomlFirst) == "suite-native")
 passed = passed &&

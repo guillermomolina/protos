@@ -559,30 +559,26 @@ public final class ProtosCli {
         // route's own "self:Discovery" selection machinery lives under the
         // ordinary Test Tool root, not under packageToolRoot), overlaid with
         // exact host-selected references to Package Tool's own RuntimeNames
-        // module and to the finite Package TOML module graph
-        // (TomlSyntax/TomlDocument/ManifestSchemaV1 and the shared Toml10
-        // modules they depend on), so a selected Test body can prove it
-        // resolved the Package-flavored bootstrap (via imports unreachable
-        // under any other flavor's fallback resolver) instead of falling back
-        // to the ordinary, unoverlaid test resolver. A corpus-loaded suite is
-        // materialized through ProtosDirectFileModuleResolver and therefore
-        // carries a "direct-file:" ModuleKey, which never satisfies
-        // ProtosBundledToolModuleResolver's "self:"/"tool-shared:" closure
-        // guards; the exact overlay below resolves those literal specifiers
-        // before the closure-checked fallback ever sees them, so the generic
-        // bundled-tool closure guards remain unchanged for every other
-        // consumer. The shared Toml10 modules are given the same canonical
-        // "bundled-tool-shared:" ModuleKey that ProtosBundledToolModuleResolver
-        // would itself produce for the same specifier, so the shared modules
-        // keep one single canonical identity regardless of which resolution
-        // path reaches them. This does not change packagePrelude or the
-        // legacy packageExecutionAsync facility, which keep resolving self:/
-        // tool-shared: imports against packageToolRoot exactly as before.
+        // module and to the Package manifest schema module (ManifestSchemaV1,
+        // whose TOML 1.0 parsing imports std:toml/TOML and therefore resolves
+        // through the Standard Library resolver without any overlay, I079), so
+        // a selected Test body can prove it resolved the Package-flavored
+        // bootstrap (via imports unreachable under any other flavor's fallback
+        // resolver) instead of falling back to the ordinary, unoverlaid test
+        // resolver. A corpus-loaded suite is materialized through
+        // ProtosDirectFileModuleResolver and therefore carries a "direct-file:"
+        // ModuleKey, which never satisfies ProtosBundledToolModuleResolver's
+        // "self:" closure guard; the exact overlay below resolves those literal
+        // specifiers before the closure-checked fallback ever sees them, so the
+        // generic bundled-tool closure guards remain unchanged for every other
+        // consumer. This does not change packagePrelude or the legacy
+        // packageExecutionAsync facility, which keep resolving self: imports
+        // against packageToolRoot exactly as before.
         // TOOL009 Publication 1: the finite Package non-TOML module graph (the
         // seven ReleaseVersion/DependencyConstraint/FreshVersionSelection/
         // RetainedVersionSelection/LockSyntax/LockDocument/ResolutionInput
         // "self:" specifiers the 157 version/lock/resolution-input case-outcomes
-        // corpora depend on) is overlaid exactly like the TOML module graph
+        // corpora depend on) is overlaid exactly like the manifest schema module
         // above: exact host-selected references to the real Package Tool
         // source files, so the same finite exact-overlay strategy governs every
         // Package-owned module the suite-native route resolves. Their shared
@@ -601,18 +597,6 @@ public final class ProtosCli {
                                                 new ProtosModuleKey(
                                                         "tool001-package:runtime-names"),
                                                 packageToolRoot.resolve("RuntimeNames.protos"))),
-                                Map.entry(
-                                        "self:TomlSyntax",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:toml-syntax"),
-                                                packageToolRoot.resolve("TomlSyntax.protos"))),
-                                Map.entry(
-                                        "self:TomlDocument",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "tool001-package:toml-document"),
-                                                packageToolRoot.resolve("TomlDocument.protos"))),
                                 Map.entry(
                                         "self:ManifestSchemaV1",
                                         new ProtosExactModuleOverlayResolver.ExactModule(
@@ -731,25 +715,7 @@ public final class ProtosCli {
                                                 new ProtosModuleKey(
                                                         "tool001-package:manifest-command"),
                                                 packageToolRoot.resolve(
-                                                        "ManifestCommand.protos"))),
-                                Map.entry(
-                                        "tool-shared:Toml10/TomlSyntax",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "bundled-tool-shared:Toml10/TomlSyntax"),
-                                                packageToolRoot
-                                                        .resolveSibling("shared")
-                                                        .resolve("Toml10")
-                                                        .resolve("TomlSyntax.protos"))),
-                                Map.entry(
-                                        "tool-shared:Toml10/TomlDocument",
-                                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                                new ProtosModuleKey(
-                                                        "bundled-tool-shared:Toml10/TomlDocument"),
-                                                packageToolRoot
-                                                        .resolveSibling("shared")
-                                                        .resolve("Toml10")
-                                                        .resolve("TomlDocument.protos")))),
+                                                        "ManifestCommand.protos")))),
                         logicalCaseFallbackResolver);
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()

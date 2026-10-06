@@ -90,6 +90,8 @@ library/toml/data-model.protos	suite-native	-
 library/toml/data-model-errors.protos	suite-native	-
 library/toml/parser-positive.protos	suite-native	-
 library/toml/parser-errors.protos	suite-native	-
+library/toml/parser-dialects.protos	suite-native	-
+library/toml/parser-toml10.protos	suite-native	-
 library/toml/encoder-positive.protos	suite-native	-
 library/toml/encoder-errors.protos	suite-native	-
 library/toml/roundtrip.protos	suite-native	-

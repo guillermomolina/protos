@@ -16,10 +16,11 @@
 
 // TOOL002-I7A: pure D077/D097/D098 resource-catalog v1 schema parser.
 //
-// This module parses already-acquired TOML 1.0 text into inert private catalog
-// records only. D099 host-path/CLI acquisition, D076 reservation, provider
-// resolution/provisioning and public std:toml remain outside this slice.
-Document: import("tool-shared:Toml10/TomlDocument")
+// This module parses already-acquired TOML 1.0 text, through the Standard Library
+// TOML parser with TOML 1.0 selected, into inert private catalog records only.
+// D099 host-path/CLI acquisition, D076 reservation and provider
+// resolution/provisioning remain outside this slice.
+TOML: import("std:toml/TOML")
 Manifest: import("self:Manifest")
 
 frozenTuple: (...items) => {
@@ -109,7 +110,7 @@ entryProfile: (entryValue) => {
 }
 
 parse: (text) => {
-    rootEntries: tableEntries(Document.table(text))
+    rootEntries: tableEntries(TOML.parseDialect(text, "1.0"))
 
     rootAllowed: Map()
     rootAllowed["resource-catalog-version"] = true

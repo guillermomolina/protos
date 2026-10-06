@@ -543,12 +543,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                                         new ProtosModuleKey(
                                                 "tool001-package:dependency-constraint"),
                                         PACKAGE_TOOL_ROOT.resolve(
-                                                "DependencyConstraint.protos"))),
-                        Map.entry(
-                                "self:TomlDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:toml-document"),
-                                        PACKAGE_TOOL_ROOT.resolve("TomlDocument.protos")))),
+                                                "DependencyConstraint.protos")))),
                 ordinaryTestResolver);
     }
 }

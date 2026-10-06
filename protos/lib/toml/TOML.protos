@@ -1245,10 +1245,20 @@ encode: (rootTable) => {
 }
 
 
-/// Parses one complete TOML document into its root table node; invalid text signals an
-/// Error.
-parse: (text) => {
+/// Parses one complete TOML document into its root table node using the TOML
+/// specification version named by `version`, either `"1.0"` or `"1.1"`; any other
+/// `version` or invalid text signals an Error. Both versions share one parser: TOML
+/// 1.0 additionally rejects the `\e` and `\xHH` escapes, inline tables that span
+/// lines or end with a trailing comma, and times without seconds.
+parseDialect: (text, version) => {
     String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    String.recognizes(version).ifFalse(() => {
+        Error().signal()
+    })
+    toml11: version == "1.1"
+    (toml11 || (version == "1.0")).ifFalse(() => {
         Error().signal()
     })
 
@@ -1431,11 +1441,11 @@ parse: (text) => {
                                 buffer.add(13)
                                 handled = true
                             })
-                            (escape == 101).ifTrue(() => {
+                            (toml11 && (escape == 101)).ifTrue(() => {
                                 buffer.add(27)
                                 handled = true
                             })
-                            (escape == 120).ifTrue(() => {
+                            (toml11 && (escape == 120)).ifTrue(() => {
                                 parseUnicodeEscape(2, buffer)
                                 handled = true
                             })
@@ -1719,6 +1729,17 @@ parse: (text) => {
             })
         }
 
+        // TOML 1.0 inline tables are single-line, so only spaces and tabs may
+        // separate their tokens; TOML 1.1 also admits newlines and comments.
+        skipInlineTableTrivia: () => {
+            toml11.ifTrue(() => {
+                skipArrayTrivia()
+            })
+            toml11.ifFalse(() => {
+                skipSpaces()
+            })
+        }
+
         hexDigit: (octet) => {
             result: -1
             (octet >= 48).ifTrue(() => {
@@ -1964,11 +1985,11 @@ parse: (text) => {
                                         buffer.add(13)
                                         handled = true
                                     })
-                                    (escape == 101).ifTrue(() => {
+                                    (toml11 && (escape == 101)).ifTrue(() => {
                                         buffer.add(27)
                                         handled = true
                                     })
-                                    (escape == 120).ifTrue(() => {
+                                    (toml11 && (escape == 120)).ifTrue(() => {
                                         parseUnicodeEscape(2, buffer)
                                         handled = true
                                     })
@@ -2876,6 +2897,19 @@ parse: (text) => {
                 })
             })
 
+            // TOML 1.0 requires the seconds field; TOML 1.1 lets it be omitted.
+            valid.ifTrue(() => {
+                toml11.ifFalse(() => {
+                    secondsPresent: false
+                    (position < tokenLength).ifTrue(() => {
+                        secondsPresent = token[position] == 58
+                    })
+                    secondsPresent.ifFalse(() => {
+                        valid = false
+                    })
+                })
+            })
+
             valid.ifTrue(() => {
                 (position < tokenLength).ifTrue(() => {
                     (token[position] == 58).ifTrue(() => {
@@ -3363,7 +3397,7 @@ parse: (text) => {
                 })
 
                 (frame.kind == "inlineTable").ifTrue(() => {
-                    skipArrayTrivia()
+                    skipInlineTableTrivia()
 
                     (phase == "keyOrEnd").ifTrue(() => {
                         closing: peek() == 125
@@ -3390,9 +3424,11 @@ parse: (text) => {
                         closing: peek() == 125
                         comma.ifTrue(() => {
                             index = index + 1
-                            skipArrayTrivia()
+                            skipInlineTableTrivia()
                             trailing: peek() == 125
                             trailing.ifTrue(() => {
+                                // TOML 1.0 forbids a trailing comma in an inline table.
+                                toml11.ifFalse(() => { fail() })
                                 index = index + 1
                                 closeInlineTableFrame()
                             })
@@ -4263,4 +4299,10 @@ parse: (text) => {
     }
 
     documentTable(text)
+}
+
+/// Parses one complete TOML 1.1 document into its root table node; invalid text signals
+/// an Error. Equivalent to `parseDialect(text, "1.1")`.
+parse: (text) => {
+    parseDialect(text, "1.1")
 }

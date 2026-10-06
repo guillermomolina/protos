@@ -60,6 +60,7 @@ final class ProtosTomlDataModelModuleTest {
                         "array",
                         "table",
                         "parse",
+                        "parseDialect",
                         "encode"),
                 module.localSlotsSnapshot().keySet());
     }

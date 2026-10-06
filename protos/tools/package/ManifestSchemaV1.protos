@@ -91,8 +91,8 @@ baseFromTable: (root) => {
 }
 
 parseBase: (text) => {
-    Document: import("self:TomlDocument")
-    baseFromTable(Document.table(text))
+    TOML: import("std:toml/TOML")
+    baseFromTable(TOML.parseDialect(text, "1.0"))
 }
 
 sectionsFromTable: (root) => {
@@ -189,8 +189,8 @@ sectionsFromTable: (root) => {
 }
 
 parseSections: (text) => {
-    Document: import("self:TomlDocument")
-    sectionsFromTable(Document.table(text))
+    TOML: import("std:toml/TOML")
+    sectionsFromTable(TOML.parseDialect(text, "1.0"))
 }
 
 fromTable: (root) => {
@@ -316,6 +316,6 @@ fromTable: (root) => {
 }
 
 parse: (text) => {
-    Document: import("self:TomlDocument")
-    fromTable(Document.table(text))
+    TOML: import("std:toml/TOML")
+    fromTable(TOML.parseDialect(text, "1.0"))
 }
