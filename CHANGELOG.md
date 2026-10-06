@@ -30,6 +30,18 @@ Historical implementation changelogs:
     authority. The `library/datetime` corpus gains `iso8601.protos` and
     `rfc3339.protos`.
 
+## 0.3.250-SNAPSHOT
+
+- `BUG019` (guillermomolina/protos#811) makes Native distributions report
+  their exact packaged Protos version through `protos --version`. The Native
+  launcher takes `implementation_version` from the distribution `SOURCE.txt`
+  and passes it to the Native payload, overriding any caller-provided value.
+  JVM distributions continue to use their JAR manifest identity, and genuine
+  development executions still fall back to `Protos development`. Native
+  distribution admission now requires exact version output. The fix applies
+  to distributions built from this code onward; already-published artifacts
+  are unchanged. There is no specification change.
+
 ## 0.3.249-SNAPSHOT
 
 - `BUG020` (guillermomolina/protos#812) keeps the Test Tool running when one
