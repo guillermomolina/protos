@@ -258,6 +258,60 @@ here is simpler:
 The current progress policy is implemented in
 [`Progress.protos`](../../../protos/tools/test/Progress.protos).
 
+## `--file`: exact file-backed focal selection
+
+To run only the tests that the Test Tool already associates with one local
+source file:
+
+```text
+bin/protos test --file protos/tests/library/uri/parse.protos
+```
+
+The option uses the exact separate-token form `--file FILE`. As with `--jobs`,
+an attached form such as `--file=FILE` is not an alias and is currently ignored.
+
+`FILE` is a **locator for this invocation only**. A relative path is
+interpreted against the working directory of the `protos test` invocation; an
+absolute path is also accepted. The path is not a test's identity: it is not a
+Case identity or `--case` reference, not a corpus or suite identity, not an
+execution-requirement identity, and it is not persisted anywhere as a name for
+the selected tests.
+
+Selection is a filter over the authoritative test plans the Test Tool has
+already built, not a discovery mechanism. An existing `*.protos` file does not
+become a test because it was named on the command line, and `--file` never
+executes an arbitrary source that the plans do not already contain. The file
+can correspond to:
+
+| Authoritative Cases for `FILE` | Result |
+|---|---|
+| none (unregistered, missing, outside every corpus, or a directory) | the selection fails as a Test Tool configuration error before any test runs |
+| one | that Case is selected |
+| several | every matching Case is retained |
+
+The example above is the "several" case: the file is one physical source, but
+its `protos/corpus/library/uri` plan entry contributes several logical Cases
+(`parse components`, `parse invalid`, `parse valid`, ...). All of them run,
+each still a distinct logical Case.
+
+`--file FILE` may be repeated. Each occurrence must independently match at
+least one authoritative Case, otherwise the invocation fails before scheduling.
+The matches of all occurrences are combined as a union: a Case selected more
+than once runs once, and selected Cases keep the canonical plan order rather
+than the order of the `--file` arguments.
+
+Selection happens after the authoritative plans are materialized and before
+progress counting and scheduling. Each selected Case keeps its existing
+metadata, expectations, resource requirements and execution authority and then
+follows the ordinary Test Tool pipeline. `--file` does not change the meaning of
+`--jobs` or `--resource-catalog`, fresh-Process isolation, result
+classification, progress or exit status; it only reduces which Cases are
+executed.
+
+The current Test Tool also has later selection/listing options (`--directory`,
+`--case`, `--list-cases`). They are separate surfaces and are not covered by
+this section.
+
 ## What `protos test` does not mean yet
 
 With the current published executable surface:
