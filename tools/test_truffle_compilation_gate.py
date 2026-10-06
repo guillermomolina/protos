@@ -15,7 +15,7 @@
 # the specific language governing rights and limitations under the License.
 
 
-"""TEST009-F/BUG016-B self-tests for tools/truffle_compilation_gate.py (synthetic logs only, no real Graal)."""
+"""TEST009-F/BUG016-B/TEST009-T self-tests for tools/truffle_compilation_gate.py (synthetic logs only, no real Graal)."""
 
 from __future__ import print_function
 
@@ -33,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import java_generated_bytecode_bci_compilation_check as bci_check  # noqa: E402
 import truffle_compilation_gate as gate  # noqa: E402
+import truffle_compilerability_causal as causal  # noqa: E402
 import truffle_jvm_launch  # noqa: E402
 
 DONE = "[engine] opt done   id=12   work@1a2b |Tier 2|Time   120(  90+30  )ms|AST   40"
@@ -47,6 +48,9 @@ GRAPH_TOO_BIG = """[engine] opt failed id=9    big                     |Tier 2|R
 CASCADE = ("[engine] opt failed engine=5  id=47656 work@7b52 |Tier 2|Reason: "
            "com.oracle.truffle.runtime.hotspot.libgraal.DestroyedIsolateException: Handle[2]")
 WARNING_TRACE ="[engine] perf warn  id=10   hot   |Kind: call|Partial evaluation could not inline the virtual runtime call"
+INSTALLED = causal.CAUSAL_PREFIX + json.dumps({"schema": causal.CAUSAL_SCHEMA, "event": "installed",
+                                               "runtime_class": "HotSpotTruffleRuntime"})
+DIAGNOSTIC_CLEAN = INSTALLED + "\n" + CLEAN
 
 
 def option_names(options):
@@ -73,6 +77,13 @@ class OptionTest(unittest.TestCase):
         for options in list(gate.MODES.values()) + [gate.DIAGNOSTIC_OPTIONS]:
             dumps = [option for option in options if option.startswith("-Djdk.graal.DumpPath=")]
             self.assertEqual(dumps, ["-Djdk.graal.DumpPath=target/truffle-compilation/graal_dumps"])
+
+    def test_causal_trace_property_is_diagnostic_only(self):
+        self.assertEqual(causal.CAUSAL_TRACE_PROPERTY, "-Dprotos.compilerability.causalTrace=true")
+        self.assertIn(causal.CAUSAL_TRACE_PROPERTY, gate.DIAGNOSTIC_OPTIONS)
+        self.assertNotIn(causal.CAUSAL_TRACE_PROPERTY, gate.STRICT_COMMON)
+        for options in gate.MODES.values():
+            self.assertFalse([option for option in options if "protos.compilerability" in option])
 
     def test_diagnostic_options_differ_from_strict(self):
         self.assertNotIn("-Dpolyglot.compiler.TreatPerformanceWarningsAsErrors=all", gate.DIAGNOSTIC_OPTIONS)
@@ -233,7 +244,8 @@ def cases(refs):
 def shard_result(arguments, status="PASS", exit_code=0):
     return gate.OrderedDict([("mode", gate.DIAGNOSE), ("options", list(gate.DIAGNOSTIC_OPTIONS)),
                              ("test_arguments", list(arguments)), ("status", status),
-                             ("exit_code", exit_code), ("COMPILATIONS_DONE", 1)])
+                             ("exit_code", exit_code), ("COMPILATIONS_DONE", 1),
+                             ("CAUSAL_ACQUISITION", causal.COMPLETE), ("CAUSAL_COMPILATIONS", 0)])
 
 
 class CaseListingTest(unittest.TestCase):
@@ -417,7 +429,7 @@ class DiagnoseTest(unittest.TestCase):
             if "--list-cases" in command:
                 return 0, listing(refs), 0.5
             ref = command[command.index("--case") + 1]
-            result = (outputs or {}).get(ref, (0, CLEAN))
+            result = (outputs or {}).get(ref, (0, DIAGNOSTIC_CLEAN))
             if isinstance(result, BaseException):
                 raise result
             return result[0], result[1], 1.0
@@ -453,14 +465,15 @@ class DiagnoseTest(unittest.TestCase):
         self.assertIn("TRUFFLE_COMPILATION_DIAGNOSE=PASS", out.splitlines())
 
     def test_per_shard_logs_hold_only_their_own_output(self):
-        outputs = {ref: (0, CLEAN + "marker " + ref + "\n") for ref in REFS}
+        outputs = {ref: (0, DIAGNOSTIC_CLEAN + "marker " + ref + "\n") for ref in REFS}
         _, document, _, _, _ = self.run_diagnose([], REFS, outputs)
         for shard in document["shards"]:
             log = Path(shard["log"]).read_text()
             self.assertEqual([ref for ref in REFS if "marker " + ref in log], [shard["case_ref"]])
 
     def test_findings_are_evidence_but_timeout_and_harness_errors_fail_closed(self):
-        status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[1]: (0, DONE + "\n" + PE_FAILURE + "\n" + SUMMARY)})
+        status, document, _, _, _ = self.run_diagnose(
+            [], REFS, {REFS[1]: (0, "\n".join([INSTALLED, DONE, PE_FAILURE, SUMMARY]))})
         self.assertEqual((status, document["aggregate"]["status"]), (0, "FAIL"))
         expired = subprocess.TimeoutExpired(["java"], 10, output=b"partial\n")
         status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[0]: expired})
@@ -484,10 +497,220 @@ class DiagnoseTest(unittest.TestCase):
         self.assertEqual([shard["test_arguments"] for shard in document["shards"]],
                          [["--jobs", "2", "--case", "v1.BBB"]])
 
+    def test_causal_records_reach_the_v3_report_and_aggregate(self):
+        output = "\n".join([INSTALLED] + lifecycle(1, failure=CODE_TOO_LARGE_REASON) + [SUMMARY])
+        status, document, _, out, _ = self.run_diagnose([], REFS[:1], {REFS[0]: (0, output)})
+        self.assertEqual(status, 0)
+        self.assertEqual(document["schema"], "protos.truffle-compilation.diagnose/v3")
+        shard = document["shards"][0]
+        self.assertEqual(shard["CAUSAL_ACQUISITION"], "COMPLETE")
+        self.assertEqual(shard["causal_compilations"][0]["outcome"], "CODE_TOO_LARGE")
+        self.assertTrue(Path(shard["log"]).read_text().startswith(INSTALLED))
+        aggregate = document["aggregate"]
+        self.assertEqual((aggregate["acquisition"], aggregate["CAUSAL_ACQUISITION"]), ("COMPLETE", "COMPLETE"))
+        self.assertEqual((aggregate["CAUSAL_COMPILATIONS"], aggregate["CODE_TOO_LARGE_CAUSAL_RECORDS"],
+                          aggregate["SEMANTIC_CODE_TOO_LARGE_CAUSAL_RECORDS"]), (1, 1, 1))
+        self.assertIn("DIAGNOSTIC_CAUSAL_ACQUISITION=COMPLETE", out.splitlines())
+
+    def test_missing_causal_trace_makes_acquisition_incomplete(self):
+        status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[1]: (0, CLEAN)})
+        self.assertEqual(status, 1)
+        self.assertEqual([shard["status"] for shard in document["shards"]], ["PASS", "PASS", "PASS"])
+        self.assertEqual((document["aggregate"]["status"], document["aggregate"]["CAUSAL_ACQUISITION"]),
+                         ("ERROR", "INCOMPLETE"))
+
     def test_list_cases_in_user_arguments_is_rejected(self):
         status, document, commands, _, _ = self.run_diagnose(["--list-cases"], REFS)
         self.assertEqual((status, commands), (1, []))
         self.assertEqual(document["aggregate"]["status"], "ERROR")
+
+
+SEMANTIC_KEY = "SEMANTIC_BYTECODE_ROOT|CLOSURE|file:///w/a%20%22b%22.protos|10|20"
+CODE_TOO_LARGE_REASON = "jdk.vm.ci.code.BailoutException: Code installation failed: code is too large"
+METHOD_TABLE = [
+    "[engine] Method expansion statistics after truffleTier for Root@1a2b3c:",
+    " Name                                Count    Size  Cycles | Self Count   Size",
+    " ---------------------------------------------------------------------------",
+    " ProtosSemanticBytecodeRootNodeGen@1a2b3c.execute   1  900  40 |  1   10",
+    "   Foo.bar(Object, int)                  3     600      20 |      3    600",
+    "   Baz.qux()                             2     290      10 |      2    290",
+    "",
+]
+NODE_TABLE = [
+    "[engine] Node expansion statistics after truffleTier:",
+    " Name                  Count    Size | Self Count  Size",
+    " CachedLookupNode          4     700 |          4   700",
+    " BoundaryCallNode          1     100 |          1   100",
+    "",
+]
+
+
+def event(name, **fields):
+    document = gate.OrderedDict([("schema", causal.CAUSAL_SCHEMA), ("event", name)])
+    document.update(fields)
+    return causal.CAUSAL_PREFIX + json.dumps(document)
+
+
+def start(seq, key=SEMANTIC_KEY, target_id=None, fingerprint="bc12:00ff", family="SEMANTIC_BYTECODE_ROOT"):
+    return event("start", seq=seq, durable_root_key=key, durable_root_key_problem=None if key else "X",
+                 root_family=family, root_class="ProtosSemanticBytecodeRootNodeGen", root_name=None,
+                 source_uri='file:///w/a%20%22b%22.protos', source_start=10, source_length=20,
+                 semantic_root_kind="CLOSURE", continuation=False, continuation_source_root=None,
+                 continuation_resume_bci=None, structural_fingerprint=fingerprint, tier=2,
+                 ast_non_trivial_node_count=40, active_compilations=1,
+                 run_local={"engine": 1, "id": seq if target_id is None else target_id})
+
+
+def lifecycle(seq, failure=None, text=True, key=SEMANTIC_KEY, inlined_key=SEMANTIC_KEY):
+    lines = [start(seq, key)] + (METHOD_TABLE + NODE_TABLE if text else [])
+    lines.append(event("truffle_tier", seq=seq, graph_nodes=5000, top_node_types=[{"type": "PiNode", "count": 9}],
+                       inlining={"calls": 3, "inlined_calls": 1,
+                                 "inlined_targets": [{"durable_root_key": inlined_key, "count": 1}]}))
+    lines.append(event("graal_tier", seq=seq, graph_nodes=7000, top_node_types=[]))
+    if failure is None:
+        lines.append("[engine] opt done   engine=1  id=%d   Root@1a2b |Tier 2|AST 40" % seq)
+        lines.append(event("success", seq=seq, compilation_id=77, target_code_size=4096, total_frame_size=64,
+                           exception_handlers_count=2, infopoints_count=30))
+    else:
+        lines.append("[engine] opt failed engine=1  id=%d   Root@1a2b |Tier 2|Reason: %s" % (seq, failure))
+        lines.append(event("failure", seq=seq, phase_reached="GRAAL_TIER", tier=2, bailout=True,
+                           permanent_bailout=True, reason=failure))
+    return lines
+
+
+def parse(lines, installed=True):
+    return causal.parse_causal_trace("\n".join(([INSTALLED] if installed else []) + lines) + "\n")
+
+
+class CausalTraceTest(unittest.TestCase):
+
+    def test_success_lifecycle_is_one_complete_record(self):
+        result = parse(lifecycle(1))
+        self.assertEqual((result["status"], result["problems"]), ("COMPLETE", []))
+        record = result["compilations"][0]
+        self.assertEqual((record["run_sequence"], record["outcome"], record["causal_complete"]), (1, "SUCCESS", True))
+        self.assertEqual((record["truffle_tier_graph_nodes"], record["graal_tier_graph_nodes"]), (5000, 7000))
+        self.assertEqual((record["success_target_code_size"], record["success_compilation_id"]), (4096, 77))
+        self.assertIsNone(record["install_size_relation"])
+        self.assertEqual(record["inlining"]["inlined_targets"][0]["durable_root_key"], SEMANTIC_KEY)
+
+    def test_code_too_large_failure_records_only_the_proven_relation(self):
+        record = parse(lifecycle(1, failure=CODE_TOO_LARGE_REASON))["compilations"][0]
+        self.assertEqual(record["outcome"], "CODE_TOO_LARGE")
+        self.assertEqual(record["install_size_relation"], "GREATER_THAN_JVMCI_NMETHOD_SIZE_LIMIT")
+        self.assertEqual(record["failure_reason_class"], "jdk.vm.ci.code.BailoutException")
+        self.assertEqual((record["bailout"], record["permanent_bailout"]), (True, True))
+        self.assertIsNone(record["success_target_code_size"])
+        self.assertEqual(record["graal_tier_graph_nodes"], 7000)
+        self.assertTrue(record["causal_complete"])
+        self.assertEqual(causal.summarize(parse(lifecycle(1, failure=CODE_TOO_LARGE_REASON)))
+                         ["SEMANTIC_CODE_TOO_LARGE_CAUSAL_RECORDS"], 1)
+
+    def test_too_deep_and_other_failures_are_classified(self):
+        self.assertEqual(parse(lifecycle(1, failure="Inlining too deep"))["compilations"][0]["outcome"], "TOO_DEEP")
+        self.assertEqual(parse(lifecycle(1, failure="GraphTooBig"))["compilations"][0]["outcome"], "OTHER_FAILURE")
+
+    def test_expansion_contributors_are_attributed_and_run_local_labels_dropped(self):
+        record = parse(lifecycle(1))["compilations"][0]
+        method = record["method_expansion"][0]
+        self.assertEqual((method["kind"], method["rows"], method["top_level_size"]), ("HISTOGRAM", 3, 900))
+        labels = [item["label"] for item in method["top_contributors"]]
+        self.assertEqual(labels[1:], ["Foo.bar(Object, int)", "Baz.qux()"])
+        self.assertEqual(method["top_contributors"][1]["count"], 3)
+        self.assertAlmostEqual(method["top_contributors"][1]["share_of_top_level_size"], 600 / 900.0, places=5)
+        node = record["node_expansion"][0]
+        self.assertEqual([item["size"] for item in node["top_contributors"]], [700, 100])
+        encoded = json.dumps(record)
+        self.assertNotIn("@1a2b", encoded)
+        self.assertNotIn("run_local", record)
+
+    def test_missing_installation_or_install_error_is_incomplete(self):
+        self.assertEqual(parse(lifecycle(1), installed=False)["status"], "INCOMPLETE")
+        error = event("install_error", code="RUNTIME_CLASS_MISSING", detail="x")
+        result = parse([error] + lifecycle(1), installed=False)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        self.assertTrue(any("RUNTIME_CLASS_MISSING" in problem for problem in result["problems"]))
+
+    def test_malformed_and_foreign_schema_events_are_rejected(self):
+        for bad in (causal.CAUSAL_PREFIX + '{"schema": "protos.compilerability.causal/v1", "event": ',
+                    causal.CAUSAL_PREFIX + json.dumps({"schema": "other/v1", "event": "start", "seq": 2}),
+                    causal.CAUSAL_PREFIX + json.dumps({"schema": causal.CAUSAL_SCHEMA, "event": "start"}),
+                    "noise " + INSTALLED):
+            with self.subTest(bad):
+                self.assertEqual(parse(lifecycle(1) + [bad])["status"], "INCOMPLETE")
+
+    def test_duplicate_and_missing_lifecycle_steps_are_rejected(self):
+        cases = {
+            "duplicate start": lifecycle(1) + lifecycle(1),
+            "missing terminal": lifecycle(1)[:-2],
+            "tier before start": [event("graal_tier", seq=3, graph_nodes=1, top_node_types=[])],
+            "success without graal tier": [line for line in lifecycle(1) if '"graal_tier"' not in line],
+            "duplicate terminal": lifecycle(1) + [lifecycle(1)[-1]],
+            "java correlation error": lifecycle(1) + [event("error", code="CORRELATION_UNMATCHED_CALLBACK",
+                                                            detail="graal_tier")],
+        }
+        for name, lines in cases.items():
+            with self.subTest(name):
+                self.assertEqual(parse(lines)["status"], "INCOMPLETE")
+
+    def test_overlapping_compilations_are_ambiguous_not_guessed(self):
+        first, second = lifecycle(1), lifecycle(2)
+        interleaved = first[:1] + second[:1] + first[1:] + second[1:]
+        result = parse(interleaved)
+        self.assertEqual(result["status"], "INCOMPLETE")
+        for record in result["compilations"]:
+            self.assertIn("AMBIGUOUS_TEXT_WINDOW another compilation was active", record["causal_problems"])
+
+    def test_text_outside_windows_or_from_another_target_is_rejected(self):
+        self.assertEqual(parse(METHOD_TABLE + lifecycle(1))["status"], "INCOMPLETE")
+        foreign = [line.replace("id=1 ", "id=9 ") for line in lifecycle(1)]
+        result = parse(foreign)
+        self.assertTrue(any("FOREIGN_ENGINE_TRACE" in problem for problem in result["problems"]))
+
+    def test_missing_or_unparsable_expansion_evidence_is_incomplete(self):
+        self.assertEqual(parse(lifecycle(1, text=False))["status"], "INCOMPLETE")
+        broken = [line.replace("    600", " many") for line in lifecycle(1)]
+        self.assertEqual(parse(broken)["status"], "INCOMPLETE")
+
+    def test_missing_durable_key_or_unkeyed_inlined_target_is_incomplete(self):
+        self.assertEqual(parse(lifecycle(1, key=None))["status"], "INCOMPLETE")
+        self.assertEqual(parse(lifecycle(1, inlined_key=None))["status"], "INCOMPLETE")
+
+    def test_one_durable_key_with_two_structures_is_a_collision(self):
+        lines = lifecycle(1) + [line.replace("bc12:00ff", "bc13:00aa") for line in lifecycle(2)]
+        result = parse(lines)
+        self.assertTrue(any(problem.startswith("DURABLE_KEY_COLLISION") for problem in result["problems"]))
+
+    def test_escaped_source_uri_survives_parsing(self):
+        record = parse(lifecycle(1))["compilations"][0]
+        self.assertEqual(record["source_uri"], 'file:///w/a%20%22b%22.protos')
+
+    def test_aggregate_complete_only_with_complete_causal_shards(self):
+        discovery = {"status": "PASS"}
+
+        def shard(ref, acquisition):
+            result = dict(shard_result(gate.shard_arguments([], ref)), shard="0", case_ref=ref)
+            result["CAUSAL_ACQUISITION"] = acquisition
+            return result
+        complete = [shard(REFS[0], "COMPLETE")]
+        self.assertEqual(gate.aggregate_diagnostic_shards(discovery, complete, [])["acquisition"], "COMPLETE")
+        incomplete = complete + [shard(REFS[1], "INCOMPLETE")]
+        aggregate = gate.aggregate_diagnostic_shards(discovery, incomplete, [])
+        self.assertEqual((aggregate["status"], aggregate["acquisition"], aggregate["CAUSAL_ACQUISITION"]),
+                         ("ERROR", "INCOMPLETE", "INCOMPLETE"))
+        missing = complete + [dict(shard_result(gate.shard_arguments([], REFS[1])), shard="1", case_ref=REFS[1])]
+        del missing[1]["CAUSAL_ACQUISITION"]
+        self.assertEqual(gate.aggregate_diagnostic_shards(discovery, missing, [])["status"], "ERROR")
+
+    def test_failed_compilation_stays_fail_evidence_when_causal_is_complete(self):
+        discovery = {"status": "PASS"}
+        failed = dict(shard_result(gate.shard_arguments([], REFS[0]), "FAIL", 0), shard="0", case_ref=REFS[0])
+        aggregate = gate.aggregate_diagnostic_shards(discovery, [failed], [])
+        self.assertEqual((aggregate["status"], aggregate["acquisition"]), ("FAIL", "COMPLETE"))
+
+    def test_missing_shard_output_is_incomplete(self):
+        entry = gate.attach_causal(gate.OrderedDict([("status", "ERROR")]), None)
+        self.assertEqual((entry["CAUSAL_ACQUISITION"], entry["causal_problems"]), ("INCOMPLETE", ["NO_SHARD_OUTPUT"]))
 
 
 class MainTest(unittest.TestCase):

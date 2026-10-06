@@ -764,6 +764,16 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
+        if (ProtosCompilerabilityTrace.ENABLED) {
+            result.recordCompilerabilityRootSpan(
+                    new ProtosCompilerabilityRootIdentity.Span(
+                            source,
+                            rootSpan.startOffset(),
+                            rootSpan.length(),
+                            activationDefinition == null
+                                    ? ProtosCompilerabilityRootIdentity.TOP_LEVEL
+                                    : ProtosCompilerabilityRootIdentity.CLOSURE));
+        }
         if (currentRootFrameNativeLayout != null) {
             result.recordFrameNativeBindings(
                     LocalRangeAccessor.constantOf(currentRootFrameNativeLocals),

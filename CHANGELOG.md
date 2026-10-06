@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.229-SNAPSHOT
+
+- `TEST009-T` adds a diagnostic-only causal compilerability acquisition to
+  `make diagnose-truffle-compilation`, so the residual `CodeTooLarge` failures
+  can be localized per compilation before any repair. No specification change,
+  no semantic change, no compiler-policy change and no dependency change.
+  - New private JVM property `protos.compilerability.causalTrace=true`, passed
+    only by the diagnose mode (absent from the strict SYNC/BACKGROUND gate and
+    ordinary execution). When absent, no listener is registered and nothing is
+    printed.
+  - When enabled, a reflective `OptimizedTruffleRuntimeListener` proxy is
+    installed once per JVM (`truffle-runtime` stays runtime-scope) and prints
+    one `protos.compilerability.causal/v1` JSON event per lifecycle callback:
+    start, Truffle tier, Graal tier, success or failure; installation failure
+    is reported machine-readably.
+  - Compilations get a durable root key from stable metadata only:
+    continuations normalize to their source root plus resume bytecode index;
+    semantic roots use a source span recorded by the lowerer only while the
+    trace is enabled; untagged roots use a normalized instruction digest.
+  - `tools/truffle_compilerability_causal.py` joins the events with the
+    attributed method/node expansion traces and engine trace lines; the
+    diagnose report becomes `protos.truffle-compilation.diagnose/v3` with
+    per-shard `causal_compilations`. Ambiguous or incomplete evidence makes the
+    acquisition INCOMPLETE.
+  - Added focal JUnit and harness self-tests.
+
 ## 0.3.228-SNAPSHOT
 
 - `AUD006-A4` (guillermomolina/protos#453) makes `std:cli/CommandLine.parse`
