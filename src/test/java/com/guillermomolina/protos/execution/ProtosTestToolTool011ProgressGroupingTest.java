@@ -145,7 +145,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         ORDINARY_LEAF_GROUPS.forEach((id, name) -> expected.put(id, List.of(name)));
 
         assertEquals(expected, actual);
-        assertEquals(29, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(30, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -164,9 +164,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf)))"));
 
-        assertEquals(21, pairs.indexedSize().intValueExact());
+        assertEquals(22, pairs.indexedSize().intValueExact());
         List<String> order = new ArrayList<>();
-        for (int index = 0; index < 21; index++) {
+        for (int index = 0; index < 22; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             String id = stringAt(pair, 0);
             List<String> names = strings(arrayAt(pair, 1));
@@ -179,7 +179,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         }
         assertEquals("protos/actor", order.get(0));
         assertEquals("protos/package-tool/project-projection", order.get(1));
-        assertEquals("protos/conformance", order.get(20));
+        assertEquals("protos/conformance", order.get(21));
     }
 
     @Test
@@ -408,6 +408,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "library/crypto/sha256",
                         "library/network/ip-addresses",
                         "library/network/ip-endpoints",
+                        "library/semver",
                         "package-tool/version",
                         "package-tool/lock",
                         "package-tool/resolution-input",

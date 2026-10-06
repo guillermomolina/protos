@@ -480,6 +480,9 @@ public final class ProtosCli {
                                         "protos/corpus/library/network/ip-endpoints",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/semver",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                         "protos/corpus/package-tool/version",
                                         packageToolVersionRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

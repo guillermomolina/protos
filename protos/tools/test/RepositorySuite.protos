@@ -72,6 +72,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/library/semver",
+            "protos/corpus/library/semver",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
             "protos/package-tool/version",
             "protos/corpus/package-tool/version",
             "protos/test/package"

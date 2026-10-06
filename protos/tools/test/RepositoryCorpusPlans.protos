@@ -122,6 +122,16 @@ load: (corpusId) => {
         matched = true
     })
 
+    (corpusId == "protos/corpus/library/semver").ifTrue(() => {
+        selected = planFromEntries(
+            "semver/",
+            Array(
+            Array("parse.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    })
+
     matched.ifFalse(() => {
         fail()
     })

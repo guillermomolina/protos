@@ -28,6 +28,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
+        assertPlan("protos/corpus/library/semver", 1, "semver/parse.protos", "semver/parse.protos");
     }
 
     @Test

@@ -1,0 +1,229 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Strict Semantic Versioning 2.0.0 version values. A version is an ordinary
+//! object with Integer `major`, `minor`, and `patch` slots, a `prerelease` Array
+//! of Integer (numeric) and String (alphanumeric) identifiers, and a `build`
+//! Array of String identifiers. Build metadata is preserved exactly.
+
+/// Parses `text` as exactly `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` under
+/// Semantic Versioning 2.0.0 and answers a fresh version object. Core
+/// components and numeric prerelease identifiers are unbounded Integers;
+/// alphanumeric prerelease identifiers and every build identifier keep their
+/// exact ASCII spelling as Strings, so `+001` stays `"001"`. A non-String
+/// argument, a missing component, a leading zero in a core component or numeric
+/// prerelease identifier, an empty identifier, or any character outside the
+/// SemVer grammar signals an Error. No prefix, whitespace, or partial version
+/// is accepted.
+parse: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    source: Encoding.UTF8.encode(text)
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    isIdentifierOctet: (octet) => {
+        upper: (octet >= 65) && (octet <= 90)
+        lower: (octet >= 97) && (octet <= 122)
+        isDigit(octet) || upper || lower || (octet == 45)
+    }
+
+    // Answers a fresh Array of `count` nulls in O(count): Arrays do not grow,
+    // and doubling halves keeps the copying geometric.
+    sized: null
+    sized = (count) => {
+        result: Array()
+        (count > 0).ifTrue(() => {
+            half: sized(count.div(2))
+            result = Array(...half, ...half)
+            ((count % 2) == 1).ifTrue(() => {
+                result = Array(...result, null)
+            })
+        })
+        result
+    }
+
+    // Identifiers are collected under consecutive Integer keys and
+    // materialized once, keeping parsing linear in the input length.
+    materialize: (entries) => {
+        result: sized(entries.size())
+        index: 0
+        result.each((ignored) => {
+            result[index] = entries[index]
+            index = index + 1
+        })
+        result
+    }
+
+    current: Encoding.UTF8.encode("")
+    currentNumeric: true
+
+    takeCurrent: () => {
+        (current.size() == 0).ifTrue(() => {
+            Error().signal()
+        })
+        taken: current
+        current = Encoding.UTF8.encode("")
+        currentNumeric = true
+        taken
+    }
+
+    // Numeric core components and prerelease identifiers reject leading zeros.
+    decimal: (bytes) => {
+        ((bytes.size() > 1) && (bytes[0] == 48)).ifTrue(() => {
+            Error().signal()
+        })
+        value: 0
+        bytes.each((octet) => {
+            value = value * 10 + (octet - 48)
+        })
+        value
+    }
+
+    components: Map()
+    prerelease: Map()
+    build: Map()
+
+    finishCore: () => {
+        components[components.size()] = decimal(takeCurrent())
+    }
+
+    finishPrerelease: () => {
+        numeric: currentNumeric
+        bytes: takeCurrent()
+        identifier: null
+        numeric.ifTrue(() => {
+            identifier = decimal(bytes)
+        })
+        numeric.ifFalse(() => {
+            identifier = Encoding.UTF8.decode(bytes)
+        })
+        prerelease[prerelease.size()] = identifier
+    }
+
+    finishBuild: () => {
+        build[build.size()] = Encoding.UTF8.decode(takeCurrent())
+    }
+
+    // Sections: "core" (MAJOR.MINOR.PATCH), "prerelease", and "build".
+    section: "core"
+
+    source.each((octet) => {
+        previousSection: section
+
+        (previousSection == "core").ifTrue(() => {
+            handled: false
+
+            isDigit(octet).ifTrue(() => {
+                current.add(octet)
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                (octet == 46).ifTrue(() => {
+                    (components.size() < 2).ifFalse(() => {
+                        Error().signal()
+                    })
+                    finishCore()
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                ((octet == 45) || (octet == 43)).ifTrue(() => {
+                    (components.size() == 2).ifFalse(() => {
+                        Error().signal()
+                    })
+                    finishCore()
+                    (octet == 45).ifTrue(() => {
+                        section = "prerelease"
+                    })
+                    (octet == 43).ifTrue(() => {
+                        section = "build"
+                    })
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                Error().signal()
+            })
+        })
+
+        (previousSection == "prerelease").ifTrue(() => {
+            handled: false
+
+            (octet == 46).ifTrue(() => {
+                finishPrerelease()
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                (octet == 43).ifTrue(() => {
+                    finishPrerelease()
+                    section = "build"
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                isIdentifierOctet(octet).ifFalse(() => {
+                    Error().signal()
+                })
+                isDigit(octet).ifFalse(() => {
+                    currentNumeric = false
+                })
+                current.add(octet)
+            })
+        })
+
+        (previousSection == "build").ifTrue(() => {
+            (octet == 46).ifTrue(() => {
+                finishBuild()
+            })
+
+            (octet == 46).ifFalse(() => {
+                isIdentifierOctet(octet).ifFalse(() => {
+                    Error().signal()
+                })
+                current.add(octet)
+            })
+        })
+    })
+
+    (section == "core").ifTrue(() => {
+        (components.size() == 2).ifFalse(() => {
+            Error().signal()
+        })
+        finishCore()
+    })
+    (section == "prerelease").ifTrue(() => {
+        finishPrerelease()
+    })
+    (section == "build").ifTrue(() => {
+        finishBuild()
+    })
+
+    {
+        major: components[0]
+        minor: components[1]
+        patch: components[2]
+        prerelease: materialize(prerelease)
+        build: materialize(build)
+    }
+}

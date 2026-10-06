@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.238-SNAPSHOT
+
+- `LIB012-A` (guillermomolina/protos#429) adds the Standard Library module
+  `std:semver/SemVer` with a strict Semantic Versioning 2.0.0 parser,
+  following the ratified LIB012-0 design. There is no specification change.
+  - `SemVer.parse(text)` accepts exactly
+    `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` and answers a fresh object with
+    `major`, `minor` and `patch` slots, a `prerelease` Array and a `build`
+    Array. Core components and numeric prerelease identifiers are unbounded
+    Integers. Alphanumeric prerelease identifiers and every build identifier
+    keep their exact ASCII spelling as Strings, so `+001` stays `"001"`.
+    Build metadata is preserved.
+  - Malformed input signals `Error`, following the existing Standard Library
+    parsers. That includes missing components, a `v` prefix, leading zeros
+    in core components or numeric prerelease identifiers, empty identifiers,
+    whitespace, non-ASCII characters and non-String input. There is no
+    loose, coercing or normalizing mode.
+  - Parsing is a single linear pass with no length or numeric limits.
+  - Precedence, canonical formatting and structural equality are left to
+    LIB012-B. Ranges and requirements are deferred. The Package Tool's
+    `ReleaseVersion` policy is unchanged.
+  - The test tool registers a `library/semver` corpus for the new tests.
+
 ## 0.3.237-SNAPSHOT
 
 - `TEST009-V2` (guillermomolina/protos#795) corrects the TEST009 diagnostic
