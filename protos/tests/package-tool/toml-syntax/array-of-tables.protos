@@ -33,8 +33,7 @@ tests: [
         Document: import("self:TomlDocument")
         root: Document.table("[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.varieties]]\nname = \"red delicious\"\n[[fruits.varieties]]\nname = \"granny smith\"\n[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n")
         fruits: root.value["fruits"].value
-        apple: fruits[0]
-        banana: fruits[1]
+        (apple, banana): fruits
         appleVarieties: apple.value["varieties"].value
         bananaVarieties: banana.value["varieties"].value
         ok: fruits.size() == 2

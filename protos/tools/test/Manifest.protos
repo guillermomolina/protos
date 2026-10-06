@@ -513,9 +513,7 @@ projectTreeCaseSpec: (fields, caseNamespace) => {
         fail()
     })
 
-    projectIdentity: fields[0]
-    fixturePath: fields[1]
-    retainedOutcome: fields[2]
+    (projectIdentity, fixturePath, retainedOutcome): fields
     ignoredProjectValidation: pathValue(projectIdentity)
     ignoredFixtureValidation: pathValue(fixturePath)
 

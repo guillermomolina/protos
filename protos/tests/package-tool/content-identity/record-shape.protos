@@ -13,29 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Identity: import("self:ContentIdentity")
 
 captured: filesystem
 records: Identity.collectRecords(captured)
 
-(records.size() == 1).ifFalse(() => {
-    Error().signal()
-})
+Assertions.require(records.size() == 1)
 
 record: records[0]
 
-record.hasSlot("pathBytes").ifFalse(() => {
-    Error().signal()
-})
-record.hasSlot("content").ifFalse(() => {
-    Error().signal()
-})
+Assertions.require(record.hasSlot("pathBytes"))
+Assertions.require(record.hasSlot("content"))
 
-(record.pathBytes.size() == 11).ifFalse(() => {
-    Error().signal()
-})
-(record.content.size() == 0).ifFalse(() => {
-    Error().signal()
-})
+Assertions.require(record.pathBytes.size() == 11)
+Assertions.require(record.content.size() == 0)
 
 true

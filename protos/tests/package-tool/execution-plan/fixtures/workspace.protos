@@ -25,8 +25,7 @@ tests: [
         (plan.packages.size() == 2).ifFalse(() => { ok = false })
         (plan.dependencies.size() == 2).ifFalse(() => { ok = false })
 
-        rootPackage: plan.packages[0]
-        memberPackage: plan.packages[1]
+        (rootPackage, memberPackage): plan.packages
 
         (rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
         (rootPackage.location == "").ifFalse(() => { ok = false })

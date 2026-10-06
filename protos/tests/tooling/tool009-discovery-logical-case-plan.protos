@@ -54,8 +54,7 @@ Assertions.require(signature[1] == "second")
 
 Assertions.require(plan.size() == 2)
 
-first: plan[0]
-second: plan[1]
+(first, second): plan
 
 Assertions.require(first.size() == 3)
 Assertions.require(second.size() == 3)

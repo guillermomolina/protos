@@ -27,10 +27,10 @@ associationMatches: (association, corpusId, casePath) => {
     associationCorpus: association[0]
     associationPath: association[1]
 
-    ("" + associationCorpus === associationCorpus).ifFalse(() => {
+    String.recognizes(associationCorpus).ifFalse(() => {
         selectionError()
     })
-    ("" + associationPath === associationPath).ifFalse(() => {
+    String.recognizes(associationPath).ifFalse(() => {
         selectionError()
     })
 
@@ -78,10 +78,10 @@ directoryAssociationMatches: (
     associationCorpus: association[0]
     associationDirectory: association[1]
 
-    ("" + associationCorpus === associationCorpus).ifFalse(() => {
+    String.recognizes(associationCorpus).ifFalse(() => {
         selectionError()
     })
-    ("" + associationDirectory === associationDirectory).ifFalse(() => {
+    String.recognizes(associationDirectory).ifFalse(() => {
         selectionError()
     })
 

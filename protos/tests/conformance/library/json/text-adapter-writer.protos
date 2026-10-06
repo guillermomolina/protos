@@ -102,12 +102,8 @@ tests: [
             })
 
             finished.then((ignored) => {
-                (sink == "{\"a\":[12e-1,false]}").ifFalse(() => {
-                    Error().signal()
-                })
-                (writes == 8).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(sink == "{\"a\":[12e-1,false]}")
+                Assertions.require(writes == 8)
                 true
             })
         }

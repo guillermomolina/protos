@@ -61,8 +61,7 @@ tests: [
             }
 
             captured: makeCaptured()
-            escaped: captured[0]
-            reader: captured[1]
+            (escaped, reader): captured
 
             before: reader()
             removed: escaped.removeSlot("x")

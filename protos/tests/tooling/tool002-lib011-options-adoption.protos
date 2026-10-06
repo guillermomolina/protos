@@ -13,25 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Options: import("self:Options")
-
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
-
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
-            true
-        }
-    )
-}
 
 // Ordinary, option-like and structural-looking unknown arguments remain a
 // TOOL002-local ignore policy. Exact recognized options after them still work.
@@ -47,8 +30,8 @@ selected: Options.parse(Array(
     "trailing-unknown"
 ))
 
-require(selected[0] == 3)
-require(selected[1] == "catalog.toml")
+Assertions.require(selected[0] == 3)
+Assertions.require(selected[1] == "catalog.toml")
 
 // LIB011 supports attached long values in general, but TOOL002 did not publish
 // attached forms. The adapter therefore leaves them unknown rather than silently
@@ -58,45 +41,45 @@ attachedRemainUnknown: Options.parse(Array(
     "--jobs=9",
     "--resource-catalog=other.toml"
 ))
-require(attachedRemainUnknown[0] == 1)
-require(attachedRemainUnknown[1] === null)
+Assertions.require(attachedRemainUnknown[0] == 1)
+Assertions.require(attachedRemainUnknown[1] === null)
 
 // Once a recognized value-taking option is selected, the next token is literal.
 catalogValueLooksLikeJobs:
     Options.parse(Array("test", "--resource-catalog", "--jobs"))
-require(catalogValueLooksLikeJobs[0] == 1)
-require(catalogValueLooksLikeJobs[1] == "--jobs")
+Assertions.require(catalogValueLooksLikeJobs[0] == 1)
+Assertions.require(catalogValueLooksLikeJobs[1] == "--jobs")
 
 // Unknown options do not claim following values. A later exact TOOL002 option is
 // still recognized, matching the historical state-machine parser.
 unknownThenJobs:
     Options.parse(Array("test", "--foreign", "--jobs", "4"))
-require(unknownThenJobs[0] == 4)
-require(unknownThenJobs[1] === null)
+Assertions.require(unknownThenJobs[0] == 4)
+Assertions.require(unknownThenJobs[1] === null)
 
 // TOOL002 historically did not treat `--` as a structural delimiter.
 afterDoubleDash:
     Options.parse(Array("test", "--", "--jobs", "5"))
-require(afterDoubleDash[0] == 5)
+Assertions.require(afterDoubleDash[0] == 5)
 
 // Existing fail-closed policy remains owned by the same public selectors.
-require(reject(() => {
+Assertions.signals(Error, () => {
     Options.jobs(Array("test", "--jobs"))
-}))
+})
 
-require(reject(() => {
+Assertions.signals(Error, () => {
     Options.jobs(Array("test", "--jobs", "2", "--jobs", "3"))
-}))
+})
 
-require(reject(() => {
+Assertions.signals(Error, () => {
     Options.jobs(Array("test", "--jobs", "0"))
-}))
+})
 
-require(reject(() => {
+Assertions.signals(Error, () => {
     Options.jobs(Array("test", "--jobs", "--resource-catalog"))
-}))
+})
 
-require(reject(() => {
+Assertions.signals(Error, () => {
     Options.resourceCatalogPath(Array(
         "test",
         "--resource-catalog",
@@ -104,6 +87,6 @@ require(reject(() => {
         "--resource-catalog",
         "b.toml"
     ))
-}))
+})
 
 true

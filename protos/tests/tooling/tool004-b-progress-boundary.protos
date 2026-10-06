@@ -142,10 +142,7 @@ plainPassed = plainPassed && (terminalEvents.size() == 2)
 plainPassed = plainPassed && (lifecycleEvents.size() == 4)
 
 plainPassed.ifTrue(() => {
-    firstStarted: lifecycleEvents[0]
-    secondStarted: lifecycleEvents[1]
-    firstTerminal: lifecycleEvents[2]
-    secondTerminal: lifecycleEvents[3]
+    (firstStarted, secondStarted, firstTerminal, secondTerminal): lifecycleEvents
 
     plainPassed =
         firstStarted[0] === "started"
@@ -292,8 +289,7 @@ infrastructurePassed =
     (lifecycleEvents.size() == 2)
 
 infrastructurePassed.ifTrue(() => {
-    started: lifecycleEvents[0]
-    terminal: lifecycleEvents[1]
+    (started, terminal): lifecycleEvents
 
     infrastructurePassed =
         started[0] === "started"

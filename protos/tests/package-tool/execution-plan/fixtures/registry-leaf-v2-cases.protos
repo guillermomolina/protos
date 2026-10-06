@@ -53,8 +53,7 @@ tests: [
         (plan.packages.size() == 2).ifFalse(() => { ok = false })
         (plan.dependencies.size() == 1).ifFalse(() => { ok = false })
 
-        rootPackage: plan.packages[0]
-        externalPackage: plan.packages[1]
+        (rootPackage, externalPackage): plan.packages
         edge: plan.dependencies[0]
 
         (rootPackage.ref.kind == "workspace").ifFalse(() => { ok = false })

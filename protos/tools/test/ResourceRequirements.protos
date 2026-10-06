@@ -171,10 +171,7 @@ attachToPlan: (plan, declarations) => {
             fail()
         })
 
-        attached: Array()
-        requirementsByCase.containsKey(id).ifTrue(() => {
-            attached = requirementsByCase[id]
-        })
+        attached: requirementsByCase.atIfAbsent(id, () => { Array() })
         attached = Array(...attached, declarationRequirement(declarationValue))
         requirementsByCase[id] = attached
     })
@@ -182,10 +179,7 @@ attachToPlan: (plan, declarations) => {
     joinedCases: Array()
     cases.each((spec) => {
         id: Manifest.caseId(spec)
-        attached: Array()
-        requirementsByCase.containsKey(id).ifTrue(() => {
-            attached = requirementsByCase[id]
-        })
+        attached: requirementsByCase.atIfAbsent(id, () => { Array() })
         joinedCases = Array(
             ...joinedCases,
             Manifest.caseSpecWithRequirements(spec, attached)

@@ -359,8 +359,12 @@ validateExpected: (expected) => {
     algorithm: expected.algorithm
     hex: expected.hex
 
-    ignoredMethodStringValidation: Encoding.UTF8.encode(method)
-    ignoredAlgorithmStringValidation: Encoding.UTF8.encode(algorithm)
+    String.recognizes(method).ifFalse(() => {
+        fail()
+    })
+    String.recognizes(algorithm).ifFalse(() => {
+        fail()
+    })
     hexBytes: Encoding.UTF8.encode(hex)
 
     (method == "protos-package-tree-v1").ifFalse(() => {

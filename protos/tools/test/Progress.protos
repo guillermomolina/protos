@@ -255,8 +255,7 @@ lifecycleObserver: (state, displayReference = null) => {
 
 observer: (state) => {
     (spec, evaluation, infrastructureFailed) => {
-        phaseName: state[0]
-        total: state[1]
+        (phaseName, total): state
         completed: state[2] + 1
         failed: infrastructureFailed
 
@@ -303,10 +302,7 @@ observer: (state) => {
 }
 
 finishPhase: (state, infrastructureAborted) => {
-    phaseName: state[0]
-    total: state[1]
-    completed: state[2]
-    failed: state[3]
+    (phaseName, total, completed, failed): state
 
     line:
         "[" + phaseName + "] " +

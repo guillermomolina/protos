@@ -40,25 +40,17 @@ tests: [
 
             first: stream.read()
             second: first.then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
                 stream.read()
             })
             eof: second.then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
                 stream.read()
             })
 
             eof.then((more) => {
-                (more === false).ifFalse(() => {
-                    Error().signal()
-                })
-                (seen == "objectStart,name,arrayStart,number,boolean,arrayEnd,objectEnd,").ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === false)
+                Assertions.require(seen == "objectStart,name,arrayStart,number,boolean,arrayEnd,objectEnd,")
                 true
             })
         }
@@ -88,31 +80,19 @@ tests: [
 
             emptyChunk: stream.read()
             valueChunk: emptyChunk.then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
-                (seen == "").ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
+                Assertions.require(seen == "")
                 stream.read()
             })
             eof: valueChunk.then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
-                (seen == "null,").ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
+                Assertions.require(seen == "null,")
                 stream.read()
             })
 
             eof.then((more) => {
-                (more === false).ifFalse(() => {
-                    Error().signal()
-                })
-                (seen == "null,").ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === false)
+                Assertions.require(seen == "null,")
                 true
             })
         }
@@ -155,15 +135,11 @@ tests: [
             stream: JSON.readEvents(reader, (event) => { null })
             valueRead: stream.read()
             eof: valueRead.then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
                 stream.read()
             })
             eof.then((more) => {
-                (more === false).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === false)
                 stream.read()
             })
         }
@@ -196,9 +172,7 @@ tests: [
 
             stream: JSON.readEvents(reader, (event) => { null })
             stream.read().then((more) => {
-                (more === true).ifFalse(() => {
-                    Error().signal()
-                })
+                Assertions.require(more === true)
                 stream.read()
             })
         }

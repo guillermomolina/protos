@@ -618,8 +618,7 @@ listCases.ifFalse(() => {
     // created D120 observer; it never reorders or reprojects `logicalResults`.
     logicalCompletionObserver: (index, completion) => {
         metadata: logicalCaseMetadata[index]
-        targetSuiteIndex: metadata[0]
-        spec: metadata[1]
+        (targetSuiteIndex, spec): metadata
 
         projected: LogicalCaseResult.project(completion)
         classification: LogicalCaseResult.classification(projected)

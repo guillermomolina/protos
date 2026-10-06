@@ -81,8 +81,7 @@ run: (
             nextIndex = nextIndex + 1
 
             item: workItems[index]
-            signature: item[0]
-            entry: item[1]
+            (signature, entry): item
 
             (lifecycleObserver === null).ifFalse(() => {
                 lifecycleObserver(

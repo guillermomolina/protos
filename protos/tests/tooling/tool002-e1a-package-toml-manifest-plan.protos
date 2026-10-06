@@ -19,8 +19,7 @@ plan: Manifest.loadPackageToml(filesystem)
 cases: Manifest.planCases(plan)
 passed: cases.size() == 2
 
-first: cases[0]
-second: cases[1]
+(first, second): cases
 
 passed.ifTrue(() => {
     passed = Manifest.caseId(first) ==
