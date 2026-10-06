@@ -38,7 +38,6 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexic
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
-import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
@@ -3342,16 +3341,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.EnterClosureCall.immediate(prepared);
         }
 
-        @Specialization(guards = "prepared.nativeBody() == cachedBody", limit = "3")
-        public static Object nativeDirect(
-                NativeCall prepared,
-                @Cached("prepared.nativeBody()")
-                        ProtosNativeClosureBody cachedBody) {
-            return ProtosBytecodeRootNode.EnterClosureCall.nativeDirect(
-                    prepared, cachedBody);
-        }
-
-        @Specialization(replaces = "nativeDirect")
+        @Specialization
         public static Object nativeCall(NativeCall prepared) {
             return ProtosBytecodeRootNode.EnterClosureCall.nativeCall(prepared);
         }

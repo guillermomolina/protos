@@ -104,8 +104,8 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     /**
      * TEST009-I: closure-call entry must likewise specialize on concrete
      * representations in both generated interpreters. Immediate entry has one
-     * specialization; native entry (TEST009-M) keeps an exact native-body
-     * identity cache with a generic fallback; the two source-backed
+     * specialization; native entry (TEST009-Q) has one generic entry with no
+     * native-body identity cache; the two source-backed
      * representations each keep a direct-call cache with an indirect fallback,
      * and module initialization additionally keeps its immediate-hit entry.
      */
@@ -114,7 +114,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         java.util.Map<Class<?>, Long> expected =
                 java.util.Map.of(
                         ProtosBytecodeRootNode.ImmediateResultCall.class, 1L,
-                        ProtosBytecodeRootNode.NativeCall.class, 2L,
+                        ProtosBytecodeRootNode.NativeCall.class, 1L,
                         ProtosBytecodeRootNode.OrdinarySourceCall.class, 2L,
                         ProtosBytecodeRootNode.ModuleInitializationCall.class, 3L);
 
@@ -145,10 +145,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
 
             assertEquals(
                     List.of(
-                            List.of(ProtosBytecodeRootNode.NativeCall.class),
-                            List.of(
-                                    ProtosBytecodeRootNode.NativeCall.class,
-                                    com.guillermomolina.protos.runtime.ProtosNativeClosureBody.class)),
+                            List.of(ProtosBytecodeRootNode.NativeCall.class)),
                     specializations.stream()
                             .filter(
                                     method ->

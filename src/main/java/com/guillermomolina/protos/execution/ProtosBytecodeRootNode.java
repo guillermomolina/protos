@@ -2735,22 +2735,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Override
         public Object enterNative() {
-            return enterNativeBody(nativeBody);
-        }
-
-        /** Exact native body identity for the {@link EnterClosureCall} cache. */
-        ProtosNativeClosureBody nativeBody() {
-            return nativeBody;
-        }
-
-        /**
-         * The single ordinary-versus-suspension-capable entry rule for this
-         * call. TEST009-M: {@code body} is this call's own {@link #nativeBody}
-         * (the identity-cached copy on the specialized path), so a cached body
-         * is a partial-evaluation constant and both the instanceof selection
-         * and the {@code execute} target fold; the rule itself is unchanged.
-         */
-        Object enterNativeBody(ProtosNativeClosureBody body) {
             if (requiresStructuredDispatch()) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
@@ -2758,7 +2742,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if ((activation.task().isPresent()
                             || activation.deferredCPrimeOperationForRuntime().isPresent()
                             || activation.deferredCPrimeReleaseForRuntime().isPresent())
-                    && body
+                    && nativeBody
                             instanceof ProtosSuspensionCapableNativeClosureBody
                                     suspensionCapable) {
                 return suspensionCapable
@@ -2766,7 +2750,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 activation,
                                 supplied);
             }
-            return body.execute(
+            return nativeBody.execute(
                     activation,
                     supplied);
         }
@@ -9375,9 +9359,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * target selection or observable behavior. Both indirect fallbacks share
      * one {@link IndirectCallNode}, as the single indirect fallback did.
      *
-     * <p>TEST009-M: native calls likewise cache up to three exact native
-     * bodies by identity, replaced by the generic {@link NativeCall#enterNative}
-     * entry. Both paths apply the one {@link NativeCall#enterNativeBody} rule.
+     * <p>TEST009-Q: native calls have one generic {@link NativeCall#enterNative}
+     * entry; native body identity is not cached.
      */
     @Operation
     public static final class EnterClosureCall {
@@ -9386,15 +9369,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepared.enterImmediate();
         }
 
-        @Specialization(guards = "prepared.nativeBody() == cachedBody", limit = "3")
-        public static Object nativeDirect(
-                NativeCall prepared,
-                @Cached("prepared.nativeBody()")
-                        ProtosNativeClosureBody cachedBody) {
-            return prepared.enterNativeBody(cachedBody);
-        }
-
-        @Specialization(replaces = "nativeDirect")
+        @Specialization
         public static Object nativeCall(NativeCall prepared) {
             return prepared.enterNative();
         }

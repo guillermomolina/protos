@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.224-SNAPSHOT
+
+- `TEST009-Q` (child of TEST009, guillermomolina/protos#795) fully reverts
+  the TEST009-M M5 global exact-native-body PIC, as decided by TEST009-P.
+  No semantic change and no specification change.
+  - `EnterClosureCall.nativeDirect` (exact `ProtosNativeClosureBody`
+    identity guard, `limit = "3"`, replaced by the generic entry) is removed
+    from both `ProtosBytecodeRootNode` and `ProtosSemanticBytecodeRootNode`;
+    each again has one generic `nativeCall(NativeCall)` specialization, and
+    the Semantic Bytecode entry still delegates to the Bytecode owner.
+  - `NativeCall.nativeBody()` and `NativeCall.enterNativeBody(body)` existed
+    only for the PIC and are removed; the ordinary versus
+    suspension-capable rule (structured-dispatch rejection; Task, deferred
+    C-prime operation and deferred C-prime release admission;
+    `ProtosSuspensionCapableNativeClosureBody` continuation entry) again has
+    its single owner in `NativeCall.enterNative()`, unchanged.
+  - Retained: TEST009-M M1-M4 and the TEST009-O encoding, C-prime plan
+    cache-miss and physical-close host boundaries.
+  - `ProtosI072PhaseDPreparedCallSeparationTest` now expects exactly one
+    `NativeCall` entry specialization with parameters `[NativeCall]`.
+  - Post-Q Truffle diagnostic (`closure-call-and-return.protos::plain
+    closure call`, one shard worker) was acquired; its analysis belongs to
+    the next TEST009 slice. TEST009 remains open.
+
 ## 0.3.223-SNAPSHOT
 
 - `I070` (guillermomolina/protos#712) completes the remaining warning
