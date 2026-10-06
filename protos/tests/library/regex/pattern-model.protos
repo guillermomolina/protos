@@ -1,0 +1,129 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+// Answers `text` concatenated with itself 2^doublings times.
+repeated: (text, doublings) => {
+    result: text
+    count: 0
+    (() => count < doublings).whileTrue() {
+        result = result + result
+        count = count + 1
+    }
+    result
+}
+
+requireNames: (pattern, ...pairs) => {
+    Assertions.require(pattern.captureNames.size() == pairs.size().div(2))
+    index: 0
+    (() => index < pairs.size()).whileTrue() {
+        Assertions.require(pattern.captureNames[pairs[index]] == pairs[index + 1])
+        index = index + 2
+    }
+    true
+}
+
+tests: [
+    Test("capturing groups are numbered in opening-parenthesis order", () => {
+        Assertions.require(Regex.compile("").captureCount == 0)
+        Assertions.require(Regex.compile("abc").captureCount == 0)
+        Assertions.require(Regex.compile("(a)").captureCount == 1)
+        Assertions.require(Regex.compile("(a)(?:b)(c)").captureCount == 2)
+        Assertions.require(Regex.compile("(a)|(b)").captureCount == 2)
+        Assertions.require(Regex.compile("((a)(b))*").captureCount == 3)
+        Assertions.require(Regex.compile("[(]\\(").captureCount == 0)
+        Assertions.require(Regex.compile("(a){0}").captureCount == 1)
+
+        requireNames(Regex.compile("(?<a>(?<b>(?<c>x)))"), "a", 1, "b", 2, "c", 3)
+        requireNames(Regex.compile("(?<c>x)(?<b>y)(?<a>z)"), "c", 1, "b", 2, "a", 3)
+    }),
+    Test("named groups are also numbered", () => {
+        pattern: Regex.compile("(a)(?:b)(?<x>c)((?<y>d)e)(?<z>f)?")
+        Assertions.require(pattern.captureCount == 5)
+        requireNames(pattern, "x", 2, "y", 4, "z", 5)
+        Assertions.require(pattern.captureNames.containsKey("a") == false)
+        requireNames(Regex.compile("(a)(b)"))
+        requireNames(Regex.compile("(?<A>x)(?<a>y)"), "A", 1, "a", 2)
+    }),
+    Test("patterns preserve their exact source", () => {
+        Array("", "a", "(?<n>é)+\\p{L}", "a b # c", "😀{2}", "[\\u{41}-\\u{5A}]", "e\u{301}").each((source) => {
+            Assertions.require(Regex.compile(source).source == source)
+            Assertions.require(Regex.compileWithFlags(source, "im").source == source)
+        })
+        null
+    }),
+    Test("flags are canonical and independent of input order", () => {
+        Assertions.require(Regex.compile("a").flags == "")
+        Assertions.require(Regex.compileWithFlags("a", "").flags == "")
+        Assertions.require(Regex.compileWithFlags("a", "i").flags == "i")
+        Assertions.require(Regex.compileWithFlags("a", "mi").flags == "im")
+        Assertions.require(Regex.compileWithFlags("a", "im").flags == "im")
+        Assertions.require(Regex.compileWithFlags("a", "xs").flags == "sx")
+        Assertions.require(Regex.compileWithFlags("a", "xsmi").flags == "imsx")
+        Assertions.require(Regex.compileWithFlags("a", "smxi").flags == "imsx")
+    }),
+    Test("independent compilations answer distinct patterns", () => {
+        first: Regex.compile("(?<n>a)")
+        second: Regex.compile("(?<n>a)")
+        Assertions.require((first === second) == false)
+        Assertions.require((first == second) == false)
+        Assertions.require(first == first)
+        Assertions.require((Regex.compileWithFlags("a", "im") === Regex.compileWithFlags("a", "mi")) == false)
+    }),
+    Test("patterns are frozen and expose no compiled representation", () => {
+        pattern: Regex.compile("(?<n>a)(b)")
+        Array("source", "flags", "captureCount", "captureNames").each((name) => {
+            Assertions.require(pattern.hasSlot(name))
+        })
+        Array("program", "nodes", "root", "fullMatch", "search", "searchFrom", "findAll", "replaceAll", "split").each((name) => {
+            Assertions.require(pattern.hasSlot(name) == false)
+        })
+        Assertions.signals(Error, () => { pattern.source = "b" })
+        Assertions.signals(Error, () => { pattern.captureCount = 0 })
+        Assertions.signals(Error, () => { pattern.extra: 1 })
+        Assertions.signals(Error, () => { pattern.captureNames["m"] = 3 })
+        Assertions.signals(Error, () => { pattern.captureNames["n"] = 2 })
+        Assertions.require(pattern.source == "(?<n>a)(b)")
+        Assertions.require(pattern.captureCount == 2)
+        requireNames(pattern, "n", 1)
+        requireNames(Regex.compile("(?<n>a)(b)"), "n", 1)
+    }),
+    Test("the module publishes only its ratified operations", () => {
+        Array("compile", "compileWithFlags", "escape", "escapeReplacement").each((name) => {
+            Assertions.require(Regex.hasSlot(name))
+        })
+        Assertions.require(Regex.hasSlot("_regexUnicodeFacility") == false)
+    }),
+    Test("counted repetition compiles without expansion", () => {
+        Assertions.require(Regex.compile("(?:a{1000000000}){1000000000}").captureCount == 0)
+        Assertions.require(Regex.compile("(?:(?:(?:(a{1000}){1000}){1000}){1000}){1000,}?").captureCount == 1)
+        Assertions.require(Regex.compile("a{99999999999999999999999999999999,999999999999999999999999999999999}").captureCount == 0)
+        Assertions.require(Regex.compileWithFlags("[\\p{L}\\p{N}]{0,4294967296}", "i").captureCount == 0)
+    }),
+    Test("deep nesting and long sources compile without host recursion", () => {
+        // 2^11 = 2048 levels.
+        groups: Regex.compile(repeated("(", 11) + "a" + repeated(")", 11))
+        Assertions.require(groups.captureCount == 2048)
+        plain: Regex.compile(repeated("(?:", 11) + "a" + repeated(")*", 11))
+        Assertions.require(plain.captureCount == 0)
+        classes: Regex.compile(repeated("[", 10) + "a" + repeated("]", 10))
+        Assertions.require(classes.captureCount == 0)
+        alternatives: Regex.compile(repeated("a|", 12) + "b")
+        Assertions.require(alternatives.captureCount == 0)
+    })
+]

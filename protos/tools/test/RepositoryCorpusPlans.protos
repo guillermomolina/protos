@@ -149,6 +149,19 @@ load: (corpusId) => {
         matched = true
     })
 
+    (corpusId == "protos/corpus/library/regex").ifTrue(() => {
+        selected = planFromEntries(
+            "regex/",
+            Array(
+            Array("compile.protos", "suite-native", "-"),
+            Array("rejection.protos", "suite-native", "-"),
+            Array("pattern-model.protos", "suite-native", "-"),
+            Array("escape.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    })
+
     matched.ifFalse(() => {
         fail()
     })

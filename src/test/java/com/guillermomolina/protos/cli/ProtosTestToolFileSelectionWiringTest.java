@@ -57,6 +57,7 @@ final class ProtosTestToolFileSelectionWiringTest {
             "protos/corpus/library/network/ip-endpoints",
             "protos/corpus/library/semver",
             "protos/corpus/library/datetime",
+            "protos/corpus/library/regex",
             "protos/corpus/package-tool/version",
             "protos/corpus/package-tool/lock",
             "protos/corpus/package-tool/resolution-input",
@@ -74,7 +75,7 @@ final class ProtosTestToolFileSelectionWiringTest {
         }
 
         assertEquals(
-                22,
+                23,
                 occurrences(
                         source,
                         "new ProtosTestToolFileSelectionFacility.CorpusSourceRoot("));

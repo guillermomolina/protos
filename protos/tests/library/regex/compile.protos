@@ -1,0 +1,116 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+acceptsWithFlags: (flags, ...sources) => {
+    sources.each((source) => {
+        pattern: Regex.compileWithFlags(source, flags)
+        Assertions.require(pattern.source == source)
+    })
+    true
+}
+
+accepts: (...sources) => {
+    acceptsWithFlags("", ...sources)
+}
+
+rejectsFlags: (...flagSets) => {
+    flagSets.each((flags) => {
+        Assertions.signals(Error, () => { Regex.compileWithFlags("a", flags) })
+    })
+    true
+}
+
+tests: [
+    Test("compile accepts ASCII and non-ASCII literals", () => {
+        accepts("", "a", "abc", "hello world", "a,b;c:d=e!f<g>h", "'\"@%/~_`", "-", "&", "#")
+        accepts("é", "日本語", "😀", "a😀b", "e\u{301}", "\u{10FFFF}", "\t\n\r")
+    }),
+    Test("compile accepts escapes and Unicode scalar escapes", () => {
+        accepts("\\t", "\\n", "\\r", "\\f")
+        accepts("\\u{41}", "\\u{e9}", "\\u{E9}", "\\u{0}", "\\u{000041}", "\\u{1F600}", "\\u{10FFFF}")
+        accepts("\\.\\*\\+\\?\\(\\)\\[\\]\\{\\}\\|\\^\\$\\\\")
+        accepts("\\#", "\\ ", "\\-", "\\&", "\\~", "\\/", "\\!", "\\,", "\\:", "\\<", "\\>", "\\=", "\\'", "\\\"", "\\@", "\\_")
+    }),
+    Test("compile accepts dot, alternation, and groups", () => {
+        accepts(".", "a.b", ".*", "a|b", "a|b|c", "|", "a|", "|a", "a||b")
+        accepts("(a|b)c", "(?:a|b)c", "()", "(?:)", "((a))", "(a)(b)(c)", "(?:(?:a))")
+        accepts("(?<name>a)", "(?<_x9>a)", "(?<A_b_C>a)(?<d>b)", "(?<a>(?<b>x))", "(|a)")
+    }),
+    Test("compile accepts greedy and lazy quantifiers", () => {
+        accepts("a?", "a*", "a+", "a{3}", "a{2,}", "a{2,5}", "a{0}", "a{0,0}", "a{0,1}", "a{007}")
+        accepts("a??", "a*?", "a+?", "a{3}?", "a{2,}?", "a{2,5}?")
+        accepts("(ab){2,3}", "[a-z]{1,2}", "\\d+", "(a|b)*?c", "(?:a)+", "(?<n>a)*", "()*", ".+?")
+    }),
+    Test("compile accepts anchors and word boundaries", () => {
+        accepts("^", "$", "^a$", "^$", "a^b", "\\A", "\\z", "\\Aa\\z", "\\b", "\\B", "\\bword\\b", "\\Ba\\B")
+    }),
+    Test("compile accepts classes, ranges, and negation", () => {
+        accepts("[a]", "[abc]", "[a-z]", "[A-Za-z0-9_]", "[^a]", "[^a-z]", "[a^]", "[^^]")
+        accepts("[\\d]", "[\\w\\s]", "[\\D\\S\\W]", "[\\]\\[\\-\\&\\\\]", "[.*+?(){}|$]", "[#]", "[ ]", "[~]", "[,]")
+        accepts("[\\u{41}-\\u{5A}]", "[\\t-\\r]", "[é-ü]", "[😀-😂]", "[a-a]", "[\\--\\.]")
+        accepts("[[a-c][x-z]]", "[a[b]]", "[^[^a]]", "[[[a]]]")
+    }),
+    Test("compile accepts class intersection and subtraction", () => {
+        accepts("[a-z&&[^aeiou]]", "[\\w&&\\d]", "[\\p{L}--\\p{Lu}]", "[a-z--[aeiou]]")
+        accepts("[a-z&&b-y--c]", "[a-z--b--c]", "[\\p{Greek}&&\\p{Ll}]", "[^a-z&&[aeiou]]")
+    }),
+    Test("compile accepts Perl classes and Unicode properties", () => {
+        accepts("\\d", "\\D", "\\s", "\\S", "\\w", "\\W")
+        accepts("\\p{L}", "\\p{Letter}", "\\p{Lu}", "\\p{gc=Lu}", "\\p{General_Category=Uppercase_Letter}")
+        accepts("\\p{general category = lu}", "\\p{Nd}", "\\p{Cn}", "\\p{Cs}", "\\P{L}", "\\P{Nd}")
+        accepts("\\p{Greek}", "\\p{sc=Grek}", "\\p{Script=Greek}", "\\p{scx=Grek}", "\\p{Script_Extensions=Greek}")
+        accepts("\\p{Alphabetic}", "\\p{Alpha}", "\\p{Uppercase}", "\\p{Lowercase}", "\\p{White_Space}")
+        accepts("\\p{Noncharacter_Code_Point}", "\\p{Default_Ignorable_Code_Point}")
+        accepts("\\p{Any}", "\\p{ASCII}", "\\p{Assigned}", "\\p{any}", "\\P{ASCII}")
+        // Unicode 17.0.0 additions.
+        accepts("\\p{sc=Sidetic}", "\\p{Tai_Yo}", "\\p{Script=Beria_Erfe}", "\\p{scx=Tolong_Siki}")
+    }),
+    Test("compileWithFlags accepts each ratified flag in any order", () => {
+        acceptsWithFlags("i", "abc", "[a-z]", "\\p{Lu}", "[^K]", "\\W")
+        acceptsWithFlags("m", "^a$")
+        acceptsWithFlags("s", "a.b")
+        acceptsWithFlags("x", "a b c", "a # comment", "a\\ b", "[\\ \\#]", "a\n+")
+        acceptsWithFlags("im", "^abc$")
+        acceptsWithFlags("mi", "^abc$")
+        acceptsWithFlags("imsx", "a . b")
+        acceptsWithFlags("xsmi", "a . b")
+        acceptsWithFlags("", "a b # not a comment")
+    }),
+    Test("extended mode ignores whitespace and comments outside classes", () => {
+        Assertions.require(Regex.compileWithFlags("(a) # (b", "x").captureCount == 1)
+        Assertions.require(Regex.compileWithFlags("( a ) ( b ) # (c)\n( d )", "x").captureCount == 3)
+        Assertions.require(Regex.compile("(a) # (b)").captureCount == 2)
+        Assertions.signals(Error, () => { Regex.compile("(a) # (b") })
+        Assertions.signals(Error, () => { Regex.compileWithFlags("[ ]", "x") })
+        Assertions.signals(Error, () => { Regex.compileWithFlags("[#]", "x") })
+        null
+    }),
+    Test("compileWithFlags rejects unknown and repeated flags", () => {
+        rejectsFlags("u", "g", "y", "I", "M", "ii", "mm", "ss", "xx", "imi", "i ", " ", "-i", "é")
+    }),
+    Test("compile rejects non-String arguments", () => {
+        Assertions.signals(Error, () => { Regex.compile(null) })
+        Assertions.signals(Error, () => { Regex.compile(1) })
+        Assertions.signals(Error, () => { Regex.compile(Encoding.UTF8.encode("a")) })
+        Assertions.signals(Error, () => { Regex.compileWithFlags(1, "") })
+        Assertions.signals(Error, () => { Regex.compileWithFlags("a", null) })
+        Assertions.signals(Error, () => { Regex.compileWithFlags("a", ["i"]) })
+        null
+    })
+]

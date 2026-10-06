@@ -7,6 +7,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.245-SNAPSHOT
+
+- `LIB014-1` (guillermomolina/protos#431) adds `std:regex/Regex` compilation and
+  escaping under the D187 restricted portable regex contract. There is no
+  specification change.
+  - `Regex.compile(source)` and `Regex.compileWithFlags(source, flags)` parse a
+    Protos-owned dialect over Unicode scalars: literals, `\t \n \r \f`,
+    `\u{HEX}`, escaped ASCII punctuation, `.`, classes with ranges, nesting,
+    negation, `&&` intersection and `--` subtraction, `\d \s \w` and their
+    negations, `\p{...}`/`\P{...}`, ordered alternation, numbered,
+    non-capturing and named groups, greedy and lazy `? * + {n} {n,} {n,m}`, and
+    `^ $ \A \z \b \B`. Flags `i`, `m`, `s`, and `x` may each appear once in
+    any order. Backreferences, look-around, atomic groups, possessive
+    quantifiers, recursion, conditionals, inline flags, `\G`, `\K`, `\X`,
+    POSIX bracket classes, and malformed input signal an ordinary Error.
+  - Unicode properties accept General_Category, Script, and Script_Extensions
+    values plus the UTS #18 Level 1 binary properties, `Any`, `ASCII`, and
+    `Assigned`, resolved from guarded Unicode 17.0.0 data through a private
+    frozen facility provisioned only to the module. Case-insensitive classes
+    are closed under simple case folding.
+  - A Pattern is a fresh frozen value exposing `source`, canonical `flags`,
+    `captureCount`, and a frozen `captureNames` Map; groups are numbered in
+    opening-parenthesis order and named groups are also numbered. The compiled
+    representation is a private postfix node table that never expands counted
+    repetition and is built without host recursion. Matching operations are
+    not yet provided.
+  - `Regex.escape(text)` produces literal regex source valid under every flag;
+    `Regex.escapeReplacement(text)` doubles every `$`.
+  - The `protos/library/regex` suite-native corpus covers accepted and
+    rejected syntax, flags, the Pattern value model, bounded compilation, and
+    escaping; the native-boundary guard records the new facility.
+
 ## 0.3.244-SNAPSHOT
 
 - `TEST009-W` (guillermomolina/protos#795) fixes CLI session teardown when

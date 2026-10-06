@@ -101,7 +101,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
-        assertEquals(22, flattened.indexedSize().intValueExact());
+        assertEquals(23, flattened.indexedSize().intValueExact());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "protos/conformance");
         assertLeafId(flattened, 1, "protos/process-snapshot");
@@ -117,14 +117,15 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafId(flattened, 11, "protos/library/network/ip-endpoints");
         assertLeafId(flattened, 12, "protos/library/semver");
         assertLeafId(flattened, 13, "protos/library/datetime");
-        assertLeafId(flattened, 14, "protos/package-tool/version");
-        assertLeafId(flattened, 15, "protos/package-tool/lock");
-        assertLeafId(flattened, 16, "protos/package-tool/resolution-input");
-        assertLeafId(flattened, 17, "protos/package-tool/content-identity");
-        assertLeafId(flattened, 18, "protos/package-tool/resolution-input-lock");
-        assertLeafId(flattened, 19, "protos/package-tool/resolution-root");
-        assertLeafId(flattened, 20, "protos/package-tool/execution-plan");
-        assertLeafId(flattened, 21, "protos/package-tool/project-projection");
+        assertLeafId(flattened, 14, "protos/library/regex");
+        assertLeafId(flattened, 15, "protos/package-tool/version");
+        assertLeafId(flattened, 16, "protos/package-tool/lock");
+        assertLeafId(flattened, 17, "protos/package-tool/resolution-input");
+        assertLeafId(flattened, 18, "protos/package-tool/content-identity");
+        assertLeafId(flattened, 19, "protos/package-tool/resolution-input-lock");
+        assertLeafId(flattened, 20, "protos/package-tool/resolution-root");
+        assertLeafId(flattened, 21, "protos/package-tool/execution-plan");
+        assertLeafId(flattened, 22, "protos/package-tool/project-projection");
     }
 
     @Test
@@ -137,7 +138,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(22, leaves.indexedSize().intValueExact());
+        assertEquals(23, leaves.indexedSize().intValueExact());
         assertTrue(leaves.isFrozen());
         assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
         assertLeafCorpus(leaves, 1, "protos/process-snapshot", "protos/corpus/process-snapshot");
@@ -153,14 +154,15 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafCorpus(leaves, 11, "protos/library/network/ip-endpoints", "protos/corpus/library/network/ip-endpoints");
         assertLeafCorpus(leaves, 12, "protos/library/semver", "protos/corpus/library/semver");
         assertLeafCorpus(leaves, 13, "protos/library/datetime", "protos/corpus/library/datetime");
-        assertLeafCorpus(leaves, 14, "protos/package-tool/version", "protos/corpus/package-tool/version");
-        assertLeafCorpus(leaves, 15, "protos/package-tool/lock", "protos/corpus/package-tool/lock");
-        assertLeafCorpus(leaves, 16, "protos/package-tool/resolution-input", "protos/corpus/package-tool/resolution-input");
-        assertLeafCorpus(leaves, 17, "protos/package-tool/content-identity", "protos/corpus/package-tool/content-identity");
-        assertLeafCorpus(leaves, 18, "protos/package-tool/resolution-input-lock", "protos/corpus/package-tool/resolution-input-lock");
-        assertLeafCorpus(leaves, 19, "protos/package-tool/resolution-root", "protos/corpus/package-tool/resolution-root");
-        assertLeafCorpus(leaves, 20, "protos/package-tool/execution-plan", "protos/corpus/package-tool/execution-plan");
-        assertLeafCorpus(leaves, 21, "protos/package-tool/project-projection", "protos/corpus/package-tool/project-projection");
+        assertLeafCorpus(leaves, 14, "protos/library/regex", "protos/corpus/library/regex");
+        assertLeafCorpus(leaves, 15, "protos/package-tool/version", "protos/corpus/package-tool/version");
+        assertLeafCorpus(leaves, 16, "protos/package-tool/lock", "protos/corpus/package-tool/lock");
+        assertLeafCorpus(leaves, 17, "protos/package-tool/resolution-input", "protos/corpus/package-tool/resolution-input");
+        assertLeafCorpus(leaves, 18, "protos/package-tool/content-identity", "protos/corpus/package-tool/content-identity");
+        assertLeafCorpus(leaves, 19, "protos/package-tool/resolution-input-lock", "protos/corpus/package-tool/resolution-input-lock");
+        assertLeafCorpus(leaves, 20, "protos/package-tool/resolution-root", "protos/corpus/package-tool/resolution-root");
+        assertLeafCorpus(leaves, 21, "protos/package-tool/execution-plan", "protos/corpus/package-tool/execution-plan");
+        assertLeafCorpus(leaves, 22, "protos/package-tool/project-projection", "protos/corpus/package-tool/project-projection");
     }
 
     @Test
@@ -173,7 +175,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(22, leaves.indexedSize().intValueExact());
+        assertEquals(23, leaves.indexedSize().intValueExact());
         assertTrue(leaves.isFrozen());
         assertLeafRequirement(leaves, 0, "protos/conformance", "protos/test/ordinary");
         assertLeafRequirement(leaves, 1, "protos/process-snapshot", "protos/test/process-snapshot");
@@ -189,14 +191,15 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafRequirement(leaves, 11, "protos/library/network/ip-endpoints", "protos/test/ordinary");
         assertLeafRequirement(leaves, 12, "protos/library/semver", "protos/test/ordinary");
         assertLeafRequirement(leaves, 13, "protos/library/datetime", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 14, "protos/package-tool/version", "protos/test/package");
-        assertLeafRequirement(leaves, 15, "protos/package-tool/lock", "protos/test/package");
-        assertLeafRequirement(leaves, 16, "protos/package-tool/resolution-input", "protos/test/package");
-        assertLeafRequirement(leaves, 17, "protos/package-tool/content-identity", "protos/test/package");
-        assertLeafRequirement(leaves, 18, "protos/package-tool/resolution-input-lock", "protos/test/package");
-        assertLeafRequirement(leaves, 19, "protos/package-tool/resolution-root", "protos/test/package");
-        assertLeafRequirement(leaves, 20, "protos/package-tool/execution-plan", "protos/test/package");
-        assertLeafRequirement(leaves, 21, "protos/package-tool/project-projection", "protos/test/package");
+        assertLeafRequirement(leaves, 14, "protos/library/regex", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 15, "protos/package-tool/version", "protos/test/package");
+        assertLeafRequirement(leaves, 16, "protos/package-tool/lock", "protos/test/package");
+        assertLeafRequirement(leaves, 17, "protos/package-tool/resolution-input", "protos/test/package");
+        assertLeafRequirement(leaves, 18, "protos/package-tool/content-identity", "protos/test/package");
+        assertLeafRequirement(leaves, 19, "protos/package-tool/resolution-input-lock", "protos/test/package");
+        assertLeafRequirement(leaves, 20, "protos/package-tool/resolution-root", "protos/test/package");
+        assertLeafRequirement(leaves, 21, "protos/package-tool/execution-plan", "protos/test/package");
+        assertLeafRequirement(leaves, 22, "protos/package-tool/project-projection", "protos/test/package");
     }
 
     @Test

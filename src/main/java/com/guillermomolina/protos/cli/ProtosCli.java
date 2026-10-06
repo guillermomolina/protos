@@ -486,6 +486,9 @@ public final class ProtosCli {
                                         "protos/corpus/library/datetime",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/regex",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                         "protos/corpus/package-tool/version",
                                         packageToolVersionRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

@@ -1,0 +1,88 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+samples: Array(
+    "",
+    "plain",
+    "a.b*c+d?",
+    "\\.+*?()|[]{}^$#-&",
+    "(?<name>x)\\1",
+    "[a-z&&b]--c",
+    "${1} $$ {}",
+    " \t\n\r\f\u{B}\u{85}\u{200E}\u{200F}\u{2028}\u{2029}",
+    "é日本😀\u{3000}e\u{301}",
+    "# not a comment\n(x)"
+)
+
+tests: [
+    Test("escape prefixes syntax characters with a backslash", () => {
+        Assertions.require(Regex.escape("") == "")
+        Assertions.require(Regex.escape("plain_text,123!") == "plain_text,123!")
+        Assertions.require(Regex.escape("a.b") == "a\\.b")
+        Assertions.require(
+            Regex.escape("\\.+*?()|[]{}^$#-&") ==
+                "\\\\\\.\\+\\*\\?\\(\\)\\|\\[\\]\\{\\}\\^\\$\\#\\-\\&"
+        )
+        Assertions.require(Regex.escape("${1}") == "\\$\\{1\\}")
+    }),
+    Test("escape spells pattern whitespace explicitly", () => {
+        Assertions.require(Regex.escape(" ") == "\\ ")
+        Assertions.require(Regex.escape("\t\n\r\f") == "\\t\\n\\r\\f")
+        Assertions.require(
+            Regex.escape("\u{B}\u{85}\u{200E}\u{200F}\u{2028}\u{2029}") ==
+                "\\u{B}\\u{85}\\u{200E}\\u{200F}\\u{2028}\\u{2029}"
+        )
+    }),
+    Test("escape keeps other Unicode text unchanged", () => {
+        Assertions.require(Regex.escape("é日本😀") == "é日本😀")
+        Assertions.require(Regex.escape("\u{3000}\u{A0}e\u{301}") == "\u{3000}\u{A0}e\u{301}")
+        Assertions.require(Regex.escape("a😀.") == "a😀\\.")
+    }),
+    Test("escaped text compiles under every flag without captures", () => {
+        Array("", "i", "m", "s", "x", "imsx").each((flags) => {
+            samples.each((text) => {
+                pattern: Regex.compileWithFlags(Regex.escape(text), flags)
+                Assertions.require(pattern.captureCount == 0)
+            })
+        })
+        null
+    }),
+    Test("escapeReplacement doubles every dollar sign", () => {
+        Assertions.require(Regex.escapeReplacement("") == "")
+        Assertions.require(Regex.escapeReplacement("abc") == "abc")
+        Assertions.require(Regex.escapeReplacement("$") == "$$")
+        Assertions.require(Regex.escapeReplacement("$$") == "$$$$")
+        Assertions.require(Regex.escapeReplacement("${1}") == "$${1}")
+        Assertions.require(Regex.escapeReplacement("${name}${0}") == "$${name}$${0}")
+        Assertions.require(Regex.escapeReplacement("a$b$c") == "a$$b$$c")
+    }),
+    Test("escapeReplacement keeps braces, backslashes, and Unicode text", () => {
+        Assertions.require(Regex.escapeReplacement("{}\\") == "{}\\")
+        Assertions.require(Regex.escapeReplacement("\\${x}") == "\\$${x}")
+        Assertions.require(Regex.escapeReplacement("€$€😀") == "€$$€😀")
+        Assertions.require(Regex.escapeReplacement("é\u{301}") == "é\u{301}")
+    }),
+    Test("escaping rejects non-String arguments", () => {
+        Assertions.signals(Error, () => { Regex.escape(null) })
+        Assertions.signals(Error, () => { Regex.escape(1) })
+        Assertions.signals(Error, () => { Regex.escapeReplacement(null) })
+        Assertions.signals(Error, () => { Regex.escapeReplacement(Encoding.UTF8.encode("$")) })
+        null
+    })
+]

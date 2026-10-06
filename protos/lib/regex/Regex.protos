@@ -1,0 +1,1413 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Protos regular expressions (D187): a restricted, portable, predictable
+//! dialect whose matching unit is the Unicode scalar, with Unicode 17.0.0
+//! properties, simple locale-independent case folding, no implicit
+//! normalization, and no grapheme matching.
+//!
+//! Accepted syntax: literals; `\t`, `\n`, `\r`, `\f`; `\u{HEX}` scalar escapes
+//! (1 to 6 hexadecimal digits); a backslash before any printable ASCII scalar
+//! that is neither a letter nor a digit (including space and `#`); `.`;
+//! classes `[...]` and `[^...]` with ranges, nested classes, intersection `&&`,
+//! and subtraction `--`; `\d`, `\s`, `\w` and their negations; `\p{...}` and
+//! `\P{...}`; concatenation; ordered alternation `|`; numbered `(...)`,
+//! non-capturing `(?:...)`, and named `(?<name>...)` groups; greedy `?`, `*`,
+//! `+`, `{n}`, `{n,}`, `{n,m}` and their lazy forms with a trailing `?`; and the
+//! assertions `^`, `$`, `\A`, `\z`, `\b`, `\B`. Everything else signals an
+//! ordinary Error, including backreferences, look-around, atomic groups,
+//! possessive quantifiers, recursion, conditionals, inline flags, `\G`, `\K`,
+//! `\X`, and POSIX bracket classes. Literal `]`, `{`, and `}`, and literal `[`,
+//! `]`, `-`, and `&` inside a class, must be escaped.
+//!
+//! `\p{...}` accepts a General_Category value, one of the binary properties
+//! Alphabetic, Uppercase, Lowercase, White_Space, Noncharacter_Code_Point, and
+//! Default_Ignorable_Code_Point, `Any`, `ASCII`, `Assigned`, or a Script value,
+//! tried in that order; or `name=value` where `name` is General_Category,
+//! Script, or Script_Extensions. Names and values match loosely as Unicode
+//! aliases. `\d` is Decimal_Number, `\s` is White_Space, and `\w` is the UTS #18
+//! word set (Alphabetic, Mark, Decimal_Number, Connector_Punctuation,
+//! Join_Control).
+
+/// Compiles `source` into a fresh, frozen Pattern under the flag letters of
+/// `flags`: `i` (simple Unicode case-insensitive), `m` (`^` and `$` at line
+/// boundaries: CRLF, LF, CR, NEL, LS, PS), `s` (`.` also matches those line
+/// terminators), and `x` (Pattern_White_Space and `#` comments to the end of
+/// the line are ignored outside classes; unescaped whitespace or `#` inside a
+/// class signals an Error). Each letter may appear at most once and their order
+/// is irrelevant. A non-String argument, an unknown or repeated flag, or a
+/// source outside the accepted dialect signals an Error.
+///
+/// A Pattern exposes `source`, the canonical `flags` String (present letters in
+/// `imsx` order), `captureCount`, the number of explicit capturing groups,
+/// numbered from 1 in opening-parenthesis order, and `captureNames`, a frozen
+/// Map from each capture name to its group number. Independent compilations
+/// answer distinct Patterns; equality is ordinary identity.
+compileWithFlags: ((unicode) => {
+    Arrays: import("std:collections/Array")
+
+    maxScalar: 1114111
+
+    // Answers a fresh Array of `count` nulls in O(count): Arrays do not grow,
+    // and doubling halves keeps the copying geometric.
+    sized: null
+    sized = (count) => {
+        result: Array()
+        (count > 0).ifTrue(() => {
+            half: sized(count.div(2))
+            result = Array(...half, ...half)
+            ((count % 2) == 1).ifTrue(() => {
+                result = Array(...result, null)
+            })
+        })
+        result
+    }
+
+    // Answers a frozen Array of the values stored under keys 0..count-1.
+    frozenArray: (entries, count) => {
+        result: sized(count)
+        index: 0
+        (() => index < count).whileTrue() {
+            result[index] = entries[index]
+            index = index + 1
+        }
+        result.freeze()
+        result
+    }
+
+    // Character sets are frozen Arrays [lo0, hi0, lo1, hi1, ...] of ascending,
+    // disjoint, non-adjacent inclusive Unicode scalar ranges; surrogates are
+    // never members.
+
+    // Collects ranges supplied in ascending start order, coalescing overlapping
+    // and adjacent ranges.
+    newRangeWriter: () => {
+        bounds: Map()
+        count: 0
+        low: -2
+        high: -2
+        add: (rangeLow, rangeHigh) => {
+            (rangeLow <= (high + 1)).ifTrueIfFalse(() => {
+                (rangeHigh > high).ifTrue(() => {
+                    high = rangeHigh
+                })
+            }, () => {
+                (high >= 0).ifTrue(() => {
+                    bounds[count] = low
+                    bounds[count + 1] = high
+                    count = count + 2
+                })
+                low = rangeLow
+                high = rangeHigh
+            })
+        }
+        finish: () => {
+            (high >= 0).ifTrue(() => {
+                bounds[count] = low
+                bounds[count + 1] = high
+                count = count + 2
+                high = -2
+            })
+            frozenArray(bounds, count)
+        }
+        writer: { add: add; finish: finish }
+        writer
+    }
+
+    scalarSet: [0, 55295, 57344, 1114111]
+    scalarSet.freeze()
+    asciiSet: [0, 127]
+    asciiSet.freeze()
+    // LF, CR, NEL, LINE SEPARATOR, and PARAGRAPH SEPARATOR; CRLF is a pair of them.
+    lineTerminatorSet: [10, 10, 13, 13, 133, 133, 8232, 8233]
+    lineTerminatorSet.freeze()
+
+    singleton: (scalar) => {
+        result: [scalar, scalar]
+        result.freeze()
+        result
+    }
+
+    union: (left, right) => {
+        writer: newRangeWriter()
+        leftIndex: 0
+        rightIndex: 0
+        (() => (leftIndex < left.size()) || (rightIndex < right.size())).whileTrue() {
+            takeLeft: (rightIndex >= right.size()) ||
+                ((leftIndex < left.size()) && (left[leftIndex] <= right[rightIndex]))
+            takeLeft.ifTrueIfFalse(() => {
+                writer.add(left[leftIndex], left[leftIndex + 1])
+                leftIndex = leftIndex + 2
+            }, () => {
+                writer.add(right[rightIndex], right[rightIndex + 1])
+                rightIndex = rightIndex + 2
+            })
+        }
+        writer.finish()
+    }
+
+    intersect: (left, right) => {
+        writer: newRangeWriter()
+        leftIndex: 0
+        rightIndex: 0
+        (() => (leftIndex < left.size()) && (rightIndex < right.size())).whileTrue() {
+            low: left[leftIndex]
+            (right[rightIndex] > low).ifTrue(() => {
+                low = right[rightIndex]
+            })
+            high: left[leftIndex + 1]
+            (right[rightIndex + 1] < high).ifTrue(() => {
+                high = right[rightIndex + 1]
+            })
+            (low <= high).ifTrue(() => {
+                writer.add(low, high)
+            })
+            (left[leftIndex + 1] < right[rightIndex + 1]).ifTrueIfFalse(() => {
+                leftIndex = leftIndex + 2
+            }, () => {
+                rightIndex = rightIndex + 2
+            })
+        }
+        writer.finish()
+    }
+
+    // The complement is taken within the Unicode scalar values.
+    complement: (set) => {
+        writer: newRangeWriter()
+        next: 0
+        index: 0
+        (() => index < set.size()).whileTrue() {
+            (set[index] > next).ifTrue(() => {
+                writer.add(next, set[index] - 1)
+            })
+            next = set[index + 1] + 1
+            index = index + 2
+        }
+        (next <= maxScalar).ifTrue(() => {
+            writer.add(next, maxScalar)
+        })
+        intersect(writer.finish(), scalarSet)
+    }
+
+    subtract: (left, right) => {
+        intersect(left, complement(right))
+    }
+
+    // Normalizes `count` unordered [low, high] pairs stored under keys 0..count-1.
+    fromPairs: (pairs, count) => {
+        sorted: Arrays.sort(frozenArray(pairs, count), (first, second) => {
+            first[0] < second[0]
+        })
+        writer: newRangeWriter()
+        sorted.each((pair) => {
+            writer.add(pair[0], pair[1])
+        })
+        writer.finish()
+    }
+
+    // Unicode property policy. The facility only resolves Unicode 17.0.0 data;
+    // which properties are accepted and in which order bare names are tried is
+    // decided here.
+    enumeratedProperties: ["General_Category", "Script", "Script_Extensions"]
+    binaryProperties: [
+        "Alphabetic",
+        "Uppercase",
+        "Lowercase",
+        "White_Space",
+        "Noncharacter_Code_Point",
+        "Default_Ignorable_Code_Point"
+    ]
+
+    includes: (names, candidate) => {
+        found: false
+        (candidate !== null).ifTrue(() => {
+            names.each((name) => {
+                (name == candidate).ifTrue(() => {
+                    found = true
+                })
+            })
+        })
+        found
+    }
+
+    // ASCII lowercase without spaces, hyphens, or underscores, for the names
+    // that are not Unicode property aliases.
+    looseName: (text) => {
+        output: Encoding.UTF8.encode("")
+        Encoding.UTF8.encode(text).each((octet) => {
+            ((octet == 32) || (octet == 45) || (octet == 95)).ifFalse(() => {
+                ((octet >= 65) && (octet <= 90)).ifTrueIfFalse(() => {
+                    output.add(octet + 32)
+                }, () => {
+                    output.add(octet)
+                })
+            })
+        })
+        Encoding.UTF8.decode(output)
+    }
+
+    // Answers the set named by `\p{name}` (`value` null) or `\p{name=value}`.
+    propertySet: (name, value) => {
+        result: null
+        (value === null).ifTrueIfFalse(() => {
+            result = unicode.ranges("General_Category", name)
+            (result === null).ifTrue(() => {
+                canonical: unicode.propertyName(name)
+                includes(binaryProperties, canonical).ifTrue(() => {
+                    result = unicode.ranges(canonical, "Yes")
+                })
+            })
+            (result === null).ifTrue(() => {
+                loose: looseName(name)
+                (loose == "any").ifTrue(() => {
+                    result = scalarSet
+                })
+                (loose == "ascii").ifTrue(() => {
+                    result = asciiSet
+                })
+                (loose == "assigned").ifTrue(() => {
+                    result = complement(unicode.ranges("General_Category", "Unassigned"))
+                })
+            })
+            (result === null).ifTrue(() => {
+                result = unicode.ranges("Script", name)
+            })
+        }, () => {
+            canonical: unicode.propertyName(name)
+            includes(enumeratedProperties, canonical).ifTrue(() => {
+                result = unicode.ranges(canonical, value)
+            })
+        })
+        (result === null).ifTrue(() => {
+            Error().signal()
+        })
+        result
+    }
+
+    digitSet: unicode.ranges("General_Category", "Decimal_Number")
+    spaceSet: unicode.ranges("White_Space", "Yes")
+    wordSet: union(
+        union(
+            union(
+                unicode.ranges("Alphabetic", "Yes"),
+                unicode.ranges("General_Category", "Mark")
+            ),
+            union(
+                digitSet,
+                unicode.ranges("General_Category", "Connector_Punctuation")
+            )
+        ),
+        unicode.ranges("Join_Control", "Yes")
+    )
+    dotSet: subtract(scalarSet, lineTerminatorSet)
+
+    isAsciiLetter: (scalar) => {
+        ((scalar >= 65) && (scalar <= 90)) || ((scalar >= 97) && (scalar <= 122))
+    }
+
+    isAsciiDigit: (scalar) => {
+        (scalar >= 48) && (scalar <= 57)
+    }
+
+    hexValue: (scalar) => {
+        result: -1
+        isAsciiDigit(scalar).ifTrue(() => {
+            result = scalar - 48
+        })
+        ((scalar >= 65) && (scalar <= 70)).ifTrue(() => {
+            result = scalar - 55
+        })
+        ((scalar >= 97) && (scalar <= 102)).ifTrue(() => {
+            result = scalar - 87
+        })
+        result
+    }
+
+    isPatternWhiteSpace: (scalar) => {
+        ((scalar >= 9) && (scalar <= 13)) || (scalar == 32) || (scalar == 133) ||
+            (scalar == 8206) || (scalar == 8207) || (scalar == 8232) || (scalar == 8233)
+    }
+
+    isLineTerminator: (scalar) => {
+        (scalar == 10) || (scalar == 13) || (scalar == 133) || (scalar == 8232) || (scalar == 8233)
+    }
+
+    // Decodes the UTF-8 encoding of a String into a Map from scalar index to
+    // Unicode scalar value. Core String indexing is not constant time, so the
+    // parser reads this Map instead.
+    decodeScalars: (text) => {
+        scalars: Map()
+        count: 0
+        pending: 0
+        value: 0
+        Encoding.UTF8.encode(text).each((octet) => {
+            (pending > 0).ifTrueIfFalse(() => {
+                value = value * 64 + (octet - 128)
+                pending = pending - 1
+            }, () => {
+                value = octet
+                ((octet >= 192) && (octet < 224)).ifTrue(() => {
+                    value = octet - 192
+                    pending = 1
+                })
+                ((octet >= 224) && (octet < 240)).ifTrue(() => {
+                    value = octet - 224
+                    pending = 2
+                })
+                (octet >= 240).ifTrue(() => {
+                    value = octet - 240
+                    pending = 3
+                })
+            })
+            (pending == 0).ifTrue(() => {
+                scalars[count] = value
+                count = count + 1
+            })
+        })
+        scalars
+    }
+
+    // Private Pattern construction. The compiled `program` is reachable only
+    // from Closures created here, never from a slot; LIB014-2 adds the matching
+    // operations to this object.
+    newPattern: (patternSource, patternFlags, program) => {
+        pattern: {
+            source: patternSource
+            flags: patternFlags
+            captureCount: program.captureCount
+            captureNames: program.captureNames
+        }
+        pattern.freeze()
+        pattern
+    }
+
+    // Private immutable Match construction for the matcher (LIB014-2).
+    // `bounds` holds 2 * (captureCount + 1) entries: the start and end Unicode
+    // scalar offsets of group g at 2g and 2g + 1 as a half-open span, both null
+    // when the group did not participate in the selected match. `texts` holds
+    // captureCount + 1 entries: the captured String of each participating
+    // group, possibly empty, or null. Group 0 is the whole match and always
+    // participates. A repeated group reports its last selected participation.
+    newMatch: (program, bounds, texts) => {
+        groupTotal: program.captureCount + 1
+        ((bounds.size() == (2 * groupTotal)) && (texts.size() == groupTotal)).ifFalse(() => {
+            Error().signal()
+        })
+        capturedBounds: Array(...bounds)
+        capturedBounds.freeze()
+        capturedTexts: Array(...texts)
+        capturedTexts.freeze()
+        groupIndex: 0
+        (() => groupIndex < groupTotal).whileTrue() {
+            first: capturedBounds[2 * groupIndex]
+            last: capturedBounds[2 * groupIndex + 1]
+            captured: capturedTexts[groupIndex]
+            absent: (first === null) && (last === null) && (captured === null)
+            present: Integer.recognizes(first) && Integer.recognizes(last) &&
+                String.recognizes(captured)
+            present.ifTrue(() => {
+                ((first >= 0) && (first <= last) && (captured.size() == (last - first))).ifFalse(() => {
+                    Error().signal()
+                })
+            })
+            ((absent || present) && (present || (groupIndex > 0))).ifFalse(() => {
+                Error().signal()
+            })
+            groupIndex = groupIndex + 1
+        }
+
+        // Answers the group number selected by an Integer number or a capture name.
+        selectGroup: (key) => {
+            selected: null
+            Integer.recognizes(key).ifTrue(() => {
+                ((key >= 0) && (key < groupTotal)).ifTrue(() => {
+                    selected = key
+                })
+            })
+            String.recognizes(key).ifTrue(() => {
+                program.captureNames.containsKey(key).ifTrue(() => {
+                    selected = program.captureNames[key]
+                })
+            })
+            (selected === null).ifTrue(() => {
+                Error().signal()
+            })
+            selected
+        }
+
+        result: {
+            captureCount: program.captureCount
+            group: (key) => {
+                capturedTexts[selectGroup(key)]
+            }
+            start: (key) => {
+                capturedBounds[2 * selectGroup(key)]
+            }
+            end: (key) => {
+                capturedBounds[2 * selectGroup(key) + 1]
+            }
+            // Fresh snapshots: mutating them never alters the Match.
+            groups: () => {
+                Array(...capturedTexts)
+            }
+            namedGroups: () => {
+                snapshot: Map()
+                program.groupNames.each((groupName) => {
+                    (groupName === null).ifFalse(() => {
+                        snapshot[groupName] = capturedTexts[program.captureNames[groupName]]
+                    })
+                })
+                snapshot
+            }
+        }
+        result.freeze()
+        result
+    }
+
+    (source, flags) => {
+        String.recognizes(source).ifFalse(() => {
+            Error().signal()
+        })
+        String.recognizes(flags).ifFalse(() => {
+            Error().signal()
+        })
+
+        caseInsensitive: false
+        multiline: false
+        dotAll: false
+        extended: false
+        Encoding.UTF8.encode(flags).each((octet) => {
+            known: false
+            (octet == 105).ifTrue(() => {
+                caseInsensitive.ifTrue(() => {
+                    Error().signal()
+                })
+                caseInsensitive = true
+                known = true
+            })
+            (octet == 109).ifTrue(() => {
+                multiline.ifTrue(() => {
+                    Error().signal()
+                })
+                multiline = true
+                known = true
+            })
+            (octet == 115).ifTrue(() => {
+                dotAll.ifTrue(() => {
+                    Error().signal()
+                })
+                dotAll = true
+                known = true
+            })
+            (octet == 120).ifTrue(() => {
+                extended.ifTrue(() => {
+                    Error().signal()
+                })
+                extended = true
+                known = true
+            })
+            known.ifFalse(() => {
+                Error().signal()
+            })
+        })
+        canonicalFlags: ""
+        caseInsensitive.ifTrue(() => {
+            canonicalFlags = canonicalFlags + "i"
+        })
+        multiline.ifTrue(() => {
+            canonicalFlags = canonicalFlags + "m"
+        })
+        dotAll.ifTrue(() => {
+            canonicalFlags = canonicalFlags + "s"
+        })
+        extended.ifTrue(() => {
+            canonicalFlags = canonicalFlags + "x"
+        })
+
+        // Under `i`, every literal and class leaf is closed under simple case
+        // folding before set operations and negation.
+        caseFold: (set) => {
+            result: set
+            caseInsensitive.ifTrue(() => {
+                result = unicode.caseClosure(set)
+            })
+            result
+        }
+
+        scalars: decodeScalars(source)
+        length: scalars.size()
+        position: 0
+
+        // Answers the scalar at `index`, or -1 past the end of the source.
+        scalarAt: (index) => {
+            result: -1
+            (index < length).ifTrue(() => {
+                result = scalars[index]
+            })
+            result
+        }
+
+        // The compiled program is a postfix node table: every node is a frozen
+        // record and refers to its children by smaller node indexes, so later
+        // stages can traverse it iteratively without reinterpreting the source.
+        // Node `op`s: "set" (ranges), "empty", "assert" (kind), "concat" (items),
+        // "alternate" (items in priority order), "capture" (group, name, item),
+        // and "repeat" (item, min, max or null when unbounded, greedy). Counted
+        // repetition is never expanded. `weight` estimates the expanded
+        // automaton size of a node as an unbounded Integer.
+        nodes: Map()
+        nodeCount: 0
+        addNode: (node) => {
+            node.freeze()
+            nodes[nodeCount] = node
+            nodeCount = nodeCount + 1
+            nodeCount - 1
+        }
+
+        setNode: (ranges) => {
+            addNode({ op: "set"; ranges: ranges; weight: 1 })
+        }
+
+        weightOf: (indexes) => {
+            total: 0
+            indexes.each((index) => {
+                total = total + nodes[index].weight
+            })
+            total
+        }
+
+        captureCount: 0
+        captureNames: Map()
+        usesWordBoundary: false
+
+        // Group frames form an explicit stack, so nesting depth never consumes
+        // host stack. `last` is "none", "atom", "assert", or "quantified" and
+        // decides whether a quantifier may follow.
+        newFrame: (group, name) => {
+            created: {
+                group: group
+                name: name
+                alternatives: Map()
+                alternativeCount: 0
+                items: Map()
+                itemCount: 0
+                last: "none"
+            }
+            created
+        }
+        frames: Map()
+        depth: 0
+        frame: newFrame(null, null)
+
+        pushItem: (node, kind) => {
+            frame.items[frame.itemCount] = node
+            frame.itemCount = frame.itemCount + 1
+            frame.last = kind
+        }
+
+        pushAssertion: (kind) => {
+            ((kind == "wordBoundary") || (kind == "notWordBoundary")).ifTrue(() => {
+                usesWordBoundary = true
+            })
+            pushItem(addNode({ op: "assert"; kind: kind; weight: 1 }), "assert")
+        }
+
+        finishSequence: (current) => {
+            count: current.itemCount
+            result: null
+            (count == 0).ifTrue(() => {
+                result = addNode({ op: "empty"; weight: 1 })
+            })
+            (count == 1).ifTrue(() => {
+                result = current.items[0]
+            })
+            (count > 1).ifTrue(() => {
+                items: frozenArray(current.items, count)
+                result = addNode({ op: "concat"; items: items; weight: weightOf(items) })
+            })
+            current.items = Map()
+            current.itemCount = 0
+            current.last = "none"
+            result
+        }
+
+        finishAlternation: (current) => {
+            current.alternatives[current.alternativeCount] = finishSequence(current)
+            current.alternativeCount = current.alternativeCount + 1
+            count: current.alternativeCount
+            result: current.alternatives[0]
+            (count > 1).ifTrue(() => {
+                items: frozenArray(current.alternatives, count)
+                result = addNode({ op: "alternate"; items: items; weight: weightOf(items) + count - 1 })
+            })
+            result
+        }
+
+        parseCaptureName: () => {
+            bytes: Encoding.UTF8.encode("")
+            (isAsciiLetter(scalarAt(position)) || (scalarAt(position) == 95)).ifFalse(() => {
+                Error().signal()
+            })
+            (() => isAsciiLetter(scalarAt(position)) || isAsciiDigit(scalarAt(position)) ||
+                (scalarAt(position) == 95)).whileTrue() {
+                bytes.add(scalarAt(position))
+                position = position + 1
+            }
+            (scalarAt(position) == 62).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            Encoding.UTF8.decode(bytes)
+        }
+
+        // Capturing groups are numbered when their opening parenthesis is read.
+        openGroup: () => {
+            position = position + 1
+            group: null
+            name: null
+            (scalarAt(position) == 63).ifTrueIfFalse(() => {
+                position = position + 1
+                marker: scalarAt(position)
+                handled: false
+                (marker == 58).ifTrue(() => {
+                    position = position + 1
+                    handled = true
+                })
+                (marker == 60).ifTrue(() => {
+                    position = position + 1
+                    name = parseCaptureName()
+                    captureCount = captureCount + 1
+                    group = captureCount
+                    handled = true
+                })
+                // Look-around, atomic, inline-flag, conditional, recursive,
+                // branch-reset, comment, and callout groups are excluded.
+                handled.ifFalse(() => {
+                    Error().signal()
+                })
+            }, () => {
+                captureCount = captureCount + 1
+                group = captureCount
+            })
+            (name === null).ifFalse(() => {
+                captureNames.containsKey(name).ifTrue(() => {
+                    Error().signal()
+                })
+                captureNames[name] = group
+            })
+            frames[depth] = frame
+            depth = depth + 1
+            frame = newFrame(group, name)
+        }
+
+        closeGroup: () => {
+            (depth == 0).ifTrue(() => {
+                Error().signal()
+            })
+            inner: finishAlternation(frame)
+            closed: frame
+            depth = depth - 1
+            frame = frames[depth]
+            node: inner
+            (closed.group === null).ifFalse(() => {
+                node = addNode({
+                    op: "capture"
+                    group: closed.group
+                    name: closed.name
+                    item: inner
+                    weight: nodes[inner].weight + 2
+                })
+            })
+            pushItem(node, "atom")
+            position = position + 1
+        }
+
+        parseDecimal: () => {
+            isAsciiDigit(scalarAt(position)).ifFalse(() => {
+                Error().signal()
+            })
+            value: 0
+            (() => isAsciiDigit(scalarAt(position))).whileTrue() {
+                value = value * 10 + (scalarAt(position) - 48)
+                position = position + 1
+            }
+            value
+        }
+
+        parseQuantifier: () => {
+            (frame.last == "atom").ifFalse(() => {
+                Error().signal()
+            })
+            first: scalarAt(position)
+            minimum: 0
+            maximum: null
+            position = position + 1
+            (first == 43).ifTrue(() => {
+                minimum = 1
+            })
+            (first == 63).ifTrue(() => {
+                maximum = 1
+            })
+            (first == 123).ifTrue(() => {
+                minimum = parseDecimal()
+                (scalarAt(position) == 125).ifTrueIfFalse(() => {
+                    maximum = minimum
+                }, () => {
+                    (scalarAt(position) == 44).ifFalse(() => {
+                        Error().signal()
+                    })
+                    position = position + 1
+                    (scalarAt(position) == 125).ifFalse(() => {
+                        maximum = parseDecimal()
+                        (maximum < minimum).ifTrue(() => {
+                            Error().signal()
+                        })
+                    })
+                    (scalarAt(position) == 125).ifFalse(() => {
+                        Error().signal()
+                    })
+                })
+                position = position + 1
+            })
+            greedy: true
+            (scalarAt(position) == 63).ifTrue(() => {
+                greedy = false
+                position = position + 1
+            })
+            // Possessive quantifiers are excluded.
+            (scalarAt(position) == 43).ifTrue(() => {
+                Error().signal()
+            })
+            index: frame.itemCount - 1
+            item: frame.items[index]
+            copies: maximum
+            (maximum === null).ifTrue(() => {
+                copies = minimum + 1
+            })
+            weight: (nodes[item].weight + 1) * copies + 1
+            frame.items[index] = addNode({
+                op: "repeat"
+                item: item
+                min: minimum
+                max: maximum
+                greedy: greedy
+                weight: weight
+            })
+            frame.last = "quantified"
+        }
+
+        parseScalarEscape: () => {
+            (scalarAt(position) == 123).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            value: 0
+            digits: 0
+            (() => (digits <= 6) && (hexValue(scalarAt(position)) >= 0)).whileTrue() {
+                value = value * 16 + hexValue(scalarAt(position))
+                digits = digits + 1
+                position = position + 1
+            }
+            ((digits < 1) || (digits > 6) || (scalarAt(position) != 125)).ifTrue(() => {
+                Error().signal()
+            })
+            position = position + 1
+            ((value > maxScalar) || ((value >= 55296) && (value <= 57343))).ifTrue(() => {
+                Error().signal()
+            })
+            value
+        }
+
+        propertyCache: Map()
+
+        parseProperty: () => {
+            (scalarAt(position) == 123).ifFalse(() => {
+                Error().signal()
+            })
+            position = position + 1
+            nameBytes: Encoding.UTF8.encode("")
+            valueBytes: null
+            (() => scalarAt(position) != 125).whileTrue() {
+                current: scalarAt(position)
+                // Every Unicode property and value alias is ASCII.
+                ((current < 0) || (current > 127)).ifTrue(() => {
+                    Error().signal()
+                })
+                (current == 61).ifTrueIfFalse(() => {
+                    (valueBytes === null).ifFalse(() => {
+                        Error().signal()
+                    })
+                    valueBytes = Encoding.UTF8.encode("")
+                }, () => {
+                    target: nameBytes
+                    (valueBytes === null).ifFalse(() => {
+                        target = valueBytes
+                    })
+                    target.add(current)
+                })
+                position = position + 1
+            }
+            position = position + 1
+            (nameBytes.size() == 0).ifTrue(() => {
+                Error().signal()
+            })
+            name: Encoding.UTF8.decode(nameBytes)
+            value: null
+            key: "=" + name
+            (valueBytes === null).ifFalse(() => {
+                (valueBytes.size() == 0).ifTrue(() => {
+                    Error().signal()
+                })
+                value = Encoding.UTF8.decode(valueBytes)
+                key = name + "=" + value
+            })
+            propertyCache.containsKey(key).ifFalse(() => {
+                propertyCache[key] = propertySet(name, value)
+            })
+            propertyCache[key]
+        }
+
+        // Reads one escape at `position` (a backslash) and answers a record of
+        // kind "scalar" (value), "set" (ranges, already case-folded and
+        // negated), or "assert" (name). Assertions are invalid inside classes.
+        parseEscape: (inClass) => {
+            position = position + 1
+            escaped: scalarAt(position)
+            (escaped < 0).ifTrue(() => {
+                Error().signal()
+            })
+            position = position + 1
+            result: null
+            answerScalar: (value) => {
+                result = { kind: "scalar"; value: value }
+            }
+            answerSet: (ranges) => {
+                result = { kind: "set"; ranges: ranges }
+            }
+            answerAssertion: (name) => {
+                inClass.ifTrue(() => {
+                    Error().signal()
+                })
+                result = { kind: "assert"; name: name }
+            }
+            (escaped == 116).ifTrue(() => {
+                answerScalar(9)
+            })
+            (escaped == 110).ifTrue(() => {
+                answerScalar(10)
+            })
+            (escaped == 114).ifTrue(() => {
+                answerScalar(13)
+            })
+            (escaped == 102).ifTrue(() => {
+                answerScalar(12)
+            })
+            (escaped == 117).ifTrue(() => {
+                answerScalar(parseScalarEscape())
+            })
+            (escaped == 100).ifTrue(() => {
+                answerSet(caseFold(digitSet))
+            })
+            (escaped == 68).ifTrue(() => {
+                answerSet(complement(caseFold(digitSet)))
+            })
+            (escaped == 115).ifTrue(() => {
+                answerSet(caseFold(spaceSet))
+            })
+            (escaped == 83).ifTrue(() => {
+                answerSet(complement(caseFold(spaceSet)))
+            })
+            (escaped == 119).ifTrue(() => {
+                answerSet(caseFold(wordSet))
+            })
+            (escaped == 87).ifTrue(() => {
+                answerSet(complement(caseFold(wordSet)))
+            })
+            (escaped == 112).ifTrue(() => {
+                answerSet(caseFold(parseProperty()))
+            })
+            (escaped == 80).ifTrue(() => {
+                answerSet(complement(caseFold(parseProperty())))
+            })
+            (escaped == 65).ifTrue(() => {
+                answerAssertion("textStart")
+            })
+            (escaped == 122).ifTrue(() => {
+                answerAssertion("textEnd")
+            })
+            (escaped == 98).ifTrue(() => {
+                answerAssertion("wordBoundary")
+            })
+            (escaped == 66).ifTrue(() => {
+                answerAssertion("notWordBoundary")
+            })
+            (result === null).ifTrue(() => {
+                // Any other printable ASCII scalar that is neither a letter nor
+                // a digit escapes itself; every other escape is rejected.
+                ((escaped >= 32) && (escaped <= 126) && !isAsciiLetter(escaped) &&
+                    !isAsciiDigit(escaped)).ifFalse(() => {
+                    Error().signal()
+                })
+                answerScalar(escaped)
+            })
+            result
+        }
+
+        literalSet: (scalar) => {
+            caseFold(singleton(scalar))
+        }
+
+        // Class frames also form an explicit stack. Within one class, juxtaposed
+        // items form a union operand; `&&` and `--` combine operands left to
+        // right; negation applies last.
+        newClassFrame: (inverted) => {
+            created: {
+                inverted: inverted
+                left: null
+                operator: null
+                pairs: Map()
+                pairCount: 0
+                nested: Map()
+                nestedCount: 0
+            }
+            created
+        }
+
+        addNested: (classFrame, ranges) => {
+            classFrame.nested[classFrame.nestedCount] = ranges
+            classFrame.nestedCount = classFrame.nestedCount + 1
+        }
+
+        finishOperand: (classFrame) => {
+            ((classFrame.pairCount + classFrame.nestedCount) == 0).ifTrue(() => {
+                Error().signal()
+            })
+            operand: caseFold(fromPairs(classFrame.pairs, classFrame.pairCount))
+            index: 0
+            (() => index < classFrame.nestedCount).whileTrue() {
+                operand = union(operand, classFrame.nested[index])
+                index = index + 1
+            }
+            classFrame.pairs = Map()
+            classFrame.pairCount = 0
+            classFrame.nested = Map()
+            classFrame.nestedCount = 0
+            (classFrame.operator === null).ifTrue(() => {
+                classFrame.left = operand
+            })
+            (classFrame.operator == "and").ifTrue(() => {
+                classFrame.left = intersect(classFrame.left, operand)
+            })
+            (classFrame.operator == "minus").ifTrue(() => {
+                classFrame.left = subtract(classFrame.left, operand)
+            })
+        }
+
+        // Reads one class item and answers its scalar, or -1 when the item was a
+        // set escape, which is added to `classFrame` directly.
+        parseClassAtom: (classFrame) => {
+            current: scalarAt(position)
+            ((current < 0) || (current == 91) || (current == 93) || (current == 45) ||
+                (current == 38)).ifTrue(() => {
+                Error().signal()
+            })
+            (extended && (isPatternWhiteSpace(current) || (current == 35))).ifTrue(() => {
+                Error().signal()
+            })
+            result: -1
+            (current == 92).ifTrueIfFalse(() => {
+                token: parseEscape(true)
+                (token.kind == "scalar").ifTrue(() => {
+                    result = token.value
+                })
+                (token.kind == "set").ifTrue(() => {
+                    addNested(classFrame, token.ranges)
+                })
+            }, () => {
+                result = current
+                position = position + 1
+            })
+            result
+        }
+
+        parseClass: () => {
+            classFrames: Map()
+            classDepth: 0
+            result: null
+            openClass: () => {
+                position = position + 1
+                // POSIX bracket expressions are excluded: `[:` and `[=` never
+                // open a class, and inside a class neither does `[.`. An
+                // outermost class may start with a literal `.`.
+                ((scalarAt(position) == 58) || (scalarAt(position) == 61) ||
+                    ((classDepth > 0) && (scalarAt(position) == 46))).ifTrue(() => {
+                    Error().signal()
+                })
+                inverted: scalarAt(position) == 94
+                inverted.ifTrue(() => {
+                    position = position + 1
+                })
+                classFrames[classDepth] = newClassFrame(inverted)
+                classDepth = classDepth + 1
+            }
+            openClass()
+            (() => result === null).whileTrue() {
+                current: classFrames[classDepth - 1]
+                first: scalarAt(position)
+                second: scalarAt(position + 1)
+                kind: "atom"
+                (first == 93).ifTrue(() => {
+                    kind = "close"
+                })
+                (first == 91).ifTrue(() => {
+                    kind = "open"
+                })
+                ((first == 38) && (second == 38)).ifTrue(() => {
+                    kind = "and"
+                })
+                ((first == 45) && (second == 45)).ifTrue(() => {
+                    kind = "minus"
+                })
+                // `~~` is symmetric difference in other dialects; it is excluded.
+                ((first == 126) && (second == 126)).ifTrue(() => {
+                    Error().signal()
+                })
+
+                (kind == "close").ifTrue(() => {
+                    finishOperand(current)
+                    finished: current.left
+                    current.inverted.ifTrue(() => {
+                        finished = complement(finished)
+                    })
+                    position = position + 1
+                    classDepth = classDepth - 1
+                    (classDepth == 0).ifTrueIfFalse(() => {
+                        result = finished
+                    }, () => {
+                        addNested(classFrames[classDepth - 1], finished)
+                    })
+                })
+                (kind == "open").ifTrue(() => {
+                    openClass()
+                })
+                ((kind == "and") || (kind == "minus")).ifTrue(() => {
+                    finishOperand(current)
+                    current.operator = kind
+                    position = position + 2
+                })
+                (kind == "atom").ifTrue(() => {
+                    low: parseClassAtom(current)
+                    (low >= 0).ifTrue(() => {
+                        high: low
+                        ((scalarAt(position) == 45) && (scalarAt(position + 1) != 45)).ifTrue(() => {
+                            position = position + 1
+                            high = parseClassAtom(current)
+                            ((high < 0) || (high < low)).ifTrue(() => {
+                                Error().signal()
+                            })
+                        })
+                        current.pairs[current.pairCount] = [low, high]
+                        current.pairCount = current.pairCount + 1
+                    })
+                })
+            }
+            result
+        }
+
+        skipIgnorable: () => {
+            extended.ifTrue(() => {
+                (() => isPatternWhiteSpace(scalarAt(position)) || (scalarAt(position) == 35)).whileTrue() {
+                    (scalarAt(position) == 35).ifTrueIfFalse(() => {
+                        (() => (position < length) && !isLineTerminator(scalars[position])).whileTrue() {
+                            position = position + 1
+                        }
+                    }, () => {
+                        position = position + 1
+                    })
+                }
+            })
+        }
+
+        (() => position < length).whileTrue() {
+            skipIgnorable()
+            (position < length).ifTrue(() => {
+                current: scalars[position]
+                kind: "literal"
+                (current == 40).ifTrue(() => {
+                    kind = "open"
+                })
+                (current == 41).ifTrue(() => {
+                    kind = "close"
+                })
+                (current == 124).ifTrue(() => {
+                    kind = "alternate"
+                })
+                ((current == 42) || (current == 43) || (current == 63) || (current == 123)).ifTrue(() => {
+                    kind = "quantifier"
+                })
+                (current == 91).ifTrue(() => {
+                    kind = "class"
+                })
+                (current == 92).ifTrue(() => {
+                    kind = "escape"
+                })
+                (current == 46).ifTrue(() => {
+                    kind = "dot"
+                })
+                (current == 94).ifTrue(() => {
+                    kind = "caret"
+                })
+                (current == 36).ifTrue(() => {
+                    kind = "dollar"
+                })
+                // A literal `]` or `}` must be escaped.
+                ((current == 93) || (current == 125)).ifTrue(() => {
+                    Error().signal()
+                })
+
+                (kind == "open").ifTrue(() => {
+                    openGroup()
+                })
+                (kind == "close").ifTrue(() => {
+                    closeGroup()
+                })
+                (kind == "alternate").ifTrue(() => {
+                    frame.alternatives[frame.alternativeCount] = finishSequence(frame)
+                    frame.alternativeCount = frame.alternativeCount + 1
+                    position = position + 1
+                })
+                (kind == "quantifier").ifTrue(() => {
+                    parseQuantifier()
+                })
+                (kind == "class").ifTrue(() => {
+                    pushItem(setNode(parseClass()), "atom")
+                })
+                (kind == "escape").ifTrue(() => {
+                    token: parseEscape(false)
+                    (token.kind == "scalar").ifTrue(() => {
+                        pushItem(setNode(literalSet(token.value)), "atom")
+                    })
+                    (token.kind == "set").ifTrue(() => {
+                        pushItem(setNode(token.ranges), "atom")
+                    })
+                    (token.kind == "assert").ifTrue(() => {
+                        pushAssertion(token.name)
+                    })
+                })
+                (kind == "dot").ifTrue(() => {
+                    dotAll.ifTrueIfFalse(() => {
+                        pushItem(setNode(scalarSet), "atom")
+                    }, () => {
+                        pushItem(setNode(dotSet), "atom")
+                    })
+                    position = position + 1
+                })
+                (kind == "caret").ifTrue(() => {
+                    multiline.ifTrueIfFalse(() => {
+                        pushAssertion("lineStart")
+                    }, () => {
+                        pushAssertion("textStart")
+                    })
+                    position = position + 1
+                })
+                // Outside multiline mode `$` is kept distinct from `\z` as kind
+                // "end", so the matcher applies its end-of-input rule without
+                // reparsing.
+                (kind == "dollar").ifTrue(() => {
+                    multiline.ifTrueIfFalse(() => {
+                        pushAssertion("lineEnd")
+                    }, () => {
+                        pushAssertion("end")
+                    })
+                    position = position + 1
+                })
+                (kind == "literal").ifTrue(() => {
+                    pushItem(setNode(literalSet(current)), "atom")
+                    position = position + 1
+                })
+            })
+        }
+
+        (depth == 0).ifFalse(() => {
+            Error().signal()
+        })
+        root: finishAlternation(frame)
+        captureNames.freeze()
+        groupNames: sized(captureCount + 1)
+        frames = Map()
+        frame = null
+        nameIndex: 0
+        (() => nameIndex < nodeCount).whileTrue() {
+            node: nodes[nameIndex]
+            ((node.op == "capture") && (node.name !== null)).ifTrue(() => {
+                groupNames[node.group] = node.name
+            })
+            nameIndex = nameIndex + 1
+        }
+        groupNames.freeze()
+        boundaryWords: null
+        usesWordBoundary.ifTrue(() => {
+            boundaryWords = wordSet
+        })
+        nodeTable: frozenArray(nodes, nodeCount)
+        rootWeight: nodes[root].weight
+
+        // Private compiled program consumed by the matcher.
+        program: {
+            nodes: nodeTable
+            root: root
+            captureCount: captureCount
+            captureNames: captureNames
+            groupNames: groupNames
+            caseInsensitive: caseInsensitive
+            multiline: multiline
+            dotAll: dotAll
+            wordSet: boundaryWords
+            lineTerminators: lineTerminatorSet
+            weight: rootWeight
+        }
+        program.freeze()
+        nodes = null
+        scalars = null
+        newPattern(source, canonicalFlags, program)
+    }
+})(_regexUnicodeFacility)
+
+// The runtime-provisioned Unicode data facility is captured privately above; it
+// is not module surface.
+context.removeSlot("_regexUnicodeFacility")
+
+/// Compiles `source` without flags; equivalent to
+/// `compileWithFlags(source, "")`.
+compile: (source) => {
+    compileWithFlags(source, "")
+}
+
+/// Answers regex source that matches exactly the scalars of `text` under every
+/// flag combination. Every ASCII syntax character, `#`, `-`, and `&` gains a
+/// backslash; tab, LF, CR, and FF become `\t`, `\n`, `\r`, and `\f`; space
+/// becomes `\ `; and the remaining Pattern_White_Space scalars become
+/// `\u{HEX}` escapes with uppercase hexadecimal digits. Every other scalar is
+/// kept. A non-String argument signals an Error.
+escape: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    appendAscii: (spelling) => {
+        Encoding.UTF8.encode(spelling).each((octet) => {
+            output.add(octet)
+        })
+    }
+    appendHexEscape: (scalar) => {
+        digits: "0123456789ABCDEF"
+        hex: ""
+        remaining: scalar
+        (() => remaining > 0).whileTrue() {
+            hex = digits[remaining % 16] + hex
+            remaining = remaining.div(16)
+        }
+        appendAscii("\\u{" + hex + "}")
+    }
+    // Multi-byte UTF-8 sequences are collected whole so the scalars that are
+    // Pattern_White_Space can be recognized.
+    pending: Encoding.UTF8.encode("")
+    expected: 0
+    scalar: 0
+    Encoding.UTF8.encode(text).each((octet) => {
+        (expected == 0).ifTrueIfFalse(() => {
+            (octet < 128).ifTrueIfFalse(() => {
+                handled: false
+                (octet == 9).ifTrue(() => {
+                    appendAscii("\\t")
+                    handled = true
+                })
+                (octet == 10).ifTrue(() => {
+                    appendAscii("\\n")
+                    handled = true
+                })
+                (octet == 13).ifTrue(() => {
+                    appendAscii("\\r")
+                    handled = true
+                })
+                (octet == 12).ifTrue(() => {
+                    appendAscii("\\f")
+                    handled = true
+                })
+                (octet == 11).ifTrue(() => {
+                    appendHexEscape(11)
+                    handled = true
+                })
+                handled.ifFalse(() => {
+                    special: (octet == 32) || (octet == 35) || (octet == 36) || (octet == 38) ||
+                        (octet == 40) || (octet == 41) || (octet == 42) || (octet == 43) ||
+                        (octet == 45) || (octet == 46) || (octet == 63) || (octet == 91) ||
+                        (octet == 92) || (octet == 93) || (octet == 94) || (octet == 123) ||
+                        (octet == 124) || (octet == 125)
+                    special.ifTrue(() => {
+                        output.add(92)
+                    })
+                    output.add(octet)
+                })
+            }, () => {
+                pending.add(octet)
+                scalar = octet - 192
+                expected = 1
+                (octet >= 224).ifTrue(() => {
+                    scalar = octet - 224
+                    expected = 2
+                })
+                (octet >= 240).ifTrue(() => {
+                    scalar = octet - 240
+                    expected = 3
+                })
+            })
+        }, () => {
+            pending.add(octet)
+            scalar = scalar * 64 + (octet - 128)
+            expected = expected - 1
+            (expected == 0).ifTrue(() => {
+                ((scalar == 133) || (scalar == 8206) || (scalar == 8207) || (scalar == 8232) ||
+                    (scalar == 8233)).ifTrueIfFalse(() => {
+                    appendHexEscape(scalar)
+                }, () => {
+                    pending.each((held) => {
+                        output.add(held)
+                    })
+                })
+                pending = Encoding.UTF8.encode("")
+            })
+        })
+    })
+    Encoding.UTF8.decode(output)
+}
+
+/// Answers replacement text that denotes exactly `text` under the replacement
+/// grammar, in which `$$` is a literal `$` and `${...}` refers to a capture:
+/// every `$` is doubled and every other scalar, including `{`, `}`, and
+/// backslash, is kept. A non-String argument signals an Error.
+escapeReplacement: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
+    output: Encoding.UTF8.encode("")
+    Encoding.UTF8.encode(text).each((octet) => {
+        (octet == 36).ifTrue(() => {
+            output.add(36)
+        })
+        output.add(octet)
+    })
+    Encoding.UTF8.decode(output)
+}

@@ -82,6 +82,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/library/regex",
+            "protos/corpus/library/regex",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
             "protos/package-tool/version",
             "protos/corpus/package-tool/version",
             "protos/test/package"

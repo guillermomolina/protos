@@ -437,7 +437,7 @@ public final class ProtosCoreBootstrap {
     }
 
     /**
-     * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3).
+     * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -459,7 +459,11 @@ public final class ProtosCoreBootstrap {
                 ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
                 Map.of(
                         ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT,
-                        ProtosCommandLineArrayConstructionFacility.createFactory()));
+                        ProtosCommandLineArrayConstructionFacility.createFactory()),
+                ProtosRegexUnicodeFacility.MODULE_KEY,
+                Map.of(
+                        ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT,
+                        ProtosRegexUnicodeFacility.createFacility()));
     }
 
 

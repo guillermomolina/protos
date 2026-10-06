@@ -1,0 +1,73 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+rejects: (...sources) => {
+    sources.each((source) => {
+        Assertions.signals(Error, () => { Regex.compile(source) })
+    })
+    true
+}
+
+tests: [
+    Test("compile rejects malformed and unknown escapes", () => {
+        rejects("\\", "a\\", "\\y", "\\q", "\\0", "\\x41", "\\x{41}", "\\c", "\\e", "\\a", "\\v", "\\o{1}")
+        rejects("\\Q", "\\E", "\\Z", "\\R", "\\h", "\\N", "\\U{41}", "\\é", "\\😀", "\\\t")
+        rejects("\\p", "\\pL", "\\p{", "\\p{L", "\\p{}", "\\P")
+    }),
+    Test("compile rejects invalid Unicode scalar escapes", () => {
+        rejects("\\u", "\\u{}", "\\u{41", "\\u0041", "\\u{12G}", "\\u{-1}", "\\u{ 41}")
+        rejects("\\u{110000}", "\\u{D800}", "\\u{DFFF}", "\\u{1234567}", "\\u{0000041}")
+    }),
+    Test("compile rejects malformed classes and ranges", () => {
+        rejects("[", "[a", "[]", "[^]", "[a]]", "[a[b]", "[z-a]", "[a-]", "[-a]", "[a-\\d]", "[\\d-z]", "[a-b-c]")
+        rejects("[a&&]", "[&&a]", "[a--]", "[--a]", "[a&&&&b]", "[a&b]", "[a~~b]", "[a&&--b]")
+        rejects("[[:alpha:]]", "[:alpha:]", "[[=a=]]", "[[.a.]]")
+        rejects("[\\b]", "[\\B]", "[\\A]", "[\\z]", "[\\u{110000}]", "[\\p{Nope}]")
+    }),
+    Test("compile rejects malformed quantifiers", () => {
+        rejects("*", "+", "?", "{2}", "a|*", "(*)", "(?:*)", "(*FAIL)", "^*", "$+", "\\b?", "\\A{2}")
+        rejects("a**", "a*+", "a++", "a?+", "a{2}+", "a*?+", "a*??", "a{2}{3}", "a+*")
+    }),
+    Test("compile rejects invalid bounds and stray braces", () => {
+        rejects("a{", "a{}", "a{,}", "a{,3}", "a{2,1}", "a{1,2,3}", "a{a}", "a{1", "a{1,", "a{1,2")
+        rejects("a{ 1}", "a{1 }", "a{-1}", "a{1.5}", "}", "]", "a}", "a]")
+    }),
+    Test("compile rejects invalid and incomplete groups", () => {
+        rejects("(", ")", "(a", "a)", "((a)", "(a))", "(?", "(?:", "a|(b", "(?a)")
+        rejects("(?P<n>a)", "(?'n'a)", "(?#comment)", "(?|a)", "(?(1)a|b)", "(?R)", "(?1)", "(?&n)", "(?C1)", "(?{code})")
+    }),
+    Test("compile rejects invalid and duplicate capture names", () => {
+        rejects("(?<>a)", "(?<1a>a)", "(?<a-b>a)", "(?<a b>a)", "(?<é>a)", "(?<a.b>a)", "(?<a", "(?<a>", "(?<a>a")
+        rejects("(?<a>x)(?<a>y)", "(?<n>(?<n>x))", "(?<a>x)|(?<a>y)", "(?<A>x)(?<b>y)(?<A>z)")
+    }),
+    Test("compile rejects backreferences, look-around, and atomic groups", () => {
+        rejects("\\1", "(a)\\1", "\\9", "\\k<a>", "(?<a>x)\\k<a>", "\\g{1}", "\\g1")
+        rejects("(?=a)", "(?!a)", "(?<=a)", "(?<!a)", "a(?=b)", "(?>a)")
+    }),
+    Test("compile rejects excluded anchors and grapheme escapes", () => {
+        rejects("\\G", "a\\G", "\\K", "a\\Kb", "\\X", "\\X+")
+    }),
+    Test("compile rejects embedded flag modifiers", () => {
+        rejects("(?i)a", "(?i:a)", "(?-i)a", "(?s)", "(?m)", "(?x)", "(?^)", "(?im-sx:a)", "a(?i)b")
+    }),
+    Test("compile rejects invalid Unicode properties", () => {
+        rejects("\\p{Nope}", "\\P{Nope}", "\\p{gc=Nope}", "\\p{Foo=L}", "\\p{Script=}", "\\p{=L}")
+        rejects("\\p{gc=L=M}", "\\p{sc=Nope}", "\\p{scx=}", "\\p{Lé}", "\\p{Basic_Emoji}", "\\p{Alphabetic=Yes}")
+    })
+]
