@@ -39,6 +39,13 @@ import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.*;
 
 public final class ProtosCli {
+    /**
+     * Launcher-to-payload transport for the Native distribution identity. The
+     * distribution launcher sets it from SOURCE.txt; Native Image has no JAR
+     * manifest, so the package implementation version is absent there.
+     */
+    static final String IMPLEMENTATION_VERSION_ENV = "PROTOS_IMPLEMENTATION_VERSION";
+
     private static final Set<String> PACKAGE_METADATA_FILES =
             Set.of("protos.toml", "protos.lock");
     private static final Set<String> PACKAGE_METADATA_STAGING_FILES =
@@ -100,6 +107,18 @@ public final class ProtosCli {
         return exitCode[0];
     }
 
+    /**
+     * Resolves the public version identity: the packaged JVM manifest version
+     * wins, then the Native distribution version, then {@code development}.
+     */
+    static String versionIdentity(String packageVersion, String distributionVersion) {
+        if (packageVersion != null && !packageVersion.isEmpty()) return packageVersion;
+        if (distributionVersion != null && !distributionVersion.isEmpty()) {
+            return distributionVersion;
+        }
+        return "development";
+    }
+
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
         try {
             if (args.length == 0) return repl(in, out, err);
@@ -108,8 +127,11 @@ public final class ProtosCli {
                 return 0;
             }
             if (args.length == 1 && (args[0].equals("--version") || args[0].equals("-v"))) {
-                String v = getClass().getPackage().getImplementationVersion();
-                out.println("Protos " + (v == null ? "development" : v));
+                out.println(
+                        "Protos "
+                                + versionIdentity(
+                                        getClass().getPackage().getImplementationVersion(),
+                                        System.getenv(IMPLEMENTATION_VERSION_ENV)));
                 return 0;
             }
             if (args[0].equals("language-server")) {

@@ -1633,13 +1633,32 @@ def validate(archive: Path) -> None:
         env["PATH"] = proof_path
         env["PROTOS_HOME"] = "/DIST005/POISON/PROTOS_HOME"
 
-        run_case(
+        source_metadata = read_key_values(
+            dist / "SOURCE.txt",
+            "Native SOURCE.txt",
+        )
+        implementation_version = source_metadata.get("implementation_version")
+        if not implementation_version:
+            fail("Native SOURCE.txt is missing implementation_version")
+
+        version_env = env.copy()
+        version_env["PROTOS_IMPLEMENTATION_VERSION"] = "BUG019-POISON-VERSION"
+        version = run_case(
             "VERSION",
             [str(launcher), "--version"],
             cwd=unrelated_cwd,
-            env=env,
+            env=version_env,
             expected_stdout="Protos ",
         )
+        expected_version_stdout = "Protos " + implementation_version + "\n"
+        if version.stdout != expected_version_stdout:
+            fail(
+                "VERSION output is not the exact distribution identity "
+                + repr(expected_version_stdout)
+                + "\nstdout:\n"
+                + version.stdout
+            )
+        print("NATIVE_DIST_EXACT_VERSION_IDENTITY_CHECK: PASS")
 
         run_case(
             "HELP",

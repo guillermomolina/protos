@@ -52,9 +52,23 @@ class NativeLauncherTest(unittest.TestCase):
         path.write_text(content, encoding="utf-8")
         path.chmod(0o755)
 
+    @staticmethod
+    def native_source_metadata(root: Path, version: str) -> None:
+        (root / "SOURCE.txt").write_text(
+            "\n".join(
+                [
+                    "implementation_version=" + version,
+                    "source_revision=" + "0" * 40,
+                    "",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
     def test_native_payload_precedes_all_java_selection(self) -> None:
         root = self.distribution("native")
         native = root / "libexec" / "protos-native"
+        self.native_source_metadata(root, "7.8.9-SNAPSHOT")
         poison_java = self.work / "java-must-not-run"
 
         self.executable(
@@ -62,6 +76,7 @@ class NativeLauncherTest(unittest.TestCase):
             """#!/usr/bin/env sh
 set -eu
 printf 'PROTOS_HOME=%s\\n' "${PROTOS_HOME:-}"
+printf 'PROTOS_IMPLEMENTATION_VERSION=%s\\n' "${PROTOS_IMPLEMENTATION_VERSION:-}"
 printf 'ARGC=%s\\n' "$#"
 i=0
 for arg do
@@ -81,6 +96,7 @@ exit 97
         env = os.environ.copy()
         env["PROTOS_JAVA"] = str(poison_java)
         env["JAVA_HOME"] = str(self.work / "also-invalid-java-home")
+        env["PROTOS_IMPLEMENTATION_VERSION"] = "forged-by-caller"
 
         result = subprocess.run(
             [str(root / "bin" / "protos"), "--version", "argument with spaces"],
@@ -92,11 +108,46 @@ exit 97
         )
 
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn(f"PROTOS_HOME={root}", result.stdout)
-        self.assertIn("ARGC=2", result.stdout)
-        self.assertIn("ARG_0=--version", result.stdout)
-        self.assertIn("ARG_1=argument with spaces", result.stdout)
+        self.assertEqual(
+            "\n".join(
+                [
+                    f"PROTOS_HOME={root}",
+                    "PROTOS_IMPLEMENTATION_VERSION=7.8.9-SNAPSHOT",
+                    "ARGC=2",
+                    "ARG_0=--version",
+                    "ARG_1=argument with spaces",
+                    "",
+                ]
+            ),
+            result.stdout,
+        )
+        self.assertNotIn("forged-by-caller", result.stdout)
         self.assertNotIn("JAVA_WAS_EXECUTED", result.stderr)
+
+    def test_native_payload_requires_distribution_identity(self) -> None:
+        root = self.distribution("native-without-source")
+        self.executable(
+            root / "libexec" / "protos-native",
+            """#!/usr/bin/env sh
+echo 'NATIVE_WAS_EXECUTED'
+""",
+        )
+
+        env = os.environ.copy()
+        env["PROTOS_IMPLEMENTATION_VERSION"] = "forged-by-caller"
+
+        result = subprocess.run(
+            [str(root / "bin" / "protos"), "--version"],
+            cwd=self.cwd,
+            env=env,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertNotIn("NATIVE_WAS_EXECUTED", result.stdout)
+        self.assertIn("distribution source metadata is missing", result.stderr)
 
     def test_portable_jvm_distribution_still_uses_java_without_native_payload(
         self,
@@ -132,6 +183,7 @@ EOF
 fi
 printf 'JAVA_EXECUTED=1\\n'
 printf 'PROTOS_HOME=%s\\n' "${PROTOS_HOME:-}"
+printf 'PROTOS_IMPLEMENTATION_VERSION=%s\\n' "${PROTOS_IMPLEMENTATION_VERSION:-<unset>}"
 printf 'ARGS=%s\\n' "$*"
 """,
         )
@@ -139,6 +191,7 @@ printf 'ARGS=%s\\n' "$*"
         env = os.environ.copy()
         env["PROTOS_JAVA"] = str(fake_java)
         env.pop("JAVA_HOME", None)
+        env["PROTOS_IMPLEMENTATION_VERSION"] = "forged-by-caller"
 
         result = subprocess.run(
             [str(root / "bin" / "protos"), "--help"],
@@ -152,6 +205,7 @@ printf 'ARGS=%s\\n' "$*"
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("JAVA_EXECUTED=1", result.stdout)
         self.assertIn(f"PROTOS_HOME={root}", result.stdout)
+        self.assertIn("PROTOS_IMPLEMENTATION_VERSION=<unset>", result.stdout)
         self.assertIn(
             "com.guillermomolina.protos.cli.ProtosCli --help",
             result.stdout,

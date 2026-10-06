@@ -61,10 +61,23 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("explicit program output"));
         assertTrue(help.o.contains("protos format [<file>]"));
 
-        assertTrue(run("--version").o.startsWith("Protos "));
+        String expectedIdentity =
+                ProtosCli.versionIdentity(
+                        ProtosCli.class.getPackage().getImplementationVersion(),
+                        System.getenv(ProtosCli.IMPLEMENTATION_VERSION_ENV));
+        assertEquals("Protos " + expectedIdentity + System.lineSeparator(), run("--version").o);
         assertEquals("", run("-e", "1 + 1").o);
         assertEquals("", run("-e", "\"hello\"").o);
         assertEquals("", run("-e", "null").o);
+    }
+
+    @Test
+    void versionIdentityPrefersPackageThenDistributionThenDevelopment() {
+        assertEquals("1.2.3", ProtosCli.versionIdentity("1.2.3", "9.9.9-native"));
+        assertEquals("9.9.9-native", ProtosCli.versionIdentity(null, "9.9.9-native"));
+        assertEquals("9.9.9-native", ProtosCli.versionIdentity("", "9.9.9-native"));
+        assertEquals("development", ProtosCli.versionIdentity(null, null));
+        assertEquals("development", ProtosCli.versionIdentity(null, ""));
     }
 
     @Test
