@@ -403,6 +403,12 @@ offsetDateTime: (
     }
 }
 
+/// Answers a fresh TOML array node whose elements are `nodes`, in order.
+/// Each element must be a TOML node: this constructor checks only each element's
+/// immediate envelope, namely that its `kind` names one of the ten TOML semantic
+/// kinds and that it carries a `value`; otherwise it signals an Error.
+/// Success does not establish that an arbitrarily constructed tree is recursively
+/// valid TOML; `TOML.encode` rejects any tree that cannot be validly encoded.
 array: (...nodes) => {
     validateNode: (node) => {
         kind: node.kind
@@ -432,6 +438,13 @@ array: (...nodes) => {
     }
 }
 
+/// Answers a fresh TOML table node from alternating `name, node` arguments, in
+/// order. Each name must be a String, names must not repeat, and every name must
+/// be followed by its node; otherwise it signals an Error.
+/// Each node is checked only for its immediate envelope, namely that its `kind`
+/// names one of the ten TOML semantic kinds and that it carries a `value`.
+/// Success does not establish that arbitrarily constructed descendants are
+/// recursively valid TOML; `TOML.encode` retains full encodability validation.
 table: (...nameNodePairs) => {
     validateNode: (node) => {
         kind: node.kind

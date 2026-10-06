@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.234-SNAPSHOT
+
+- `LIB010-E2-D` is the final corrective closure for `AUD005`
+  (guillermomolina/protos#451) and `LIB010` (guillermomolina/protos#418).
+  There is no public API, TOML semantic, specification, D104, D109, D087 or
+  TOOL001/TOOL002 change.
+  - F4 is explicitly deferred with no behavior change. `TOML.array` and
+    `TOML.table` keep their current immediate-envelope checks and now carry
+    authored documentation. That documentation does not present constructor
+    success as proof that an arbitrarily constructed tree is recursively
+    valid. `TOML.encode` keeps full encodability validation. A future
+    decision may strengthen the constructors; this closure promises no
+    compatibility for invalid constructed trees.
+  - Standard Library documentation coverage has no missing public modules
+    or symbols. `ProtosStandardLibraryDocumentationExtractorTest` now
+    requires that for the current repository.
+  - F5: the historical LIB010-D V9 changed-path gate piped the path list
+    into `python3 -` while the program also arrived on stdin through a
+    heredoc. It was therefore not a valid proof. Retrospective review found
+    the affected interval benign. The current reusable gate
+    (`scripts/validation_impact.py`) reads the delta directly from Git
+    `--base`/`--head`. `scripts/test_validation_impact.py` adds a regression
+    proving that stdin has no effect on how the delta is obtained.
+  - F1, F2, F3 and F6 were already resolved by earlier slices.
+  - The focal gates and the integrated full suite (`make test`) passed
+    before this metadata was finalized. AUD005 and LIB010 are ready for
+    final GitHub and durable closure after publication.
+
 ## 0.3.233-SNAPSHOT
 
 - `AUD007-B2` (guillermomolina/protos#452) closes the parallel validation

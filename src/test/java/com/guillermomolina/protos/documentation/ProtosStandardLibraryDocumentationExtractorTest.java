@@ -303,6 +303,13 @@ class ProtosStandardLibraryDocumentationExtractorTest {
         });
         extraction.artifact().symbols().forEach(symbol ->
                 assertTrue(symbol.source().path().startsWith("protos/lib/")));
+
+        ProtosStandardLibraryDocumentationExtractor.Coverage coverage =
+                extraction.coverage();
+        assertEquals(List.of(), coverage.missingModuleDocumentation());
+        assertEquals(List.of(), coverage.missingSymbolDocumentation());
+        assertEquals(coverage.moduleCount(), coverage.documentedModuleCount());
+        assertEquals(coverage.symbolCount(), coverage.documentedSymbolCount());
     }
 
     private Symbol symbol(

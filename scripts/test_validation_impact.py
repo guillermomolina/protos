@@ -18,8 +18,10 @@
 from __future__ import print_function
 
 import importlib.util
+import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -189,6 +191,48 @@ class ValidationImpactTest(unittest.TestCase):
             result = IMPACT.classify_delta(directory, base, shared_head)
             self.assertEqual("FULL", result.impact)
             self.assertFalse(result.skip_allowed)
+
+    def test_cli_derives_delta_from_git_base_head_not_stdin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.check_call(["git", "-C", directory, "init", "-q"])
+            subprocess.check_call([
+                "git", "-C", directory, "config", "user.email", "test@example.invalid"
+            ])
+            subprocess.check_call([
+                "git", "-C", directory, "config", "user.name", "Validation Test"
+            ])
+            path = os.path.join(directory, "protos", "tools", "test", "Runner.protos")
+            os.makedirs(os.path.dirname(path))
+            with open(path, "w") as handle:
+                handle.write("// base\n")
+            subprocess.check_call(["git", "-C", directory, "add", "."])
+            subprocess.check_call(["git", "-C", directory, "commit", "-qm", "base"])
+            base = subprocess.check_output(
+                ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
+
+            with open(path, "w") as handle:
+                handle.write("// head\n")
+            subprocess.check_call(["git", "-C", directory, "add", "."])
+            subprocess.check_call(["git", "-C", directory, "commit", "-qm", "tool"])
+            head = subprocess.check_output(
+                ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
+
+            # Paths on stdin that would classify as FULL must be ignored.
+            irrelevant_stdin = "src/main/java/Shared.java\nAGENTS.md\n"
+            output = subprocess.check_output(
+                [
+                    sys.executable, MODULE_PATH,
+                    "--repo", directory,
+                    "--base", base,
+                    "--head", head,
+                    "--format", "json",
+                ],
+                input=irrelevant_stdin,
+                text=True,
+            )
+            data = json.loads(output)
+            self.assertEqual("TOOL_LOCAL:TEST", data["validation_impact"])
+            self.assertEqual("SKIP_ALLOWED", data["full_test_suite"])
 
     def test_shared_main_requires_full(self):
         self.assert_full([
