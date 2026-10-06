@@ -679,6 +679,15 @@ listCases.ifFalse(() => {
         null
     }
 
+    // BUG020: a logical Case whose execution fails outright, instead of
+    // producing a D155 completion, is named before the failure propagates.
+    logicalFailureObserver: (index, entry, error) => {
+        emitProgress(
+            "Test case error: " + CaseRef.display(entry)
+        )
+        null
+    }
+
     (logicalProjections.size() > 0).ifTrue(() => {
         logicalCompletions:
             LogicalCaseRunner.run(
@@ -689,7 +698,8 @@ listCases.ifFalse(() => {
                 ),
                 jobs,
                 logicalLifecycleObserver,
-                logicalCompletionObserver
+                logicalCompletionObserver,
+                logicalFailureObserver
             ).value()
 
         logicalResults =

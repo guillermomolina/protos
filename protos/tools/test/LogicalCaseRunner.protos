@@ -26,12 +26,18 @@ CasePlan: import("self:LogicalCasePlan")
 // while physical executions are still in flight, without waiting for
 // `results` to be complete and without changing the stable logical index
 // each completion is stored at.
+//
+// BUG020: `failureObserver`, when supplied, is called `(index, entry, error)`
+// when one logical Case's execution Future fails instead of producing a
+// completion. It only lets the caller attribute the failure to its Case; the
+// same Error is then re-signaled unchanged.
 run: (
     projections,
     executorAsync,
     maxInFlight,
     lifecycleObserver = null,
-    completionObserver = null
+    completionObserver = null,
+    failureObserver = null
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         fail()
@@ -91,12 +97,25 @@ run: (
                 )
             })
 
-            completion:
-                executorAsync(
-                    CasePlan.sourceAssociation(entry),
-                    signature,
-                    CasePlan.selector(entry)
-                ).value()
+            completion: null
+
+            Error.handle(() => {
+                completion =
+                    executorAsync(
+                        CasePlan.sourceAssociation(entry),
+                        signature,
+                        CasePlan.selector(entry)
+                    ).value()
+            }, (error) => {
+                (failureObserver === null).ifFalse(() => {
+                    failureObserver(
+                        index,
+                        entry,
+                        error
+                    )
+                })
+                error.signal()
+            })
 
             (lifecycleObserver === null).ifFalse(() => {
                 lifecycleObserver(

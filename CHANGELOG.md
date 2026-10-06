@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.248-SNAPSHOT
+
+- `BUG020` (guillermomolina/protos#812) makes the Test Tool name the failing
+  logical Case when its execution fails without producing a Case completion.
+  Before the existing `Test tool error` diagnostic, stderr now shows
+  `Test case error: <corpus>:<source>::<selector>`. The Error, exit status,
+  progress output, and scheduling are unchanged. There is no specification
+  change.
+
 ## 0.3.247-SNAPSHOT
 
 - `LIB015-A` (guillermomolina/protos#432) adds the structured logging core:
