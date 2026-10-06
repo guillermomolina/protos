@@ -13,6 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Sequential and isolated-parallel algorithms over ordinary Arrays.
+
+/// Answers a fresh Array whose element `i` is `transform(array[i])`, applied to a
+/// snapshot of `array` in ascending index order.
 map: (array, transform) => {
     snapshot: Array(...array)
     result: Array(...snapshot)
@@ -24,6 +28,9 @@ map: (array, transform) => {
     result
 }
 
+/// Answers a fresh Array of the elements of a snapshot of `array` for which
+/// `predicate(element)` answers `true`, keeping source order. A result other
+/// than canonical `true` or `false` signals `InvalidPredicateResult`.
 filter: (array, predicate) => {
     snapshot: Array(...array)
 
@@ -65,6 +72,10 @@ filter: (array, predicate) => {
     filterRange(0, snapshot.size())
 }
 
+/// Answers the lowest index of a snapshot of `array` whose element satisfies
+/// `predicate(element)`, or `null` when none does. Elements are tested in
+/// ascending order; a result other than canonical `true` or `false` signals
+/// `InvalidPredicateResult`.
 findIndex: (array, predicate) => {
     snapshot: Array(...array)
     index: 0
@@ -85,6 +96,10 @@ findIndex: (array, predicate) => {
     null
 }
 
+/// Folds a snapshot of `array` left to right with `reducer(accumulator, element)`.
+/// An optional single `initial` value seeds the fold; without one, the first
+/// element does, and an empty Array answers `null`. More than one initial
+/// value signals an Error.
 reduce: (array, reducer, ...initial) => {
     snapshot: Array(...array)
     initialSize: initial.size()
@@ -125,6 +140,10 @@ reduce: (array, reducer, ...initial) => {
     accumulator
 }
 
+/// Answers a fresh Array with the elements of a snapshot of `array` stably sorted
+/// by `less(left, right)`. A comparator result other than canonical `true` or
+/// `false` signals `InvalidComparatorResult`, and two elements each less than
+/// the other signal `InvalidComparatorOrder`. The source is not mutated.
 sort: (array, less) => {
     snapshot: Array(...array)
 

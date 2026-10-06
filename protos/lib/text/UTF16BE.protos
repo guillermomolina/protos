@@ -13,26 +13,34 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! UTF-16BE text encoding helpers: one-shot conversion and UTF-16BE text-I/O wrappers.
+
+/// Encodes `text` with `Encoding.UTF16BE`, answering a fresh Bytes value.
 encode: (text) => {
     Encoding.UTF16BE.encode(text)
 }
 
+/// Decodes `bytes` with `Encoding.UTF16BE`, answering a String.
 decode: (bytes) => {
     Encoding.UTF16BE.decode(bytes)
 }
 
+/// Answers a fresh borrowing TextReader that decodes `source` as UTF-16BE.
 reader: (source) => {
     TextReader(source, Encoding.UTF16BE)
 }
 
+/// Answers a fresh owning TextReader that decodes `source` as UTF-16BE.
 owningReader: (source) => {
     TextReader.owning(source, Encoding.UTF16BE)
 }
 
+/// Answers a fresh borrowing TextWriter that encodes to `target` as UTF-16BE.
 writer: (target) => {
     TextWriter(target, Encoding.UTF16BE)
 }
 
+/// Answers a fresh owning TextWriter that encodes to `target` as UTF-16BE.
 owningWriter: (target) => {
     TextWriter.owning(target, Encoding.UTF16BE)
 }

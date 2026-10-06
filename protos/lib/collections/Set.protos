@@ -13,6 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Sets represented as ordinary Maps keyed by their members (ordinary `hash` plus `==`
+//! key equality).
+
+/// Answers a fresh Set containing `elements`.
 call: (...elements) => {
     result: Map()
     elements.each((element) => {
@@ -21,24 +25,29 @@ call: (...elements) => {
     result
 }
 
+/// Answers whether `element` is a member of `set`.
 contains: (set, element) => {
     set.containsKey(element)
 }
 
+/// Answers the number of members of `set`.
 size: (set) => {
     set.size()
 }
 
+/// Adds `element` to `set` in place and answers `set`.
 add: (set, element) => {
     set[element] = true
     set
 }
 
+/// Removes `element` from `set` in place and answers `set`.
 remove: (set, element) => {
     set.remove(element)
     set
 }
 
+/// Calls `block(element)` for each member of `set` and answers `set`.
 each: (set, block) => {
     set.each((element, marker) => {
         block(element)
@@ -46,6 +55,7 @@ each: (set, block) => {
     set
 }
 
+/// Answers a fresh Set of the members of `left` or `right`.
 union: (left, right) => {
     result: Map()
     left.each((element, marker) => {
@@ -57,6 +67,7 @@ union: (left, right) => {
     result
 }
 
+/// Answers a fresh Set of the members of `left` that are also in `right`.
 intersection: (left, right) => {
     result: Map()
     left.each((element, marker) => {
@@ -67,6 +78,7 @@ intersection: (left, right) => {
     result
 }
 
+/// Answers a fresh Set of the members of `left` that are not in `right`.
 difference: (left, right) => {
     result: Map()
     left.each((element, marker) => {
@@ -77,6 +89,7 @@ difference: (left, right) => {
     result
 }
 
+/// Answers whether `left` and `right` have exactly the same members.
 sameMembers: (left, right) => {
     (left.size() == right.size()).ifFalse(() => {
         ^false
@@ -89,6 +102,7 @@ sameMembers: (left, right) => {
     true
 }
 
+/// Answers whether every member of `left` is a member of `right`.
 isSubset: (left, right) => {
     left.each((element, marker) => {
         right.containsKey(element).ifFalse(() => {
@@ -98,6 +112,7 @@ isSubset: (left, right) => {
     true
 }
 
+/// Answers whether every member of `right` is a member of `left`.
 isSuperset: (left, right) => {
     right.each((element, marker) => {
         left.containsKey(element).ifFalse(() => {
@@ -107,6 +122,7 @@ isSuperset: (left, right) => {
     true
 }
 
+/// Answers whether `left` and `right` have no member in common.
 isDisjoint: (left, right) => {
     left.each((element, marker) => {
         right.containsKey(element).ifTrue(() => {

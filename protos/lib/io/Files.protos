@@ -12,6 +12,12 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
+
+//! Whole-file convenience operations over an explicit Filesystem capability.
+
+/// Answers a Future of a fresh Bytes value with the complete contents of the file
+/// at `path` in `filesystem`. The file is opened and always closed by the
+/// operation.
 readAllBytes: (filesystem, path) => {
     (() => {
         openFuture: null
@@ -90,6 +96,10 @@ readAllBytes: (filesystem, path) => {
     }).future()
 }
 
+/// Answers a Future that replaces the contents of the file at `path` in
+/// `filesystem` with a snapshot of `bytes`, creating or truncating it, and
+/// answers `filesystem`. The snapshot is taken synchronously; the file is always
+/// closed, and a failed write is not retried.
 writeAllBytes: (filesystem, path, bytes) => {
     // Capture the complete caller Bytes value synchronously, before the helper
     // creates its Future or starts any Filesystem effect. Latin1 is a bijection
@@ -160,6 +170,8 @@ writeAllBytes: (filesystem, path, bytes) => {
     }).future()
 }
 
+/// Answers a Future of the complete contents of the file at `path` decoded with
+/// `encoding` after the whole file has been read.
 readAllText: (filesystem, path, encoding) => {
     (() => {
         // readAllBytes owns acquisition/read/close. Decode only after that Future
@@ -169,6 +181,8 @@ readAllText: (filesystem, path, encoding) => {
     }).future()
 }
 
+/// Encodes `text` with `encoding` synchronously and then writes it as by
+/// `writeAllBytes`; an encoding failure signals before any Filesystem effect.
 writeAllText: (filesystem, path, text, encoding) => {
     // One-shot conversion is synchronous and happens before writeAllBytes can
     // perform any Filesystem effect. EncodingError therefore cannot truncate or

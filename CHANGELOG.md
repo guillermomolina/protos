@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.227-SNAPSHOT
+
+- `DOC008-B` (guillermomolina/protos#560) completes the safe D067 Standard
+  Library source documentation. No runtime or language semantic change and no
+  specification change; only `//!`/`///` documentation comments were added.
+  - Added module `//!` documentation to the 18 previously undocumented `std:`
+    modules and `///` documentation to 99 top-level slot owners, so 23 of 23
+    modules and 120 of 122 top-level symbols now carry authored documentation.
+  - `std:toml/TOML::array` and `std:toml/TOML::table` deliberately remain
+    without authored documentation pending the open semantic question routed
+    to AUD005 (guillermomolina/protos#451).
+  - `std:io/BufferedReader` and `std:io/BufferedWriter` receive module
+    documentation only; their runtime-owned factories have no source slot
+    owner.
+
 ## 0.3.226-SNAPSHOT
 
 - `TEST002-A4` (child of TEST002, guillermomolina/protos#538) reconciles the

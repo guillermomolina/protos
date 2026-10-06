@@ -12,6 +12,11 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
+
+//! TOML node trees and whole-document parsing and encoding. Nodes are objects with
+//! `kind` and `value` slots.
+
+/// Answers a fresh TOML string node; `value` must be a String.
 string: (value) => {
     String.recognizes(value).ifFalse(() => {
         Error().signal()
@@ -23,6 +28,7 @@ string: (value) => {
     }
 }
 
+/// Answers a fresh TOML integer node; `value` must be an Integer.
 integer: (value) => {
     Integer.recognizes(value).ifFalse(() => {
         Error().signal()
@@ -34,6 +40,7 @@ integer: (value) => {
     }
 }
 
+/// Answers a fresh TOML float node; `value` must be a Float.
 float: (value) => {
     Float.recognizes(value).ifFalse(() => {
         Error().signal()
@@ -45,6 +52,7 @@ float: (value) => {
     }
 }
 
+/// Answers a fresh TOML boolean node; `value` must be canonical `true` or `false`.
 boolean: (value) => {
     valid: value === true
     (value === false).ifTrue(() => {
@@ -60,6 +68,8 @@ boolean: (value) => {
     }
 }
 
+/// Answers a fresh TOML local-date node. Validates the year (1..9999), month, and day
+/// against the proleptic Gregorian calendar.
 localDate: (year, month, day) => {
     ignoredYearValidation: 0 + year
     ignoredMonthValidation: 0 + month
@@ -109,6 +119,9 @@ localDate: (year, month, day) => {
     }
 }
 
+/// Answers a fresh TOML local-time node. Validates hour (0..23), minute (0..59), and
+/// second (0..60); the fraction is `fractionCoefficient` over `fractionDigits` decimal
+/// digits.
 localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     ignoredHourValidation: 0 + hour
     ignoredMinuteValidation: 0 + minute
@@ -166,6 +179,11 @@ localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     }
 }
 
+/// Answers a fresh TOML local-date-time node.
+/// Validates the year (1..9999), month, and day against the proleptic Gregorian
+/// calendar.
+/// Validates hour (0..23), minute (0..59), and second (0..60); the fraction is
+/// `fractionCoefficient` over `fractionDigits` decimal digits.
 localDateTime: (
     year,
     month,
@@ -269,6 +287,12 @@ localDateTime: (
     }
 }
 
+/// Answers a fresh TOML offset-date-time node.
+/// Validates the year (1..9999), month, and day against the proleptic Gregorian
+/// calendar.
+/// Validates hour (0..23), minute (0..59), and second (0..60); the fraction is
+/// `fractionCoefficient` over `fractionDigits` decimal digits.
+/// `offsetMinutes` must lie in -1439..1439.
 offsetDateTime: (
     year,
     month,
@@ -463,6 +487,8 @@ table: (...nameNodePairs) => {
     }
 }
 
+/// Encodes the table node `rootTable` as TOML document text; a root that is not
+/// a table node or a tree that cannot be encoded signals an Error.
 encode: (rootTable) => {
     output: Encoding.UTF8.encode("")
 
@@ -1200,6 +1226,8 @@ encode: (rootTable) => {
 }
 
 
+/// Parses one complete TOML document into its root table node; invalid text signals an
+/// Error.
 parse: (text) => {
     String.recognizes(text).ifFalse(() => {
         Error().signal()

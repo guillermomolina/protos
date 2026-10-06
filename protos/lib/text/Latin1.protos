@@ -13,26 +13,34 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Latin-1 text encoding helpers: one-shot conversion and Latin-1 text-I/O wrappers.
+
+/// Encodes `text` with `Encoding.Latin1`, answering a fresh Bytes value.
 encode: (text) => {
     Encoding.Latin1.encode(text)
 }
 
+/// Decodes `bytes` with `Encoding.Latin1`, answering a String.
 decode: (bytes) => {
     Encoding.Latin1.decode(bytes)
 }
 
+/// Answers a fresh borrowing TextReader that decodes `source` as Latin-1.
 reader: (source) => {
     TextReader(source, Encoding.Latin1)
 }
 
+/// Answers a fresh owning TextReader that decodes `source` as Latin-1.
 owningReader: (source) => {
     TextReader.owning(source, Encoding.Latin1)
 }
 
+/// Answers a fresh borrowing TextWriter that encodes to `target` as Latin-1.
 writer: (target) => {
     TextWriter(target, Encoding.Latin1)
 }
 
+/// Answers a fresh owning TextWriter that encodes to `target` as Latin-1.
 owningWriter: (target) => {
     TextWriter.owning(target, Encoding.Latin1)
 }

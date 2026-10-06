@@ -12,6 +12,15 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
+
+//! Text wrappers over a Process's standard streams using the Process's own encodings.
+
+/// Answers a fresh borrowing TextReader over `process.stdin()` with
+/// `process.stdinEncoding()`.
 stdinReader: (process) => TextReader(process.stdin(), process.stdinEncoding())
+/// Answers a fresh borrowing TextWriter over `process.stdout()` with
+/// `process.stdoutEncoding()`.
 stdoutWriter: (process) => TextWriter(process.stdout(), process.stdoutEncoding())
+/// Answers a fresh borrowing TextWriter over `process.stderr()` with
+/// `process.stderrEncoding()`.
 stderrWriter: (process) => TextWriter(process.stderr(), process.stderrEncoding())

@@ -13,8 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Assertion helpers for Protos tests.
+
+/// The Error prototype signalled when an assertion helper fails.
 AssertionFailure: Error {}
 
+/// Signals an `AssertionFailure` when `condition` is `false` and answers `null`
+/// when it is `true`. Any other value signals an Error.
 require: (condition) => {
     valid: condition === true
     (condition === false).ifTrue(() => {
@@ -33,6 +38,9 @@ require: (condition) => {
     null
 }
 
+/// Runs `body` and answers the Error it signals when that Error is handled by
+/// `errorPrototype`; signals an `AssertionFailure` when no such Error is
+/// signalled.
 signals: (errorPrototype, body) => {
     caught: null
     matched: false

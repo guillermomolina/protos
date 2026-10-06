@@ -13,6 +13,11 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! JSON node trees, whole-text parsing and encoding, and incremental event parsing and
+//! writing. Nodes are objects with `kind` and `value` slots; numbers are exact
+//! decimals of an Integer `coefficient` and Integer `exponent`.
+
+/// Answers a fresh JSON null node.
 nullValue: () => {
     node: {
         kind: "null"
@@ -20,6 +25,7 @@ nullValue: () => {
     }
 }
 
+/// Answers a fresh JSON boolean node; `value` must be canonical `true` or `false`.
 boolean: (value) => {
     valid: value === true
     (value === false).ifTrue(() => {
@@ -35,6 +41,7 @@ boolean: (value) => {
     }
 }
 
+/// Answers a fresh JSON string node; `value` must be a String.
 string: (value) => {
     String.recognizes(value).ifFalse(() => {
         Error().signal()
@@ -46,6 +53,8 @@ string: (value) => {
     }
 }
 
+/// Answers a fresh JSON number node of value `coefficient` × 10^`exponent`; both must
+/// be Integers.
 number: (coefficient, exponent) => {
     Integer.recognizes(coefficient).ifFalse(() => {
         Error().signal()
@@ -65,6 +74,8 @@ number: (coefficient, exponent) => {
     }
 }
 
+/// Answers a fresh JSON array node of `nodes`; each argument must have one of the six
+/// JSON node kinds.
 array: (...nodes) => {
     nodes.each((node) => {
         kind: node.kind
@@ -87,6 +98,9 @@ array: (...nodes) => {
     }
 }
 
+/// Answers a fresh JSON object node from alternating String names and nodes. A
+/// duplicate name, a non-String name, a non-node value, or a missing final value
+/// signals an Error.
 object: (...nameNodePairs) => {
     result: Map()
     pendingName: null
@@ -136,6 +150,8 @@ object: (...nameNodePairs) => {
     }
 }
 
+/// Parses one complete JSON text into a node tree. Malformed text, trailing
+/// content, or a duplicate object name signals an Error.
 parse: (text) => {
     String.recognizes(text).ifFalse(() => {
         Error().signal()
@@ -1013,6 +1029,8 @@ parse: (text) => {
     root
 }
 
+/// Encodes the node tree `root` as compact JSON text. An invalid or cyclic node
+/// signals an Error.
 encode: (root) => {
     output: Encoding.UTF8.encode("")
 
@@ -1213,6 +1231,12 @@ encode: (root) => {
     Encoding.UTF8.decode(output)
 }
 
+/// Answers an incremental parser whose `feed(text)` consumes JSON text and whose
+/// `finish()` ends the input, calling `emit(event)` with events of `kind`
+/// `objectStart`, `objectEnd`, `arrayStart`, `arrayEnd`, `name`, `null`,
+/// `boolean`, `string`, or `number` and their `value`. Malformed input, an
+/// `emit` failure, or use after `finish()` signals an Error and leaves the
+/// parser terminal.
 eventParser: (emit) => {
     failed: false
     finished: false
@@ -2099,6 +2123,11 @@ eventParser: (emit) => {
     parser
 }
 
+/// Answers an incremental writer whose `feed(event)` accepts the events produced
+/// by `eventParser` and calls `emit(text)` with each encoded chunk, and whose
+/// `finish()` requires one complete document. Invalid event sequences, an
+/// `emit` failure, or use after `finish()` signals an Error and leaves the
+/// writer terminal.
 eventWriter: (emit) => {
     failed: false
     finished: false
@@ -2414,6 +2443,10 @@ eventWriter: (emit) => {
     writer
 }
 
+/// Answers an adapter whose `read()` reads one chunk from `textReader`, feeds it to
+/// an `eventParser(emit)`, and answers a Future of `true`, or of `false` once the
+/// input has ended and been finished. Calling `read()` while a read is pending
+/// or after the end signals an Error.
 readEvents: (textReader, emit) => {
     parser: eventParser(emit)
     busy: false
@@ -2459,6 +2492,10 @@ readEvents: (textReader, emit) => {
     adapter
 }
 
+/// Answers an adapter whose `feed(event)` encodes one event and writes it to
+/// `textWriter`, and whose `finish()` requires one complete document and then
+/// performs an ordered zero-output write; both answer a Future of the adapter.
+/// The adapter does not close `textWriter`.
 writeEvents: (textWriter) => {
     busy: false
     finished: false

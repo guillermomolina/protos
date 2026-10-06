@@ -13,6 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! The SHA-256 message digest over standard Bytes values.
+
+/// Answers a fresh 32-octet Bytes value holding the SHA-256 digest of `bytes`.
 digest: (bytes) => {
     mod32: 4294967296
     maxBytes: 2305843009213693951

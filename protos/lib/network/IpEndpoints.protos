@@ -12,6 +12,13 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
+
+//! Parsing and formatting of canonical `IpEndpoint` values; the `IpEndpoint`
+//! factory itself is installed by the runtime.
+
+/// Parses endpoint text `address:port` for IPv4 or `[address]:port` for IPv6
+/// into an `IpEndpoint`. The port is decimal in 1..65535. Invalid text,
+/// including unbracketed IPv6, signals an Error.
 parse: (text) => {
     // Validate the exact semantic String family without conversion.
     String.recognizes(text).ifFalse(() => {
@@ -180,6 +187,8 @@ parse: (text) => {
     IpEndpoint(address, port)
 }
 
+/// Formats an `IpEndpoint` as `address:port` for IPv4 or `[address]:port` for
+/// IPv6, using `IpAddresses.format` and a decimal port.
 format: (endpoint) => {
     IpEndpoint.recognizes(endpoint).ifFalse(() => {
         fail()

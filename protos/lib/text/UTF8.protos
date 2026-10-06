@@ -13,26 +13,34 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! UTF-8 text encoding helpers: one-shot conversion and UTF-8 text-I/O wrappers.
+
+/// Encodes `text` with `Encoding.UTF8`, answering a fresh Bytes value.
 encode: (text) => {
     Encoding.UTF8.encode(text)
 }
 
+/// Decodes `bytes` with `Encoding.UTF8`, answering a String.
 decode: (bytes) => {
     Encoding.UTF8.decode(bytes)
 }
 
+/// Answers a fresh borrowing TextReader that decodes `source` as UTF-8.
 reader: (source) => {
     TextReader(source, Encoding.UTF8)
 }
 
+/// Answers a fresh owning TextReader that decodes `source` as UTF-8.
 owningReader: (source) => {
     TextReader.owning(source, Encoding.UTF8)
 }
 
+/// Answers a fresh borrowing TextWriter that encodes to `target` as UTF-8.
 writer: (target) => {
     TextWriter(target, Encoding.UTF8)
 }
 
+/// Answers a fresh owning TextWriter that encodes to `target` as UTF-8.
 owningWriter: (target) => {
     TextWriter.owning(target, Encoding.UTF8)
 }

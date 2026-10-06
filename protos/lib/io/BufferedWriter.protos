@@ -13,6 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Publishes the standard runtime-owned `BufferedWriter` factory.
+
 // D167: `BufferedWriter` is the exact frozen runtime-owned standard factory, installed
 // as an initial member of this module before this source executes. It is not
 // redeclared here so that every module instance publishes the same factory.

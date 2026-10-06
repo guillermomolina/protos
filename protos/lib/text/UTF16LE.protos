@@ -13,26 +13,34 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! UTF-16LE text encoding helpers: one-shot conversion and UTF-16LE text-I/O wrappers.
+
+/// Encodes `text` with `Encoding.UTF16LE`, answering a fresh Bytes value.
 encode: (text) => {
     Encoding.UTF16LE.encode(text)
 }
 
+/// Decodes `bytes` with `Encoding.UTF16LE`, answering a String.
 decode: (bytes) => {
     Encoding.UTF16LE.decode(bytes)
 }
 
+/// Answers a fresh borrowing TextReader that decodes `source` as UTF-16LE.
 reader: (source) => {
     TextReader(source, Encoding.UTF16LE)
 }
 
+/// Answers a fresh owning TextReader that decodes `source` as UTF-16LE.
 owningReader: (source) => {
     TextReader.owning(source, Encoding.UTF16LE)
 }
 
+/// Answers a fresh borrowing TextWriter that encodes to `target` as UTF-16LE.
 writer: (target) => {
     TextWriter(target, Encoding.UTF16LE)
 }
 
+/// Answers a fresh owning TextWriter that encodes to `target` as UTF-16LE.
 owningWriter: (target) => {
     TextWriter.owning(target, Encoding.UTF16LE)
 }

@@ -13,6 +13,13 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+//! Comma-separated values over String fields: comma separators, double-quote
+//! quoting with doubled quotes, and CR, LF, or CRLF row terminators.
+
+/// Answers an incremental parser whose `feed(text)` consumes CSV text and whose
+/// `finish()` ends the input, calling `emit(row)` with each completed row as an
+/// Array of Strings. Malformed input, an `emit` failure, or use after `finish()`
+/// signals an Error and leaves the parser terminal.
 rowParser: (emit) => {
     failed: false
     finished: false
@@ -294,6 +301,7 @@ rowParser: (emit) => {
     parser
 }
 
+/// Parses complete CSV `text` and answers an Array of rows, each an Array of Strings.
 parse: (text) => {
     tableChunks: Map()
     tableMaxLevel: -1
@@ -340,6 +348,8 @@ parse: (text) => {
     collectTableChunks(tableMaxLevel, Array())
 }
 
+/// Encodes `rows` as CSV text, quoting fields that contain a comma, quote, CR, or
+/// LF and ending every row with CRLF. An empty row signals an Error.
 encode: (rows) => {
     table: Array(...rows)
     output: Encoding.UTF8.encode("")
@@ -396,6 +406,10 @@ encode: (rows) => {
     Encoding.UTF8.decode(output)
 }
 
+/// Answers an adapter whose `read()` reads one chunk from `textReader`, feeds it to
+/// a `rowParser(emit)`, and answers a Future of `true`, or of `false` once the
+/// input has ended and been finished. Calling `read()` while a read is pending
+/// or after the end signals an Error.
 readRows: (textReader, emit) => {
     parser: rowParser(emit)
     busy: false
@@ -443,6 +457,10 @@ readRows: (textReader, emit) => {
     adapter
 }
 
+/// Answers an adapter whose `feed(row)` encodes one row and writes it to
+/// `textWriter`, and whose `finish()` is an ordered zero-output barrier; both
+/// answer a Future of the adapter. The adapter does not flush, close, or take
+/// ownership of `textWriter`.
 writeRows: (textWriter) => {
     busy: false
     finished: false

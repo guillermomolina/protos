@@ -12,6 +12,12 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
+
+//! Construction, parsing, and formatting of canonical `IpAddress` values; the
+//! `IpAddress` factory itself is installed by the runtime.
+
+/// Answers the IPv4 `IpAddress` with octets `a.b.c.d`; each must be an Integer in
+/// 0..255.
 v4: (a, b, c, d) => {
     requireComponent: (value) => {
         // Validate the exact ordinary-Integer family without conversion.
@@ -39,6 +45,8 @@ v4: (a, b, c, d) => {
     IpAddress(4, bits)
 }
 
+/// Answers the IPv6 `IpAddress` with hextets `a` through `h`; each must be an Integer
+/// in 0..65535.
 v6: (a, b, c, d, e, f, g, h) => {
     requireHextet: (value) => {
         // Validate the exact ordinary-Integer family without conversion or
@@ -75,6 +83,10 @@ v6: (a, b, c, d, e, f, g, h) => {
     IpAddress(6, bits)
 }
 
+/// Parses numeric IP address text: dotted-decimal IPv4 without leading zeros, or
+/// IPv6 hextets with optional `::` compression and a trailing dotted-decimal
+/// IPv4 part. Text containing `:` is parsed as IPv6. Invalid text signals an
+/// Error.
 parse: (text) => {
     // Validate the exact semantic String family without conversion.
     String.recognizes(text).ifFalse(() => {
@@ -429,6 +441,9 @@ parse: (text) => {
     result
 }
 
+/// Formats an `IpAddress`: IPv4 as dotted decimal, IPv6 as lowercase hextets
+/// with the leftmost longest run of two or more zero hextets compressed to `::`,
+/// and IPv4-mapped IPv6 as `::ffff:` followed by dotted decimal.
 format: (address) => {
     IpAddress.recognizes(address).ifFalse(() => {
         fail()
