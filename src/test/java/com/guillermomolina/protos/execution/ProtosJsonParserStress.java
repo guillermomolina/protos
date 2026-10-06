@@ -20,9 +20,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -32,6 +37,9 @@ import org.junit.jupiter.api.Test;
  * convention. Run it explicitly when validating parser implementation scale.
  */
 final class ProtosJsonParserStress {
+    private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
+
 
     @Test
     void deeplyNestedContainersUseExplicitJsonStackRatherThanRecursiveDescent()
@@ -39,19 +47,19 @@ final class ProtosJsonParserStress {
         int depth = 2048;
         String input = "[".repeat(depth) + "0" + "]".repeat(depth);
 
-        ProtosObjectValue node = ProtosJsonParserModuleTest.parse(input);
+        ProtosObjectValue node = parse(input);
         for (int index = 0; index < depth; index++) {
             ProtosArrayValue array =
                     assertInstanceOf(
                             ProtosArrayValue.class,
-                            ProtosJsonParserModuleTest.value(node, "array"));
+                            value(node, "array"));
             assertEquals(BigInteger.ONE, array.indexedSize());
             node =
                     assertInstanceOf(
                             ProtosObjectValue.class,
                             array.indexedAt(BigInteger.ZERO));
         }
-        ProtosJsonParserModuleTest.assertDecimal(node, 0, 0);
+        assertDecimal(node, 0, 0);
     }
 
     @Test
@@ -70,20 +78,70 @@ final class ProtosJsonParserStress {
         ProtosArrayValue array =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        ProtosJsonParserModuleTest.value(
-                                ProtosJsonParserModuleTest.parse(input.toString()),
+                        value(
+                                parse(input.toString()),
                                 "array"));
 
         assertTrue(array.isFrozen());
         assertEquals(BigInteger.valueOf(size), array.indexedSize());
 
         for (int index : new int[] {0, 1, 2, 31, 32, 511, 1024, 2047}) {
-            ProtosJsonParserModuleTest.assertDecimal(
+            assertDecimal(
                     assertInstanceOf(
                             ProtosObjectValue.class,
                             array.indexedAt(BigInteger.valueOf(index))),
                     index,
                     0);
         }
+    }
+
+    private static ProtosObjectValue parse(String input) throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+        activation.context().createLocalSlot("input", new ProtosStringValue(input));
+        return assertInstanceOf(
+                ProtosObjectValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        JSON: import("std:json/JSON")
+                        JSON.parse(input)
+                        """,
+                        activation));
+    }
+
+    private static Object value(ProtosObjectValue node, String expectedKind) {
+        assertTrue(node.isOpen());
+        assertEquals(expectedKind, kind(node));
+        return node.readLocalSlot("value").orElseThrow();
+    }
+
+    private static String kind(ProtosObjectValue node) {
+        return assertInstanceOf(
+                        ProtosStringValue.class,
+                        node.readLocalSlot("kind").orElseThrow())
+                .value();
+    }
+
+    private static void assertDecimal(
+            ProtosObjectValue numberNode, long coefficient, long exponent) {
+        ProtosObjectValue decimal =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        value(numberNode, "number"));
+        assertTrue(decimal.isOpen());
+        assertEquals(
+                BigInteger.valueOf(coefficient),
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                decimal.readLocalSlot("coefficient").orElseThrow())
+                        .value());
+        assertEquals(
+                BigInteger.valueOf(exponent),
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                decimal.readLocalSlot("exponent").orElseThrow())
+                        .value());
     }
 }

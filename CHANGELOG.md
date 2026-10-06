@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.226-SNAPSHOT
+
+- `TEST002-A4` (child of TEST002, guillermomolina/protos#538) reconciles the
+  legacy JSON parser Java/JUnit semantic ownership into suite-native Protos
+  Test Tool coverage. No semantic change and no specification change.
+  - Removed `ProtosJsonParserModuleTest`; its deep-nesting and
+    chunk-boundary materialization contracts are now owned by
+    `library/json/final-deep-stress.protos` (full 2048-level structural
+    walk) and the new `final array materialization chunk boundary` Test in
+    `library/json/final-large-materialization.protos` (indices 0, 1, 2, 31,
+    32 and 63, plus guest-observable open state of parsed nodes and decimal
+    payloads). Parsed Array frozen state remains owned by
+    `library/json/parser-structural-errors.protos`.
+  - The explicit `ProtosJsonParserStress` harness now carries its own copy of
+    the former shared helpers; its stress behavior is unchanged.
+
 ## 0.3.225-SNAPSHOT
 
 - `TEST002-A3` (child of TEST002, guillermomolina/protos#538) migrates the
