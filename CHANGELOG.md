@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.240-SNAPSHOT
+
+- `LIB012-B` (guillermomolina/protos#429) completes the `std:semver/SemVer`
+  version kernel. There is no specification change.
+  - `SemVer.format(version)` answers the canonical
+    `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` text from the structured value,
+    in time linear in the output length. `format(parse(text)) == text` holds for every
+    accepted `text`, including unbounded Integers and build identifiers such
+    as `001`.
+  - `SemVer.comparePrecedence(a, b)` answers `-1`, `0`, or `1` under
+    Semantic Versioning 2.0.0 precedence. Core components and numeric prerelease
+    identifiers compare as unbounded Integers, numeric identifiers rank below
+    alphanumeric ones, alphanumeric ones compare by ASCII octet order, and a
+    longer prerelease list ranks above its prefix. Build metadata is ignored.
+  - Versions answered by `parse` now define complete semantic `==`, which
+    includes build metadata, and a coherent `hash`. This uses the ordinary
+    `alias("equals", "==")` mechanism, so versions carry local `equals`, `hash`,
+    and `==` slots. `===` stays object identity. `==` against a non-version
+    answers `false`. `format` and `comparePrecedence` signal `Error` for values
+    without the `parse` representation.
+  - Tests: new `semver/precedence.protos`, `semver/format.protos`, and
+    `semver/equality.protos` suite-native sources in the
+    `protos/corpus/library/semver` plan.
+
 ## 0.3.239-SNAPSHOT
 
 - `I079` (guillermomolina/protos#806) moves bundled-tool TOML parsing onto

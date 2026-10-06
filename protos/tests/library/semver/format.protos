@@ -1,0 +1,80 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+SemVer: import("std:semver/SemVer")
+
+requireRoundTrip: (text) => {
+    Assertions.require(SemVer.format(SemVer.parse(text)) == text)
+    true
+}
+
+tests: [
+    Test("format round trips accepted versions", () => {
+        requireRoundTrip("0.0.0")
+        requireRoundTrip("1.2.3")
+        requireRoundTrip("10.20.30")
+        requireRoundTrip("1.0.0-alpha")
+        requireRoundTrip("1.0.0-alpha.1")
+        requireRoundTrip("1.0.0-0.3.7")
+        requireRoundTrip("1.0.0-x.7.z.92")
+        requireRoundTrip("1.0.0--")
+        requireRoundTrip("1.0.0-01a.a01")
+        requireRoundTrip("1.0.0-Alpha.BETA")
+        requireRoundTrip("1.2.3-alpha.7.rc-1+001.linux")
+        requireRoundTrip("1.0.0+001")
+        requireRoundTrip("1.0.0+0.00.-")
+        requireRoundTrip("1.0.0-rc.1+build.1-x")
+    }),
+    Test("format round trips unbounded integers", () => {
+        requireRoundTrip("999999999999999999999999999.0.1")
+        requireRoundTrip("18446744073709551616.9223372036854775808.340282366920938463463374607431768211457")
+        requireRoundTrip("1.0.0-999999999999999999999.alpha")
+        requireRoundTrip("1.0.0-100000000000000000000000000000+0")
+    }),
+    Test("format writes the structured value", () => {
+        version: SemVer.parse("1.2.3-alpha.7.rc-1+001.linux")
+        text: SemVer.format(version)
+        Assertions.require(String.recognizes(text))
+        Assertions.require(text == "1.2.3-alpha.7.rc-1+001.linux")
+        Assertions.require(SemVer.format(version) == text)
+        Assertions.require(version.build[0] == "001")
+    }),
+    Test("format many identifiers", () => {
+        // 1024 repetitions built by doubling: 1.0.0-0.1.1...1+b.b...b
+        repetitions: Array(1)
+        Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10).each((ignored) => {
+            repetitions = Array(...repetitions, ...repetitions)
+        })
+        source: Encoding.UTF8.encode("1.0.0-0")
+        repetitions.each((ignored) => {
+            source.add(46)
+            source.add(49)
+        })
+        source.add(43)
+        source.add(98)
+        repetitions.each((ignored) => {
+            source.add(46)
+            source.add(98)
+        })
+        requireRoundTrip(Encoding.UTF8.decode(source))
+    }),
+    Test("format rejects non-versions", () => {
+        Assertions.signals(Error, () => { SemVer.format("1.0.0") })
+        Assertions.signals(Error, () => { SemVer.format(null) })
+        Assertions.signals(Error, () => { SemVer.format(1) })
+    })
+]

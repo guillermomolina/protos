@@ -17,6 +17,14 @@
 //! object with Integer `major`, `minor`, and `patch` slots, a `prerelease` Array
 //! of Integer (numeric) and String (alphanumeric) identifiers, and a `build`
 //! Array of String identifiers. Build metadata is preserved exactly.
+//!
+//! Versions answer complete semantic equality through `==`: two versions are
+//! equal when their core components, prerelease identifiers, and build
+//! identifiers are equal in order, with numeric and alphanumeric identifiers
+//! never equal to each other. `hash` is coherent with that equality, so
+//! independently parsed equal versions work as the same Map key. `===` remains
+//! ordinary object identity. SemVer precedence (`comparePrecedence`) is a
+//! distinct relation that ignores build metadata.
 
 /// Parses `text` as exactly `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` under
 /// Semantic Versioning 2.0.0 and answers a fresh version object. Core
@@ -219,11 +227,311 @@ parse: (text) => {
         finishBuild()
     })
 
-    {
+    isVersion: (value) => {
+        (value !== null) &&
+            value.hasSlot("major") &&
+            value.hasSlot("minor") &&
+            value.hasSlot("patch") &&
+            value.hasSlot("prerelease") &&
+            value.hasSlot("build") &&
+            Integer.recognizes(value.major) &&
+            Integer.recognizes(value.minor) &&
+            Integer.recognizes(value.patch) &&
+            Array.recognizes(value.prerelease) &&
+            Array.recognizes(value.build)
+    }
+
+    // Identifiers are equal only within the same family: Integer 1 never
+    // equals String "1".
+    sameIdentifiers: (left, right) => {
+        same: left.size() == right.size()
+        index: 0
+        (() => same && (index < left.size())).whileTrue() {
+            first: left[index]
+            second: right[index]
+            same = (Integer.recognizes(first) == Integer.recognizes(second)) &&
+                (String.recognizes(first) == String.recognizes(second)) &&
+                (first == second)
+            index = index + 1
+        }
+        same
+    }
+
+    // Hashes are folded modulo a fixed prime so the accumulator stays bounded.
+    mix: (accumulated, value) => {
+        (accumulated * 31 + value) % 2305843009213693951
+    }
+
+    version: {
         major: components[0]
         minor: components[1]
         patch: components[2]
         prerelease: materialize(prerelease)
         build: materialize(build)
+
+        equals: (other) => {
+            version: this
+            isVersion(other) &&
+                (version.major == other.major) &&
+                (version.minor == other.minor) &&
+                (version.patch == other.patch) &&
+                sameIdentifiers(version.prerelease, other.prerelease) &&
+                sameIdentifiers(version.build, other.build)
+        }
+
+        hash: () => {
+            version: this
+            result: mix(mix(mix(17, version.major.hash()), version.minor.hash()), version.patch.hash())
+            result = mix(result, version.prerelease.size())
+            version.prerelease.each((identifier) => {
+                family: 1
+                String.recognizes(identifier).ifTrue(() => {
+                    family = 2
+                })
+                result = mix(mix(result, family), identifier.hash())
+            })
+            result = mix(result, version.build.size())
+            version.build.each((identifier) => {
+                result = mix(result, identifier.hash())
+            })
+            result
+        }
     }
+
+    // The equality and hash Closures capture this activation; release the
+    // scratch state so a version retains only its own slots.
+    source = null
+    current = null
+    components = null
+    prerelease = null
+    build = null
+    version.alias("equals", "==")
+}
+
+/// Answers the canonical text `MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]` of a
+/// version answered by `parse`. Integers are written in decimal and String
+/// identifiers keep their exact spelling, so `format(parse(text)) == text` for
+/// every accepted `text`. A value without that representation, an empty
+/// String identifier, an alphanumeric prerelease identifier made only of
+/// digits, or a character outside the SemVer identifier alphabet signals an
+/// Error.
+format: (version) => {
+    // Requires the representation answered by `parse`.
+    requireVersion: (version) => {
+        (Integer.recognizes(version.major) &&
+            Integer.recognizes(version.minor) &&
+            Integer.recognizes(version.patch) &&
+            Array.recognizes(version.prerelease) &&
+            Array.recognizes(version.build)).ifFalse(() => {
+            Error().signal()
+        })
+        ((version.major >= 0) && (version.minor >= 0) && (version.patch >= 0)).ifFalse(() => {
+            Error().signal()
+        })
+        version.prerelease.each((identifier) => {
+            numeric: Integer.recognizes(identifier) && (identifier >= 0)
+            (numeric || String.recognizes(identifier)).ifFalse(() => {
+                Error().signal()
+            })
+        })
+        version.build.each((identifier) => {
+            String.recognizes(identifier).ifFalse(() => {
+                Error().signal()
+            })
+        })
+    }
+
+    requireVersion(version)
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    isIdentifierOctet: (octet) => {
+        upper: (octet >= 65) && (octet <= 90)
+        lower: (octet >= 97) && (octet <= 122)
+        isDigit(octet) || upper || lower || (octet == 45)
+    }
+
+    output: Encoding.UTF8.encode("")
+
+    // Digits are produced least significant first and written in reverse.
+    appendDecimal: (value) => {
+        digits: Map()
+        remaining: value
+        (value == 0).ifTrue(() => {
+            digits[0] = 48
+        })
+        (() => remaining > 0).whileTrue() {
+            digits[digits.size()] = 48 + (remaining % 10)
+            remaining = remaining.div(10)
+        }
+        index: digits.size() - 1
+        (() => index >= 0).whileTrue() {
+            output.add(digits[index])
+            index = index - 1
+        }
+    }
+
+    appendText: (text, alphanumeric) => {
+        bytes: Encoding.UTF8.encode(text)
+        (bytes.size() == 0).ifTrue(() => {
+            Error().signal()
+        })
+        hasNonDigit: false
+        bytes.each((octet) => {
+            isIdentifierOctet(octet).ifFalse(() => {
+                Error().signal()
+            })
+            isDigit(octet).ifFalse(() => {
+                hasNonDigit = true
+            })
+            output.add(octet)
+        })
+        (alphanumeric && (hasNonDigit == false)).ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    appendIdentifiers: (separator, identifiers, alphanumeric) => {
+        next: separator
+        identifiers.each((identifier) => {
+            output.add(next)
+            next = 46
+            Integer.recognizes(identifier).ifTrue(() => {
+                appendDecimal(identifier)
+            })
+            String.recognizes(identifier).ifTrue(() => {
+                appendText(identifier, alphanumeric)
+            })
+        })
+    }
+
+    appendDecimal(version.major)
+    output.add(46)
+    appendDecimal(version.minor)
+    output.add(46)
+    appendDecimal(version.patch)
+    appendIdentifiers(45, version.prerelease, true)
+    appendIdentifiers(43, version.build, false)
+    Encoding.UTF8.decode(output)
+}
+
+/// Answers `-1`, `0`, or `1` as version `left` has lower, equal, or higher
+/// Semantic Versioning 2.0.0 precedence than version `right`. Core components
+/// compare numerically; a version without prerelease identifiers outranks one
+/// with them; prerelease identifiers compare left to right, numeric ones
+/// numerically and below every alphanumeric one, alphanumeric ones by ASCII
+/// octet order; a longer prerelease list outranks its prefix. Build metadata
+/// never participates, so precedence `0` does not imply `==`. Arguments must
+/// have the representation answered by `parse`; otherwise an Error is
+/// signalled.
+comparePrecedence: (left, right) => {
+    // Requires the representation answered by `parse`.
+    requireVersion: (version) => {
+        (Integer.recognizes(version.major) &&
+            Integer.recognizes(version.minor) &&
+            Integer.recognizes(version.patch) &&
+            Array.recognizes(version.prerelease) &&
+            Array.recognizes(version.build)).ifFalse(() => {
+            Error().signal()
+        })
+        ((version.major >= 0) && (version.minor >= 0) && (version.patch >= 0)).ifFalse(() => {
+            Error().signal()
+        })
+        version.prerelease.each((identifier) => {
+            numeric: Integer.recognizes(identifier) && (identifier >= 0)
+            (numeric || String.recognizes(identifier)).ifFalse(() => {
+                Error().signal()
+            })
+        })
+        version.build.each((identifier) => {
+            String.recognizes(identifier).ifFalse(() => {
+                Error().signal()
+            })
+        })
+    }
+
+    requireVersion(left)
+    requireVersion(right)
+
+    compareIntegers: (first, second) => {
+        result: 0
+        (first < second).ifTrue(() => {
+            result = -1
+        })
+        (first > second).ifTrue(() => {
+            result = 1
+        })
+        result
+    }
+
+    compareText: (first, second) => {
+        firstBytes: Encoding.UTF8.encode(first)
+        secondBytes: Encoding.UTF8.encode(second)
+        limit: firstBytes.size()
+        (secondBytes.size() < limit).ifTrue(() => {
+            limit = secondBytes.size()
+        })
+        result: 0
+        index: 0
+        (() => (result == 0) && (index < limit)).whileTrue() {
+            result = compareIntegers(firstBytes[index], secondBytes[index])
+            index = index + 1
+        }
+        (result == 0).ifTrue(() => {
+            result = compareIntegers(firstBytes.size(), secondBytes.size())
+        })
+        result
+    }
+
+    compareIdentifiers: (first, second) => {
+        firstNumeric: Integer.recognizes(first)
+        secondNumeric: Integer.recognizes(second)
+        result: 0
+        (firstNumeric && secondNumeric).ifTrue(() => {
+            result = compareIntegers(first, second)
+        })
+        (firstNumeric && (!secondNumeric)).ifTrue(() => {
+            result = -1
+        })
+        ((!firstNumeric) && secondNumeric).ifTrue(() => {
+            result = 1
+        })
+        ((!firstNumeric) && (!secondNumeric)).ifTrue(() => {
+            result = compareText(first, second)
+        })
+        result
+    }
+
+    result: compareIntegers(left.major, right.major)
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.minor, right.minor)
+    })
+    (result == 0).ifTrue(() => {
+        result = compareIntegers(left.patch, right.patch)
+    })
+    (result == 0).ifTrue(() => {
+        leftSize: left.prerelease.size()
+        rightSize: right.prerelease.size()
+        ((leftSize == 0) || (rightSize == 0)).ifTrue(() => {
+            // A release outranks any prerelease of the same core.
+            result = compareIntegers(rightSize, leftSize)
+        })
+        ((leftSize > 0) && (rightSize > 0)).ifTrue(() => {
+            limit: leftSize
+            (rightSize < limit).ifTrue(() => {
+                limit = rightSize
+            })
+            index: 0
+            (() => (result == 0) && (index < limit)).whileTrue() {
+                result = compareIdentifiers(left.prerelease[index], right.prerelease[index])
+                index = index + 1
+            }
+            (result == 0).ifTrue(() => {
+                result = compareIntegers(leftSize, rightSize)
+            })
+        })
+    })
+    result
 }

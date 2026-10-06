@@ -1,0 +1,148 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+SemVer: import("std:semver/SemVer")
+
+// Requires `compare(left, right) == expected`, sign antisymmetry, and
+// determinism over repeated calls.
+requireOrder: (left, right, expected) => {
+    a: SemVer.parse(left)
+    b: SemVer.parse(right)
+    Assertions.require(SemVer.comparePrecedence(a, b) == expected)
+    Assertions.require(SemVer.comparePrecedence(b, a) == (0 - expected))
+    Assertions.require(SemVer.comparePrecedence(a, b) == expected)
+    true
+}
+
+requireIncreasing: (...texts) => {
+    versions: Map()
+    texts.each((text) => {
+        versions[versions.size()] = SemVer.parse(text)
+    })
+    i: 0
+    (() => i < versions.size()).whileTrue() {
+        j: 0
+        (() => j < versions.size()).whileTrue() {
+            expected: 0
+            (i < j).ifTrue(() => { expected = -1 })
+            (i > j).ifTrue(() => { expected = 1 })
+            Assertions.require(SemVer.comparePrecedence(versions[i], versions[j]) == expected)
+            j = j + 1
+        }
+        i = i + 1
+    }
+    true
+}
+
+tests: [
+    Test("precedence official vector", () => {
+        requireIncreasing(
+            "1.0.0-alpha",
+            "1.0.0-alpha.1",
+            "1.0.0-alpha.beta",
+            "1.0.0-beta",
+            "1.0.0-beta.2",
+            "1.0.0-beta.11",
+            "1.0.0-rc.1",
+            "1.0.0"
+        )
+    }),
+    Test("precedence core components", () => {
+        requireOrder("1.0.0", "2.0.0", -1)
+        requireOrder("2.0.0", "2.1.0", -1)
+        requireOrder("2.1.0", "2.1.1", -1)
+        requireOrder("2.0.0", "1.9.9", 1)
+        requireOrder("1.10.0", "1.9.0", 1)
+        requireOrder("0.0.0", "0.0.0", 0)
+        requireOrder("18446744073709551615.0.0", "18446744073709551616.0.0", -1)
+        requireOrder("1.99999999999999999999999999999.0", "1.100000000000000000000000000000.0", -1)
+        requireOrder("1.2.340282366920938463463374607431768211457", "1.2.340282366920938463463374607431768211456", 1)
+        requireOrder("2.0.0-alpha", "1.99.99", 1)
+    }),
+    Test("precedence release above prerelease", () => {
+        requireOrder("1.0.0-alpha", "1.0.0", -1)
+        requireOrder("1.0.0-0", "1.0.0", -1)
+        requireOrder("1.0.0-rc.1+build", "1.0.0", -1)
+    }),
+    Test("precedence numeric prerelease identifiers", () => {
+        requireOrder("1.0.0-2", "1.0.0-11", -1)
+        requireOrder("1.0.0-1", "1.0.0-2", -1)
+        requireOrder("1.0.0-alpha.9", "1.0.0-alpha.10", -1)
+        requireOrder(
+            "1.0.0-999999999999999999999",
+            "1.0.0-1000000000000000000000",
+            -1
+        )
+        requireOrder("1.0.0-18446744073709551616", "1.0.0-18446744073709551615", 1)
+    }),
+    Test("precedence numeric below alphanumeric", () => {
+        requireOrder("1.0.0-1", "1.0.0-alpha", -1)
+        requireOrder("1.0.0-2", "1.0.0-beta", -1)
+        requireOrder("1.0.0-999999999999999999999", "1.0.0-alpha", -1)
+        requireOrder("1.0.0-999999999999999999999", "1.0.0-0a", -1)
+        requireOrder("1.0.0-alpha.1", "1.0.0-alpha.-", -1)
+    }),
+    Test("precedence alphanumeric ASCII order", () => {
+        requireOrder("1.0.0-A", "1.0.0-a", -1)
+        requireOrder("1.0.0-Z", "1.0.0-a", -1)
+        requireOrder("1.0.0-alpha", "1.0.0-beta", -1)
+        requireOrder("1.0.0--", "1.0.0-0a", -1)
+        requireOrder("1.0.0-01a", "1.0.0-a01", -1)
+        requireOrder("1.0.0-rc-1", "1.0.0-rc1", -1)
+        requireOrder("1.0.0-alpha", "1.0.0-alphab", -1)
+        requireOrder("1.0.0-beta", "1.0.0-Beta", 1)
+        requireOrder("1.0.0-x-y", "1.0.0-x-y", 0)
+    }),
+    Test("precedence common prefix", () => {
+        requireOrder("1.0.0-alpha", "1.0.0-alpha.1", -1)
+        requireOrder("1.0.0-alpha.1", "1.0.0-alpha.1.1", -1)
+        requireOrder("1.0.0-alpha.beta", "1.0.0-alpha.beta.0", -1)
+        requireOrder("1.0.0-0.0", "1.0.0-0", 1)
+    }),
+    Test("precedence ignores build metadata", () => {
+        requireOrder("1.0.0+linux", "1.0.0+windows", 0)
+        requireOrder("1.0.0+abc", "1.0.0+def", 0)
+        requireOrder("1.0.0-alpha+001", "1.0.0-alpha+xyz", 0)
+        requireOrder("1.0.0-alpha+001", "1.0.0-alpha+999", 0)
+        requireOrder("1.0.0", "1.0.0+a.b.c", 0)
+        requireOrder("1.0.0-alpha+zzz", "1.0.0-alpha.1+aaa", -1)
+        requireOrder("1.0.0+zzz", "1.0.1+aaa", -1)
+    }),
+    Test("precedence self and independent parses", () => {
+        version: SemVer.parse("1.2.3-alpha.7+build")
+        Assertions.require(SemVer.comparePrecedence(version, version) == 0)
+        Assertions.require(SemVer.comparePrecedence(version, SemVer.parse("1.2.3-alpha.7+build")) == 0)
+    }),
+    Test("precedence does not mutate operands", () => {
+        left: SemVer.parse("1.2.3-alpha.7+b.1")
+        right: SemVer.parse("1.2.3-alpha.beta+c")
+        prerelease: left.prerelease
+        build: left.build
+        Assertions.require(SemVer.comparePrecedence(left, right) == -1)
+        Assertions.require(SemVer.comparePrecedence(left, right) == -1)
+        Assertions.require(left.prerelease === prerelease)
+        Assertions.require(left.build === build)
+        Assertions.require(SemVer.format(left) == "1.2.3-alpha.7+b.1")
+        Assertions.require(SemVer.format(right) == "1.2.3-alpha.beta+c")
+    }),
+    Test("precedence rejects non-versions", () => {
+        version: SemVer.parse("1.0.0")
+        Assertions.signals(Error, () => { SemVer.comparePrecedence("1.0.0", version) })
+        Assertions.signals(Error, () => { SemVer.comparePrecedence(version, null) })
+        Assertions.signals(Error, () => { SemVer.comparePrecedence(version, 1) })
+    })
+]

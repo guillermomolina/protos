@@ -126,7 +126,10 @@ load: (corpusId) => {
         selected = planFromEntries(
             "semver/",
             Array(
-            Array("parse.protos", "suite-native", "-")
+            Array("parse.protos", "suite-native", "-"),
+            Array("precedence.protos", "suite-native", "-"),
+            Array("format.protos", "suite-native", "-"),
+            Array("equality.protos", "suite-native", "-")
             )
         )
         matched = true
