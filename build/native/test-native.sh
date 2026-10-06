@@ -67,11 +67,11 @@ test_tool_status=$?
 
 test_tool_output_ok=1
 for expected_line in \
-    "[uri] 0/4" \
-    "[uri] 1/4" \
-    "[uri] 2/4" \
-    "[uri] 3/4" \
-    "[uri] 4/4 passed" \
+    "[library/uri] 0/4" \
+    "[library/uri] 1/4" \
+    "[library/uri] 2/4" \
+    "[library/uri] 3/4" \
+    "[library/uri] 4/4 passed" \
     "4 passed, 0 failed"
 do
     if ! grep -Fqx -- "${expected_line}" "${test_tool_log}"; then

@@ -1760,11 +1760,11 @@ def validate(archive: Path) -> None:
 
         combined = test_result.stdout + "\n" + test_result.stderr
         expected_test_lines = (
-            "[uri] 0/4",
-            "[uri] 1/4",
-            "[uri] 2/4",
-            "[uri] 3/4",
-            "[uri] 4/4 passed",
+            "[library/uri] 0/4",
+            "[library/uri] 1/4",
+            "[library/uri] 2/4",
+            "[library/uri] 3/4",
+            "[library/uri] 4/4 passed",
             "4 passed, 0 failed",
             "Protos test tool bootstrap",
         )
