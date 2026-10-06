@@ -126,6 +126,35 @@ that answers:
   than the guest program;
 - where graph growth occurs before the bailout.
 
+### Single-root diagnostic workflow
+
+Expansion traces are printed per compilation, while expansion statistics are
+aggregated over the whole run and printed at shutdown. Neither can be attributed
+reliably to one root in a run that compiles many roots, and a global correlation
+of listener events with textual traces (TEST009-T) failed by construction.
+Diagnose one compilation unit at a time instead:
+
+1. narrow the strict-gate failure to one Test Tool Case (`make
+   diagnose-truffle-compilation` triages per Case);
+2. `make truffle-root-catalog TRUFFLE_ROOT_TEST_ARGS='--case <ref>'` lists the
+   stable selectors (`protos-root:<digest>`, derived from root kind, source URI
+   and exact span) of the semantic roots that Case lowers, without compiling;
+3. `make diagnose-truffle-root TRUFFLE_ROOT_SELECTOR=<selector>
+   TRUFFLE_ROOT_TEST_ARGS='--case <ref>' TRUFFLE_ROOT_EXPANSION=method|node|none`
+   compiles only that root (`engine.CompileOnly`, synchronous,
+   `CompilationFailureAction=Print`), with one expansion view and
+   `-Djdk.graal.Dump=Truffle:1` (`TRUFFLE_ROOT_DUMP_LEVEL=2` for phase-by-phase
+   graphs) retained under `target/truffle-compilation/root-diagnostic/`;
+4. open the `.bgv` in any IGV installation and inspect `After TruffleTier` (and
+   `After PartialEscape` when needed) for unexpected `Invoke` nodes,
+   implementation-generated control-flow splits, `Load`/`LoadIndexed`
+   indirections and dominant expanded host machinery.
+
+A `CodeTooLarge` failure of the selected root is valid evidence. The tool fails
+closed when the selector matches no target or several distinct target names, or
+when the trace or BGV evidence is missing. It never changes compiler limits,
+inlining, splitting or boundaries.
+
 ### Controlled falsification evidence
 
 Before publishing an architectural change, prefer a temporary diagnostic variant

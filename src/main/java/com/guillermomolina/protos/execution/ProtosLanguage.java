@@ -44,7 +44,6 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
 
     @Override
     protected ProtosLanguageContext createContext(Env env) {
-        ProtosCompilerabilityTrace.activateIfEnabled();
         return new ProtosLanguageContext(this, env);
     }
 

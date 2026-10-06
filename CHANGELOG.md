@@ -7,6 +7,56 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.236-SNAPSHOT
+
+- `TEST009-V` (guillermomolina/protos#795) replaces the TEST009-T global
+  compilerability causal correlator with the standard targeted Truffle/Graal
+  single-root diagnostic. There is no semantic, specification,
+  compiler-policy or strict-gate change.
+  - The TEST009-U evidence showed that the global model was wrong for the
+    APIs it consumed. Expansion trees are per compilation, expansion
+    statistics are run aggregates, and the runtime listener exposes neither
+    as structured per-compilation data. `ProtosCompilerabilityTrace`,
+    `ProtosCompilerabilityRootIdentity`, `ProtosCompilerabilityRecorder`,
+    `ProtosCompilerabilityListenerBridge`, `ProtosCompilerabilityJson`, their
+    test, `tools/truffle_compilerability_causal.py` and the
+    `protos.compilerability.causalTrace` property are removed. The earlier
+    TEST009-T entries remain historical.
+  - `ProtosDiagnosticRootIdentity`: only while the private
+    `-Dprotos.diagnostic.stableRootIdentity=true` property is set, each
+    semantic root records its exact span at lowering, prints one catalog
+    line, and names its call target
+    `protos-root:<digest>[KIND|uri|start+length]`. The digest covers only
+    kind, source URI and span, with no object hash or bytecode. A root
+    without a recorded span is `protos-root:unavailable[...]` (fail closed).
+    Without the property, root naming is the Truffle default.
+  - `tools/truffle_root_diagnostic.py` with `make truffle-root-catalog`
+    and `make diagnose-truffle-root`. The catalog lists the selectors lowered
+    by one Case without compiling. The diagnose step compiles only the
+    selected root (`engine.CompileOnly`, synchronous,
+    `CompilationFailureAction=Print`) with one expansion view
+    (`TraceMethodExpansion` or `TraceNodeExpansion`, never statistics) and
+    `-Djdk.graal.Dump=Truffle:1`, into a fresh directory under
+    `target/truffle-compilation/root-diagnostic/`. Results are
+    `TARGET_COMPILATION_SUCCEEDED`, `..._FAILED_CODE_TOO_LARGE` and
+    `..._FAILED_OTHER` (valid evidence), or `TARGET_NOT_FOUND`,
+    `TARGET_SELECTOR_AMBIGUOUS` and `TOOL_ACQUISITION_FAILED`.
+  - `make diagnose-truffle-compilation` is now per-Case triage only (report
+    `/v4`). It enables no expansion traces, no expansion statistics and no
+    causal fields. The strict SYNC/BACKGROUND gate is unchanged.
+  - Real acceptance: `protos-root:67ee73cdc49e3775` (the `items` body of
+    `frozenTuple` in `protos/tools/test/Manifest.protos`, compiled during the
+    `closure-and-argument-surface.protos::closure form equivalence` Case)
+    reported `TARGET_COMPILATION_SUCCEEDED`. The run produced two fresh BGV
+    files. Both opened in IGV, showed the selected root and contained
+    `After TruffleTier`.
+  - Known limitations: a root with generated continuations is reported as
+    ambiguous with its continuation names. Roots lowered from a Test Tool
+    Case's own source were not observed to compile under the Test Tool, so
+    the acceptance root came from the Tool's own sources.
+  - Focused gates, the real BGV/IGV acceptance and the integrated full suite
+    (`make test`) passed before this metadata was finalized.
+
 ## 0.3.235-SNAPSHOT
 
 - `TOOL011-B` (guillermomolina/protos#803) replaces the positional Test Tool

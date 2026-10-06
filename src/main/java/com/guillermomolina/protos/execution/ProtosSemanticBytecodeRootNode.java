@@ -124,18 +124,30 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     private ProtosFrameLexicalLayout frameNativeBindingLayout;
 
     /*
-     * TEST009-T: the exact root span, recorded by the lowerer only while the diagnostic
-     * compilerability causal trace is enabled, so a compiled root has a durable identity without
-     * materializing (reparsing) its lazy source information. Never read by guest execution.
+     * TEST009-V: the exact root span, recorded by the lowerer only while the diagnostic stable
+     * root identity is enabled, so a compiled root has a cross-run name without materializing
+     * (reparsing) its lazy source information. Never read by guest execution.
      */
-    private ProtosCompilerabilityRootIdentity.Span compilerabilityRootSpan;
+    private ProtosDiagnosticRootIdentity.Span diagnosticRootSpan;
 
-    final void recordCompilerabilityRootSpan(ProtosCompilerabilityRootIdentity.Span span) {
-        this.compilerabilityRootSpan = span;
+    final void recordDiagnosticRootSpan(ProtosDiagnosticRootIdentity.Span span) {
+        this.diagnosticRootSpan = span;
     }
 
-    final ProtosCompilerabilityRootIdentity.Span compilerabilityRootSpan() {
-        return compilerabilityRootSpan;
+    final ProtosDiagnosticRootIdentity.Span diagnosticRootSpan() {
+        return diagnosticRootSpan;
+    }
+
+    /**
+     * The default Truffle text unless {@link ProtosDiagnosticRootIdentity#PROPERTY} is set; then
+     * the stable diagnostic target name that {@code engine.CompileOnly} can select across runs.
+     */
+    @Override
+    public String toString() {
+        if (ProtosDiagnosticRootIdentity.ENABLED) {
+            return ProtosDiagnosticRootIdentity.targetName(diagnosticRootSpan);
+        }
+        return super.toString();
     }
 
     final void recordFrameNativeBindings(

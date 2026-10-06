@@ -30,8 +30,8 @@ Truffle compilation completed, and no compilation failure or performance
 warning was traced. Timeouts and an incomplete package/runtime plane fail.
 
 `diagnose` is manual escalation only: synchronous runs with textual
-compilation, performance-warning, method/node-expansion and inlining traces,
-retained under the artifact directory. It changes no product code and never
+compilation, performance-warning and inlining traces, retained under the
+artifact directory. It changes no product code and never
 tries patches or boundaries; a gate failure is classified from its evidence.
 
 BUG016-B: those traces and expansion statistics are published through
@@ -42,13 +42,12 @@ protos.test.cases/v1), then runs each opaque CaseRef in its own diagnostic JVM
 (`protos test ... --case <ref>`), at most --shard-workers JVMs at a time.
 CaseRefs are never decoded or derived here; the report keeps CasePlan order.
 
-TEST009-T: each diagnostic JVM also enables the private causal trace
-(-Dprotos.compilerability.causalTrace=true, absent from the strict modes). Every
-shard gains `causal_compilations`, one record per compilation with a durable root
-key, both graph tiers, the outcome and the attributed expansion evidence (see
-truffle_compilerability_causal). The report schema becomes /v3: a /v2 document plus
-the causal fields. Acquisition is COMPLETE only when every shard's causal evidence
-is complete and unambiguously correlated.
+TEST009-V: `diagnose` is per-Case triage only (report schema /v4). It no longer
+enables expansion traces or expansion statistics, and the TEST009-T global causal
+correlation it once carried is retired: a per-compilation expansion tree is only
+attributable inside a run that compiles one selected root. That single-root
+escalation (stable root catalog, CompileOnly, one expansion view, Dump=Truffle:1
+BGV under target/) is tools/truffle_root_diagnostic.py.
 """
 
 from __future__ import print_function
@@ -68,8 +67,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from truffle_jvm_launch import (CheckError, cli_command, compilations_done, failure_records,  # noqa: E402
                                 is_done_line, is_failure_line, run_cli, select_java)
-from truffle_compilerability_causal import (CAUSAL_TRACE_PROPERTY, COMPLETE, INCOMPLETE,  # noqa: E402
-                                            parse_causal_trace, summarize)
 
 ENGINE = "-Dpolyglot.engine."
 COMPILER = "-Dpolyglot.compiler."
@@ -101,12 +98,7 @@ DIAGNOSTIC_OPTIONS = (
     ENGINE + "CompilationFailureAction=Print",
     ENGINE + "TraceCompilation=true",
     COMPILER + "TracePerformanceWarnings=all",
-    COMPILER + "TraceMethodExpansion=truffleTier",
-    COMPILER + "MethodExpansionStatistics=truffleTier",
-    COMPILER + "TraceNodeExpansion=truffleTier",
-    COMPILER + "NodeExpansionStatistics=truffleTier",
     COMPILER + "TraceInlining=true",
-    CAUSAL_TRACE_PROPERTY,
 )
 
 SUMMARY = re.compile(r"(?:^|\s)([0-9][0-9,]*) passed, ([0-9][0-9,]*) failed\s*$")
@@ -237,12 +229,6 @@ def print_entry(entry, out, label: Optional[str] = None) -> None:
             print("  %s=%s" % (key, entry[key]), file=out)
     for failure in entry.get("failures", []):
         print("  " + failure, file=out)
-    for key in ("CAUSAL_ACQUISITION", "CAUSAL_COMPILATIONS", "CODE_TOO_LARGE_CAUSAL_RECORDS",
-                "SEMANTIC_CODE_TOO_LARGE_CAUSAL_RECORDS"):
-        if key in entry:
-            print("  %s=%s" % (key, entry[key]), file=out)
-    for problem in entry.get("causal_problems", []):
-        print("  CAUSAL " + problem, file=out)
     for record in entry.get("records", []):
         print(record, file=out)
 
@@ -271,7 +257,7 @@ def check(root: Path, java: str, modes: Sequence[str], test_arguments: Sequence[
 
 
 CASES_SCHEMA = "protos.test.cases/v1"
-DIAGNOSE_REPORT_SCHEMA = "protos.truffle-compilation.diagnose/v3"
+DIAGNOSE_REPORT_SCHEMA = "protos.truffle-compilation.diagnose/v4"
 DIAGNOSE_DIR = "diagnose"
 DEFAULT_SHARD_WORKERS = 1
 CASE_OPTION = "--case"
@@ -379,21 +365,8 @@ def shard_label(index: int) -> str:
 def run_diagnostic_shard(root: Path, java: str, test_arguments: Sequence[str], timeout: int, artifacts: Path,
                          index: int, ref: str) -> "OrderedDict[str, object]":
     """One logical Case in one fresh diagnostic JVM with exactly DIAGNOSTIC_OPTIONS; the timeout is its own."""
-    entry = run_mode(root, java, DIAGNOSE, DIAGNOSTIC_OPTIONS, shard_arguments(test_arguments, ref), timeout,
-                     artifacts, log_name="shard-%s.log" % shard_label(index))
-    return attach_causal(entry, Path(entry["log"]).read_text(encoding="utf-8") if "log" in entry else None)
-
-
-def attach_causal(entry, output: Optional[str]) -> "OrderedDict[str, object]":
-    """Adds the shard's causal records; the complete raw log stays retained under entry['log']."""
-    if output is None:
-        causal = OrderedDict([("status", INCOMPLETE), ("problems", ["NO_SHARD_OUTPUT"]), ("compilations", [])])
-    else:
-        causal = parse_causal_trace(output)
-    entry.update(summarize(causal))
-    entry["causal_problems"] = causal["problems"]
-    entry["causal_compilations"] = causal["compilations"]
-    return entry
+    return run_mode(root, java, DIAGNOSE, DIAGNOSTIC_OPTIONS, shard_arguments(test_arguments, ref), timeout,
+                    artifacts, log_name="shard-%s.log" % shard_label(index))
 
 
 def run_diagnostic_shards(cases: Sequence["OrderedDict[str, str]"], workers: int, test_arguments: Sequence[str],
@@ -453,12 +426,11 @@ def shard_acquired(shard) -> bool:
 
 
 def aggregate_diagnostic_shards(discovery, shards, problems) -> "OrderedDict[str, object]":
-    """A compiler failure stays FAIL evidence; incomplete causal evidence makes the acquisition ERROR."""
+    """A compiler failure stays FAIL evidence; an unobtained shard or coverage gap makes it ERROR."""
     counters = ("COMPILATIONS_DONE", "COMPILATION_FAILURES", "SHUTDOWN_CASCADE_FAILURES", "PERFORMANCE_WARNINGS",
                 "PE_CONSTANT_FAILURES", "OTHER_PERMANENT_FAILURES")
-    causal_complete = bool(shards) and all(shard.get("CAUSAL_ACQUISITION") == COMPLETE for shard in shards)
     acquired = discovery["status"] == "PASS" and not problems and bool(shards) and all(
-        shard_acquired(shard) for shard in shards) and causal_complete
+        shard_acquired(shard) for shard in shards)
     aggregate = OrderedDict()
     aggregate["status"] = "PASS" if acquired and all(shard["status"] == "PASS" for shard in shards) else (
         "FAIL" if acquired else "ERROR")
@@ -468,9 +440,6 @@ def aggregate_diagnostic_shards(discovery, shards, problems) -> "OrderedDict[str
     aggregate["SHARDS_TIMEOUT"] = sum(1 for shard in shards if shard["status"] != "ERROR"
                                       and shard.get("exit_code") is None)
     for counter in counters:
-        aggregate[counter] = sum(shard.get(counter, 0) for shard in shards)
-    aggregate["CAUSAL_ACQUISITION"] = COMPLETE if causal_complete else INCOMPLETE
-    for counter in ("CAUSAL_COMPILATIONS", "CODE_TOO_LARGE_CAUSAL_RECORDS", "SEMANTIC_CODE_TOO_LARGE_CAUSAL_RECORDS"):
         aggregate[counter] = sum(shard.get(counter, 0) for shard in shards)
     return aggregate
 

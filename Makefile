@@ -56,8 +56,14 @@ TRUFFLE_COMPILATION_TIMEOUT ?= 3600
 TRUFFLE_COMPILATION_SHARD_WORKERS ?= 1
 # BUG016-B: each diagnose shard runs exactly one Case, so the Test Tool --jobs is not forwarded by default.
 TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS ?=
+# TEST009-V: single-root diagnostic. Select one Case, list its stable root selectors with
+# truffle-root-catalog, then compile only one of them with diagnose-truffle-root.
+TRUFFLE_ROOT_TEST_ARGS ?=
+TRUFFLE_ROOT_SELECTOR ?=
+TRUFFLE_ROOT_EXPANSION ?= method
+TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -83,9 +89,15 @@ help:
 		'                      the Test Tool corpus on the JVM with CompileImmediately,' \
 		'                      ExitVM and performance warnings as errors, in SYNC and' \
 		'                      BACKGROUND compilation modes (included in make check)' \
-		'  make diagnose-truffle-compilation  Manual textual compilation diagnostics' \
-		'                      (expansion, inlining, performance-warning traces) retained' \
+		'  make diagnose-truffle-compilation  Manual per-Case compilation triage' \
+		'                      (compilation, inlining, performance-warning traces) retained' \
 		'                      under target/truffle-compilation; never changes product code' \
+		'  make truffle-root-catalog  List the stable semantic-root selectors lowered by' \
+		"                      TRUFFLE_ROOT_TEST_ARGS='--case <ref>' (no compilation)" \
+		'  make diagnose-truffle-root  Compile only TRUFFLE_ROOT_SELECTOR (CompileOnly) with' \
+		'                      TRUFFLE_ROOT_EXPANSION=method|node|none and a Graal' \
+		'                      Dump=Truffle:TRUFFLE_ROOT_DUMP_LEVEL BGV under target/;' \
+		"                      open it in IGV at 'After TruffleTier'" \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Run compilerability / PE bailout checks only:' \
@@ -103,7 +115,9 @@ help:
 		'' \
 		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
 		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...' \
-		'           TRUFFLE_COMPILATION_SHARD_WORKERS=... TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS=...'
+		'           TRUFFLE_COMPILATION_SHARD_WORKERS=... TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS=...' \
+		'           TRUFFLE_ROOT_TEST_ARGS=... TRUFFLE_ROOT_SELECTOR=... TRUFFLE_ROOT_EXPANSION=...' \
+		'           TRUFFLE_ROOT_DUMP_LEVEL=...'
 
 toolchain:
 	$(PYTHON) tools/verify_toolchain.py --mode check --scope development
@@ -226,6 +240,26 @@ diagnose-truffle-compilation:
 		--artifacts $(TRUFFLE_COMPILATION_DIR) \
 		--report $(TRUFFLE_COMPILATION_DIAGNOSE_REPORT) \
 		-- $(TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS)
+
+# TEST009-V: manual single-root escalation; observation only, never a compiler-policy change.
+truffle-root-catalog:
+	$(MVN) $(MVN_FLAGS) package -DskipTests
+	$(PYTHON) tools/test_truffle_root_diagnostic.py
+	$(PYTHON) tools/truffle_root_diagnostic.py catalog \
+		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
+		--artifacts $(TRUFFLE_COMPILATION_DIR) \
+		-- $(TRUFFLE_ROOT_TEST_ARGS)
+
+diagnose-truffle-root:
+	$(MVN) $(MVN_FLAGS) package -DskipTests
+	$(PYTHON) tools/test_truffle_root_diagnostic.py
+	$(PYTHON) tools/truffle_root_diagnostic.py diagnose \
+		--selector '$(TRUFFLE_ROOT_SELECTOR)' \
+		--expansion '$(TRUFFLE_ROOT_EXPANSION)' \
+		--dump-level '$(TRUFFLE_ROOT_DUMP_LEVEL)' \
+		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
+		--artifacts $(TRUFFLE_COMPILATION_DIR) \
+		-- $(TRUFFLE_ROOT_TEST_ARGS)
 
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe
