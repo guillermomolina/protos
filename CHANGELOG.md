@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.230-SNAPSHOT
+
+- `LIB010-E2-A` (AUD005, guillermomolina/protos#451) makes the
+  `std:toml/TOML` encoder's temporal fraction text linear in the emitted
+  length, closing audit finding F6. No specification change, no public API
+  change and no change to encoded spelling.
+  - `fractionText` now writes `.`, the zero padding and the coefficient
+    digits into one octet buffer and decodes it once, instead of repeatedly
+    prepending `"0"` to an immutable String.
+  - Added a suite-native round-trip test for a 400-digit zero-padded fraction
+    and a structural guard in `ProtosTomlClosureConformanceTest` against the
+    quadratic prepend pattern.
+  - AUD005, LIB010-E2 and LIB010 remain open (F3, F4 and F5 outstanding).
+
 ## 0.3.229-SNAPSHOT
 
 - `TEST009-T` adds a diagnostic-only causal compilerability acquisition to

@@ -201,6 +201,18 @@ tests: [
                 "\"time\" = 23:59:60.00123\n" +
                 "\"offset\" = 1979-05-27T00:32:00Z\n"
         )
+    }),
+    Test("encode round-trips a long zero-padded temporal fraction", () => {
+        TOML: import("std:toml/TOML")
+
+        encoded: TOML.encode(
+            TOML.table("time", TOML.localTime(0, 0, 0, 7, 400))
+        )
+        parsed: TOML.parse(encoded)
+
+        Assertions.require(encoded.size() == 419)
+        Assertions.require(parsed.value["time"].value.fraction.coefficient == 7)
+        Assertions.require(parsed.value["time"].value.fraction.digits == 400)
     })
 ]
 tests.freeze()

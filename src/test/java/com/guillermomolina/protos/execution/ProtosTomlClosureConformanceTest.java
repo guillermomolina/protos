@@ -29,5 +29,6 @@ final class ProtosTomlClosureConformanceTest {
         assertFalse(source.contains("loadFile"), source);
         assertFalse(source.contains("saveFile"), source);
         assertFalse(source.contains("appendQuotes(quote, remaining - 1)"), source);
+        assertFalse(source.contains("raw = \"0\" + raw"), source);
     }
 }

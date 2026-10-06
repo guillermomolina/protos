@@ -908,11 +908,17 @@ encode: (rootTable) => {
 
         result: ""
         (digits > 0).ifTrue(() => {
-            raw: integerText(coefficient)
-            (() => raw.size() < digits).whileTrue(() => {
-                raw = "0" + raw
+            raw: Encoding.UTF8.encode(integerText(coefficient))
+            buffer: Encoding.UTF8.encode(".")
+            padding: digits - raw.size()
+            (() => padding > 0).whileTrue(() => {
+                buffer.add(48)
+                padding = padding - 1
             })
-            result = "." + raw
+            raw.each((octet) => {
+                buffer.add(octet)
+            })
+            result = Encoding.UTF8.decode(buffer)
         })
         result
     }
