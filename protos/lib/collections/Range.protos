@@ -17,8 +17,12 @@
 
 /// Visits each Integer in [start, stop) in ascending unit order.
 each: (start, stop, block) => {
-    start.div(1)
-    stop.div(1)
+    Integer.recognizes(start).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(stop).ifFalse(() => {
+        Error().signal()
+    })
 
     current: start
 
@@ -32,8 +36,12 @@ each: (start, stop, block) => {
 
 /// Visits each Integer in [start, stop) in descending unit order.
 reverseEach: (start, stop, block) => {
-    start.div(1)
-    stop.div(1)
+    Integer.recognizes(start).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(stop).ifFalse(() => {
+        Error().signal()
+    })
 
     current: stop
 

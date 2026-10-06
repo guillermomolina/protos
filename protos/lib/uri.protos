@@ -596,7 +596,9 @@ format: (reference) => {
 
     validateOptionalText: (value) => {
         (value === null).ifFalse(() => {
-            ignoredValidation: Encoding.UTF8.encode(value)
+            String.recognizes(value).ifFalse(() => {
+                Error().signal()
+            })
         })
     }
 
@@ -604,7 +606,9 @@ format: (reference) => {
     validateOptionalText(userInfoValue)
     validateOptionalText(hostValue)
     validateOptionalText(portValue)
-    ignoredPathValidation: Encoding.UTF8.encode(pathValue)
+    String.recognizes(pathValue).ifFalse(() => {
+        Error().signal()
+    })
     validateOptionalText(queryValue)
     validateOptionalText(fragmentValue)
 
