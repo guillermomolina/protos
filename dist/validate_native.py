@@ -1346,10 +1346,14 @@ FALLBACK_RUNTIME_WARNING_STDERR = (
 
 
 def unexpected_stderr(stderr: str) -> str:
-    if stderr.startswith(FALLBACK_RUNTIME_WARNING_STDERR):
-        return stderr[len(FALLBACK_RUNTIME_WARNING_STDERR):].lstrip("\n")
+    remaining = stderr
 
-    return stderr
+    while remaining.startswith(FALLBACK_RUNTIME_WARNING_STDERR):
+        remaining = remaining[
+            len(FALLBACK_RUNTIME_WARNING_STDERR):
+        ].lstrip("\n")
+
+    return remaining
 
 
 def interpreter_only_probe_source() -> str:

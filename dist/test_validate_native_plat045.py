@@ -123,6 +123,25 @@ class FallbackWarningStderrTest(unittest.TestCase):
     def test_empty_stderr_is_accepted(self) -> None:
         self.assertEqual("", unexpected_stderr(""))
 
+    def test_repeated_exact_fallback_warnings_are_expected(self) -> None:
+        self.assertEqual(
+            "",
+            unexpected_stderr(
+                FALLBACK_RUNTIME_WARNING_STDERR
+                + FALLBACK_RUNTIME_WARNING_STDERR
+            ),
+        )
+
+    def test_other_stderr_after_repeated_warnings_is_rejected(self) -> None:
+        self.assertEqual(
+            "boom\n",
+            unexpected_stderr(
+                FALLBACK_RUNTIME_WARNING_STDERR
+                + FALLBACK_RUNTIME_WARNING_STDERR
+                + "boom\n"
+            ),
+        )
+
     def test_other_stderr_after_warning_is_rejected(self) -> None:
         self.assertEqual(
             "boom\n",
