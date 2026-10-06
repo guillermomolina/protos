@@ -260,6 +260,38 @@ class ValidationImpactTest(unittest.TestCase):
             IMPACT.parse_name_status_z(payload),
         )
 
+    # AUD007-B2: one taxonomy for commit deltas and untracked checkout input.
+    def test_observability_shares_the_delta_taxonomy(self):
+        observable = [
+            "src/main/java/com/guillermomolina/protos/Shadow.java",
+            "src/test/java/com/guillermomolina/protos/ShadowTest.java",
+            "protos/lib/Shadow.protos",
+            "protos/tools/package/Shadow.protos",
+            "protos/tools/test/Shadow.protos",
+            "scripts/shadow.py",
+            "tools/shadow.py",
+            "pom.xml",
+            "future/unknown.txt",
+            ".mvn/maven.config",
+        ]
+        self.assertEqual(observable, IMPACT.observable_paths(observable))
+        self.assertEqual([], IMPACT.observable_paths([
+            "docs/scratch/notes.md",
+            "./docs/x.md",
+            "CHANGELOG.md",
+        ]))
+
+    def test_dot_directory_cannot_alias_neutral_root(self):
+        self.assertTrue(IMPACT.path_is_validation_observable(".docs/x.md"))
+        self.assert_full([".docs/x.md"])
+        self.assertFalse(IMPACT.path_is_validation_observable("./docs/x.md"))
+
+    def test_ignored_maven_configuration_is_declared_observable(self):
+        self.assertIn(".mvn/", IMPACT.IGNORED_OBSERVABLE_PREFIXES)
+        for prefix in IMPACT.IGNORED_OBSERVABLE_PREFIXES:
+            self.assertTrue(
+                IMPACT.path_is_validation_observable(prefix + "config"))
+
 
 if __name__ == "__main__":
     unittest.main()

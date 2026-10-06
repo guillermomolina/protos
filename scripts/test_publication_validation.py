@@ -13,7 +13,11 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 
-"""Focused integration tests for scripts/publication_validation.py."""
+"""Focused integration tests for scripts/publication_validation.py.
+
+AUD007-B2 cases print ``AUD007_RESULT <KEY>=<VALUE>`` lines to stderr after
+their invariants have been asserted.
+"""
 
 from __future__ import print_function
 
@@ -22,6 +26,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -41,6 +46,12 @@ SPEC = importlib.util.spec_from_file_location(
 HELPER = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(HELPER)
 
+SHADOW_SOURCE = "src/main/java/com/guillermomolina/protos/Shadow.java"
+
+
+def report(key, value):
+    print("AUD007_RESULT %s=%s" % (key, value), file=sys.stderr)
+
 
 class PublicationValidationTest(unittest.TestCase):
     def setUp(self):
@@ -50,6 +61,9 @@ class PublicationValidationTest(unittest.TestCase):
         self.log = self.temp / "mvn.log"
         self.make_log = self.temp / "make.log"
         self.bin.mkdir()
+        self.tmp = self.temp / "tmp"
+        self.tmp.mkdir()
+        self.shared_m2 = self.temp / "shared-m2"
 
         subprocess.run(
             ["git", "init", "-b", "main", str(self.repo)],
@@ -82,6 +96,8 @@ class PublicationValidationTest(unittest.TestCase):
             str(scripts / "legacy_execution_guard.py"),
         )
         (self.repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+        (self.repo / ".gitignore").write_text(
+            "__pycache__/\ntmp/\n.mvn/\n", encoding="utf-8")
 
         subprocess.run(
             ["git", "-C", str(self.repo), "add", "."],
@@ -107,6 +123,9 @@ class PublicationValidationTest(unittest.TestCase):
         make.write_text(
             "#!/usr/bin/env bash\n"
             "printf '%s\\n' \"$*\" >> \"$MAKE_LOG\"\n"
+            "if [ -e \"" + SHADOW_SOURCE + "\" ]; then\n"
+            "  printf 'observed\\n' > \"$MAKE_LOG.shadow\"\n"
+            "fi\n"
             "exit \"${MAKE_EXIT_CODE:-0}\"\n",
             encoding="utf-8",
         )
@@ -154,7 +173,11 @@ class PublicationValidationTest(unittest.TestCase):
         env["MVN_EXIT_CODE"] = exit_code
         env["MAKE_LOG"] = str(self.make_log)
         env["MAKE_EXIT_CODE"] = make_exit_code
-        with mock.patch.dict(os.environ, env, clear=True):
+        env["HOME"] = str(self.temp / "home")
+        env[HELPER.SHARED_MAVEN_REPOSITORY_ENV] = str(self.shared_m2)
+        env.pop("MVN_FLAGS", None)
+        with mock.patch.dict(os.environ, env, clear=True), \
+                mock.patch.object(HELPER.tempfile, "tempdir", str(self.tmp)):
             return HELPER.run(
                 self.repo,
                 self.base,
@@ -180,6 +203,28 @@ class PublicationValidationTest(unittest.TestCase):
             if line.strip()
         ]
 
+    def assert_full_make(self):
+        calls = self.make_calls()
+        self.assertEqual(1, len(calls))
+        words = calls[0].split()
+        self.assertEqual("test", words[0])
+        self.assert_isolated_maven(words[1:], prefix="MVN_FLAGS=")
+
+    def assert_isolated_maven(self, words, prefix=""):
+        private = [w for w in words
+                   if w.startswith(prefix + "-Dmaven.repo.local=")
+                   or w.startswith("-Dmaven.repo.local=")]
+        tail = [w for w in words if w.startswith("-Dmaven.repo.local.tail=")]
+        self.assertEqual(1, len(private), words)
+        self.assertEqual(["-Dmaven.repo.local.tail=" + str(self.shared_m2)], tail)
+        private_path = Path(private[0].split("=", 2)[-1])
+        self.assertEqual(self.tmp, private_path.parent.parent)
+        self.assertTrue(private_path.parent.name.startswith(
+            HELPER.PRIVATE_MAVEN_PREFIX))
+        self.assertFalse(private_path.parent.exists(),
+                         "private Maven repository must be cleaned up")
+        return private_path
+
     def test_package_local_runs_complete_package_affected_set(self):
         candidate = self.commit_files({
             "protos/tools/package/Probe.protos": "self\n",
@@ -190,6 +235,7 @@ class PublicationValidationTest(unittest.TestCase):
         self.assertIn("-Dtest=ProtosPackage*Test", calls[0])
         self.assertIn("ProtosTestToolPackage*Test", calls[0])
         self.assertTrue(calls[0].endswith(" test"))
+        self.assert_isolated_maven(calls[0].split())
 
     def test_test_tool_local_runs_complete_test_tool_affected_set(self):
         candidate = self.commit_files({
@@ -206,7 +252,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_unknown_path_runs_full(self):
         candidate = self.commit_files({
@@ -214,7 +260,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_cross_tool_delta_runs_full(self):
         candidate = self.commit_files({
@@ -223,7 +269,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_top_level_closure_with_tool_change_forces_full(self):
         candidate = self.commit_files({
@@ -231,7 +277,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_top_level_closure_without_tool_change_runs_full(self):
         candidate = self.commit_files({
@@ -239,7 +285,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_shared_plus_package_tool_change_runs_complete_suite(self):
         candidate = self.commit_files({
@@ -248,7 +294,7 @@ class PublicationValidationTest(unittest.TestCase):
         })
         self.assertEqual(0, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_source_style_regression_fails_before_maven(self):
         candidate = self.commit_files({
@@ -309,7 +355,7 @@ require(true)
             self.run_helper(candidate, make_exit_code="9"),
         )
         self.assertEqual([], self.maven_calls())
-        self.assertEqual(["test"], self.make_calls())
+        self.assert_full_make()
 
     def test_dirty_tracked_state_fails_before_maven(self):
         candidate = self.commit_files({
@@ -356,6 +402,199 @@ require(true)
                 '"affected_test_set":"NON_TOOL","full_test_suite":"SKIP_ALLOWED",'
                 '"reason":"retired quarantine"}'
             )
+
+    # AUD007-B2 F3: candidate evidence binds every observable input -------
+    def untracked(self, relative, content="untracked\n"):
+        path = self.repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+        return path
+
+    def run_helper_capture(self, candidate):
+        with mock.patch.object(sys, "stderr", new=_Capture()) as err:
+            code = self.run_helper(candidate)
+        return code, err.text()
+
+    def test_f3_proof_untracked_input_escapes_tracked_only_binding(self):
+        candidate = self.commit_files({
+            "src/main/java/com/guillermomolina/protos/Probe.java":
+                "final class Probe {}\n",
+        })
+        self.untracked(SHADOW_SOURCE, "final class Shadow {}\n")
+
+        absent = subprocess.run(
+            ["git", "-C", str(self.repo), "cat-file", "-e",
+             candidate + ":" + SHADOW_SOURCE],
+            stderr=subprocess.DEVNULL,
+        ).returncode != 0
+        self.assertTrue(absent)
+        report("CANDIDATE_SHA_DOES_NOT_CONTAIN_INPUT", "YES")
+
+        # The pre-repair binding was exactly this tracked-only status query.
+        pre_repair = subprocess.check_output(
+            ["git", "-C", str(self.repo), "status", "--porcelain",
+             "--untracked-files=no"], text=True).strip()
+        self.assertEqual("", pre_repair)
+        with mock.patch.object(HELPER, "observable_untracked_inputs",
+                               return_value=[]):
+            self.assertEqual(0, self.run_helper(candidate))
+        report("VALIDATOR_ACCEPTED_BEFORE_REPAIR", "YES")
+        shadow_log = Path(str(self.make_log) + ".shadow")
+        self.assertTrue(shadow_log.is_file(),
+                        "selected validation must observe the untracked input")
+        report("VALIDATION_CAN_OBSERVE_INPUT", "YES")
+
+        self.make_log.unlink()
+        shadow_log.unlink()
+        code, err = self.run_helper_capture(candidate)
+        self.assertEqual(2, code)
+        self.assertIn("untracked validation-observable input", err)
+        self.assertIn(SHADOW_SOURCE, err)
+        self.assertEqual([], self.make_calls())
+        self.assertTrue((self.repo / SHADOW_SOURCE).is_file(),
+                        "fail-closed must preserve the untracked input")
+        report("F3_UNTRACKED_CANDIDATE_INPUT", "REPAIRED")
+
+    def assert_untracked_fails_closed(self, relative):
+        candidate = self.commit_files({
+            "protos/tools/package/Probe.protos": "self\n",
+        })
+        self.untracked(relative)
+        code, err = self.run_helper_capture(candidate)
+        self.assertEqual(2, code, relative)
+        self.assertIn(relative, err)
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual([], self.make_calls())
+        self.assertTrue((self.repo / relative).is_file())
+
+    def test_f3_untracked_main_source_fails_closed(self):
+        self.assert_untracked_fails_closed(SHADOW_SOURCE)
+
+    def test_f3_untracked_test_source_fails_closed(self):
+        self.assert_untracked_fails_closed(
+            "src/test/java/com/guillermomolina/protos/ShadowTest.java")
+
+    def test_f3_untracked_protos_library_and_tool_fail_closed(self):
+        self.assert_untracked_fails_closed("protos/lib/Shadow.protos")
+
+    def test_f3_untracked_tool_local_input_fails_closed(self):
+        self.assert_untracked_fails_closed("protos/tools/package/Shadow.protos")
+
+    def test_f3_untracked_validation_script_fails_closed(self):
+        self.assert_untracked_fails_closed("scripts/shadow_guard.py")
+
+    def test_f3_untracked_tools_helper_fails_closed(self):
+        self.assert_untracked_fails_closed("tools/shadow_guard.py")
+
+    def test_f3_untracked_unknown_root_fails_closed(self):
+        self.assert_untracked_fails_closed("future/Shadow.protos")
+
+    def test_f3_ignored_maven_config_fails_closed(self):
+        candidate = self.commit_files({
+            "protos/tools/package/Probe.protos": "self\n",
+        })
+        self.untracked(".mvn/maven.config", "-Daether.offline=true\n")
+        code, err = self.run_helper_capture(candidate)
+        self.assertEqual(2, code)
+        self.assertIn(".mvn/maven.config", err)
+        self.assertEqual([], self.maven_calls())
+
+    def test_f3_unrelated_untracked_scratch_is_preserved(self):
+        candidate = self.commit_files({
+            "protos/tools/package/Probe.protos": "self\n",
+        })
+        self.untracked("docs/scratch/notes.md")
+        self.untracked("tmp/scratch.txt")
+        self.assertEqual(0, self.run_helper(candidate))
+        self.assertEqual(1, len(self.maven_calls()))
+        self.assertTrue((self.repo / "docs/scratch/notes.md").is_file())
+        self.assertTrue((self.repo / "tmp/scratch.txt").is_file())
+        report("F3_UNRELATED_UNTRACKED_PRESERVED", "YES")
+
+    def test_f3_clean_exact_candidate_passes(self):
+        candidate = self.commit_files({
+            "protos/tools/package/Probe.protos": "self\n",
+        })
+        self.assertEqual(0, self.run_helper(candidate))
+        report("F3_RELEVANT_UNTRACKED_FAIL_CLOSED", "YES")
+
+    def test_f3_dirty_tracked_error_names_path(self):
+        candidate = self.commit_files({
+            "protos/tools/package/Probe.protos": "self\n",
+        })
+        (self.repo / "tracked.txt").write_text("dirty\n", encoding="utf-8")
+        code, err = self.run_helper_capture(candidate)
+        self.assertEqual(2, code)
+        self.assertIn("tracked.txt", err)
+
+    # AUD007-B2 F1: writable Maven state is private per validation --------
+    def test_f1_concurrent_validations_get_distinct_private_heads(self):
+        with mock.patch.object(HELPER.tempfile, "tempdir", str(self.tmp)):
+            with HELPER.PrivateMavenRepository() as first:
+                with HELPER.PrivateMavenRepository() as second:
+                    self.assertNotEqual(first, second)
+                    self.assertTrue(first.is_dir() and second.is_dir())
+        self.assertEqual([], list(self.tmp.iterdir()))
+
+    def test_f1_recovery_removes_only_dead_owner_residue(self):
+        dead = subprocess.Popen([sys.executable, "-c", "pass"])
+        dead.wait()
+        stale = self.tmp / (HELPER.PRIVATE_MAVEN_PREFIX + "stale")
+        live = self.tmp / (HELPER.PRIVATE_MAVEN_PREFIX + "live")
+        foreign = self.tmp / "foreign-dir"
+        for path, pid in ((stale, dead.pid), (live, os.getpid())):
+            (path / "repository").mkdir(parents=True)
+            (path / HELPER.PRIVATE_MAVEN_OWNER).write_text(
+                '{"pid": %d}' % pid, encoding="utf-8")
+        foreign.mkdir()
+        recovered = HELPER.recover_private_maven_residue(self.tmp)
+        self.assertEqual([stale.name], recovered)
+        self.assertTrue(live.is_dir())
+        self.assertTrue(foreign.is_dir())
+
+    def test_f1_shared_repository_follows_user_settings(self):
+        home = self.temp / "home"
+        (home / ".m2").mkdir(parents=True)
+        (home / ".m2" / "settings.xml").write_text(
+            '<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">'
+            "<localRepository>${user.home}/custom-m2</localRepository>"
+            "</settings>", encoding="utf-8")
+        self.assertEqual(
+            (home / "custom-m2").resolve(),
+            HELPER.shared_maven_repository({"HOME": str(home)}))
+        self.assertEqual(
+            (self.temp / "x").resolve(),
+            HELPER.shared_maven_repository({
+                "HOME": str(home),
+                HELPER.SHARED_MAVEN_REPOSITORY_ENV: str(self.temp / "x")}))
+
+    def test_f1_full_validation_preserves_existing_mvn_flags(self):
+        command = HELPER.validation_command(
+            {"validation_impact": "FULL", "affected_test_set": "ALL"},
+            ["-Dmaven.repo.local=/p", "-Dmaven.repo.local.tail=/s"],
+            env={"MVN_FLAGS": "-B -q"})
+        self.assertEqual(
+            ["make", "test",
+             "MVN_FLAGS=-B -q -Dmaven.repo.local=/p -Dmaven.repo.local.tail=/s"],
+            command)
+
+    def test_f1_whitespace_repository_path_fails_closed(self):
+        with self.assertRaises(HELPER.PublicationValidationError):
+            HELPER.maven_isolation_flags(Path("/a b"), Path("/s"))
+
+
+class _Capture(object):
+    def __init__(self):
+        self.parts = []
+
+    def write(self, text):
+        self.parts.append(text)
+
+    def flush(self):
+        pass
+
+    def text(self):
+        return "".join(self.parts)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.233-SNAPSHOT
+
+- `AUD007-B2` (guillermomolina/protos#452) closes the parallel validation
+  launcher isolation defects. No specification change and no product runtime
+  change; the GITHUB003 optimistic fail-closed publication model is unchanged.
+  - F1: `scripts/publication_validation.py` gives every validation a private,
+    uniquely named writable Maven local repository and reads the shared one
+    only as a read-only `maven.repo.local.tail`. Cleanup is bounded, the
+    validation runs in its own process group, and dead-owner residue is
+    recovered. `scripts/maven_local_repository_harness.py` retains the
+    two-JVM proof that a shared writable repository has no multi-process
+    synchronization, and that the policy leaves it unwritten.
+  - F2: the real-DAP tests bind `127.0.0.1:0` and connect to the endpoint the
+    instrument publishes through `ProtosGraalDapReadinessAdapter`. They share
+    `ProtosDapTestSupport` instead of reserving, releasing and rebinding a port
+    number. `ProtosAud007DapPortOwnershipTest` retains the deterministic
+    TOCTOU proof and a source guard, and it runs in the serial Java lane.
+  - F3: publication validation fails closed on untracked, or ignored but
+    Maven-read (`.mvn/`), input that the selected validation can observe, and
+    names the offending paths. `scripts/validation_impact.py` exposes the
+    shared observability taxonomy. Paths it classifies as unobservable, such
+    as `docs/`, and gitignored scratch are preserved. Dot-directory paths no
+    longer alias a neutral root.
+
 ## 0.3.232-SNAPSHOT
 
 - `LIB010-E2-C` (guillermomolina/protos#418, AUD005 F3 / #451) retains the

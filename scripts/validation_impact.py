@@ -70,6 +70,11 @@ TEST_TOOL_SOURCE_GLOBS = (
     "src/main/java/com/guillermomolina/protos/execution/ProtosTestTool*.java",
 )
 
+# AUD007: gitignored roots that Maven still reads from the checkout. Git does
+# not report them as untracked, so candidate-evidence binding must list them
+# explicitly.
+IGNORED_OBSERVABLE_PREFIXES = (".mvn/",)
+
 PROTOS_CLI_PATH = "src/main/java/com/guillermomolina/protos/cli/ProtosCli.java"
 PROTOS_CLI_TEST_TOOL_METHOD = "    private int runBundledTestTool("
 
@@ -123,12 +128,36 @@ def _kind(path):
     return "FULL"
 
 
+def _normalize_path(raw):
+    # Strip only a literal "./" prefix: dot-directories such as ".mvn/" keep
+    # their leading dot so they cannot alias a different root.
+    path = raw.replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    return path.lstrip("/")
+
+
+def path_is_validation_observable(path):
+    """True when a checkout path can influence executable validation.
+
+    This is the same taxonomy that classifies commit deltas: only NEUTRAL
+    paths are unobservable, so every unknown root fails closed.
+    """
+    normalized = _normalize_path(path)
+    return bool(normalized) and _kind(normalized) != "NEUTRAL"
+
+
+def observable_paths(paths):
+    """Return the given paths that validation can observe, in input order."""
+    return [path for path in paths if path_is_validation_observable(path)]
+
+
 def classify_paths(paths, top_level_closure=False, kind_overrides=None):
     normalized = []
     for raw in paths:
         if raw is None:
             continue
-        path = raw.replace("\\", "/").lstrip("./")
+        path = _normalize_path(raw)
         if path and path not in normalized:
             normalized.append(path)
 
@@ -293,7 +322,7 @@ def protos_cli_change_is_test_tool_only(repo, base, head):
 def classify_delta(repo, base, head, top_level_closure=False):
     paths = changed_paths(repo, base, head)
     overrides = {}
-    normalized = [p.replace("\\", "/").lstrip("./") for p in paths]
+    normalized = [_normalize_path(p) for p in paths]
     if PROTOS_CLI_PATH in normalized:
         if protos_cli_change_is_test_tool_only(repo, base, head):
             overrides[PROTOS_CLI_PATH] = "TEST"
