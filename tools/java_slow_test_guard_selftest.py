@@ -311,7 +311,7 @@ class GuardSelfTest(unittest.TestCase):
         self.assertNotIn("test", prerequisites)
         self.assertNotIn("test-java", prerequisites)
         self.assertNotIn("test-protos", prerequisites)
-        self.assertIn("check-truffle-compilation", prerequisites)
+        self.assertNotIn("check-truffle-compilation", prerequisites)
 
     def test_warning_mode_downgrades_only_slow_test_failures(self) -> None:
         fail_lines = [

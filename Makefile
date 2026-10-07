@@ -88,7 +88,8 @@ help:
 		'  make check-truffle-compilation  Strict Truffle compilation gate: package, then run' \
 		'                      the Test Tool corpus on the JVM with CompileImmediately,' \
 		'                      ExitVM and performance warnings as errors, in SYNC and' \
-		'                      BACKGROUND compilation modes (included in make check)' \
+		'                      BACKGROUND compilation modes (explicit full-corpus audit;' \
+		'                      not part of make check)' \
 		'  make diagnose-truffle-compilation  Manual per-Case compilation triage' \
 		'                      (compilation, inlining, performance-warning traces) retained' \
 		'                      under target/truffle-compilation; never changes product code' \
@@ -100,9 +101,9 @@ help:
 		'                      BGV capture under target/ (handoff for external analysis)' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
-		'  make check          Run compilerability / PE bailout checks only:' \
-		'                      toolchain, static PE guards, generated-dispatch BCI and' \
-		'                      strict Truffle compilation; never runs make test' \
+		'  make check          Run bounded compilerability / PE bailout checks only:' \
+		'                      toolchain, static PE guards and generated-dispatch BCI;' \
+		'                      never runs make test or check-truffle-compilation' \
 		'  make verify         Run a clean Maven verify lifecycle' \
 		'  make clean          Remove Maven build output' \
 		'  make artifacts      Build the canonical exact-revision artifact set' \
@@ -274,10 +275,11 @@ test-protos:
 	exit $$status
 
 # TEST009: compilerability validation is independent from functional tests.
-# Cheap/static guards and the generated-dispatch BCI guard run first; the strict
-# Truffle compilation gate is the final bailout authority. `make test` is never
-# a prerequisite of `make check`.
-check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation
+# `make check` aggregates only the bounded routine guards (static PE guards and
+# the generated-dispatch BCI guard). TEST009-AM: the strict full-corpus Truffle
+# compilation gate is an explicit audit target (`make check-truffle-compilation`)
+# and is never a prerequisite of `make check`; neither is `make test`.
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify
