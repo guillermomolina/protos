@@ -1905,6 +1905,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default boolean isStructuredMapReadLookup() { return false; }
         default boolean isStructuredMapAtPut() { return false; }
         default boolean isStructuredMapRemove() { return false; }
+        default boolean isStructuredForeignEach() { return false; }
 
         /**
          * PLAT044 B′ (PERF026-C1) whole-pair admission of a selected standard
@@ -2029,6 +2030,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default PreparedMapRemoveCall prepareStructuredMapRemove() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Map.remove capability");
+        }
+
+        default ProtosForeignEachCall prepareStructuredForeignEach() {
+            throw new IllegalStateException(
+                    "prepared Closure call has no structured foreign each capability");
         }
 
         Object handleControlTransfer(ControlFlowException transfer);
@@ -2438,6 +2444,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Override
         public boolean isStructuredMapRemove() { return structured != null && structured.mapRemove; }
 
+        /**
+         * D188 projected foreign {@code each}, recognized by its private projection body like
+         * Array.match: the body is reachable only through the foreign projection, and the cursor
+         * itself re-validates the receiver.
+         */
+        @Override
+        public boolean isStructuredForeignEach() {
+            return ProtosForeignProjectedOperations.isEachImplementation(nativeBody);
+        }
+
         @Override
         public boolean requiresStructuredDispatch() {
             if (structured != null
@@ -2460,7 +2476,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return isStructuredCaseOf()
                     || isStructuredMapMatch()
                     || isStructuredArrayMatch()
-                    || isStructuredIdentityMapAtIfAbsent();
+                    || isStructuredIdentityMapAtIfAbsent()
+                    || isStructuredForeignEach();
         }
 
         @Override
@@ -2658,6 +2675,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.receiver(),
                     supplied,
                     activation);
+        }
+
+        @Override
+        public ProtosForeignEachCall prepareStructuredForeignEach() {
+            if (!isStructuredForeignEach()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured foreign each capability");
+            }
+            return new ProtosForeignEachCall(activation.receiver(), supplied, activation);
         }
 
         @Override
@@ -4652,6 +4678,92 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class FinishStructuredEnvironmentEach {
         @Specialization
         public static Object perform(PreparedEnvironmentEachCall prepared) {
+            return prepared.finish();
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredForeignEachCall {
+        @Specialization
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredForeignEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredForeignEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredForeignEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
+            return prepared.isStructuredForeignEach();
+        }
+    }
+
+    /**
+     * D188 projected foreign {@code each}: the cursor validates the receiver, arity and block
+     * callability before any foreign operation; the provider iterator is acquired lazily by the
+     * first {@link StructuredForeignEachHasNext}.
+     */
+    @Operation
+    public static final class PrepareStructuredForeignEachCall {
+        @Specialization
+        public static ProtosForeignEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredForeignEach();
+        }
+
+        @Specialization
+        public static ProtosForeignEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredForeignEach();
+        }
+
+        @Specialization
+        public static ProtosForeignEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredForeignEach();
+        }
+
+        @Specialization
+        public static ProtosForeignEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
+            return prepared.prepareStructuredForeignEach();
+        }
+    }
+
+    @Operation
+    public static final class StructuredForeignEachHasNext {
+        @Specialization
+        public static boolean perform(ProtosForeignEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    /** Pulls and admits one element, then prepares the ordinary invocation of the block. */
+    @Operation
+    public static final class PrepareStructuredForeignEachElementCall {
+        @Specialization
+        public static PreparedClosureCall perform(ProtosForeignEachCall prepared) {
+            return prepareClosureCall(
+                    prepared.callback(), List.of(prepared.current()), prepared.activation());
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredForeignEach {
+        @Specialization
+        public static void perform(ProtosForeignEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredForeignEach {
+        @Specialization
+        public static Object perform(ProtosForeignEachCall prepared) {
             return prepared.finish();
         }
     }

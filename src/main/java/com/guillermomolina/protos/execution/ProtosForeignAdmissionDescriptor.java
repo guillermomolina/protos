@@ -48,7 +48,9 @@ record ProtosForeignAdmissionDescriptor(
         INSTANTIABLE,
         INDEXED_READ,
         INDEXED_WRITE,
-        HASH_ENTRIES
+        HASH_ENTRIES,
+        /** Ordinary pull iteration is a faithful, unambiguous projection of this value. */
+        ITERABLE
     }
 
     ProtosForeignAdmissionDescriptor {

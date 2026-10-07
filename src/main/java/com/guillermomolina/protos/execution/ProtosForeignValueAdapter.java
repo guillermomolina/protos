@@ -80,6 +80,27 @@ interface ProtosForeignValueAdapter {
     }
 
     /**
+     * Acquires a fresh pull iterator over {@code target} for one projected {@code each}. The
+     * iterator is a provider-private handle bound to {@code session}; it is never admitted or
+     * guest-visible. Iteration never receives a Protos callback: Protos owns the loop.
+     */
+    default Object openIterator(ProtosForeignProviderSession session, Object target)
+            throws Exception {
+        throw new UnsupportedOperationException("foreign iterator");
+    }
+
+    default boolean iteratorHasNext(ProtosForeignProviderSession session, Object iterator)
+            throws Exception {
+        throw new UnsupportedOperationException("foreign iterator has-next");
+    }
+
+    /** Pulls the next element; the runtime admits it like any other provider result. */
+    default Object iteratorNext(ProtosForeignProviderSession session, Object iterator)
+            throws Exception {
+        throw new UnsupportedOperationException("foreign iterator next");
+    }
+
+    /**
      * Sanitizes one entered failure. The default exposes nothing beyond the language and
      * operation: host messages, stacks, and objects are never copied implicitly.
      */

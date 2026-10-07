@@ -7,6 +7,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.276-SNAPSHOT
+
+- `I082-D2` completes the generic D188 runtime with projected foreign pull
+  iteration, `foreign.each(block)` (`VALUES_AND_COLLECTIONS.md` "Indexed
+  access, foreign hash containers, and iteration"). There is no specification
+  change. On normal completion, `each` returns the receiver, matching every
+  standard `each` (owner decision; the D188 text does not yet state it).
+  - A provider declares the new `ITERABLE` capability; iterability is never
+    inferred from array/hash shape or from a foreign member named `each`, which
+    stays reserved.
+  - `ProtosForeignValueAdapter` gains `openIterator`, `iteratorHasNext` and
+    `iteratorNext`. These receive only the session and provider-private values,
+    never a Protos callback. Protos owns the loop.
+  - `ProtosForeignEachCall` validates the receiver, exact arity and the
+    ordinary callability of the block (any invokable value, not only a Closure)
+    before acquiring the iterator. It then pulls one element at a time, admits
+    it through `ProtosForeignValueAdmission`, and invokes the block through
+    ordinary invocation. Nothing is snapshotted.
+  - Each provider call is an entered foreign operation (`iterator`,
+    `iteratorHasNext`, `iteratorNext`). Failures inside the provider become a
+    fresh `ForeignError`. A closed session fails with an ordinary Error before
+    entry and never rebinds. An Error or non-local exit from the block stops
+    pulling and propagates unchanged.
+  - Inside a Task, the structured C-prime dispatcher recognizes the projected
+    `each` body and drives the same cursor with scoped callback invocation, so
+    callback suspension resumes the same visit without replay, with no new
+    Task, Future, or Actor turn.
+  - Raw references and attached module facades project `each` identically.
+    The projected `each` Closure stays Actor-nontransferable and P-nonparallel.
+  - D189 callback bridging, concrete providers, `std:interop`, and host
+    authority remain out of scope.
+
 ## 0.3.275-SNAPSHOT
 
 - `I082-D1` adds the single provider-neutral D188 foreign-value substrate

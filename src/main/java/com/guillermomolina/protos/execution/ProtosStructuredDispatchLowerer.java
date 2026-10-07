@@ -121,6 +121,10 @@ final class ProtosStructuredDispatchLowerer {
                 builder.createLocal("structuredEnvironmentEachCall", null);
         BytecodeLocal structuredEnvironmentEachChild =
                 builder.createLocal("structuredEnvironmentEachChildCall", null);
+        BytecodeLocal structuredForeignEach =
+                builder.createLocal("structuredForeignEachCall", null);
+        BytecodeLocal structuredForeignEachChild =
+                builder.createLocal("structuredForeignEachChildCall", null);
         BytecodeLocal structuredIdentityMapAtIfAbsent =
                 builder.createLocal("structuredIdentityMapAtIfAbsentCall", null);
         BytecodeLocal structuredIdentityMapAtIfAbsentChild =
@@ -1004,6 +1008,68 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
+        /*
+         * D188 projected foreign each: a Protos-side pull loop. Prevalidation happens in the
+         * prepare step; each iteration asks the provider for has-next, pulls and admits one
+         * element, and invokes the block as an ordinary scoped child, so suspension resumes the
+         * same visit and an Error or non-local exit leaves no later pull.
+         */
+        builder.beginIsStructuredForeignEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredForeignEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredForeignEach);
+        builder.beginPrepareStructuredForeignEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredForeignEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredForeignEachHasNext();
+        builder.emitLoadLocal(structuredForeignEach);
+        builder.endStructuredForeignEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredForeignEachChild);
+        builder.beginPrepareStructuredForeignEachElementCall();
+        builder.emitLoadLocal(structuredForeignEach);
+        builder.endPrepareStructuredForeignEachElementCall();
+        builder.endStoreLocal();
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredForeignEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredForeignEach();
+        builder.emitLoadLocal(structuredForeignEach);
+        builder.endAdvanceStructuredForeignEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredForeignEach();
+        builder.emitLoadLocal(structuredForeignEach);
+        builder.endFinishStructuredForeignEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginIfThenElse();
+
         builder.beginIsStructuredIdentityMapAtIfAbsentCall();
         builder.emitLoadLocal(preparedCall);
         builder.endIsStructuredIdentityMapAtIfAbsentCall();
@@ -1523,6 +1589,9 @@ final class ProtosStructuredDispatchLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

@@ -32,7 +32,7 @@ import java.util.Set;
  * D188 Protos-facing projection of raw foreign references and attached foreign module facades.
  *
  * <p>Lookup order for a raw reference: the projected institutions ({@code call}, {@code at},
- * {@code atPut}) that its classification makes faithful and unambiguous; then the
+ * {@code atPut}, {@code each}) that its classification makes faithful and unambiguous; then the
  * ordinary chain of its delegation parent, the root Object, which supplies {@code ==} and
  * {@code hash} but never {@code Object.call}; then a faithful foreign-member fallback whose result
  * is admitted; otherwise the ordinary missing-member failure. A facade is an ordinary object, so
@@ -41,8 +41,10 @@ import java.util.Set;
  *
  * <p>Projected members are native Closures selected with the private {@link #PROJECTION_HOME};
  * reading one binds it to the receiver like any method. {@code foreign.member(args)} is the read
- * followed by ordinary invocation of the read value ({@link #isForeignMemberSelection}). Foreign
- * iteration ({@code each}) is not projected yet: it needs the structured Task-side callback loop.
+ * followed by ordinary invocation of the read value ({@link #isForeignMemberSelection}). Projected
+ * {@code each} is a Protos-side pull loop ({@link ProtosForeignEachCall}); inside a Task the
+ * structured dispatcher recognizes its body ({@link #isEachImplementation}) and runs the same
+ * cursor with ordinary structured callback invocation.
  */
 final class ProtosForeignProjectedOperations {
     private static final Set<String> INSTITUTIONS =
@@ -66,6 +68,8 @@ final class ProtosForeignProjectedOperations {
     private static final ProtosClosureValue AT_PUT =
             ProtosClosureValue.nativeClosure(
                     (ProjectedBody) ProtosForeignProjectedOperations::atPut);
+    private static final ProjectedBody EACH_BODY = ProtosForeignProjectedOperations::each;
+    private static final ProtosClosureValue EACH = ProtosClosureValue.nativeClosure(EACH_BODY);
 
     private static final Object NOT_FAITHFUL = new Object();
 
@@ -106,6 +110,7 @@ final class ProtosForeignProjectedOperations {
             case "call" -> handle.projectsCall() ? CALL : null;
             case "at" -> handle.projectsAt() ? AT : null;
             case "atPut" -> handle.projectsAtPut() ? AT_PUT : null;
+            case "each" -> handle.projectsEach() ? EACH : null;
             default -> null;
         };
     }
@@ -166,6 +171,22 @@ final class ProtosForeignProjectedOperations {
     /** True for projected Closures, which carry provider-session state through their receiver. */
     static boolean isProjectionClosure(ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) instanceof ProjectedBody;
+    }
+
+    /** True for the projected {@code each} body, whose loop needs structured dispatch in a Task. */
+    static boolean isEachImplementation(ProtosNativeClosureBody body) {
+        return body == EACH_BODY;
+    }
+
+    /** The non-Task path; inside a Task the structured dispatcher drives the same cursor. */
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        ProtosForeignEachCall each =
+                new ProtosForeignEachCall(activation.receiver(), supplied, activation);
+        while (each.hasNext()) {
+            ProtosInvocation.invoke(each.callback(), List.of(each.current()), activation);
+            each.advance();
+        }
+        return each.finish();
     }
 
     private static Object call(ProtosActivation activation, List<?> supplied) {

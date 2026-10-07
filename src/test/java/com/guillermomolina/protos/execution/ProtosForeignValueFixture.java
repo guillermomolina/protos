@@ -20,10 +20,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigDecimal;
@@ -156,6 +158,11 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         final Map<String, Object> unfaithful = new LinkedHashMap<>();
         final List<Object> elements = new ArrayList<>();
         Function<List<ProtosForeignArgument>, Object> body = arguments -> Marker.NULL;
+        /** Pull-iteration failure injected at "iterator", "hasNext", or "next". */
+        String iteratorFailureStage;
+        TestForeignFailure iteratorFailure;
+        /** Runs inside the provider right after each successful pull. */
+        Runnable afterNext = () -> {};
 
         Fake(boolean stableIdentity, ProtosForeignAdmissionDescriptor.Capability... capabilities) {
             this.stableIdentity = stableIdentity;
@@ -222,6 +229,8 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         final List<String> events = new CopyOnWriteArrayList<>();
         final List<List<ProtosForeignArgument>> executions = new CopyOnWriteArrayList<>();
         final List<ProtosForeignProviderSession> sessions = new CopyOnWriteArrayList<>();
+        /** Protos runtime objects that reached an iterator operation; must stay empty. */
+        final List<Object> leaks = new CopyOnWriteArrayList<>();
 
         ProtosForeignProviderDescriptor descriptor() {
             return new ProtosForeignProviderDescriptor(
@@ -352,6 +361,61 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                 ProtosForeignArgument value) {
             events.add("atPut:" + index.value());
             fake(target).elements.set(((BigInteger) index.value()).intValueExact(), value.value());
+        }
+
+        /** Provider-private pull iterator: a live position over the target's element list. */
+        static final class Cursor {
+            final Fake fake;
+            int index;
+
+            Cursor(Fake fake) {
+                this.fake = fake;
+            }
+        }
+
+        private void guardNoProtosObject(Object... received) {
+            for (Object value : received) {
+                if (value instanceof ProtosClosureValue
+                        || value instanceof ProtosObjectValue
+                        || value instanceof ProtosActivation
+                        || value instanceof ProtosTask) {
+                    leaks.add(value);
+                }
+            }
+        }
+
+        private static void failAt(Fake fake, String stage) {
+            if (stage.equals(fake.iteratorFailureStage)) {
+                throw fake.iteratorFailure;
+            }
+        }
+
+        @Override
+        public Object openIterator(ProtosForeignProviderSession session, Object target) {
+            guardNoProtosObject(session, target);
+            events.add("iterator");
+            failAt(fake(target), "iterator");
+            return new Cursor(fake(target));
+        }
+
+        @Override
+        public boolean iteratorHasNext(ProtosForeignProviderSession session, Object iterator) {
+            guardNoProtosObject(session, iterator);
+            Cursor cursor = (Cursor) iterator;
+            events.add("hasNext");
+            failAt(cursor.fake, "hasNext");
+            return cursor.index < cursor.fake.elements.size();
+        }
+
+        @Override
+        public Object iteratorNext(ProtosForeignProviderSession session, Object iterator) {
+            guardNoProtosObject(session, iterator);
+            Cursor cursor = (Cursor) iterator;
+            events.add("next:" + cursor.index);
+            failAt(cursor.fake, "next");
+            Object element = cursor.fake.elements.get(cursor.index++);
+            cursor.fake.afterNext.run();
+            return element;
         }
 
         @Override

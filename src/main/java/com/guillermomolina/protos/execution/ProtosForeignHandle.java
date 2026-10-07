@@ -95,6 +95,11 @@ final class ProtosForeignHandle implements ProtosRawForeignValue.Handle {
                 && !descriptor.has(ProtosForeignAdmissionDescriptor.Capability.HASH_ENTRIES);
     }
 
+    /** Pull iteration only where the provider declared it faithful; shape never implies it. */
+    boolean projectsEach() {
+        return descriptor.has(ProtosForeignAdmissionDescriptor.Capability.ITERABLE);
+    }
+
     @Override
     public Object sessionGenerationForRuntime() {
         return session;

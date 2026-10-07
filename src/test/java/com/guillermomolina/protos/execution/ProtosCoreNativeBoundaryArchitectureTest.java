@@ -89,7 +89,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             Map.ofEntries(
                     Map.entry("execution/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
-                    Map.entry("execution/ProtosForeignProjectedOperations.java", 3),
+                    // I082-D2 adds the projected pull each to call/at/atPut.
+                    Map.entry("execution/ProtosForeignProjectedOperations.java", 4),
                     Map.entry("execution/ProtosLoggingFacility.java", 3),
                     Map.entry("execution/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/ProtosRegexSemanticTransferFamily.java", 3),

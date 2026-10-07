@@ -201,7 +201,7 @@ class ProtosForeignValueProjectionTest {
                     ProtosForeignAdmissionDescriptor.Kind.RAW,
                     fixture.provider.executions.get(0).get(0).kind());
             assertSame(root.faithful.get("other"), fixture.provider.executions.get(0).get(0).value());
-            // Foreign iteration is not projected by this slice: each stays an ordinary miss.
+            // Indexed shape never implies iteration: without ITERABLE, each stays an ordinary miss.
             assertMissing(fixture, fixture.failure(M + "m.seq.each"));
         }
     }
@@ -293,6 +293,7 @@ class ProtosForeignValueProjectionTest {
                 List.of(
                         "execution/ProtosForeignAdmissionDescriptor.java",
                         "execution/ProtosForeignArgument.java",
+                        "execution/ProtosForeignEachCall.java",
                         "execution/ProtosForeignFailureDescription.java",
                         "execution/ProtosForeignHandle.java",
                         "execution/ProtosForeignOperation.java",
