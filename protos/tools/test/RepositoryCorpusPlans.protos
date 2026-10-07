@@ -185,6 +185,7 @@ load: (corpusId) => {
             Array("logger.protos", "suite-native", "-"),
             Array("recognition.protos", "suite-native", "-"),
             Array("text-formatter.protos", "suite-native", "-"),
+            Array("json-formatter.protos", "suite-native", "-"),
             Array("sinks.protos", "suite-native", "-")
             )
         )

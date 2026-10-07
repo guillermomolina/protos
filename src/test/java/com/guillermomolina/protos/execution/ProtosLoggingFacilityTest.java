@@ -42,7 +42,7 @@ import java.util.SplittableRandom;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** LIB015-B1 evidence for the private runtime facilities of std:logging. */
+/** LIB015-B1 and LIB015-C1 evidence for the private runtime facilities of std:logging. */
 final class ProtosLoggingFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -52,20 +52,45 @@ final class ProtosLoggingFacilityTest {
         ProtosPrelude prelude = core();
         ProtosObjectValue events = eventFacility(prelude);
         ProtosObjectValue text = textFacility(prelude);
+        ProtosObjectValue json = jsonFacility(prelude);
 
         assertTrue(events.isFrozen());
         assertTrue(text.isFrozen());
+        assertTrue(json.isFrozen());
         assertNotSame(events, text);
+        assertNotSame(text, json);
         assertEquals(Set.of("recognizes", "isAttachableError"), events.localSlotsSnapshot().keySet());
         assertEquals(Set.of("shortestDecimal"), text.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("shortestDecimal"), json.localSlotsSnapshot().keySet());
         assertTrue(prelude.isStandardModuleMemberForRuntime(events));
         assertTrue(prelude.isStandardModuleMemberForRuntime(text));
+        assertTrue(prelude.isStandardModuleMemberForRuntime(json));
 
         ProtosObjectValue otherContext = prelude.newExecutionContext();
         prelude.installStandardModuleMembersForRuntime(
                 new ProtosModuleKey("std:logging/Logger"), otherContext);
         assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT));
         assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT));
+        assertFalse(otherContext.hasLocalSlot(ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT));
+    }
+
+    @Test
+    void jsonFormatterFacilityAnswersTheSameShortestDecimal() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue json = jsonFacility(prelude);
+
+        assertDecimal(json, activation, 1.0, "1", 0);
+        assertDecimal(json, activation, 1.23, "123", -2);
+        assertDecimal(json, activation, -1.5, "15", -1);
+        assertDecimal(json, activation, Double.MIN_VALUE, "5", -324);
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invokeMessage(
+                        json,
+                        "shortestDecimal",
+                        List.of(new ProtosFloatValue(Double.NaN)),
+                        activation));
     }
 
     @Test
@@ -181,6 +206,13 @@ final class ProtosLoggingFacilityTest {
                 prelude,
                 ProtosLoggingFacility.TEXT_MODULE_KEY.canonicalId(),
                 ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT);
+    }
+
+    private static ProtosObjectValue jsonFacility(ProtosPrelude prelude) {
+        return ProtosStandardModuleMemberTestSupport.member(
+                prelude,
+                ProtosLoggingFacility.JSON_MODULE_KEY.canonicalId(),
+                ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT);
     }
 
     private static ProtosPrelude core() throws Exception {

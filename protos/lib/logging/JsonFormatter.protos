@@ -1,0 +1,163 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Deterministic JSON rendering of `std:logging/LogEvent` values over
+//! `std:json`. Each event renders as one compact JSON object with no line
+//! terminator, timestamp, source metadata, color, or terminal control sequence:
+//!
+//! ```text
+//! {"level":LEVEL,"message":STRING,"fields":OBJECT[,"error":true]}
+//! ```
+//!
+//! For example `{"level":"ERROR","message":"failed","fields":{"requestId":"r-7"},"error":true}`.
+//! The members always appear in that order. `fields` is always present, `{}`
+//! when the event has no fields, and holds every field nested inside it, so a
+//! field may use any name, including `level`, `message`, `fields`, or `error`.
+//! `"error":true` appears exactly when an Error is attached; the attached Error
+//! is never inspected, so every Error renders the same marker.
+//!
+//! Structured data maps to JSON nodes of `std:json`, which alone owns string
+//! escaping and number spelling: `null`, Booleans, and Strings map to the same
+//! JSON values; Arrays keep their order; Maps become objects whose members are
+//! in ascending order of their names' Unicode scalar sequences at every depth
+//! (the first differing scalar decides, and a proper prefix comes first). An
+//! Integer is the exact JSON number of the same value, without range limits.
+//! A finite non-zero Float is the decimal with the fewest significant digits
+//! that round-trips to the same binary64 value, the same decimal
+//! `std:logging/TextFormatter` renders. Both `0.0` and `-0.0` render as the
+//! number `0`, so JSON output does not preserve the sign of a zero. `NaN`,
+//! `Infinity`, and `-Infinity` have no JSON form and signal an Error.
+
+/// Answers the compact JSON text of `event`, which must be recognized by
+/// `std:logging/LogEvent`. Any other argument, or a field holding `NaN`,
+/// `Infinity`, or `-Infinity`, signals an Error before any text is produced.
+/// Rendering invokes no behavior stored in the event.
+format: ((numeric) => (event) => {
+    LogEvent: import("std:logging/LogEvent")
+    JSON: import("std:json/JSON")
+    Arrays: import("std:collections/Array")
+
+    LogEvent.recognizes(event).ifFalse(() => {
+        Error().signal()
+    })
+
+    positiveInfinity: 1.0 / 0.0
+    negativeInfinity: 0.0 - positiveInfinity
+
+    projectFloat: (value) => {
+        (value == value).ifFalse(() => {
+            Error().signal()
+        })
+        (value == positiveInfinity).ifTrue(() => {
+            Error().signal()
+        })
+        (value == negativeInfinity).ifTrue(() => {
+            Error().signal()
+        })
+        node: JSON.number(0, 0)
+        (value == 0.0).ifFalse(() => {
+            decimal: numeric.shortestDecimal(value)
+            coefficient: decimal[0]
+            (value < 0.0).ifTrue(() => {
+                coefficient = 0 - coefficient
+            })
+            node = JSON.number(coefficient, decimal[1])
+        })
+        node
+    }
+
+    // UTF-8 octet order is Unicode scalar order, and a proper prefix of an
+    // encoding is the encoding of a proper scalar prefix.
+    precedes: (left, right) => {
+        leftSize: left.size()
+        rightSize: right.size()
+        index: 0
+        decided: false
+        result: false
+        (() => (decided == false) && (index < leftSize) && (index < rightSize)).whileTrue(() => {
+            (left[index] == right[index]).ifFalse(() => {
+                result = left[index] < right[index]
+                decided = true
+            })
+            index = index + 1
+        })
+        decided.ifFalse(() => {
+            result = leftSize < rightSize
+        })
+        result
+    }
+
+    project: null
+    projectMap: (map) => {
+        entries: []
+        map.each((key, item) => {
+            entries = Array(...entries, [Encoding.UTF8.encode(key), key, item])
+        })
+        sorted: Arrays.sort(entries, (left, right) => precedes(left[0], right[0]))
+        members: []
+        sorted.each((entry) => {
+            members = Array(...members, entry[1], project(entry[2]))
+        })
+        JSON.object(...members)
+    }
+
+    project = (value) => {
+        node: null
+        handled: false
+        (value === null).ifTrue(() => {
+            node = JSON.nullValue()
+            handled = true
+        })
+        ((value === true) || (value === false)).ifTrue(() => {
+            node = JSON.boolean(value)
+            handled = true
+        })
+        ((handled == false) && String.recognizes(value)).ifTrue(() => {
+            node = JSON.string(value)
+            handled = true
+        })
+        ((handled == false) && Integer.recognizes(value)).ifTrue(() => {
+            node = JSON.number(value, 0)
+            handled = true
+        })
+        ((handled == false) && Float.recognizes(value)).ifTrue(() => {
+            node = projectFloat(value)
+            handled = true
+        })
+        ((handled == false) && Array.recognizes(value)).ifTrue(() => {
+            node = JSON.array(...Arrays.map(value, (element) => project(element)))
+            handled = true
+        })
+        // A recognized event holds only Maps beyond this point.
+        handled.ifFalse(() => {
+            node = projectMap(value)
+        })
+        node
+    }
+
+    topMembers: [
+        "level", JSON.string(event.level),
+        "message", JSON.string(event.message),
+        "fields", projectMap(event.fields)
+    ]
+    (event.error === null).ifFalse(() => {
+        topMembers = Array(...topMembers, "error", JSON.boolean(true))
+    })
+    JSON.encode(JSON.object(...topMembers))
+})(_logJsonFacility)
+
+// The runtime-provisioned numeric facility is captured privately above; it is
+// not module surface.
+context.removeSlot("_logJsonFacility")

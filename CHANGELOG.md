@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.257-SNAPSHOT
+
+- `LIB015-C1` (guillermomolina/protos#432) adds JSON log formatting to
+  `std:logging` over `std:json`, implementing the ratified LIB015-C0
+  contract. There is no specification change; timestamps, color, and a
+  dedicated JSON sink remain unimplemented.
+  - `std:logging/JsonFormatter.format(event)` answers one compact JSON
+    object, `{"level":...,"message":...,"fields":{...}}`, plus
+    `"error":true` exactly when an Error is attached, with no terminator.
+    The members keep that order; `fields` is always present (`{}` when
+    empty) and nests every field, so names such as `level` or `error` never
+    collide with top-level members. The attached Error is never inspected.
+  - Event data is projected to `std:json` nodes and encoded by
+    `JSON.encode`, which alone owns string escaping and number spelling; no
+    private serializer is added. Arrays keep their order and Maps are
+    ordered by Unicode scalar sequence at every depth. Integers are exact
+    JSON numbers without range limits; finite non-zero Floats use the same
+    shortest round-trip decimal as `TextFormatter`; `0.0` and `-0.0` both
+    render as `0`; `NaN`, `Infinity`, and `-Infinity` signal an Error before
+    any text is produced.
+  - Composition reuses `TextSink(JsonFormatter, writer)`, which writes one
+    JSON value per line; a Logger contains formatting Errors as before.
+  - The private shortest-decimal runtime facility is now also provisioned
+    to `std:logging/JsonFormatter`; `TextFormatter` output is unchanged.
+  - The `library/logging` corpus gains `json-formatter`.
+
 ## 0.3.256-SNAPSHOT
 
 - `TOOL012` (guillermomolina/protos#814) bounds the Test Tool

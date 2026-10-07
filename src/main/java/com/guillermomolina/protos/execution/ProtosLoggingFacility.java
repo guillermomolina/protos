@@ -40,7 +40,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Private runtime facilities for {@code std:logging} (LIB015-B1).
+ * Private runtime facilities for {@code std:logging} (LIB015-B1, LIB015-C1).
  *
  * <p>Following the D101/D187 pattern, every logging policy stays in Protos; these facilities own
  * only what Protos source cannot observe without running candidate behavior or re-deriving
@@ -53,8 +53,10 @@ import java.util.Set;
  *       {@code isAttachableError(value)}. Both inspect host representation only: delegation
  *       parents, mutation state, local slot tables, and indexed/keyed state are read directly, so
  *       no slot, method, equality, hash, or other behavior of the candidate is ever invoked.
- *   <li>{@code std:logging/TextFormatter} receives {@code shortestDecimal(float)}, the digits of
- *       the shortest round-tripping decimal of a finite non-zero Float magnitude.
+  *   <li>{@code std:logging/TextFormatter} and {@code std:logging/JsonFormatter} each receive a
+ *       numeric facility with {@code shortestDecimal(float)}, the digits of the shortest
+ *       round-tripping decimal of a finite non-zero Float magnitude, so both formatters share one
+ *       Float decimal policy.
  * </ul>
  */
 public final class ProtosLoggingFacility {
@@ -64,6 +66,9 @@ public final class ProtosLoggingFacility {
     public static final ProtosModuleKey TEXT_MODULE_KEY =
             new ProtosModuleKey("std:logging/TextFormatter");
     public static final String TEXT_BOOTSTRAP_SLOT = "_logTextFacility";
+    public static final ProtosModuleKey JSON_MODULE_KEY =
+            new ProtosModuleKey("std:logging/JsonFormatter");
+    public static final String JSON_BOOTSTRAP_SLOT = "_logJsonFacility";
 
     private static final Set<String> EVENT_SLOTS = Set.of("level", "message", "fields", "error");
     private static final Set<String> LEVELS = Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR");
@@ -85,7 +90,10 @@ public final class ProtosLoggingFacility {
         return facility.freeze();
     }
 
-    /** Creates the frozen, stateless numeric facility of {@code std:logging/TextFormatter}. */
+    /**
+     * Creates a frozen, stateless numeric facility for {@code std:logging/TextFormatter} or {@code
+     * std:logging/JsonFormatter}.
+     */
     public static ProtosObjectValue createTextFacility() {
         ProtosObjectValue facility = new ProtosObjectValue(ProtosObjectValue.rootObject());
         facility.createLocalSlot(

@@ -1,0 +1,289 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+JSON: import("std:json/JSON")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+Logger: import("std:logging/Logger")
+JsonFormatter: import("std:logging/JsonFormatter")
+TextSink: import("std:logging/TextSink")
+
+Failure: Error {}
+
+render: (level, message, fields, error) => {
+    JsonFormatter.format(LogEvent(level, message, fields, error))
+}
+
+// The JSON text of an INFO event with an empty message and the single field
+// "v" whose rendering is `text`.
+withField: (text) => {
+    "{\"level\":\"INFO\",\"message\":\"\",\"fields\":{\"v\":" + text + "}}"
+}
+
+renderValue: (value) => {
+    render(Level.INFO, "", %{ "v": value }, null)
+}
+
+// A TextWriter stand-in that records every written line.
+recordingWriter: () => {
+    state: { lines: [] }
+    writer: {
+        state: state
+        writeLine: (text) => {
+            state.lines = Array(...state.lines, text)
+            (() => { writer }).future()
+        }
+    }
+    writer
+}
+
+// A byte target for a real TextWriter, recording decoded output and lifecycle.
+byteTarget: () => {
+    state: {
+        text: ""
+        flushes: 0
+        closes: 0
+    }
+    target: {
+        state: state
+        write: (bytes) => {
+            state.text = state.text + Encoding.UTF8.decode(bytes)
+            (() => { target }).future()
+        }
+        flush: () => {
+            state.flushes = state.flushes + 1
+            (() => { target }).future()
+        }
+        close: () => {
+            state.closes = state.closes + 1
+            (() => { target }).future()
+        }
+    }
+    target
+}
+
+tests: [
+    Test("a basic event renders level, message, and empty fields", () => {
+        Assertions.require(
+            render(Level.INFO, "hello", null, null) ==
+                "{\"level\":\"INFO\",\"message\":\"hello\",\"fields\":{}}"
+        )
+        Assertions.require(
+            render(Level.INFO, "hello", %{}, null) ==
+                "{\"level\":\"INFO\",\"message\":\"hello\",\"fields\":{}}"
+        )
+        Assertions.require(
+            render(Level.TRACE, "t", null, null) ==
+                "{\"level\":\"TRACE\",\"message\":\"t\",\"fields\":{}}"
+        )
+        Assertions.require(
+            render(Level.INFO, "done", %{ "ok": true; "count": 3 }, null) ==
+                "{\"level\":\"INFO\",\"message\":\"done\",\"fields\":{\"count\":3,\"ok\":true}}"
+        )
+    }),
+    Test("an attached Error renders only a top-level presence marker", () => {
+        Assertions.require(
+            render(Level.ERROR, "failed", %{ "requestId": "r-7" }, Failure()) ==
+                "{\"level\":\"ERROR\",\"message\":\"failed\",\"fields\":{\"requestId\":\"r-7\"},\"error\":true}"
+        )
+        Assertions.require(
+            render(Level.ERROR, "failed", null, Error()) ==
+                "{\"level\":\"ERROR\",\"message\":\"failed\",\"fields\":{},\"error\":true}"
+        )
+    }),
+    Test("reserved-looking field names stay nested in fields", () => {
+        fields: %{
+            "level": "custom"
+            "message": "m2"
+            "fields": %{}
+            "error": false
+            "timestamp": 0
+        }
+        Assertions.require(
+            render(Level.WARN, "m", fields, null) ==
+                "{\"level\":\"WARN\",\"message\":\"m\",\"fields\":{\"error\":false,\"fields\":{},\"level\":\"custom\",\"message\":\"m2\",\"timestamp\":0}}"
+        )
+        Assertions.require(
+            render(Level.WARN, "m", %{ "error": "field" }, Failure()) ==
+                "{\"level\":\"WARN\",\"message\":\"m\",\"fields\":{\"error\":\"field\"},\"error\":true}"
+        )
+    }),
+    Test("Arrays keep their order and nested values project recursively", () => {
+        Assertions.require(renderValue([3, 1, 2]) == withField("[3,1,2]"))
+        Assertions.require(
+            renderValue(["a", null, %{ "x": true }, false, [%{ "y": [null] }]]) ==
+                withField("[\"a\",null,{\"x\":true},false,[{\"y\":[null]}]]")
+        )
+        Assertions.require(renderValue([]) == withField("[]"))
+        Assertions.require(
+            renderValue(%{ "b": %{ "d": 1; "c": [] }; "a": %{} }) ==
+                withField("{\"a\":{},\"b\":{\"c\":[],\"d\":1}}")
+        )
+    }),
+    Test("Map members are in Unicode scalar order at every depth", () => {
+        forward: Map()
+        backward: Map()
+        keys: ["z", "a", "aa", "ab", "A", "b", "\u{E9}", "\u{20AC}", "\u{FFFD}", "\u{1F600}", ""]
+        keys.each((key) => {
+            forward[key] = key.size()
+        })
+        index: keys.size() - 1
+        (() => index >= 0).whileTrue(() => {
+            backward[keys[index]] = keys[index].size()
+            index = index - 1
+        })
+        // U+FFFD precedes U+1F600 as scalars, unlike UTF-16 code-unit order.
+        expected: withField(
+            "{\"\":0,\"A\":1,\"a\":1,\"aa\":2,\"ab\":2,\"b\":1,\"z\":1,\"\u{E9}\":1,\"\u{20AC}\":1,\"\u{FFFD}\":1,\"\u{1F600}\":1}"
+        )
+        Assertions.require(renderValue(forward) == expected)
+        Assertions.require(renderValue(backward) == expected)
+        Assertions.require(
+            renderValue([%{ "y": 1; "x": %{ "xx": 3; "x": 2 } }]) ==
+                withField("[{\"x\":{\"x\":2,\"xx\":3},\"y\":1}]")
+        )
+    }),
+    Test("Strings are escaped by std:json and round-trip through it", () => {
+        message: "q\"b\\n\nt\tc\u{1F}\u{E9}"
+        text: render(Level.INFO, message, %{ "k\"\n": "v\\" }, null)
+        Assertions.require(
+            text ==
+                "{\"level\":\"INFO\",\"message\":\"q\\\"b\\\\n\\u000at\\u0009c\\u001f\u{E9}\",\"fields\":{\"k\\\"\\u000a\":\"v\\\\\"}}"
+        )
+        parsed: JSON.parse(text)
+        Assertions.require(parsed.value["message"].value == message)
+        Assertions.require(parsed.value["fields"].value["k\"\n"].value == "v\\")
+    }),
+    Test("Integers render as exact JSON numbers", () => {
+        Assertions.require(renderValue(0) == withField("0"))
+        Assertions.require(renderValue(-42) == withField("-42"))
+        Assertions.require(
+            renderValue(123456789012345678901234567890) ==
+                withField("123456789012345678901234567890")
+        )
+        Assertions.require(renderValue(-9223372036854775809) == withField("-9223372036854775809"))
+        Assertions.require(renderValue(9007199254740993) == withField("9007199254740993"))
+    }),
+    Test("finite non-zero Floats render their shortest round-trip decimal", () => {
+        Assertions.require(renderValue(1.0) == withField("1"))
+        Assertions.require(renderValue(-2.0) == withField("-2"))
+        Assertions.require(renderValue(100.0) == withField("1e2"))
+        Assertions.require(renderValue(1.23) == withField("123e-2"))
+        Assertions.require(renderValue(0.1) == withField("1e-1"))
+        Assertions.require(renderValue(0.1 + 0.2) == withField("30000000000000004e-17"))
+        Assertions.require(renderValue(-1.5e-7) == withField("-15e-8"))
+        Assertions.require(renderValue(5e-324) == withField("5e-324"))
+        parsed: JSON.parse(renderValue(1.23)).value["fields"].value["v"].value
+        Assertions.require(parsed.coefficient == 123)
+        Assertions.require(parsed.exponent == -2)
+    }),
+    Test("both Float zeros render as the number 0", () => {
+        Assertions.require(renderValue(0.0) == withField("0"))
+        Assertions.require(renderValue((0.0 - 1.0) * 0.0) == withField("0"))
+    }),
+    Test("non-finite Floats signal an Error at any depth", () => {
+        infinity: 1.0 / 0.0
+        Assertions.signals(Error, () => {
+            renderValue(infinity - infinity)
+        })
+        Assertions.signals(Error, () => {
+            renderValue(infinity)
+        })
+        Assertions.signals(Error, () => {
+            renderValue(0.0 - infinity)
+        })
+        Assertions.signals(Error, () => {
+            renderValue([1, %{ "deep": infinity - infinity }])
+        })
+        Assertions.signals(Error, () => {
+            renderValue([1, %{ "deep": infinity }])
+        })
+        Assertions.signals(Error, () => {
+            renderValue([1, %{ "deep": 0.0 - infinity }])
+        })
+    }),
+    Test("only recognized events are formatted", () => {
+        noFields: Map()
+        noFields.freeze()
+        lookalike: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        lookalike.freeze()
+        Assertions.signals(Error, () => {
+            JsonFormatter.format(lookalike)
+        })
+        Assertions.signals(Error, () => {
+            JsonFormatter.format(null)
+        })
+        Assertions.signals(Error, () => {
+            JsonFormatter.format("{}")
+        })
+        Assertions.signals(Error, () => {
+            JsonFormatter.format(LogEvent)
+        })
+    }),
+    Test("formatted text has no line terminator", () => {
+        text: render(Level.INFO, "m", %{ "k": "line\nbreak" }, null)
+        Assertions.require(text[text.size() - 1] == "}")
+        index: 0
+        (() => index < text.size()).whileTrue(() => {
+            Assertions.require((text[index] == "\n") == false)
+            Assertions.require((text[index] == "\r") == false)
+            index = index + 1
+        })
+    }),
+    Test("a TextSink frames each JSON event as one writer line", () => {
+        target: byteTarget()
+        writer: TextWriter(target, Encoding.UTF8)
+        logger: Logger(Level.INFO, TextSink(JsonFormatter, writer))
+        logger.info("first")
+        logger.error("last", %{ "n": 1 }, Failure())
+        Assertions.require(
+            target.state.text ==
+                "{\"level\":\"INFO\",\"message\":\"first\",\"fields\":{}}\n{\"level\":\"ERROR\",\"message\":\"last\",\"fields\":{\"n\":1},\"error\":true}\n"
+        )
+        Assertions.require(target.state.flushes == 0)
+        Assertions.require(target.state.closes == 0)
+    }),
+    Test("a direct emit observes a formatting Error and writes nothing", () => {
+        writer: recordingWriter()
+        sink: TextSink(JsonFormatter, writer)
+        Assertions.signals(Error, () => {
+            sink.emit(LogEvent(Level.INFO, "m", %{ "f": 1.0 / 0.0 }, null))
+        })
+        Assertions.require(writer.state.lines.size() == 0)
+    }),
+    Test("a Logger contains a formatting Error from its JSON sink", () => {
+        writer: recordingWriter()
+        logger: Logger(Level.INFO, TextSink(JsonFormatter, writer))
+        Assertions.require(logger.info("bad", %{ "f": 1.0 / 0.0 }) === null)
+        Assertions.require(writer.state.lines.size() == 0)
+        Assertions.require(logger.info("good") === null)
+        Assertions.require(writer.state.lines.size() == 1)
+        Assertions.require(
+            writer.state.lines[0] == "{\"level\":\"INFO\",\"message\":\"good\",\"fields\":{}}"
+        )
+    }),
+    Test("the formatter publishes only format", () => {
+        Assertions.require(JsonFormatter.hasSlot("format"))
+        Assertions.require(JsonFormatter.hasSlot("_logJsonFacility") == false)
+    })
+]
+tests.freeze()
