@@ -23,6 +23,35 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.446] - 2026-10-07
+
+### I081 / D189 A_DYNAMIC_SYNCHRONOUS_CALLBACK_BASELINE — Synchronous foreign callbacks
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: new Foreign Values subsection
+  Synchronous foreign callbacks is the primary owner of the baseline
+  foreign-to-Protos callback contract. The callback denotes the exact Protos
+  value; a Closure callback is ordinary activation of that Closure (lexical
+  environment, receiver, `methodHome`, return home, non-local return). Callback
+  arguments use the existing foreign-value admission. Results are projected only
+  losslessly (representable scalars, raw foreign references returning to their
+  provider); no automatic export of identity-bearing Protos objects. A Protos
+  Error or control outcome returned recognizably unchanged through the same
+  foreign operation continues as that exact outcome; other entered-operation
+  failures remain fresh `ForeignError`. Synchronous reentrancy is permitted. The
+  callback is live only during the originating operation's dynamic extent; late,
+  expired, or post-termination invocations are rejected before guest entry with
+  no Task creation or resurrection. Retained/asynchronous callbacks are deferred.
+- `spec/concurrency/ACTORS.md` §24J: callbacks run in the originating Actor
+  within the same synchronous segment, with no turn, message, or interleaving;
+  no concurrent Protos entry; foreign-created threads are rejected before guest
+  entry; carrier identity is not Actor/Task authority.
+- `spec/concurrency/FUTURES_AND_TASKS.md`: callbacks run in the current Task and
+  structured scope and create no Task, Future, scope, or cancellation
+  checkpoint; an actual Task suspension across the foreign extent is rejected
+  before it commits with a fresh `Error`; cancellation is observed only at
+  ordinary boundaries, with the cancellation-first rule unchanged.
+- Foreign-value semantics of 0.1.445 are unchanged. Adds no syntax, no Error
+  category, and no runtime interoperability API.
+
 ## [0.1.445] - 2026-10-07
 
 ### I080 / D188 C_HYBRID_PROTOS_SEMANTIC_PROJECTION — Foreign-value semantics

@@ -967,6 +967,37 @@ prevents unrelated task failures from being intercepted by another task's
 temporary scope, and avoids retaining a creator's dynamic stack for the lifetime
 of asynchronously spawned work.
 
+### Synchronous foreign callbacks and the current Task
+
+A Protos callback invoked by a synchronous foreign operation within its dynamic
+extent (`../semantics/VALUES_AND_COLLECTIONS.md`, "Synchronous foreign
+callbacks") runs in the current Task and in the same structured execution scope
+as the originating foreign call, like any other synchronous nested activation.
+Callback invocation creates no Task, Future, structured-concurrency scope, or
+cancellation checkpoint. Work created by the callback is owned exactly as if it
+were created by that activation without the intervening foreign frames.
+
+The callback may run ordinary Protos code, including operations that may
+suspend, as long as no actual suspension of the current Task occurs across the
+foreign dynamic extent. For example, `value()` on an already-terminal Future
+does not suspend and completes normally. An operation inside the callback that
+would actually suspend the current Task is rejected before that suspension
+commits: it signals a fresh standard failure occurrence of category `Error`
+(`../semantics/ERRORS.md`) at that point, and no waiter is installed. The
+implementation never captures or retains the foreign/host/native stack, never
+creates a hidden child Task to preserve it, and introduces no second
+continuation model.
+
+Cancellation is unchanged by callback entry. A cancellation request already
+pending for the Task remains pending and is observed only at the ordinary
+portable cancellation boundaries of §23 that the executing code actually
+reaches; a callback that reaches none may complete before observing it. When
+an operation that would suspend is reached with cancellation already pending,
+the ordinary cancellation-first rule (§29, "Interaction with waiting-task
+cancellation") applies and cancellation is honored instead of suspending.
+Nothing in this rule introduces preemption or standardizes cancellation of the
+foreign operation itself.
+
 ### Failed Future observation does not transfer producer control state
 
 Future failure transport carries an Error outcome, not the producer's dynamic

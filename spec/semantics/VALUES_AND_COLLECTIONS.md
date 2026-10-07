@@ -3696,6 +3696,100 @@ exception objects, and runtime implementation metadata are not part of the
 public structure of a `ForeignError`. Implementation-private diagnostics remain
 governed by `ERRORS.md`.
 
+### Synchronous foreign callbacks
+
+This subsection is the primary owner of the baseline foreign-to-Protos callback
+contract: a Protos callable value handed to a synchronous foreign operation and
+invoked by that operation within its own dynamic extent. Actor-side execution of
+such a callback is owned by `../concurrency/ACTORS.md` §24J; Task ownership,
+suspension, and cancellation by `../concurrency/FUTURES_AND_TASKS.md`
+("Synchronous foreign callbacks and the current Task"). Core v0.1 defines no
+syntax and no public API for passing a callback; a provider or a future explicit
+interoperability facility supplies the passing mechanism under these rules.
+
+**Callback value.** The foreign-facing callback capability denotes the actual
+Protos semantic value that was passed. For a Closure, each foreign invocation is
+ordinary Closure activation (`CALLABLES.md`) of that exact Closure, with its
+lexical environment, receiver, `methodHome`, parameter/argument binding, return
+home, non-local return, and ordinary Error/control semantics. A host adapter or
+wrapper that an implementation uses to present the callback to the foreign
+runtime does not replace the Closure's identity, is not a distinct Closure, and
+has no semantic authority of its own.
+
+**Arguments.** Values supplied by the foreign runtime as callback arguments are
+admitted exactly by the rules of this section (primitive admission and raw
+foreign-reference identity) and then bound as the ordinary positional arguments
+of the activation. There is no separate callback-specific conversion.
+
+**Result projection.** When the activation completes normally, its result is
+projected back to the foreign runtime only losslessly:
+
+- a Protos scalar that the provider can represent without changing its value;
+- a raw foreign reference that returns faithfully to its originating provider
+  when that provider can preserve the same foreign target.
+
+No other result receives automatic projection. In particular an arbitrary
+identity-bearing Protos object, including an Object, Array, Map, Closure,
+Future, ActorRef, or other capability, is not automatically exported as a
+retained foreign handle; that requires a future explicit export contract. When
+a result cannot be projected, the callback does not complete successfully
+toward the foreign runtime; what the foreign operation then does is foreign
+behavior, and any failure it consequently returns to Protos follows "Foreign
+failures". The concrete foreign representation of a projected result is an
+implementation choice.
+
+**Errors and control.** A Protos Error signaled and not handled inside the
+activation, or any other Protos control transfer leaving it, crosses the
+callback boundary into the foreign operation. If that same outcome comes back
+through the same foreign operation recognizably unchanged, Protos continues to
+propagate exactly that outcome: an Error `e` is re-signaled as exactly `e`
+(`ERRORS.md`, "Standard failure occurrence objects and identity"), and no
+`ForeignError` is created merely because `e` traversed foreign code. If the
+foreign operation instead produces a different failure, substitutes, transforms,
+or wraps the outcome so that it is a foreign-produced failure, or fails before
+or after the callback, the failure returned to Protos is a fresh `ForeignError`
+under "Foreign failures". No host exception, foreign exception handle, raw host
+stack, or mixed-language stack becomes visible. Non-local return keeps the
+Closure's ordinary semantics (`CALLABLES.md` §13 and §14): `^value` whose return
+home is still active is that ordinary control transfer, and a return home that
+is no longer active produces the ordinary `InvalidReturn`.
+
+**Reentrancy.** A callback may itself call synchronous foreign operations that
+invoke further callbacks, callbacks may be invoked sequentially any number of
+times, and ordinary recursion through callbacks is permitted, all within the
+same logical Protos execution. Concurrent re-entry into that logical execution
+is not permitted (`../concurrency/ACTORS.md` §24J).
+
+**Lifetime.** A callback capability is semantically live only during the dynamic
+extent of the foreign operation that received it: it becomes live when that
+operation is entered and expires when the operation leaves by any means,
+including normal return, failure, a Protos Error, non-local control,
+cancellation unwind, or termination. Preparing the capability before entry gives
+it no independent lifetime, and physically retaining a host wrapper does not
+extend it. An expired callback cannot keep alive or reactivate a Process, Actor,
+Task, provider, foreign execution context, Closure execution authority, or
+return home. The mechanism used to track expiry is an implementation choice.
+
+**Rejected invocations.** A foreign attempt to invoke a callback is rejected
+before any Protos code is entered when the capability has expired, when its
+originating foreign operation has returned, when its owning Task has completed,
+when its Actor no longer permits ordinary work, when its Process has terminated
+or closed, when its provider or foreign execution context has closed, or under
+the thread rule of `../concurrency/ACTORS.md` §24J. A rejected invocation never
+creates a Task and never resurrects an Actor, Process, provider, or foreign
+execution context. The rejection is reported to the foreign caller, not as a
+Protos Error: if it occurs inside another entered foreign operation that then
+fails back to Protos, that failure is a `ForeignError` under "Foreign failures";
+if no Protos execution awaits the result, no Protos Error channel exists for it.
+
+**Deferred.** This baseline defines no retained or asynchronous callback
+facility: no retained callback handle, foreign-thread ingress queue, listener,
+timer, or event-loop registration, asynchronous completion callback, Task
+creation for late callbacks, callback result Future, persistent rooting,
+revocation or asynchronous cancellation API, Process/provider lifetime
+extension, or callback-after-return behavior. A future explicit facility may
+define those without changing this synchronous contract.
+
 ### Relation to explicit interoperability
 
 Import-based foreign access and the future `std:interop` facility share exactly

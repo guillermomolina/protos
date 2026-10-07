@@ -1534,6 +1534,33 @@ ordinary synchronous call.
 
 This closes the former open ledger items `Blocking foreign calls` and
 `Blocking-operation offload`.
+
+### Synchronous foreign callbacks
+
+A synchronous foreign operation may invoke a Protos callback within its dynamic
+extent (`../semantics/VALUES_AND_COLLECTIONS.md`, "Synchronous foreign
+callbacks"). That callback executes in the Actor that made the originating
+foreign call, as part of the same synchronous execution segment. It is not a
+message, does not start an Actor turn, and introduces no scheduler boundary or
+interleaving point; the rules above for an outstanding synchronous call
+continue to hold around and between callbacks. Nested synchronous foreign calls
+and callbacks, sequential callbacks, and recursion remain in that Actor and
+segment.
+
+At most one physical thread executes Protos code for that segment at a time. Two
+foreign or native threads cannot execute Protos code concurrently in the same
+Actor-local mutable domain by holding the same callback.
+
+The identity of an operating-system thread or carrier is not Actor or Task
+authority. A thread created by foreign code, a foreign worker pool, a foreign
+event loop, or equivalent does not acquire the originating Actor or Task by
+invoking the callback; such an invocation is rejected before any Protos code is
+entered. It is not enqueued to the Actor, does not create a Task, does not block
+the foreign thread waiting for invented Protos work, and is not run
+fire-and-forget. An implementation may physically move the segment to a
+different carrier only while preserving the same Actor, the same Task, the same
+uninterrupted synchronous segment, the absence of concurrent Protos entry, and
+every other rule of this section.
 ## 24K. Foreign Mutable State Does Not Bypass Actor Isolation
 
 **CLOSED**
