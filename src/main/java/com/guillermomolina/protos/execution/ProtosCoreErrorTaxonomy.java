@@ -29,6 +29,7 @@ final class ProtosCoreErrorTaxonomy {
             Map.entry("RequestOutcomeUncertain", "Error"),
             Map.entry("NonTransferableValue", "Error"),
             Map.entry("NonParallelValue", "Error"),
+            Map.entry("ForeignError", "Error"),
             Map.entry("InvalidPredicateResult", "Error"),
             Map.entry("InvalidComparatorResult", "Error"),
             Map.entry("InvalidComparatorOrder", "Error"),

@@ -89,6 +89,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             Map.ofEntries(
                     Map.entry("execution/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
+                    Map.entry("execution/ProtosForeignProjectedOperations.java", 3),
                     Map.entry("execution/ProtosLoggingFacility.java", 3),
                     Map.entry("execution/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/ProtosRegexSemanticTransferFamily.java", 3),
@@ -111,6 +112,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     if (relative.startsWith("cli/")
                             || relative.equals(
                                     "execution/ProtosExactExecutionFacility.java")
+                            // I082-D D188 host-interop projection, not derived Core behavior.
+                            || relative.equals(
+                                    "execution/ProtosForeignProjectedOperations.java")
                             || relative.equals(
                                     "execution/ProtosTestToolCatalogAcquisitionFacility.java")
                             || relative.equals(

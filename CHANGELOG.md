@@ -7,6 +7,49 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.275-SNAPSHOT
+
+- `I082-D1` adds the single provider-neutral D188 foreign-value substrate
+  (`VALUES_AND_COLLECTIONS.md` "Foreign Values") and realizes the already
+  normative `ForeignError` Core category. There is no specification change.
+  Foreign iteration (`each`) is not projected yet; it follows in `I082-D2`.
+  No concrete provider, callback bridge (D189), `std:interop` API, or host
+  authority is introduced.
+  - `ForeignError` (parent `Error`) is added to the Core Error taxonomy,
+    the Prelude, `ProtosCoreErrors.StandardError`, bootstrap validation, and
+    the test Runner's standard-error mapping.
+  - Providers supply one `ProtosForeignValueAdapter` with explicit source
+    classification. Booleans, true null, valid Unicode text,
+    source-classified integrals, and exact binary64 values convert to their
+    Protos families. Everything else, including ambiguous null-like,
+    decimal, custom numeric, invalid text, and array/map-shaped values, stays
+    a raw foreign reference (`ProtosRawForeignValue`).
+  - Raw references are bound to their exact session generation and never
+    rebind. They are identity-bearing: provider-stable identity unifies
+    distinct wrappers within one session, otherwise each admission is its
+    own identity. `==`/`hash` are the default identity rules, and `Map` and
+    `IdentityMap` keep their own key rules. Raw references have no local
+    slots, so creation and assignment on them fail ordinarily.
+  - Member lookup on a raw reference uses projected `call`/`at`/`atPut`
+    only when faithful and unambiguous. It never inherits `Object.call`.
+    Otherwise it uses the root Object chain, then a provider-asserted
+    faithful member fallback whose result is admitted. Institution names are
+    never satisfied by foreign members. A foreign module facade keeps its
+    ordinary chain first and then projects its target through the same
+    substrate. `foreign.member(args)` is the read followed by ordinary
+    invocation of the read value.
+  - Pre-entry failures (missing projection, closed session, non-exportable
+    argument such as a Closure, object, or Array) are ordinary Errors.
+    Failures after entry, including foreign module target acquisition, are
+    fresh `ForeignError`s with exactly the `language`, `operation`,
+    `category`, `foreignCategory`, `message`, and `cause` slots, built from
+    provider-sanitized data with cycle-safe cause projection.
+  - Raw references, foreign module facades, and projected Closures are
+    rejected by Actor transfer (`NonTransferableValue`) and P transfer
+    (`NonParallelValue`). Converted scalars transfer normally. The three
+    projected native providers are registered as an audited non-Core
+    native boundary.
+
 ## 0.3.274-SNAPSHOT
 
 - `I082-C` routes explicit foreign imports to a registered provider and

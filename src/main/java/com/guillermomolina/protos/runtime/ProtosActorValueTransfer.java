@@ -259,6 +259,12 @@ public final class ProtosActorValueTransfer {
                 throw nonTransferable();
             }
 
+            // D188: raw foreign references and foreign module facades carry provider-session
+            // state that has no Actor transfer contract; copying would drop or smuggle it.
+            if (value instanceof ProtosForeignProjectedReceiver) {
+                throw nonTransferable();
+            }
+
             if (!(value instanceof ProtosObjectValue object)) {
                 if (materializing && value instanceof ProtosSemanticTransferRecord record) {
                     // PLAT051-A2 destination stage: one materialization per record identity.

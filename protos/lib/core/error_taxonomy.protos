@@ -20,6 +20,7 @@ FutureResolutionCycle: Error {}
 RequestOutcomeUncertain: Error {}
 NonTransferableValue: Error {}
 NonParallelValue: Error {}
+ForeignError: Error {}
 InvalidPredicateResult: Error {}
 InvalidComparatorResult: Error {}
 InvalidComparatorOrder: Error {}

@@ -23,18 +23,30 @@ import java.util.Optional;
  * Immutable host-supplied metadata and factory of one foreign provider.
  *
  * <p>A provider without an import route can still own a Process lifecycle but is never selected
- * by an import specifier.
+ * by an import specifier. {@code values} is the provider's single D188 value contract; a provider
+ * that declares none admits every value as an opaque raw reference.
  */
 record ProtosForeignProviderDescriptor(
         ProtosForeignProviderId id,
         ProtosForeignProviderExecutionProfile profile,
         ProtosForeignProviderFactory factory,
-        Optional<ProtosForeignImportRoute> importRoute) {
+        Optional<ProtosForeignImportRoute> importRoute,
+        ProtosForeignValueAdapter values) {
     ProtosForeignProviderDescriptor {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(importRoute, "importRoute");
+        Objects.requireNonNull(values, "values");
+    }
+
+    ProtosForeignProviderDescriptor(
+            ProtosForeignProviderId id,
+            ProtosForeignProviderExecutionProfile profile,
+            ProtosForeignProviderFactory factory,
+            Optional<ProtosForeignImportRoute> importRoute) {
+        // The provider id is host metadata, never a guest-visible language name.
+        this(id, profile, factory, importRoute, ProtosForeignValueAdapter.opaque("unknown"));
     }
 
     ProtosForeignProviderDescriptor(

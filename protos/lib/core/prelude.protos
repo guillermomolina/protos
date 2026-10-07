@@ -33,6 +33,7 @@ _corePreludeBindings: Context {
     RequestOutcomeUncertain: RequestOutcomeUncertain
     NonTransferableValue: NonTransferableValue
     NonParallelValue: NonParallelValue
+    ForeignError: ForeignError
     InvalidPredicateResult: InvalidPredicateResult
     InvalidComparatorResult: InvalidComparatorResult
     InvalidComparatorOrder: InvalidComparatorOrder

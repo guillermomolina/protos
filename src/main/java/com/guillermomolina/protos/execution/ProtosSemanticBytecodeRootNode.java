@@ -2134,6 +2134,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          */
         @Specialization(
                 guards = {
+                    "!isForeignReceiver(receiver)",
                     "closure != null",
                     "enteredContext != null",
                     "selector.equals(cachedSelector)",
@@ -2274,6 +2275,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             } catch (UnsupportedOperationException unsupportedRepresentation) {
                 return null;
             }
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
         }
 
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
@@ -2612,6 +2617,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         @Specialization(
                 guards = {
+                    "!isForeignReceiver(receiver)",
                     "closure != null",
                     "enteredContext != null",
                     "selector.equals(cachedSelector)",
@@ -2731,6 +2737,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object receiver, String selector, ProtosActivation caller) {
             return ProtosBytecodeRootNode.PrepareSendArguments.performOrdinarySendLookup(
                     receiver, selector, caller);
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
         }
 
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {

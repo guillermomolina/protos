@@ -525,6 +525,10 @@ standardErrorPrototype: (name) => {
         result = NonParallelValue
         known = true
     })
+    (name === "ForeignError").ifTrue(() => {
+        result = ForeignError
+        known = true
+    })
     (name === "InvalidPredicateResult").ifTrue(() => {
         result = InvalidPredicateResult
         known = true

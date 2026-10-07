@@ -29,7 +29,8 @@ import java.util.Objects;
  * Process; an unhosted caller or an empty registry routes nothing. Initialization follows the
  * ordinary module lifecycle: the facade is cached {@code INITIALIZING} before the provider
  * acquires the target, so a reentrant import observes the same partial facade. Provider sessions
- * come exclusively from the Process lifecycle; this class keeps no cache of its own.
+ * come exclusively from the Process lifecycle; this class keeps no cache of its own. Target
+ * acquisition is an entered foreign operation (D188): its failures are fresh ForeignErrors.
  */
 final class ProtosForeignModuleImports {
     private ProtosForeignModuleImports() {}
@@ -104,21 +105,32 @@ final class ProtosForeignModuleImports {
         try {
             ProtosForeignProviderSessionBinding session =
                     host.foreignSessionForRuntime(actor, descriptor.id());
-            Object target =
-                    Objects.requireNonNull(
-                            route(descriptor)
-                                    .modules()
-                                    .acquireTarget(
-                                            session.sessionForRuntime(),
-                                            address.canonicalTarget()),
-                            "foreign module target");
+            ProtosForeignValueAdapter values = descriptor.values();
+            // Target acquisition is an entered foreign operation: its failures are ForeignErrors.
+            ProtosForeignHandle handle =
+                    ProtosForeignOperation.enter(
+                            session,
+                            values,
+                            "import",
+                            caller.prelude().orElse(null),
+                            live -> {
+                                Object target =
+                                        Objects.requireNonNull(
+                                                route(descriptor)
+                                                        .modules()
+                                                        .acquireTarget(
+                                                                live, address.canonicalTarget()),
+                                                "foreign module target");
+                                return new ProtosForeignHandle(
+                                        session, values, target, targetShape(values, live, target));
+                            });
             if (!session.isOpenForRuntime()) {
                 throw new IllegalStateException(
                         "foreign provider session closed during import");
             }
             facade.attachForRuntime(
                     new ProtosForeignModuleFacadeValue.Attachment(
-                            session, address.canonicalTarget(), target));
+                            address.canonicalTarget(), handle));
             record.markReady();
             ready = true;
             return record;
@@ -127,6 +139,20 @@ final class ProtosForeignModuleImports {
                 actorState.removeIfSame(key, record);
             }
         }
+    }
+
+    /**
+     * The facade target is never admitted (the facade is the module instance); its raw
+     * classification only selects what the D188 projection of the facade may use.
+     */
+    private static ProtosForeignAdmissionDescriptor targetShape(
+            ProtosForeignValueAdapter values, ProtosForeignProviderSession live, Object target)
+            throws Exception {
+        ProtosForeignAdmissionDescriptor shape =
+                Objects.requireNonNull(values.classify(live, target), "foreign classification");
+        return shape.kind() == ProtosForeignAdmissionDescriptor.Kind.RAW
+                ? shape
+                : ProtosForeignAdmissionDescriptor.opaque();
     }
 
     private static ProtosForeignImportRoute route(ProtosForeignProviderDescriptor descriptor) {

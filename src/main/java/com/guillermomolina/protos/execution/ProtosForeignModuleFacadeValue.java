@@ -16,7 +16,10 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosForeignProjectedReceiver;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -25,12 +28,16 @@ import java.util.Optional;
  * "Foreign module instances").
  *
  * <p>The facade is an ordinary identity-bearing Protos object and the module instance cached in
- * the Actor module cache. Its private attachment is never a guest slot; member projection belongs
- * to later slices. The attachment is set once, only by a successful initialization, and never
- * rebound: a facade whose initialization failed stays unattached and remains an ordinary object.
- * Like the Actor module cache that owns it, the facade is only mutated by its owning Actor.
+ * the Actor module cache. Its private attachment is never a guest slot. Member lookup is ordinary
+ * first, over the facade's own slots and delegation chain; only after a miss does the shared D188
+ * projection of the attached target apply ({@link ProtosForeignProjectedOperations}). The
+ * attachment is set once, only by a successful initialization, and never rebound: a facade whose
+ * initialization failed stays unattached and behaves as an ordinary object. Like the Actor module
+ * cache that owns it, the facade is only mutated by its owning Actor, and it never crosses an Actor
+ * or P boundary.
  */
-final class ProtosForeignModuleFacadeValue extends ProtosObjectValue {
+final class ProtosForeignModuleFacadeValue extends ProtosObjectValue
+        implements ProtosForeignProjectedReceiver {
     private Attachment attachment;
 
     ProtosForeignModuleFacadeValue() {
@@ -49,20 +56,34 @@ final class ProtosForeignModuleFacadeValue extends ProtosObjectValue {
         return Optional.ofNullable(attachment);
     }
 
+    @Override
+    public Optional<ProtosSlotLookupResult> lookupForeignMemberForRuntime(
+            String name, ProtosPrelude prelude) {
+        return ProtosForeignProjectedOperations.lookupFacade(
+                this, attachment == null ? null : attachment.handle(), name, prelude);
+    }
+
     /**
-     * Provider target privately bound to a facade. The session binding identity is the session
-     * generation; its liveness is {@link ProtosForeignProviderSessionBinding#isOpenForRuntime()}.
+     * Provider target privately bound to a facade through the shared D188 handle. The session
+     * binding identity is the session generation; its liveness is {@link
+     * ProtosForeignProviderSessionBinding#isOpenForRuntime()}.
      */
-    record Attachment(
-            ProtosForeignProviderSessionBinding session, String canonicalTarget, Object target) {
+    record Attachment(String canonicalTarget, ProtosForeignHandle handle) {
         Attachment {
-            Objects.requireNonNull(session, "session");
             Objects.requireNonNull(canonicalTarget, "canonicalTarget");
-            Objects.requireNonNull(target, "target");
+            Objects.requireNonNull(handle, "handle");
+        }
+
+        ProtosForeignProviderSessionBinding session() {
+            return handle.session();
+        }
+
+        Object target() {
+            return handle.target();
         }
 
         ProtosForeignProviderId providerId() {
-            return session.providerId();
+            return handle.session().providerId();
         }
     }
 }

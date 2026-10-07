@@ -54,6 +54,7 @@ class ProtosCoreErrorInfrastructureTest {
         assertParent(prelude, "RequestOutcomeUncertain", "Error");
         assertParent(prelude, "NonTransferableValue", "Error");
         assertParent(prelude, "NonParallelValue", "Error");
+        assertParent(prelude, "ForeignError", "Error");
         assertParent(prelude, "InvalidPredicateResult", "Error");
         assertParent(prelude, "InvalidComparatorResult", "Error");
         assertParent(prelude, "InvalidComparatorOrder", "Error");

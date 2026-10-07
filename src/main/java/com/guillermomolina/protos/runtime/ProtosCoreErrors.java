@@ -31,6 +31,7 @@ public final class ProtosCoreErrors {
         REQUEST_OUTCOME_UNCERTAIN("RequestOutcomeUncertain"),
         NON_TRANSFERABLE_VALUE("NonTransferableValue"),
         NON_PARALLEL_VALUE("NonParallelValue"),
+        FOREIGN_ERROR("ForeignError"),
         INVALID_PREDICATE_RESULT("InvalidPredicateResult"),
         INVALID_COMPARATOR_RESULT("InvalidComparatorResult"),
         INVALID_COMPARATOR_ORDER("InvalidComparatorOrder"),
@@ -66,6 +67,20 @@ public final class ProtosCoreErrors {
     public static ProtosObjectValue newOccurrence(
             ProtosActivation activation, StandardError standardError) {
         return new ProtosObjectValue(prototype(activation, standardError));
+    }
+
+    /**
+     * Fresh standard failure occurrence for runtime paths that own only the Core prelude, such as
+     * ordinary member lookup.
+     */
+    public static ProtosObjectValue newOccurrence(
+            ProtosPrelude prelude, StandardError standardError) {
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(standardError, "standardError");
+        return new ProtosObjectValue(
+                standardError == StandardError.ERROR
+                        ? prelude.errorPrototype()
+                        : prelude.standardErrorPrototype(standardError.prototypeName()));
     }
 
     public static ProtosObjectValue newError(ProtosActivation activation) {

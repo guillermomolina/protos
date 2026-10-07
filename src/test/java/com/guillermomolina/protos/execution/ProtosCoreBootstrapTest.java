@@ -145,6 +145,7 @@ class ProtosCoreBootstrapTest {
                         "RequestOutcomeUncertain",
                         "NonTransferableValue",
                         "NonParallelValue",
+                        "ForeignError",
                         "InvalidPredicateResult",
                         "InvalidComparatorResult",
                         "InvalidComparatorOrder",

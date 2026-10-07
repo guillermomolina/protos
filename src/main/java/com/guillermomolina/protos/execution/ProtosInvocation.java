@@ -69,6 +69,10 @@ public final class ProtosInvocation {
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
+        if (ProtosForeignProjectedOperations.isForeignMemberSelection(selected)) {
+            // D188: read then ordinary invocation of the read foreign member value.
+            return invoke(selected.value(), supplied, caller);
+        }
         return invokeSelected(receiver, selected, supplied, caller);
     }
 
@@ -160,6 +164,16 @@ public final class ProtosInvocation {
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return false;
+        }
+        if (ProtosForeignProjectedOperations.isForeignMemberSelection(selected)) {
+            // D188: read then ordinary invocation of the read foreign member value.
+            receiver = selected.value();
+            try {
+                selected = ProtosForeignProjectedOperations.invocationSelection(receiver, caller);
+            } catch (ProtosSignalException signalled) {
+                task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
+                return false;
+            }
         }
         return executeSelectedInTaskForRuntime(
                 receiver,

@@ -26,6 +26,7 @@ taxonomyOk:
     (Runner.standardErrorPrototype("RequestOutcomeUncertain") === RequestOutcomeUncertain) &&
     (Runner.standardErrorPrototype("NonTransferableValue") === NonTransferableValue) &&
     (Runner.standardErrorPrototype("NonParallelValue") === NonParallelValue) &&
+    (Runner.standardErrorPrototype("ForeignError") === ForeignError) &&
     (Runner.standardErrorPrototype("InvalidPredicateResult") === InvalidPredicateResult) &&
     (Runner.standardErrorPrototype("InvalidComparatorResult") === InvalidComparatorResult) &&
     (Runner.standardErrorPrototype("InvalidComparatorOrder") === InvalidComparatorOrder) &&

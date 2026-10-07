@@ -33,6 +33,7 @@ tests: [
                 (RequestOutcomeUncertain.parent() === Error) &&
                 (NonTransferableValue.parent() === Error) &&
                 (NonParallelValue.parent() === Error) &&
+                (ForeignError.parent() === Error) &&
                 (InvalidPredicateResult.parent() === Error) &&
                 (InvalidComparatorResult.parent() === Error) &&
                 (InvalidComparatorOrder.parent() === Error) &&

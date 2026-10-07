@@ -277,6 +277,46 @@ public final class ProtosValueLookup {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
+        if (receiver instanceof ProtosForeignProjectedReceiver foreign) {
+            if (stability != null) {
+                // D188 projections and foreign-member fallback are never D013 selections:
+                // guarded callers must stay on the generic path and must not enter foreign code.
+                stability.invalidate();
+                return Optional.empty();
+            }
+            return lookupForeign(foreign, name, prelude);
+        }
+        return lookupOrdinaryChain(receiver, name, prelude, stability, admitRepresentedReceiverStep);
+    }
+
+    /**
+     * Ordinary slot lookup through the immutable delegation chain starting at {@code origin},
+     * without the D188 receiver projection. Only foreign projections use this entry point, to
+     * consult the ordinary Protos-facing chain of a foreign receiver before any foreign fallback.
+     */
+    public static Optional<ProtosSlotLookupResult> lookupOrdinaryChain(
+            Object origin,
+            String name,
+            ProtosPrelude prelude) {
+        Objects.requireNonNull(origin, "origin");
+        Objects.requireNonNull(name, "name");
+        return lookupOrdinaryChain(origin, name, prelude, null, false);
+    }
+
+    @TruffleBoundary
+    private static Optional<ProtosSlotLookupResult> lookupForeign(
+            ProtosForeignProjectedReceiver foreign,
+            String name,
+            ProtosPrelude prelude) {
+        return foreign.lookupForeignMemberForRuntime(name, prelude);
+    }
+
+    private static Optional<ProtosSlotLookupResult> lookupOrdinaryChain(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude,
+            Assumption stability,
+            boolean admitRepresentedReceiverStep) {
         Object current = receiver;
         while (true) {
             if (current instanceof ProtosObjectValue ordinary) {

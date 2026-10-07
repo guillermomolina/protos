@@ -8109,6 +8109,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(
                 guards = {
+                    "!isForeignReceiver(receiver)",
                     "closure != null",
                     "enteredContext != null",
                     "selector.equals(cachedSelector)",
@@ -8380,6 +8381,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
+         * D188: a foreign-member read is a foreign operation, so the speculative fast-path
+         * selection must not perform it; foreign receivers always use the generic send path.
+         */
+        static boolean isForeignReceiver(Object receiver) {
+            return receiver
+                    instanceof com.guillermomolina.protos.runtime.ProtosForeignProjectedReceiver;
+        }
+
+        /**
          * Returns the non-native ordinary Closure selected by {@code selected},
          * or {@code null} when the selection is not an ordinary source-backed
          * Closure. Native Closures (including the canonical standard-import
@@ -8465,6 +8475,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             List<?> supplied) {
         ProtosSlotLookupResult selected =
                 performOrdinarySendLookup(receiver, selector, caller);
+        if (ProtosForeignProjectedOperations.isForeignMemberSelection(selected)) {
+            // D188: read then ordinary invocation of the read foreign member value.
+            receiver = selected.value();
+            selected = ProtosForeignProjectedOperations.invocationSelection(receiver, caller);
+        }
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(caller));

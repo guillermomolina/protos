@@ -281,6 +281,9 @@ public final class ProtosParallelRuntime {
     private static final class Transfer {
         static Object copy(Object v,ProtosActivation a,IdentityHashMap<Object,Object> memo){
             if(v==ProtosNullValue.INSTANCE||v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE)return v;
+            // D188: raw foreign references, foreign module facades, and projected foreign Closures
+            // carry provider-session state with no P transfer contract.
+            if(v instanceof ProtosForeignProjectedReceiver||(v instanceof ProtosClosureValue c&&ProtosForeignProjectedOperations.isProjectionClosure(c)))throw new NonParallel();
             if(v instanceof ProtosIntegerValue x)return new ProtosIntegerValue(x.value());
             if(v instanceof ProtosFloatValue x)return new ProtosFloatValue(x.value());
             if(v instanceof ProtosStringValue x)return x.copyForRuntime();
