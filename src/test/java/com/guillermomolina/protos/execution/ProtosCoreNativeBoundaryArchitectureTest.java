@@ -91,6 +91,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
                     Map.entry("execution/ProtosLoggingFacility.java", 3),
                     Map.entry("execution/ProtosRegexUnicodeFacility.java", 3),
+                    Map.entry("execution/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/ProtosTestToolCatalogAcquisitionFacility.java", 1),
                     Map.entry("execution/ProtosTestToolFileSelectionFacility.java", 2),
                     Map.entry("execution/ProtosTestToolStalledCaseDiagnosticFacility.java", 1));
@@ -119,6 +120,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                                     "execution/ProtosCommandLineArrayConstructionFacility.java")
                             || relative.equals(
                                     "execution/ProtosRegexUnicodeFacility.java")
+                            || relative.equals(
+                                    "execution/ProtosRegexSemanticTransferFamily.java")
                             || relative.equals(
                                     "execution/ProtosLoggingFacility.java")) {
                         actualNonCore.put(relative, count);

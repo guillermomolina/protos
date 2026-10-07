@@ -74,6 +74,24 @@ public final class ProtosSemanticTransferDestination {
                 family.ownerModule(), activation);
     }
 
+    /**
+     * The destination-local guest factory that the owning module installed in its own
+     * Actor-local module record while initializing (see
+     * {@link ProtosActorModuleState.ModuleRecord#installSemanticTransferFactory}), loading the
+     * module first when needed. Only the family's exact owning module record is consulted.
+     */
+    public Object ownerModuleFactory() {
+        ownerModule();
+        return activation
+                .actorModuleState()
+                .lookup(family.ownerModule())
+                .flatMap(ProtosActorModuleState.ModuleRecord::semanticTransferFactory)
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "owning module installed no semantic transfer factory"));
+    }
+
     /** Synchronously invokes a destination-local callable with ordinary call semantics. */
     public Object invoke(Object callable, List<?> arguments) {
         return ProtosInvocation.invoke(callable, arguments, activation);

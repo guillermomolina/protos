@@ -63,12 +63,18 @@ public final class ProtosCoreBootstrap {
     }
 
     /**
+     * The one Regex family descriptor (PLAT051-B). The same exact identity is authorized by every
+     * standard Prelude and bound into the Regex module's private minting facility.
+     */
+    private static final ProtosRegexSemanticTransferFamily REGEX_FAMILY =
+            new ProtosRegexSemanticTransferFamily();
+
+    /**
      * Standard Library families authorized for PLAT051 semantic-value transfer. Each entry must be
-     * an explicit semantic-portability contract of its owning standard module; no family has opted
-     * in yet.
+     * an explicit semantic-portability contract of its owning standard module.
      */
     private static List<ProtosSemanticTransferFamily> standardSemanticTransferFamilies() {
-        return List.of();
+        return List.of(REGEX_FAMILY);
     }
 
     public ProtosPrelude bootstrap(Path coreDirectory) throws IOException {
@@ -492,7 +498,9 @@ public final class ProtosCoreBootstrap {
                 ProtosRegexUnicodeFacility.MODULE_KEY,
                 Map.of(
                         ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT,
-                        ProtosRegexUnicodeFacility.createFacility()),
+                        ProtosRegexUnicodeFacility.createFacility(),
+                        ProtosRegexSemanticTransferFamily.BOOTSTRAP_SLOT,
+                        REGEX_FAMILY.createFacility()),
                 ProtosLoggingFacility.EVENT_MODULE_KEY,
                 Map.of(
                         ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT,

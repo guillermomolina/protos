@@ -16,6 +16,7 @@ public final class ProtosActorModuleState {
     public static final class ModuleRecord {
         private final ProtosObjectValue instance;
         private InitializationState state;
+        private Object semanticTransferFactory;
 
         public ModuleRecord(ProtosObjectValue instance) {
             this.instance = Objects.requireNonNull(instance, "instance");
@@ -25,6 +26,23 @@ public final class ProtosActorModuleState {
         public ProtosObjectValue instance() { return instance; }
         public InitializationState state() { return state; }
         public void markReady() { state = InitializationState.READY; }
+
+        /**
+         * PLAT051: installs, once and only while the module initializes, the destination-local
+         * guest callable through which the semantic transfer family owned by this module builds
+         * its values. It is Actor-local because this record is, and it is not a module slot.
+         */
+        public void installSemanticTransferFactory(Object factory) {
+            Objects.requireNonNull(factory, "factory");
+            if (state != InitializationState.INITIALIZING || semanticTransferFactory != null) {
+                throw new IllegalStateException("semantic transfer factory already fixed");
+            }
+            semanticTransferFactory = factory;
+        }
+
+        public Optional<Object> semanticTransferFactory() {
+            return Optional.ofNullable(semanticTransferFactory);
+        }
     }
 
     private final Map<ProtosModuleKey, ModuleRecord> moduleCache = new HashMap<>();

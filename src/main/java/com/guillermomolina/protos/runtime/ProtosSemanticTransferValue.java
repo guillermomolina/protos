@@ -24,18 +24,27 @@ import java.util.Objects;
  *
  * <p>It is not a new Protos value category: slots, delegation, mutation state, identity and every
  * other observable behavior are those of an ordinary object. The only difference is the family
- * reference, which isolation transfer uses to rematerialize the value instead of copying it. Only
- * values that opt in pay for that field; ordinary objects carry nothing extra.
+ * reference, which isolation transfer uses to rematerialize the value instead of copying it, and an
+ * optional family-private state that is neither a slot nor otherwise reachable from guest code.
+ * Only values that opt in pay for those fields; ordinary objects carry nothing extra.
  */
 public final class ProtosSemanticTransferValue extends ProtosObjectValue {
     private final ProtosSemanticTransferFamily family;
+    private final Object familyState;
 
-    ProtosSemanticTransferValue(Object parent, ProtosSemanticTransferFamily family) {
+    ProtosSemanticTransferValue(
+            Object parent, ProtosSemanticTransferFamily family, Object familyState) {
         super(parent);
         this.family = Objects.requireNonNull(family, "family");
+        this.familyState = familyState;
     }
 
     public ProtosSemanticTransferFamily family() {
         return family;
+    }
+
+    /** Runtime-private state of the minting family; read only through that family. */
+    Object familyState() {
+        return familyState;
     }
 }

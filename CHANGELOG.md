@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.264-SNAPSHOT
+
+- `PLAT051-B` opts `std:regex/Regex` Pattern and Match into PLAT051 two-stage
+  semantic transfer, so both cross Actor and isolated-P boundaries as
+  portable semantic data (D187). There is no specification change and no
+  observable Regex semantic change.
+  - One trusted family, `ProtosRegexSemanticTransferFamily`, owned by
+    `std:regex/Regex` and registered once by Core bootstrap, serves both kinds.
+    Pattern payload is its source and canonical flags; the destination
+    recompiles with its own Regex module. Match payload is a snapshot of its
+    capture count, per-group participation, text and scalar bounds, and
+    capture names; the destination rebuilds it without matching again. No
+    subject, compiled program or source Closure crosses.
+  - `Regex.protos` mints its Patterns and Matches through a private bootstrap
+    facility captured only by that module and removed from its surface; the
+    public members and behavior of Pattern and Match are unchanged. Match
+    construction now depends only on capture metadata, not on the compiled
+    program.
+  - A minimal generic seam lets an owning standard module install, while it
+    initializes, a destination-local guest factory in its own Actor-local
+    module record; family values may carry family-private state readable only
+    by their family. Ordinary transfer pays no Regex-specific work.
+
 ## 0.3.263-SNAPSHOT
 
 - `TEST009-AF` (guillermomolina/protos#795) keeps the real, reachable

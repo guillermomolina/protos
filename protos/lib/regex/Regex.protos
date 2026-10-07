@@ -104,7 +104,7 @@
 /// capture name to its text. A repeated group reports its last participation.
 /// An optional iteration that consumes no input is chosen under the ordinary
 /// greedy or lazy priority, keeping its captures, and ends the repetition.
-compileWithFlags: ((unicode) => {
+compileWithFlags: ((unicode, transfer) => {
     Arrays: import("std:collections/Array")
 
     maxScalar: 1114111
@@ -441,8 +441,12 @@ compileWithFlags: ((unicode) => {
     // captureCount + 1 entries: the captured String of each participating
     // group, possibly empty, or null. Group 0 is the whole match and always
     // participates. A repeated group reports its last selected participation.
-    newMatch: (program, bounds, texts) => {
-        groupTotal: program.captureCount + 1
+    // `captureNames` and `groupNames` are the Pattern's capture metadata: the
+    // frozen Map from each name to its group and the frozen Array holding each
+    // group's name or null. The Match retains no subject and no compiled
+    // program, so the transfer family can snapshot it without matching again.
+    newMatch: (captureNames, groupNames, bounds, texts) => {
+        groupTotal: groupNames.size()
         ((bounds.size() == (2 * groupTotal)) && (texts.size() == groupTotal)).ifFalse(() => {
             Error().signal()
         })
@@ -478,8 +482,8 @@ compileWithFlags: ((unicode) => {
                 })
             })
             String.recognizes(key).ifTrue(() => {
-                program.captureNames.containsKey(key).ifTrue(() => {
-                    selected = program.captureNames[key]
+                captureNames.containsKey(key).ifTrue(() => {
+                    selected = captureNames[key]
                 })
             })
             (selected === null).ifTrue(() => {
@@ -489,7 +493,7 @@ compileWithFlags: ((unicode) => {
         }
 
         result: {
-            captureCount: program.captureCount
+            captureCount: groupTotal - 1
             group: (key) => {
                 capturedTexts[selectGroup(key)]
             }
@@ -505,16 +509,16 @@ compileWithFlags: ((unicode) => {
             }
             namedGroups: () => {
                 snapshot: Map()
-                program.groupNames.each((groupName) => {
+                groupNames.each((groupName) => {
                     (groupName === null).ifFalse(() => {
-                        snapshot[groupName] = capturedTexts[program.captureNames[groupName]]
+                        snapshot[groupName] = capturedTexts[captureNames[groupName]]
                     })
                 })
                 snapshot
             }
         }
-        result.freeze()
-        result
+        // Minted as a frozen Regex transfer-family value with these slots.
+        transfer.mintMatch(result, capturedBounds, capturedTexts, groupNames)
     }
 
     // Answers whether `scalar` belongs to `ranges`, by binary search over its
@@ -999,7 +1003,7 @@ compileWithFlags: ((unicode) => {
                     })
                     group = group + 1
                 }
-                result = newMatch(program, spans, texts)
+                result = newMatch(program.captureNames, program.groupNames, spans, texts)
             })
             result
         }
@@ -1216,11 +1220,11 @@ compileWithFlags: ((unicode) => {
                 freshArray(fields, count + 1)
             }
         }
-        pattern.freeze()
-        pattern
+        // Minted as a frozen Regex transfer-family value with these slots.
+        transfer.mintPattern(pattern)
     }
 
-    (source, flags) => {
+    compileSource: (source, flags) => {
         String.recognizes(source).ifFalse(() => {
             Error().signal()
         })
@@ -2027,11 +2031,38 @@ compileWithFlags: ((unicode) => {
         scalars = null
         newPattern(source, canonicalFlags, program)
     }
-})(_regexUnicodeFacility)
 
-// The runtime-provisioned Unicode data facility is captured privately above; it
-// is not module surface.
+    // Destination-local construction for values transferred into this Actor or
+    // P worker (PLAT051): a Pattern is recompiled from its source and canonical
+    // flags; a Match is rebuilt from its snapshot of captures, bounds, and
+    // group names, without matching again. The runtime keeps this Closure in
+    // this module instance's private record; it is not module surface.
+    transfer.installFactory((kind, first, second, third) => {
+        built: null
+        (kind == "Pattern").ifTrueIfFalse(() => {
+            built = compileSource(first, second)
+        }, () => {
+            names: Map()
+            group: 0
+            first.each((name) => {
+                (name === null).ifFalse(() => {
+                    names[name] = group
+                })
+                group = group + 1
+            })
+            names.freeze()
+            built = newMatch(names, first, second, third)
+        })
+        built
+    })
+
+    compileSource
+})(_regexUnicodeFacility, _regexTransferFacility)
+
+// The runtime-provisioned Unicode data and transfer facilities are captured
+// privately above; they are not module surface.
 context.removeSlot("_regexUnicodeFacility")
+context.removeSlot("_regexTransferFacility")
 
 /// Compiles `source` without flags; equivalent to
 /// `compileWithFlags(source, "")`.

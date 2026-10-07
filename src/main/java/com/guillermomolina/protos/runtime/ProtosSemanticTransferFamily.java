@@ -76,7 +76,24 @@ public abstract class ProtosSemanticTransferFamily {
      * publishing it; only FROZEN values are eligible for transfer.
      */
     protected final ProtosSemanticTransferValue newValue(Object parent) {
-        return new ProtosSemanticTransferValue(parent, this);
+        return newValue(parent, null);
+    }
+
+    /**
+     * Mints a fresh OPEN value of this family carrying {@code familyState}: runtime-private data
+     * that only this family can read back, so that {@link #extract} needs no guest code. The state
+     * should reference what the value already retains for its own semantics rather than copy it.
+     */
+    protected final ProtosSemanticTransferValue newValue(Object parent, Object familyState) {
+        return new ProtosSemanticTransferValue(parent, this, familyState);
+    }
+
+    /** The family-private state of a value minted by this exact family. */
+    protected final Object familyState(ProtosSemanticTransferValue value) {
+        if (value.family() != this) {
+            throw new IllegalArgumentException("value was not minted by this family");
+        }
+        return value.familyState();
     }
 
     /**
