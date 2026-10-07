@@ -109,6 +109,19 @@ final class ProtosForeignProjectedOperations {
         return institution != null ? selected(institution) : fallback(handle, name, prelude);
     }
 
+    /**
+     * Publishes the projected {@code call} as an ordinary local slot of a facade whose provider
+     * deliberately documents it ({@link ProtosForeignModuleProvider#publishesFacadeCall}); only an
+     * unambiguously executable target gets one. The slot then shadows the inherited {@code
+     * Object.call} by ordinary lookup, and its activation is the projected execution of the
+     * facade's attached target.
+     */
+    static void publishFacadeCall(ProtosForeignModuleFacadeValue facade, ProtosForeignHandle handle) {
+        if (handle.projectsCall()) {
+            facade.createLocalSlot("call", CALL);
+        }
+    }
+
     private static ProtosClosureValue institutionOrNull(ProtosForeignHandle handle, String name) {
         return switch (name) {
             case "call" -> handle.projectsCall() ? CALL : null;

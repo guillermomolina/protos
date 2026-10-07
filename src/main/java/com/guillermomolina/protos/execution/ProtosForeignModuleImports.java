@@ -133,6 +133,9 @@ final class ProtosForeignModuleImports {
             facade.attachForRuntime(
                     new ProtosForeignModuleFacadeValue.Attachment(
                             address.canonicalTarget(), handle));
+            if (route(descriptor).modules().publishesFacadeCall()) {
+                ProtosForeignProjectedOperations.publishFacadeCall(facade, handle);
+            }
             record.markReady();
             ready = true;
             return record;

@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -65,6 +66,20 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     public static ProtosPolyglotRuntimeHost open() {
         return new ProtosPolyglotRuntimeHost(
                 Engine.create(ProtosLanguage.ID), null, ProtosForeignProviderRegistry.EMPTY);
+    }
+
+    /**
+     * Opens a normal host whose only foreign provider is the restricted host-Java provider of the
+     * {@code java:} scheme over exactly {@code catalogue} (I082-G). The provider configuration is
+     * fixed for the life of the host; {@link #open()} configures no Java authority at all.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static ProtosPolyglotRuntimeHost openWithHostJava(ProtosHostJavaCatalogue catalogue) {
+        return new ProtosPolyglotRuntimeHost(
+                Engine.create(ProtosLanguage.ID),
+                null,
+                ProtosForeignProviderRegistry.of(
+                        List.of(ProtosHostJavaProvider.descriptor(catalogue))));
     }
 
     /** Test-only hook: opens a normal host owning the supplied immutable provider registry. */

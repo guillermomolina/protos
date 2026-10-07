@@ -7,6 +7,62 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.280-SNAPSHOT
+
+- `I082-G` adds the first production foreign provider: a restricted host-Java
+  provider for the `java:` import scheme. The specification, D188, D189,
+  PLAT052, and PLAT053 are unchanged. With this slice the I082 foreign interop
+  runtime/import foundation is complete.
+  - New public `ProtosHostJavaCatalogue` is the embedder's immutable list of
+    already-provisioned Java classes and the exact members that may cross the
+    boundary:
+    - at most one public constructor per class;
+    - at most one public static method and one public instance method per
+      name, declared by the admitted class itself, so no overloads and no
+      inherited members such as `getClass`;
+    - parameter and result types limited to lossless D188 scalars and other
+      admitted classes.
+    Being on the classpath never makes a class importable.
+  - New `ProtosPolyglotRuntimeHost.openWithHostJava(catalogue)` installs the
+    provider when the host is created. `open()` still configures no foreign
+    provider and no Java authority. There is no dynamic or guest provider
+    registration, no dependency acquisition, and no Espresso, guest JVM, or
+    extra Polyglot Context.
+  - The provider profile is `RESTRICTED_IN_PROCESS`; the catalogue is its
+    confinement and no authority is provisioned to it.
+    - Looking up an import target is a plain catalogue lookup, so a class that
+      is not admitted is never loaded, initialized, or probed, and no
+      compartment or session is opened for it.
+    - Compartments and sessions stay lazy and hold no application state.
+    - Reflection is used only to invoke members the embedder preselected.
+  - Imported classes are ordinary Actor-local foreign module facades:
+    - a facade with an exposed constructor publishes it as its own `call`
+      slot, so `G(args)` constructs;
+    - `G.staticMethod(args)` and `object.method(args)` are the ordinary
+      foreign member read followed by ordinary invocation of an executable
+      bound to the exact receiver.
+  - Values and failures follow D188:
+    - Java booleans, null/void, Strings, integral primitives/wrappers,
+      `BigInteger`, and binary floating values convert losslessly;
+    - every other Java object is a raw reference identified by host
+      reference identity, never Java `equals`/`hashCode`;
+    - arguments convert only losslessly for the exact parameter type and
+      otherwise fail before the Java member runs;
+    - Closure arguments are rejected before entry;
+    - a thrown Java exception becomes a fresh `ForeignError` exposing only the
+      exception class name.
+  - Generic substrate: `ProtosForeignModuleProvider.publishesFacadeCall()`
+    (default `false`) lets a provider deliberately publish its facade's
+    projected `call` (D188 "Callability and construction"). Facades of other
+    providers are unchanged.
+  - New `ProtosHostJavaProviderTest` proves the real provider end to end over
+    inert fixture classes: import and Actor-local identity, static calls,
+    construction, instance calls, scalar admission, lossy-argument and
+    overload rejection, raw identity, sanitized failures, unadmitted classes
+    and unexposed members failing closed, absence of authority, session
+    lifetime and no rebinding, no Actor/P transfer, and zero-use laziness of
+    both the configured and the default host.
+
 ## 0.3.279-SNAPSHOT
 
 - `I082-F` makes the PLAT052 foreign provider execution profiles real

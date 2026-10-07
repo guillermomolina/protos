@@ -44,4 +44,15 @@ interface ProtosForeignModuleProvider {
      */
     Object acquireTarget(ProtosForeignProviderSession session, String canonicalTarget)
             throws Exception;
+
+    /**
+     * Whether this provider deliberately publishes the facade's {@code call} as the projected
+     * execution of an executable target (D188 "Callability and construction"), whose documented
+     * provider meaning may be construction. A facade is an ordinary object, so without this
+     * publication it inherits the standard {@code Object.call}. Decided by the provider, never by
+     * the import specifier.
+     */
+    default boolean publishesFacadeCall() {
+        return false;
+    }
 }
