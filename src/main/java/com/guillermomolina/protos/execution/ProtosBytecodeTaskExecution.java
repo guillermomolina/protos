@@ -336,6 +336,84 @@ final class ProtosBytecodeTaskExecution {
         }
     }
 
+    /**
+     * D189: runs one prepared call of {@code task} nested on the host stack inside a live
+     * synchronous foreign operation and returns its result.
+     *
+     * <p>Unlike a Task segment this never publishes a continuation, because foreign/host frames
+     * below it cannot be captured. Readiness and the cancellation-first rule resume synchronously
+     * exactly as at the top level; a suspension that would actually commit is rejected by the
+     * Task gate and resumed as a fresh {@code Error} signaled at the suspension point. Errors and
+     * control transfers leaving the call propagate to the caller unchanged. No cancellation is
+     * observed merely because the call is entered.
+     *
+     * @param entryRoot whether {@code prepared} runs through the Task C-prime entry root, which
+     *     already owns its finish and own-return-home handling
+     */
+    static Object invokeNestedSynchronous(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            boolean entryRoot,
+            ProtosActivation errorSite) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(prepared, "prepared");
+        Objects.requireNonNull(errorSite, "errorSite");
+        task.enterSynchronousForeignCallbackForRuntime();
+        try {
+            Object outcome =
+                    entryRoot
+                            ? ProtosTaskCPrimeEntryExecution.planForEnteredContext()
+                                    .target()
+                                    .call(prepared.activation(), prepared)
+                            : prepared.bodyTarget().call(prepared.targetArguments());
+            while (outcome instanceof ContinuationResult continuation) {
+                outcome =
+                        continuation.continueWith(
+                                nestedResumeValue(
+                                        task,
+                                        nativeSuspensionLeaf(continuation).dependency(),
+                                        errorSite));
+            }
+            Objects.requireNonNull(outcome, "nested synchronous C-prime call returned null");
+            return entryRoot ? outcome : prepared.finish(outcome);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            if (entryRoot) {
+                throw bridged.transfer();
+            }
+            Object handled;
+            try {
+                handled = prepared.handleControlTransfer(bridged.transfer());
+            } catch (RuntimeException escaped) {
+                prepared.complete();
+                throw escaped;
+            }
+            return prepared.finish(handled);
+        } catch (RuntimeException | Error failure) {
+            if (!entryRoot) {
+                prepared.complete();
+            }
+            throw failure;
+        } finally {
+            task.exitSynchronousForeignCallbackForRuntime();
+        }
+    }
+
+    private static Object nestedResumeValue(
+            ProtosTask task, ProtosTask.WaitDependency dependency, ProtosActivation errorSite) {
+        try {
+            if (task.beginSuspensionCapture(dependency)) {
+                throw new IllegalStateException(
+                        "suspension capture began inside a synchronous foreign callback");
+            }
+        } catch (ProtosTask.SuspensionInForeignExtentRejected rejected) {
+            return new ProtosSignalException(ProtosCoreErrors.newError(errorSite));
+        }
+        if (task.cancellationRequested()) {
+            return beginCancellationTransfer(task, "synchronous foreign callback suspension");
+        }
+        return ProtosNullValue.INSTANCE;
+    }
+
     private static ProtosNativeSuspension nativeSuspensionLeaf(
             ContinuationResult top) {
         Object current = top;

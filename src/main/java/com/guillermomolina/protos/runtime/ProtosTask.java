@@ -129,6 +129,26 @@ public final class ProtosTask {
     private Object pendingCompletion;
     private ProtosDynamicControlState dynamicControlState;
 
+    /*
+     * D189 nesting depth of synchronous foreign callbacks currently executing guest code in this
+     * Task. It stays 0 for every Task that never runs a callback; while it is positive, foreign/host
+     * frames are live on the stack and an actual suspension is rejected before it commits.
+     */
+    private int synchronousForeignCallbackDepth;
+
+    /**
+     * Signals that {@link #beginSuspensionCapture} rejected a suspension because a synchronous
+     * foreign callback is executing in this Task (D189). The registered wait relationship has
+     * already been removed; the caller signals the ordinary Error at the suspension point.
+     */
+    public static final class SuspensionInForeignExtentRejected extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
+        SuspensionInForeignExtentRejected() {
+            super("suspension across a live synchronous foreign operation", null, false, false);
+        }
+    }
+
     ProtosTask(
             ProtosActorExecutionDomain owner,
             ProtosTask parent,
@@ -389,12 +409,19 @@ public final class ProtosTask {
      * {@link #publishSuspensionContinuation(WaitDependency, Continuation)} installs the complete
      * top-level logical continuation.
      *
+     * <p>This is also the single commit gate for D189: while a synchronous foreign callback runs in
+     * this Task, a suspension that would actually commit is rejected instead. Readiness and the
+     * cancellation-first rule are decided first, exactly as without a callback.
+     *
      * @return {@code true} when continuation capture/publication is required; {@code false} when
      *     readiness or an already-recorded cancellation makes suspension unnecessary
+     * @throws SuspensionInForeignExtentRejected when the suspension would commit across a live
+     *     synchronous foreign operation; no capture state was recorded
      */
     public boolean beginSuspensionCapture(WaitDependency dependency) {
         Objects.requireNonNull(dependency, "dependency");
         boolean detachCancelledWait = false;
+        boolean rejectInForeignExtent = false;
         synchronized (this) {
             requireState(State.RUNNING, "begin suspension capture");
             if (capturePendingDependency != null) {
@@ -408,6 +435,8 @@ public final class ProtosTask {
                 detachCancelledWait = true;
             } else if (dependency.isReady()) {
                 return false;
+            } else if (synchronousForeignCallbackDepth > 0) {
+                rejectInForeignExtent = true;
             } else {
                 capturePendingDependency = dependency;
                 captureWakeRecorded = false;
@@ -416,13 +445,30 @@ public final class ProtosTask {
         }
         /*
          * The caller contract registers the wait relationship before entering capture.
-         * Cancellation therefore removes only that relationship; it never cancels the
-         * dependency itself.
+         * Cancellation or a D189 rejection therefore removes only that relationship; it never
+         * cancels the dependency itself.
          */
-        if (detachCancelledWait) {
+        if (detachCancelledWait || rejectInForeignExtent) {
             dependency.waitingTaskCancelled(this);
         }
+        if (rejectInForeignExtent) {
+            throw new SuspensionInForeignExtentRejected();
+        }
         return false;
+    }
+
+    /** Enters one D189 synchronous foreign callback executing guest code in this running Task. */
+    public synchronized void enterSynchronousForeignCallbackForRuntime() {
+        requireState(State.RUNNING, "enter synchronous foreign callback");
+        synchronousForeignCallbackDepth++;
+    }
+
+    /** Leaves the innermost D189 synchronous foreign callback entered in this Task. */
+    public synchronized void exitSynchronousForeignCallbackForRuntime() {
+        if (synchronousForeignCallbackDepth == 0) {
+            throw new IllegalStateException("no synchronous foreign callback is active");
+        }
+        synchronousForeignCallbackDepth--;
     }
 
     /**

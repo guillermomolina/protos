@@ -76,6 +76,56 @@ public final class ProtosInvocation {
         return invokeSelected(receiver, selected, supplied, caller);
     }
 
+    /**
+     * D189: ordinary polymorphic invocation of {@code receiver} by a synchronous foreign callback,
+     * as a nested activation of {@code caller}'s execution.
+     *
+     * <p>Outside a Task this is {@link #invoke}. Inside a Task it continues that exact Task: the
+     * same prepared C-prime call shapes as Task entry are driven nested on the host stack, so no
+     * Task, Future, Actor turn, or structured scope is created and no suspension can commit across
+     * the foreign frames ({@link ProtosBytecodeTaskExecution#invokeNestedSynchronous}).
+     */
+    static Object invokeFromForeignCallbackForRuntime(
+            Object receiver, List<?> supplied, ProtosActivation caller) {
+        ProtosTask task = caller.task().orElse(null);
+        if (task == null) {
+            return invoke(receiver, supplied, caller);
+        }
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "polymorphic invocation requires an owning Core prelude"));
+        ProtosSlotLookupResult selected =
+                ProtosValueLookup.lookup(receiver, "call", prelude)
+                        .orElseThrow(
+                                () -> new ProtosSignalException(ProtosCoreErrors.newError(caller)));
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.prepareTaskOwnedSelectedCallIfBytecode(
+                        receiver, selected, supplied, caller, task);
+        if (prepared != null) {
+            return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
+                    task, prepared, false, caller);
+        }
+        ProtosClosureValue nativeTarget = closure;
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        closure, selected.home())) {
+            nativeTarget = targetClosure;
+        }
+        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
+        return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
+                task,
+                ProtosBytecodeRootNode.prepareTaskOwnedSelectedNativeForCPrime(
+                        receiver, selected, supplied, caller, task),
+                true,
+                caller);
+    }
+
     public static void executeInTaskForRuntime(
             Object receiver,
             List<?> supplied,

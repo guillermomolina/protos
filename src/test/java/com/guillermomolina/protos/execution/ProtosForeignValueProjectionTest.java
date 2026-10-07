@@ -184,13 +184,13 @@ class ProtosForeignValueProjectionTest {
     }
 
     @Test
-    void closureArgumentsNeedTheD189BridgeAndOrdinaryObjectsNeverCross() throws Exception {
+    void onlyClosuresCrossAsD189CallbacksAndOrdinaryObjectsNeverCross() throws Exception {
         Fake root = new Fake(false);
         try (ProtosForeignValueFixture fixture = fixture(root)) {
             root.member("fn", adder(fixture.provider))
                     .member("other", new Fake(false))
                     .member("seq", new Fake(false, Capability.INDEXED_READ));
-            assertOrdinary(fixture, fixture.failure(M + "m.fn(() => 1)"));
+            // A Closure crosses only as an operation-scoped D189 callback (ProtosForeignCallbackTest).
             assertOrdinary(fixture, fixture.failure(M + "m.fn({})"));
             assertOrdinary(fixture, fixture.failure(M + "m.fn(Array(1))"));
             assertOrdinary(fixture, fixture.failure(M + "m.fn(m)"));
@@ -288,11 +288,13 @@ class ProtosForeignValueProjectionTest {
     }
 
     @Test
-    void foreignValueSubstrateGrantsNoHostAuthorityAndHasNoCallbackBridge() throws Exception {
+    void foreignValueSubstrateGrantsNoHostAuthorityAndNeverHandsProvidersAClosure() throws Exception {
         for (String file :
                 List.of(
                         "execution/ProtosForeignAdmissionDescriptor.java",
                         "execution/ProtosForeignArgument.java",
+                        "execution/ProtosForeignCallback.java",
+                        "execution/ProtosForeignCallbackScope.java",
                         "execution/ProtosForeignEachCall.java",
                         "execution/ProtosForeignFailureDescription.java",
                         "execution/ProtosForeignHandle.java",

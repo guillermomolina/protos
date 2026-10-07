@@ -45,6 +45,10 @@ import java.util.Set;
  * {@code each} is a Protos-side pull loop ({@link ProtosForeignEachCall}); inside a Task the
  * structured dispatcher recognizes its body ({@link #isEachImplementation}) and runs the same
  * cursor with ordinary structured callback invocation.
+ *
+ * <p>A Closure argument of {@code call}, {@code at}, or {@code atPut} crosses only as a D189
+ * callback capability scoped to that one operation ({@link ProtosForeignCallbackScope}); every
+ * other non-scalar, non-raw argument still fails before entry.
  */
 final class ProtosForeignProjectedOperations {
     private static final Set<String> INSTITUTIONS =
@@ -195,16 +199,26 @@ final class ProtosForeignProjectedOperations {
         if (!handle.projectsCall()) {
             throw ProtosForeignOperation.ordinaryError(prelude);
         }
-        List<ProtosForeignArgument> arguments = new ArrayList<>(supplied.size());
-        for (Object argument : supplied) {
-            arguments.add(export(handle, argument, prelude));
+        Outbound outbound = new Outbound(handle, activation, prelude);
+        try {
+            List<ProtosForeignArgument> arguments = new ArrayList<>(supplied.size());
+            for (Object argument : supplied) {
+                arguments.add(outbound.export(argument));
+            }
+            List<ProtosForeignArgument> exported = List.copyOf(arguments);
+            return ProtosForeignOperation.enter(
+                    handle,
+                    "execute",
+                    prelude,
+                    outbound.callbacks,
+                    live ->
+                            admit(
+                                    handle,
+                                    live,
+                                    handle.adapter().execute(live, handle.target(), exported)));
+        } finally {
+            outbound.expire();
         }
-        List<ProtosForeignArgument> exported = List.copyOf(arguments);
-        return ProtosForeignOperation.enter(
-                handle,
-                "execute",
-                prelude,
-                live -> admit(handle, live, handle.adapter().execute(live, handle.target(), exported)));
     }
 
     private static Object at(ProtosActivation activation, List<?> supplied) {
@@ -213,12 +227,22 @@ final class ProtosForeignProjectedOperations {
         if (!handle.projectsAt() || supplied.size() != 1) {
             throw ProtosForeignOperation.ordinaryError(prelude);
         }
-        ProtosForeignArgument index = export(handle, supplied.get(0), prelude);
-        return ProtosForeignOperation.enter(
-                handle,
-                "readElement",
-                prelude,
-                live -> admit(handle, live, handle.adapter().readElement(live, handle.target(), index)));
+        Outbound outbound = new Outbound(handle, activation, prelude);
+        try {
+            ProtosForeignArgument index = outbound.export(supplied.get(0));
+            return ProtosForeignOperation.enter(
+                    handle,
+                    "readElement",
+                    prelude,
+                    outbound.callbacks,
+                    live ->
+                            admit(
+                                    handle,
+                                    live,
+                                    handle.adapter().readElement(live, handle.target(), index)));
+        } finally {
+            outbound.expire();
+        }
     }
 
     private static Object atPut(ProtosActivation activation, List<?> supplied) {
@@ -227,16 +251,22 @@ final class ProtosForeignProjectedOperations {
         if (!handle.projectsAtPut() || supplied.size() != 2) {
             throw ProtosForeignOperation.ordinaryError(prelude);
         }
-        ProtosForeignArgument index = export(handle, supplied.get(0), prelude);
-        ProtosForeignArgument value = export(handle, supplied.get(1), prelude);
-        ProtosForeignOperation.enter(
-                handle,
-                "writeElement",
-                prelude,
-                live -> {
-                    handle.adapter().writeElement(live, handle.target(), index, value);
-                    return null;
-                });
+        Outbound outbound = new Outbound(handle, activation, prelude);
+        try {
+            ProtosForeignArgument index = outbound.export(supplied.get(0));
+            ProtosForeignArgument value = outbound.export(supplied.get(1));
+            ProtosForeignOperation.enter(
+                    handle,
+                    "writeElement",
+                    prelude,
+                    outbound.callbacks,
+                    live -> {
+                        handle.adapter().writeElement(live, handle.target(), index, value);
+                        return null;
+                    });
+        } finally {
+            outbound.expire();
+        }
         return supplied.get(1);
     }
 
@@ -246,13 +276,46 @@ final class ProtosForeignProjectedOperations {
         return ProtosForeignValueAdmission.admit(handle.session(), handle.adapter(), live, foreign);
     }
 
-    private static ProtosForeignArgument export(
-            ProtosForeignHandle handle, Object value, ProtosPrelude prelude) {
-        ProtosForeignArgument argument = ProtosForeignValueAdmission.exportOrNull(handle, value);
-        if (argument == null) {
-            throw ProtosForeignOperation.ordinaryError(prelude);
+    /**
+     * Outbound arguments of one operation. The D189 callback scope exists only once a Closure
+     * argument needs it; an operation without one pays nothing. A failure to export any argument
+     * is the ordinary pre-entry failure and expires callbacks already prepared.
+     */
+    private static final class Outbound {
+        private final ProtosForeignHandle handle;
+        private final ProtosActivation activation;
+        private final ProtosPrelude prelude;
+        ProtosForeignCallbackScope callbacks;
+
+        Outbound(ProtosForeignHandle handle, ProtosActivation activation, ProtosPrelude prelude) {
+            this.handle = handle;
+            this.activation = activation;
+            this.prelude = prelude;
         }
-        return argument;
+
+        ProtosForeignArgument export(Object value) {
+            ProtosForeignArgument argument;
+            if (value instanceof ProtosClosureValue closure) {
+                if (callbacks == null) {
+                    callbacks = new ProtosForeignCallbackScope(handle, activation);
+                }
+                argument =
+                        ProtosForeignValueAdmission.exportCallbackOrNull(
+                                handle, callbacks.prepare(closure));
+            } else {
+                argument = ProtosForeignValueAdmission.exportOrNull(handle, value);
+            }
+            if (argument == null) {
+                throw ProtosForeignOperation.ordinaryError(prelude);
+            }
+            return argument;
+        }
+
+        void expire() {
+            if (callbacks != null) {
+                callbacks.expire();
+            }
+        }
     }
 
     private static ProtosForeignHandle requireHandle(ProtosActivation activation) {

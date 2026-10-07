@@ -30,11 +30,13 @@ import java.util.Objects;
  * directions.
  *
  * <p>Inbound, {@link #admit} converts exactly the provider-classified lossless scalars and wraps
- * everything else as a raw foreign reference bound to the exact session that produced it. Outbound,
- * {@link #exportOrNull} admits only lossless scalars and raw references returning to their own
- * session; ordinary objects, collections, Closures, Futures, ActorRefs, and capabilities never
- * cross, so a generic operation creates no new authority. Passing a Closure for foreign invocation
- * is the D189 callback bridge, which this boundary does not provide.
+ * everything else as a raw foreign reference bound to the exact session that produced it. The same
+ * admission applies to D189 callback arguments. Outbound, {@link #exportOrNull} admits only
+ * lossless scalars and raw references returning to their own session, which is also the whole D189
+ * callback result domain; ordinary objects, collections, Closures, Futures, ActorRefs, and
+ * capabilities never cross as values, so a generic operation creates no new authority. The one
+ * additional outbound form is an operation-scoped D189 callback capability for a Closure argument
+ * ({@link #exportCallbackOrNull}), which is not a foreign value and exports no retained handle.
  */
 final class ProtosForeignValueAdmission {
     private ProtosForeignValueAdmission() {}
@@ -111,6 +113,13 @@ final class ProtosForeignValueAdmission {
         } else {
             return null;
         }
+        return origin.adapter().acceptsArgument(argument) ? argument : null;
+    }
+
+    /** Outbound form of a prepared D189 callback, or null when the provider cannot accept one. */
+    static ProtosForeignArgument exportCallbackOrNull(
+            ProtosForeignHandle origin, ProtosForeignCallback callback) {
+        ProtosForeignArgument argument = ProtosForeignArgument.callback(callback);
         return origin.adapter().acceptsArgument(argument) ? argument : null;
     }
 }

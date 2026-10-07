@@ -7,6 +7,43 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.278-SNAPSHOT
+
+- `I082-E` adds the D189 synchronous foreign callback bridge with
+  dynamic-extent lifetime checks. The specification and the observable
+  semantics it already defines are unchanged.
+  - A Closure argument of a projected foreign `call`, `at`, or `atPut` now
+    crosses as an operation-scoped `ProtosForeignCallback` capability. That
+    capability denotes the exact Closure and is invoked through ordinary
+    Protos invocation. Every other non-scalar, non-raw argument still fails
+    before the operation is entered.
+  - Callback arguments are admitted through the existing D188 admission. A
+    normal result returns to the provider only as a lossless scalar or as a
+    raw reference of the same session. Any other result is rejected toward
+    the provider and is never exported.
+  - Inside a Task, the callback continues the current Task as a nested
+    synchronous C-prime call. It creates no Task, Future, Actor turn, or
+    structured scope, and adds no cancellation checkpoint. Sequential,
+    recursive, and nested foreign-call re-entry are supported.
+  - `ProtosTask.beginSuspensionCapture` is the single commit gate. A
+    suspension that would commit while a callback is running is rejected:
+    the registered waiter is removed, and a fresh `Error` is signaled at the
+    suspension point.
+  - Each operation's callback scope is live only while the operation runs
+    and expires on every exit path. On expiry it drops its Closure,
+    activation, and session references. Invocations are rejected before
+    guest entry when the scope has expired, when they arrive on a different
+    thread (foreign-created or concurrent), or when the session is closed,
+    the Task is not running, or the Actor has terminated.
+  - A Protos Error or control transfer that leaves a callback travels in a
+    private carrier bound to its operation. Only that exact carrier, leaving
+    the same operation, resumes the original outcome; anything else becomes
+    a fresh `ForeignError`. When the Error leaves the callback, any handler
+    it selected outside the callback is released, so a replacement
+    `ForeignError` can still be handled there.
+  - Only the plain-Java test provider is used. No production provider,
+    `std:interop` API, or authority expansion is added.
+
 ## 0.3.277-SNAPSHOT
 
 - `PERF033-A` adds a canonical pay-as-you-grow Polyglot executable for

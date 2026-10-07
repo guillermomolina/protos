@@ -171,6 +171,14 @@ public final class ProtosDynamicControlState {
         private void deactivate() {
             active = false;
         }
+
+        /** Re-enables a handler frame whose selection was withdrawn before it ran. */
+        void releaseSelectionForRuntime() {
+            if (kind != FrameKind.HANDLER) {
+                throw new IllegalStateException("only a handler frame can be selected");
+            }
+            active = true;
+        }
     }
 
     /** Opaque internal record for the one transfer currently being unwound by a task. */

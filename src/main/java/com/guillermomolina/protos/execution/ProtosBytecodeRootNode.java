@@ -9634,6 +9634,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 }
                 throw cancellation;
             }
+            if (resumeValue instanceof ProtosSignalException rejectedSuspension) {
+                /*
+                 * D189: the Task gate rejected this suspension across a live synchronous
+                 * foreign operation and already removed the wait relationship. The fresh
+                 * Error is signaled at the suspension point; the descriptor is never resumed.
+                 */
+                throw rejectedSuspension;
+            }
             return suspension.resume();
         }
 

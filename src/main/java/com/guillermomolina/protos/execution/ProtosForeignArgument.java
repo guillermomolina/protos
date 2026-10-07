@@ -28,12 +28,35 @@ import java.util.Objects;
  * other kind carries its lossless host scalar ({@link Boolean}, {@code null}, {@link String},
  * {@link BigInteger}, {@link Double}). The provider decides through {@link
  * ProtosForeignValueAdapter#acceptsArgument} whether it can represent the value losslessly.
+ *
+ * <p>A D189 callback argument has no admission kind: it is not a foreign value but an ephemeral
+ * {@link ProtosForeignCallback} capability, live only inside the operation that receives it
+ * ({@link #isCallback()}).
  */
 record ProtosForeignArgument(ProtosForeignAdmissionDescriptor.Kind kind, Object value) {
     ProtosForeignArgument {
-        Objects.requireNonNull(kind, "kind");
-        if ((kind == ProtosForeignAdmissionDescriptor.Kind.NULL) != (value == null)) {
+        if (kind == null) {
+            if (!(value instanceof ProtosForeignCallback)) {
+                throw new IllegalArgumentException("only a callback argument has no kind");
+            }
+        } else if ((kind == ProtosForeignAdmissionDescriptor.Kind.NULL) != (value == null)) {
             throw new IllegalArgumentException("only a null argument has no value");
         }
+    }
+
+    static ProtosForeignArgument callback(ProtosForeignCallback callback) {
+        return new ProtosForeignArgument(null, Objects.requireNonNull(callback, "callback"));
+    }
+
+    boolean isCallback() {
+        return kind == null;
+    }
+
+    /** The callback capability of a callback argument. */
+    ProtosForeignCallback callback() {
+        if (kind != null) {
+            throw new IllegalStateException("not a callback argument");
+        }
+        return (ProtosForeignCallback) value;
     }
 }

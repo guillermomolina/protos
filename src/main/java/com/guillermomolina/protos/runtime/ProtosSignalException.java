@@ -127,4 +127,17 @@ public final class ProtosSignalException extends AbstractTruffleException {
         }
         selectedHandlerFrame = frame;
     }
+
+    /**
+     * D189: withdraws the handler selected while this Error left a synchronous foreign callback.
+     * Such a frame is necessarily outside the callback, and the Error now belongs to the foreign
+     * operation; if that operation returns it unchanged, it is selected again on re-propagation,
+     * and if the operation replaces it, the handler remains available to the replacement.
+     */
+    public void releaseHandlerSelectionForForeignCallbackForRuntime() {
+        if (selectedHandlerFrame != null) {
+            selectedHandlerFrame.releaseSelectionForRuntime();
+            selectedHandlerFrame = null;
+        }
+    }
 }

@@ -37,6 +37,11 @@ import java.util.Set;
  * while admitting its result, becomes a fresh {@code ForeignError} whose six visible slots hold
  * only provider-sanitized Strings, null, or a projected Error cause. The host exception itself is
  * never reachable from guest code.
+ *
+ * <p>The single D189 exception: when the operation received callbacks, their scope is live exactly
+ * while the provider runs, and the exact carrier of a Protos outcome that left one of those
+ * callbacks, leaving this same operation unchanged, resumes that original Error or control
+ * transfer instead of becoming a {@code ForeignError}.
  */
 final class ProtosForeignOperation {
     /** Bounds cause projection even for an adapter that keeps producing fresh causes. */
@@ -52,27 +57,71 @@ final class ProtosForeignOperation {
     private ProtosForeignOperation() {}
 
     /** Runs {@code body} as the foreign operation {@code operation} of one exact session. */
-    @TruffleBoundary
     static <T> T enter(
             ProtosForeignProviderSessionBinding session,
             ProtosForeignValueAdapter adapter,
             String operation,
             ProtosPrelude prelude,
             Body<T> body) {
+        return enter(session, adapter, operation, prelude, null, body);
+    }
+
+    /**
+     * Runs {@code body} as one foreign operation whose arguments include the callbacks of {@code
+     * callbacks}, or none when it is null. The scope expires on every exit, including a failure
+     * before entry.
+     */
+    @TruffleBoundary
+    static <T> T enter(
+            ProtosForeignProviderSessionBinding session,
+            ProtosForeignValueAdapter adapter,
+            String operation,
+            ProtosPrelude prelude,
+            ProtosForeignCallbackScope callbacks,
+            Body<T> body) {
         Objects.requireNonNull(operation, "operation");
-        ProtosForeignProviderSession live = requireLiveSession(session, prelude);
         try {
-            return body.run(live);
-        } catch (Exception failure) {
-            // D189 will distinguish Protos failures propagating through a callback; D188 admits
-            // no callback, so everything raised after entry is a foreign failure.
-            throw new ProtosSignalException(foreignError(prelude, adapter, operation, failure));
+            ProtosForeignProviderSession live = requireLiveSession(session, prelude);
+            if (callbacks == null) {
+                try {
+                    return body.run(live);
+                } catch (Exception failure) {
+                    throw new ProtosSignalException(
+                            foreignError(prelude, adapter, operation, failure));
+                }
+            }
+            callbacks.enter();
+            T result;
+            try {
+                result = body.run(live);
+            } catch (Exception failure) {
+                if (callbacks.recognizes(failure)) {
+                    throw callbacks.resume(failure);
+                }
+                callbacks.supersedeCrossedCancellation();
+                throw new ProtosSignalException(foreignError(prelude, adapter, operation, failure));
+            }
+            callbacks.requireNoSwallowedCancellation();
+            return result;
+        } finally {
+            if (callbacks != null) {
+                callbacks.expire();
+            }
         }
     }
 
     static <T> T enter(
             ProtosForeignHandle handle, String operation, ProtosPrelude prelude, Body<T> body) {
-        return enter(handle.session(), handle.adapter(), operation, prelude, body);
+        return enter(handle.session(), handle.adapter(), operation, prelude, null, body);
+    }
+
+    static <T> T enter(
+            ProtosForeignHandle handle,
+            String operation,
+            ProtosPrelude prelude,
+            ProtosForeignCallbackScope callbacks,
+            Body<T> body) {
+        return enter(handle.session(), handle.adapter(), operation, prelude, callbacks, body);
     }
 
     /** The live session, or the ordinary pre-entry Error once the generation closed. */
