@@ -155,6 +155,27 @@ class ProtosPreludeTest {
     }
 
     @Test
+    void lazilyRejectsMissingStandardErrorBindingWithUnchangedFailure() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.freeze();
+        ProtosPrelude prelude = new ProtosPrelude(bindings, contextPrototype);
+
+        // TEST009-AJ: a missing named standard Error is still reported only on use,
+        // with the same exception class and message as Optional.orElseThrow().
+        NoSuchElementException failure =
+                assertThrows(
+                        NoSuchElementException.class,
+                        () -> prelude.standardErrorPrototype("IOError"));
+        assertEquals("No value present", failure.getMessage());
+    }
+
+    @Test
     void rejectsMissingOrMisparentedErrorBinding() {
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());

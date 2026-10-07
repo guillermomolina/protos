@@ -318,7 +318,14 @@ public final class ProtosPrelude {
 
     ProtosObjectValue standardErrorPrototype(String name) {
         Objects.requireNonNull(name, "name");
-        Object binding = bindings.readLocalSlot(name).orElseThrow();
+        Optional<Object> found = bindings.readLocalSlot(name);
+        if (found.isEmpty()) {
+            // TEST009-AJ: a missing named standard Error binding is a real but cold
+            // failure; keep its NoSuchElementException out of partial evaluation.
+            CompilerDirectives.transferToInterpreter();
+            throw new NoSuchElementException("No value present");
+        }
+        Object binding = found.orElse(null);
         if (!(binding instanceof ProtosObjectValue prototype)) {
             throw new IllegalStateException(
                     "standard " + name + " binding is not an ordinary object");

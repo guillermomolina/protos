@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.266-SNAPSHOT
+
+- `TEST009-AJ` (guillermomolina/protos#795) keeps the real, reachable
+  missing-binding failure of `ProtosPrelude.standardErrorPrototype(String)`
+  out of Truffle partial evaluation. There is no specification or semantic
+  change.
+  - The `Optional.orElseThrow()` read is split into an explicit empty check:
+    `CompilerDirectives.transferToInterpreter()` now precedes the throw of the
+    same `NoSuchElementException("No value present")`. The dynamic name
+    lookup, lazy validation timing, ordinary-object and Error-hierarchy
+    validations are unchanged; compiled code is not invalidated, and no
+    `@TruffleBoundary` is added.
+  - A focal test pins the lazy missing standard-Error failure class and
+    message.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`): the
+    14 `standardErrorPrototype` `NoSuchElementException` occurrences are gone
+    (aggregate 46 to 32, `Throwable.fillInStackTrace()` 76 to 62), the
+    `attachTaskOrInheritDynamicControlState` (20) and
+    `finishPreparingComposedCall` (12) subtrees are unchanged, and the target
+    now compiles instead of failing with `CodeTooLarge`.
+
 ## 0.3.265-SNAPSHOT
 
 - `TEST009-AI` (guillermomolina/protos#795) keeps the real, reachable
