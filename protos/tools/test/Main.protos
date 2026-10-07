@@ -30,6 +30,7 @@ LogicalCaseResult: import("self:LogicalCaseResult")
 LogicalCaseDispatch: import("self:LogicalCaseDispatch")
 CaseRef: import("self:CaseRef")
 CaseSelection: import("self:CaseSelection")
+CasePlan: import("self:LogicalCasePlan")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -314,6 +315,10 @@ logicalCaseMetadata: Array()
 // BUG020: aligned with logicalCaseMetadata; the exact Case reference each
 // failure report names.
 logicalCaseReferences: Array()
+// TOOL012: aligned with logicalCaseMetadata; each retained Case's
+// Array(executionSuiteIndex, casePath, selector), the presentation-only input
+// of RepositorySuite progress grouping.
+logicalProgressCaseKeys: Array()
 logicalSourceSpecs: Map()
 
 // TOOL009-D: the D125 ExecutionRequirementId a logical Case must execute
@@ -476,6 +481,20 @@ executionSuites.each((planned) => {
                     metadata
                 )
 
+            progressCaseKey:
+                Array(
+                    executionSuiteIndex,
+                    Manifest.casePath(spec),
+                    CasePlan.selector(retainedCase)
+                )
+            progressCaseKey.freeze()
+
+            logicalProgressCaseKeys =
+                Array(
+                    ...logicalProgressCaseKeys,
+                    progressCaseKey
+                )
+
             logicalCaseCount =
                 logicalCaseCount + 1
         })
@@ -514,6 +533,7 @@ logicalExecutionSuites.freeze()
 logicalProjections.freeze()
 logicalCaseMetadata.freeze()
 logicalCaseReferences.freeze()
+logicalProgressCaseKeys.freeze()
 executionSuites = logicalExecutionSuites
 
 finalOutcome: null
@@ -538,21 +558,39 @@ listCases.ifFalse(() => {
     // only outside --list-cases. RepositorySuite owns the grouping policy;
     // executionSuiteIndex in logicalCaseMetadata remains the sole execution
     // authority, and the progress-group index below is presentation only.
-    suiteGroupNames: Arrays.map(
-        executionSuites,
-        (suite) => RepositorySuite.progressGroupNames(suite.leaf)
-    )
+    // TOOL012: each suite's group names are derived from its own retained
+    // Logical Cases, in plan order.
+    suiteGroupNames: Array()
+    namesSuiteIndex: 0
+    executionSuites.each((suite) => {
+        suiteCaseKeys:
+            Arrays.map(
+                Arrays.filter(
+                    logicalProgressCaseKeys,
+                    (key) => key[0] == namesSuiteIndex
+                ),
+                (key) => Array(key[1], key[2])
+            )
+        suiteGroupNames =
+            Array(
+                ...suiteGroupNames,
+                RepositorySuite.progressGroupNames(suite.leaf, suiteCaseKeys)
+            )
+        namesSuiteIndex = namesSuiteIndex + 1
+    })
     suiteGroupTotals: Arrays.map(
         suiteGroupNames,
         (names) => Arrays.map(names, (ignored) => 0)
     )
 
-    logicalGroupKeys: Arrays.map(logicalCaseMetadata, (metadata) => {
-        (caseSuiteIndex, spec): metadata
+    logicalGroupKeys: Arrays.map(logicalProgressCaseKeys, (key) => {
+        (caseSuiteIndex, casePath, selector): key
         localIndex:
             RepositorySuite.progressGroupIndex(
                 executionSuites[caseSuiteIndex].leaf,
-                Manifest.casePath(spec)
+                suiteGroupNames[caseSuiteIndex],
+                casePath,
+                selector
             )
         totals: suiteGroupTotals[caseSuiteIndex]
         totals[localIndex] = totals[localIndex] + 1

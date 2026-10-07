@@ -138,6 +138,14 @@ root: SuiteGraph.suite(
 // presentation projection over final retained Logical Cases only: they never
 // select a CorpusId, ExecutionRequirementId, schedule, Process or Case identity.
 // Every policy violation fails closed; there is no catch-all group.
+//
+// TOOL012: a subdivided conformance group presents no group under its own
+// name. Each of its Cases presents under "<name>/<directory>", where directory
+// is the Case's D153 selector without its final segment (for toml-official,
+// the upstream toml-test direction and directory such as "invalid/array",
+// "encoder/spec-1.1.0" or, for root-level Cases, "valid"), keeping every group
+// within 100 Logical Cases without a per-Case table or a dependency on
+// scheduling.
 
 repositoryLeafIdPrefix: "protos/"
 conformanceLeafId: "protos/conformance"
@@ -149,7 +157,7 @@ policyError: () => {
 // One conformance progress group. A casePath belongs to it when the path's
 // directory equals or lies below one of `subtrees`, or equals exactly one of
 // `directories`.
-conformanceProgressGroup: (name, subtrees, directories) => {
+progressGroupDescriptor: (name, subtrees, directories, subdivided) => {
     subtreeValues: Array(...subtrees)
     subtreeValues.freeze()
     directoryValues: Array(...directories)
@@ -159,8 +167,19 @@ conformanceProgressGroup: (name, subtrees, directories) => {
         name: name
         subtrees: subtreeValues
         directories: directoryValues
+        subdivided: subdivided
     }
     descriptor.freeze()
+}
+
+conformanceProgressGroup: (name, subtrees, directories) => {
+    progressGroupDescriptor(name, subtrees, directories, false)
+}
+
+// TOOL012: membership is matched exactly as for conformanceProgressGroup; only
+// presentation is subdivided by selector directory.
+subdividedConformanceProgressGroup: (name, subtrees) => {
+    progressGroupDescriptor(name, subtrees, Array(), true)
 }
 
 // The single ordered source of truth for both conformance group order and
@@ -205,10 +224,9 @@ conformanceProgressGroups: Array(
         Array("path", "encoding", "text-reader", "text-writer", "network"),
         Array()
     ),
-    conformanceProgressGroup(
+    subdividedConformanceProgressGroup(
         "conformance/standard-library/toml-official",
-        Array("library/toml/official"),
-        Array()
+        Array("library/toml/official")
     ),
     // Only sources directly in library/toml; library/toml/official has its own
     // group, and any other library/toml subdirectory fails closed.
@@ -329,15 +347,81 @@ groupOwnsDirectory: (group, directory) => {
     owns
 }
 
-/// Answers the ordered progress group names one repository leaf may present.
-progressGroupNames: (leaf) => {
+// TOOL012: the directory of a D153 selector, under the same fail-closed rules
+// as a casePath directory, with a non-empty final segment.
+selectorDirectory: (selector) => {
+    (selector.size() > 0).ifFalse(() => {
+        policyError()
+    })
+    (selector[selector.size() - 1] == "/").ifTrue(() => {
+        policyError()
+    })
+    pathDirectory(selector)
+}
+
+// A conformance casePath must match exactly one descriptor.
+conformanceDescriptorIndex: (casePath) => {
+    directory: pathDirectory(casePath)
+    matches: Array()
+    descriptorIndex: 0
+
+    conformanceProgressGroups.each((group) => {
+        groupOwnsDirectory(group, directory).ifTrue(() => {
+            matches = Array(...matches, descriptorIndex)
+        })
+        descriptorIndex = descriptorIndex + 1
+    })
+
+    (matches.size() == 1).ifFalse(() => {
+        policyError()
+    })
+    matches[0]
+}
+
+caseGroupName: (group, selector) => {
+    name: group.name
+    group.subdivided.ifTrue(() => {
+        name = name + "/" + selectorDirectory(selector)
+    })
+    name
+}
+
+/// Answers the ordered progress group names one repository leaf presents for
+/// `caseKeys`, its final retained Logical Cases in plan order, each an
+/// Array(casePath, selector). Conformance names follow descriptor order; a
+/// subdivided descriptor contributes its subgroup names in order of first
+/// retained Case, so only subgroups owning a retained Case appear.
+progressGroupNames: (leaf, caseKeys) => {
     names: null
 
     isConformanceLeaf(leaf).ifTrue(() => {
-        names = Arrays.map(
-            conformanceProgressGroups,
-            (group) => group.name
-        )
+        caseDescriptorIndexes: Arrays.map(caseKeys, (key) => {
+            (casePath, ignoredSelector): key
+            conformanceDescriptorIndex(casePath)
+        })
+
+        names = Array()
+        descriptorIndex: 0
+        conformanceProgressGroups.each((group) => {
+            group.subdivided.ifFalse(() => {
+                names = Array(...names, group.name)
+            })
+            group.subdivided.ifTrue(() => {
+                caseIndex: 0
+                caseKeys.each((key) => {
+                    (caseDescriptorIndexes[caseIndex] == descriptorIndex).ifTrue(() => {
+                        (ignoredPath, selector): key
+                        name: caseGroupName(group, selector)
+                        known: Arrays.findIndex(names, (existing) => existing == name)
+                        (known === null).ifTrue(() => {
+                            names = Array(...names, name)
+                        })
+                    })
+                    caseIndex = caseIndex + 1
+                })
+            })
+            descriptorIndex = descriptorIndex + 1
+        })
     })
     isConformanceLeaf(leaf).ifFalse(() => {
         names = Array(ordinaryProgressGroupName(leaf))
@@ -347,38 +431,33 @@ progressGroupNames: (leaf) => {
     names
 }
 
-/// Answers the index, within progressGroupNames(leaf), of the progress group
-/// owning one Case of that leaf identified by its authoritative casePath.
-/// A conformance casePath must match exactly one descriptor.
-progressGroupIndex: (leaf, casePath) => {
-    groupIndex: null
+/// Answers the name of the progress group owning one Case of a leaf, identified
+/// by its authoritative casePath and D153 selector.
+progressGroupName: (leaf, casePath, selector) => {
+    name: null
 
     isConformanceLeaf(leaf).ifTrue(() => {
-        directory: pathDirectory(casePath)
-        matches: Array()
-        descriptorIndex: 0
-
-        conformanceProgressGroups.each((group) => {
-            groupOwnsDirectory(group, directory).ifTrue(() => {
-                matches = Array(...matches, descriptorIndex)
-            })
-            descriptorIndex = descriptorIndex + 1
-        })
-
-        (matches.size() == 1).ifFalse(() => {
-            policyError()
-        })
-        groupIndex = matches[0]
+        name =
+            caseGroupName(
+                conformanceProgressGroups[conformanceDescriptorIndex(casePath)],
+                selector
+            )
     })
     isConformanceLeaf(leaf).ifFalse(() => {
-        ordinaryProgressGroupName(leaf)
-        groupIndex = 0
+        name = ordinaryProgressGroupName(leaf)
     })
 
-    groupIndex
+    name
 }
 
-/// Answers the name of the progress group owning one Case of a leaf.
-progressGroupName: (leaf, casePath) => {
-    progressGroupNames(leaf)[progressGroupIndex(leaf, casePath)]
+/// Answers the index, within `names` as answered by progressGroupNames, of the
+/// progress group owning one Case of that leaf. A Case whose group is absent
+/// from `names` fails closed.
+progressGroupIndex: (leaf, names, casePath, selector) => {
+    name: progressGroupName(leaf, casePath, selector)
+    groupIndex: Arrays.findIndex(names, (candidate) => candidate == name)
+    (groupIndex === null).ifTrue(() => {
+        policyError()
+    })
+    groupIndex
 }

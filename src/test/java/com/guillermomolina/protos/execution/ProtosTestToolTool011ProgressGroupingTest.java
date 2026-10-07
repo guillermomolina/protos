@@ -43,7 +43,10 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
-/** TOOL011 repository progress grouping owned by RepositorySuite, projected by Main. */
+/**
+ * TOOL011 repository progress grouping owned by RepositorySuite, projected by Main. TOOL012
+ * toml-official subdivision is covered by {@link ProtosTestToolTool012TomlOfficialProgressGroupingTest}.
+ */
 final class ProtosTestToolTool011ProgressGroupingTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -59,13 +62,18 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                     + "leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)\n"
                     + "conformance: Arrays.filter(leaves, (leaf) => leaf.id == \"protos/conformance\")[0]\n";
 
+    private static final String TOML_OFFICIAL = "conformance/standard-library/toml-official";
+
+    /** Selector used where only the casePath matters; TOOL012 subdivides toml-official by it. */
+    private static final String SELECTOR = "invalid/tool011/case";
+
+    /** Conformance groups independent of retained Cases (TOOL012 toml-official is not). */
     private static final List<String> CONFORMANCE_GROUPS =
             List.of(
                     "conformance/values",
                     "conformance/object-model",
                     "conformance/control-concurrency",
                     "conformance/io",
-                    "conformance/standard-library/toml-official",
                     "conformance/standard-library/toml",
                     "conformance/standard-library/collections",
                     "conformance/standard-library/data-text-test",
@@ -104,9 +112,10 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "\"actor\"")) {
             assertFalse(main.contains(historical), historical);
         }
-        assertTrue(main.contains("RepositorySuite.progressGroupNames(suite.leaf)"));
+        assertTrue(main.contains("RepositorySuite.progressGroupNames(suite.leaf, suiteCaseKeys)"));
         assertTrue(main.contains("RepositorySuite.progressGroupIndex("));
         assertTrue(main.contains("Manifest.casePath(spec)"));
+        assertTrue(main.contains("CasePlan.selector(retainedCase)"));
 
         // Grouping is a projection over the final retained Logical Cases and
         // never runs on the --list-cases path.
@@ -137,7 +146,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         completed(
                                 PRELUDE
                                         + "Arrays.map(leaves, (leaf) => "
-                                        + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf)))"));
+                                        + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
         Map<String, List<String>> actual = leafGroups(pairs);
         Map<String, List<String>> expected = new LinkedHashMap<>();
@@ -145,7 +154,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         ORDINARY_LEAF_GROUPS.forEach((id, name) -> expected.put(id, List.of(name)));
 
         assertEquals(expected, actual);
-        assertEquals(33, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(32, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -162,7 +171,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "detached: SuiteGraph.leaf(\"protos/actor\", "
                                         + "\"protos/corpus/actor\", \"protos/test/actor\")\n"
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
-                                        + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf)))"));
+                                        + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
         assertEquals(25, pairs.indexedSize().intValueExact());
         List<String> order = new ArrayList<>();
@@ -222,7 +231,10 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                 PRELUDE
                                         + "Arrays.map("
                                         + literal
-                                        + ", (path) => RepositorySuite.progressGroupName(conformance, path))"));
+                                        + ", (path) => RepositorySuite.progressGroupName("
+                                        + "conformance, path, \""
+                                        + SELECTOR
+                                        + "\"))"));
 
         assertEquals(paths.size(), names.indexedSize().intValueExact());
         Set<String> observedGroups = new LinkedHashSet<>();
@@ -233,23 +245,32 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             assertEquals(expected, stringAt(names, index), path);
             observedGroups.add(expected);
         }
-        assertEquals(new LinkedHashSet<>(CONFORMANCE_GROUPS), observedGroups);
+        Set<String> expectedGroups = new LinkedHashSet<>(CONFORMANCE_GROUPS);
+        expectedGroups.add(TOML_OFFICIAL + "/invalid/tool011");
+        assertEquals(expectedGroups, observedGroups);
     }
 
     @Test
     void unknownOrMalformedConformancePathsFailClosed() throws Exception {
-        assertFailed(PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"unknown/a.protos\")");
-        assertFailed(PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"main/a.protos\")");
-        assertFailed(PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"integer.protos\")");
+        assertFailed(conformanceGroupName("unknown/a.protos"));
+        assertFailed(conformanceGroupName("main/a.protos"));
+        assertFailed(conformanceGroupName("integer.protos"));
     }
 
     @Test
     void libraryPathsOutsideTheStandardLibraryGroupsFailClosed() throws Exception {
-        assertFailed(PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"library/a.protos\")");
-        assertFailed(
-                PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"library/unknown/a.protos\")");
-        assertFailed(
-                PRELUDE + "RepositorySuite.progressGroupIndex(conformance, \"library/toml/other/a.protos\")");
+        assertFailed(conformanceGroupName("library/a.protos"));
+        assertFailed(conformanceGroupName("library/unknown/a.protos"));
+        assertFailed(conformanceGroupName("library/toml/other/a.protos"));
+    }
+
+    private static String conformanceGroupName(String path) {
+        return PRELUDE
+                + "RepositorySuite.progressGroupName(conformance, \""
+                + path
+                + "\", \""
+                + SELECTOR
+                + "\")";
     }
 
     @Test
@@ -257,11 +278,11 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         assertFailed(
                 PRELUDE
                         + "RepositorySuite.progressGroupNames(SuiteGraph.leaf("
-                        + "\"other/actor\", \"protos/corpus/actor\", \"protos/test/actor\"))");
+                        + "\"other/actor\", \"protos/corpus/actor\", \"protos/test/actor\"), Array())");
         assertFailed(
                 PRELUDE
                         + "RepositorySuite.progressGroupNames(SuiteGraph.leaf("
-                        + "\"protos\", \"protos/corpus/actor\", \"protos/test/actor\"))");
+                        + "\"protos\", \"protos/corpus/actor\", \"protos/test/actor\"), Array())");
     }
 
     @Test
@@ -373,7 +394,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         String directory = path.substring(0, path.lastIndexOf('/'));
         if (directory.equals("library/toml/official")
                 || directory.startsWith("library/toml/official/")) {
-            return "conformance/standard-library/toml-official";
+            return TOML_OFFICIAL + "/invalid/tool011";
         }
         if (directory.equals("library/toml")) {
             return "conformance/standard-library/toml";

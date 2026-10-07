@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.256-SNAPSHOT
+
+- `TOOL012` (guillermomolina/protos#814) bounds the Test Tool
+  `conformance/standard-library/toml-official` progress group to at most 100
+  Logical Cases. This is a presentation-only change: there is no
+  specification, Case identity, selection, scheduling, isolation,
+  classification, or aggregate-count change.
+  - `RepositorySuite` remains the single progress-grouping authority. The
+    toml-official descriptor is now subdivided: each retained Case presents
+    under `conformance/standard-library/toml-official/<directory>`, where
+    `<directory>` is its D153 selector without the final segment (the upstream
+    toml-test direction and directory, for example `invalid/array`,
+    `encoder/spec-1.1.0`, or `valid` for root-level Cases). The current
+    corpus yields 39 subgroups of at most 76 Cases.
+  - Subgroups appear in order of their first retained Case in plan order, so
+    focal runs show only subgroups that own a selected Case, and failures are
+    attributed to the owning subgroup. Malformed selectors and group names
+    absent from the presented set fail closed.
+  - `Main` records each retained Case's casePath and selector after
+    selection and passes them to `RepositorySuite.progressGroupNames` and
+    `progressGroupIndex`.
+  - Focal tests cover the 100-Case bound, complete and unique coverage, and
+    determinism over the real corpus, preservation of the `--directory` Case
+    set, focal `--file` and exact `--case` presentation, and fail-closed
+    selectors; the TOOL011 and TOOL004-C guards follow the new signatures.
+
 ## 0.3.255-SNAPSHOT
 
 - `TEST009-Y` (guillermomolina/protos#795) removes the host defensive
