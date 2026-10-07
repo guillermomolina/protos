@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.272-SNAPSHOT
+
+- `I082-A` adds the provider-neutral foreign provider registry foundation
+  ratified by PLAT053. There is no specification change and no guest-visible
+  change; import resolution and the Protos Engine/Process Context lifecycle
+  are unchanged.
+  - `ProtosPolyglotRuntimeHost` owns one immutable host-supplied
+    `ProtosForeignProviderRegistry`, fixed at construction; `open()` and
+    `openDebug()` supply the empty registry. There is no discovery, global
+    singleton, or mutation.
+  - Internal model: `ProtosForeignProviderId`, the four PLAT052/PLAT053
+    profiles in `ProtosForeignProviderExecutionProfile`
+    (`RESTRICTED_IN_PROCESS`, `TRUSTED_IN_PROCESS`, `STRONGLY_ISOLATED`,
+    `UNAVAILABLE`), `ProtosForeignProviderDescriptor`,
+    `ProtosForeignProviderFactory`, and a logical
+    `ProtosForeignProviderCompartment` that is explicitly not a Polyglot
+    Context. Duplicate provider identities are rejected deterministically.
+  - No provider factory is invoked and no compartment, session, foreign
+    Context, or foreign runtime is created; the normal execution path is
+    unchanged.
+
 ## 0.3.271-SNAPSHOT
 
 - `LIB015-E1` adds `std:logging/ColoredFormatter`, a human-readable formatter

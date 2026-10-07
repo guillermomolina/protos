@@ -40,6 +40,7 @@ import org.graalvm.polyglot.Engine;
 public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
     private final ProtosGraalDapReadinessAdapter debugReadiness;
+    private final ProtosForeignProviderRegistry foreignProviders;
     private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
@@ -50,16 +51,28 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(
-            Engine engine, ProtosGraalDapReadinessAdapter debugReadiness) {
+            Engine engine,
+            ProtosGraalDapReadinessAdapter debugReadiness,
+            ProtosForeignProviderRegistry foreignProviders) {
         this.engine = Objects.requireNonNull(engine, "engine");
         this.debugReadiness = debugReadiness;
+        this.foreignProviders = Objects.requireNonNull(foreignProviders, "foreignProviders");
         this.actorCarrierParallelism =
                 Math.max(1, Runtime.getRuntime().availableProcessors());
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost open() {
-        return new ProtosPolyglotRuntimeHost(Engine.create(ProtosLanguage.ID), null);
+        return new ProtosPolyglotRuntimeHost(
+                Engine.create(ProtosLanguage.ID), null, ProtosForeignProviderRegistry.EMPTY);
+    }
+
+    /** Test-only hook: opens a normal host owning the supplied immutable provider registry. */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static ProtosPolyglotRuntimeHost openWithForeignProvidersForTesting(
+            ProtosForeignProviderRegistry foreignProviders) {
+        return new ProtosPolyglotRuntimeHost(
+                Engine.create(ProtosLanguage.ID), null, foreignProviders);
     }
 
     /**
@@ -82,7 +95,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                         .out(readiness)
                         .err(diagnostics)
                         .build();
-        return new ProtosPolyglotRuntimeHost(engine, readiness);
+        return new ProtosPolyglotRuntimeHost(
+                engine, readiness, ProtosForeignProviderRegistry.EMPTY);
     }
 
     /**
@@ -219,6 +233,11 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         synchronized (this) {
             return networkHost != null;
         }
+    }
+
+    /** Returns the immutable host-supplied foreign provider registry fixed at construction. */
+    ProtosForeignProviderRegistry foreignProvidersForRuntime() {
+        return foreignProviders;
     }
 
     void recordContextCloseFailure(Throwable failure) {
