@@ -41,7 +41,8 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * LIB020-A evidence for the private sealing facilities of std:text/Style and std:text/StyledText,
+ * LIB020-A evidence for the private sealing facilities of std:text/Style and std:text/StyledText
+ * (shared with std:text/ANSI by LIB020-B),
  * for the logical run content that StyledText keeps out of Protos-visible state, and for the
  * non-portability of both families across Actor and isolated-parallel transfer.
  */
@@ -90,6 +91,48 @@ final class ProtosSealedFamilyFacilityTest {
         assertEquals(Set.of("call", "recognizes"), style.localSlotsSnapshot().keySet());
         assertEquals(
                 Set.of("call", "concat", "recognizes"), styledText.localSlotsSnapshot().keySet());
+    }
+
+    @Test
+    void ansiReceivesTheSameFacilitiesAndPublishesOnlyRender() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosObjectValue ansiContext = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(
+                ProtosSealedFamilyFacility.ANSI_MODULE_KEY, ansiContext);
+
+        assertEquals(
+                Set.of(
+                        ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT,
+                        ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT),
+                ansiContext.localSlotsSnapshot().keySet());
+        assertSame(
+                styleFacility(prelude),
+                ansiContext
+                        .readLocalSlot(ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT)
+                        .orElseThrow());
+        assertSame(
+                styledTextFacility(prelude),
+                ansiContext
+                        .readLocalSlot(ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT)
+                        .orElseThrow());
+
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue ansi =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:text/ANSI\")", activation));
+        assertEquals(Set.of("render"), ansi.localSlotsSnapshot().keySet());
+        assertEquals(
+                "\u001b[31mx\u001b[0m",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                ProtosTestExecutionSupport.evaluate(
+                                        IMPORTS
+                                                + "import(\"std:text/ANSI\").render("
+                                                + "StyledText(\"x\", Style(\"red\")), true)",
+                                        activation))
+                        .value());
     }
 
     @Test

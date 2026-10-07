@@ -472,7 +472,7 @@ public final class ProtosCoreBootstrap {
 
     /**
      * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187,
-     * LIB015-B1, LIB015-C1, LIB020-A).
+     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -482,6 +482,9 @@ public final class ProtosCoreBootstrap {
             ProtosObjectValue ipEndpointPrototype,
             ProtosObjectValue bufferedReaderFactory,
             ProtosObjectValue bufferedWriterFactory) {
+        // std:text/ANSI receives the same facilities as the modules that mint their families.
+        ProtosObjectValue styleFacility = ProtosSealedFamilyFacility.createFacility();
+        ProtosObjectValue styledTextFacility = ProtosSealedFamilyFacility.createFacility();
         return Map.ofEntries(
                 Map.entry(
                         new ProtosModuleKey("std:network/IpAddresses"),
@@ -526,12 +529,19 @@ public final class ProtosCoreBootstrap {
                         ProtosSealedFamilyFacility.STYLE_MODULE_KEY,
                         Map.of(
                                 ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT,
-                                ProtosSealedFamilyFacility.createFacility())),
+                                styleFacility)),
                 Map.entry(
                         ProtosSealedFamilyFacility.STYLED_TEXT_MODULE_KEY,
                         Map.of(
                                 ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT,
-                                ProtosSealedFamilyFacility.createFacility())));
+                                styledTextFacility)),
+                Map.entry(
+                        ProtosSealedFamilyFacility.ANSI_MODULE_KEY,
+                        Map.of(
+                                ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT,
+                                styleFacility,
+                                ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT,
+                                styledTextFacility)));
     }
 
 

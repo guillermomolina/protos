@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.268-SNAPSHOT
+
+- `LIB020-B` adds `std:text/ANSI` with exactly one public operation,
+  `ANSI.render(styledText, stylingEnabled)`, the pure deterministic renderer
+  ratified by D190/D191. There is no specification change; `ColorMode`,
+  environment/TTY detection and `TextWriter` integration are not part of this
+  slice.
+  - `styledText` must be recognized by `StyledText.recognizes` and
+    `stylingEnabled` must be exactly `true` or `false`; anything else signals
+    an Error without conversion or invoking candidate behavior.
+  - With `false` the result is the run text concatenated in order; no escape
+    sequence is generated.
+  - With `true` the eight basic foregrounds render as `ESC[30m`..`ESC[37m`.
+    Default text generates nothing; leaving a color for default, for a
+    different color (reset then new foreground), or at the end emits
+    `ESC[0m`. Equal adjacent colors emit nothing; empty text renders as `""`.
+  - Run text, including existing escape and control characters, passes
+    through unchanged; the renderer neither parses nor sanitizes it.
+  - Internal runtime support: the bootstrap provisions `std:text/ANSI` with
+    the same `ProtosSealedFamilyFacility` instances as `std:text/Style` and
+    `std:text/StyledText`; the module captures and removes them, so no new
+    family, native closure, or public state is introduced.
+
 ## 0.3.267-SNAPSHOT
 
 - `LIB020-A` adds the `std:text/Style` and `std:text/StyledText` public
