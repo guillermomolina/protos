@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.258-SNAPSHOT
+
+- `PLAT051-A` (guillermomolina/protos#813) adds the generic privileged
+  Standard Library semantic-value transfer mechanism ratified by PLAT051.
+  There is no specification or observable semantic change, and no Standard
+  Library family opts in yet.
+  - A trusted `ProtosSemanticTransferFamily` descriptor pairs a source-local
+    extractor producing an inert, acyclic `ProtosSemanticTransferPayload`
+    (host scalars only) with a destination-local reconstructor. Only values
+    minted by a family (`ProtosSemanticTransferValue`) carry it; guest code
+    cannot forge one through names, slots, shape, tags or delegation.
+  - Families are authorized by exact descriptor identity per owning `std:`
+    module key, fixed by Core bootstrap at Prelude construction; there is no
+    global mutable registry.
+  - Actor and P transfer rebuild authorized values through their existing
+    identity memos, preserving aliases, distinct identities and surrounding
+    cycles, and fail closed as `NonTransferableValue` / `NonParallel` on
+    unauthorized, unfrozen, malformed or invalid reconstruction. Closure,
+    capability and execution-value rules are unchanged.
+  - Ordinary transfer pays one additional `instanceof` per object, with no
+    allocation, lookup, import or source execution; ordinary object layout
+    is unchanged.
+
 ## 0.3.257-SNAPSHOT
 
 - `LIB015-C1` (guillermomolina/protos#432) adds JSON log formatting to

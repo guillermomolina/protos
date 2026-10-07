@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -34,14 +35,40 @@ import java.util.Set;
 
 public final class ProtosCoreBootstrap {
     private final ProtosSourceFileLoader sourceLoader;
+    private final List<ProtosSemanticTransferFamily> semanticTransferFamilies;
 
     public ProtosCoreBootstrap() {
         this(new ProtosSourceFileLoader());
     }
 
     ProtosCoreBootstrap(ProtosSourceFileLoader sourceLoader) {
+        this(sourceLoader, standardSemanticTransferFamilies());
+    }
+
+    private ProtosCoreBootstrap(
+            ProtosSourceFileLoader sourceLoader,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies) {
         this.sourceLoader =
                 Objects.requireNonNull(sourceLoader, "sourceLoader");
+        this.semanticTransferFamilies = List.copyOf(semanticTransferFamilies);
+    }
+
+    /**
+     * PLAT051 test seam: a bootstrap whose Prelude authorizes exactly {@code families} instead of
+     * the standard set. Authority still enters only through Prelude construction.
+     */
+    static ProtosCoreBootstrap withSemanticTransferFamiliesForTesting(
+            List<ProtosSemanticTransferFamily> families) {
+        return new ProtosCoreBootstrap(new ProtosSourceFileLoader(), families);
+    }
+
+    /**
+     * Standard Library families authorized for PLAT051 semantic-value transfer. Each entry must be
+     * an explicit semantic-portability contract of its owning standard module; no family has opted
+     * in yet.
+     */
+    private static List<ProtosSemanticTransferFamily> standardSemanticTransferFamilies() {
+        return List.of();
     }
 
     public ProtosPrelude bootstrap(Path coreDirectory) throws IOException {
@@ -433,7 +460,8 @@ public final class ProtosCoreBootstrap {
                         ipAddressPrototype,
                         ipEndpointPrototype,
                         bufferedReaderFactory,
-                        bufferedWriterFactory));
+                        bufferedWriterFactory),
+                semanticTransferFamilies);
     }
 
     /**

@@ -20,6 +20,7 @@ package com.guillermomolina.protos.runtime;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -36,6 +37,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
+    private final Map<ProtosModuleKey, ProtosSemanticTransferFamily> semanticTransferFamilies;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -109,6 +111,38 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeIpAddressPrototype,
             ProtosObjectValue runtimeIpEndpointPrototype,
             Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                List.of());
+    }
+
+    /**
+     * Creates a Prelude that additionally authorizes the given bootstrap-provided Standard Library
+     * semantic transfer families (PLAT051).
+     *
+     * <p>Authorization is by exact descriptor identity under its owning standard module key, at
+     * most one family per key, fixed for the lifetime of this Prelude.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies) {
+        this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
@@ -198,6 +232,20 @@ public final class ProtosPrelude {
             copy.put(key, Collections.unmodifiableMap(moduleMembers));
         }
         return Collections.unmodifiableMap(copy);
+    }
+
+    private static Map<ProtosModuleKey, ProtosSemanticTransferFamily> copySemanticTransferFamilies(
+            List<ProtosSemanticTransferFamily> families) {
+        Objects.requireNonNull(families, "semanticTransferFamilies");
+        LinkedHashMap<ProtosModuleKey, ProtosSemanticTransferFamily> byOwner = new LinkedHashMap<>();
+        for (ProtosSemanticTransferFamily family : families) {
+            Objects.requireNonNull(family, "semantic transfer family");
+            if (byOwner.putIfAbsent(family.ownerModule(), family) != null) {
+                throw new IllegalArgumentException(
+                        "duplicate semantic transfer family: " + family.ownerModule().canonicalId());
+            }
+        }
+        return Collections.unmodifiableMap(byOwner);
     }
 
     private static Set<ProtosObjectValue> identitiesOf(
@@ -384,6 +432,15 @@ public final class ProtosPrelude {
     public boolean isStandardModuleMemberForRuntime(Object candidate) {
         return candidate instanceof ProtosObjectValue object
                 && standardModuleMemberIdentities.contains(object);
+    }
+
+    /**
+     * True only when this Prelude's bootstrap authorized this exact family descriptor (PLAT051).
+     * Consulted only for values that already carry a family; it performs no import, module
+     * initialization, source execution or mutation.
+     */
+    public boolean authorizesSemanticTransferFamilyForRuntime(ProtosSemanticTransferFamily family) {
+        return family != null && semanticTransferFamilies.get(family.ownerModule()) == family;
     }
 
     /**

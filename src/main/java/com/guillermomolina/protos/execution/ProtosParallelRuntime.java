@@ -223,6 +223,12 @@ public final class ProtosParallelRuntime {
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
+            if(v instanceof ProtosSemanticTransferValue x){
+                // PLAT051: rebuilt from its inert payload, never copied or projected.
+                ProtosSemanticTransferValue y=ProtosSemanticTransferFamily.rematerializeForRuntime(x,p);
+                if(y==null)throw new NonParallel();
+                memo.put(v,y);return y;
+            }
             if(v instanceof ProtosClosureValue x){
                 java.util.function.Supplier<ProtosClosureExecutionPlan> rematerializer=null;
                 CanonicalClosure definition=x.definition();

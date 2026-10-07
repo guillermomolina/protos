@@ -37,6 +37,8 @@ import java.util.Set;
  * Closures and Actor-local execution state are non-transferable between Actors, ActorRef/GroupRef
  * communication capabilities are rematerialized without copying target mutable state, and an
  * explicitly delegated Process capability becomes a fresh Actor-local proxy to the same authority.
+ * A value of a bootstrap-authorized Standard Library semantic transfer family (PLAT051) is rebuilt
+ * from its inert payload by the Prelude's own implementation, never copied.
  */
 public final class ProtosActorValueTransfer {
     private ProtosActorValueTransfer() {}
@@ -159,6 +161,15 @@ public final class ProtosActorValueTransfer {
                 memo.put(value, value);
                 populated.add(value);
                 return value;
+            }
+            if (object instanceof ProtosSemanticTransferValue semantic) {
+                // PLAT051: rebuilt from its inert payload, never copied; the memo keeps aliases.
+                ProtosSemanticTransferValue rebuilt =
+                        ProtosSemanticTransferFamily.rematerializeForRuntime(semantic, prelude);
+                if (rebuilt == null) {
+                    throw nonTransferable();
+                }
+                return remember(value, rebuilt);
             }
             if (object.parent().orElse(null) == prelude.contextPrototype()) {
                 // Module/activation execution contexts are Actor-local state.
