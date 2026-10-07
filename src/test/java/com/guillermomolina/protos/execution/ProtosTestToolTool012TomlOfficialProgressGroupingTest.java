@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.cli.ProtosCli;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -79,8 +80,8 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(
+                                keys,
                                 PRELUDE
-                                        + keysSource(keys)
                                         + "first: RepositorySuite.progressGroupNames(conformance, keys)\n"
                                         + "second: RepositorySuite.progressGroupNames(conformance, keys)\n"
                                         + "owners: Arrays.map(keys, (key) => {\n"
@@ -233,19 +234,6 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
         return selector.substring(0, selector.lastIndexOf('/'));
     }
 
-    /** One append per Case, avoiding a single call with one argument per corpus Case. */
-    private static String keysSource(List<String[]> keys) {
-        StringBuilder source = new StringBuilder("keys: Array()\n");
-        for (String[] key : keys) {
-            source.append("keys = Array(...keys, Array(\"")
-                    .append(key[0])
-                    .append("\", \"")
-                    .append(key[1])
-                    .append("\"))\n");
-        }
-        return source.toString();
-    }
-
     private static List<String[]> listCases(String... selectors) {
         String[] args = new String[selectors.length + 2];
         args[0] = "test";
@@ -292,8 +280,21 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
         return values;
     }
 
-    private static Object completed(String source) throws Exception {
-        ProtosExecutionOutcome outcome = execute(source);
+    /**
+     * Executes {@code source} with {@code keys} bound as a host-built Array of
+     * Array(casePath, selector), avoiding one generated source statement per corpus Case.
+     */
+    private static Object completed(List<String[]> keys, String source) throws Exception {
+        ProtosPrelude prelude = newPrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        List<ProtosArrayValue> elements = new ArrayList<>(keys.size());
+        for (String[] key : keys) {
+            elements.add(
+                    prelude.newArray(
+                            List.of(new ProtosStringValue(key[0]), new ProtosStringValue(key[1]))));
+        }
+        activation.context().createLocalSlot("keys", prelude.newArray(elements));
+        ProtosExecutionOutcome outcome = ProtosTestExecutionSupport.execute(source, activation);
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
@@ -310,14 +311,17 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
     }
 
     private static ProtosExecutionOutcome execute(String source) throws Exception {
+        return ProtosTestExecutionSupport.execute(source, newPrelude().newModuleActivation());
+    }
+
+    private static ProtosPrelude newPrelude() throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
                         "test",
                         TOOL_ROOT,
                         TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return ProtosTestExecutionSupport.execute(source, prelude.newModuleActivation());
+        return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
     }
 
     private static R run(String... args) {

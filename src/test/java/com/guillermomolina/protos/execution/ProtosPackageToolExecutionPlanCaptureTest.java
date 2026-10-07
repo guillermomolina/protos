@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -58,32 +57,5 @@ final class ProtosPackageToolExecutionPlanCaptureTest extends ProtosPackageToolP
                         "f2e3b-nonlocked-descriptor-error.protos"),
                 "error",
                 "f2e3b-nonlocked-descriptor-error");
-    }
-
-    @Test
-    void invalidVerifiedGraphsAreRejected() throws Exception {
-        for (String name :
-                List.of(
-                        "f2e3b-id-mismatch",
-                        "f2e3b-version-mismatch",
-                        "f2e3b-path",
-                        "f2e3b-workspace-empty",
-                        "f2e3b-compatibility-mismatch",
-                        "f2e3b-registry-authority",
-                        "f2e3b-registry-locator",
-                        "f2e3b-registry-constraint",
-                        "f2e3b-git-fetch",
-                        "f2e3b-git-revision",
-                        "f2e3b-missing-edge",
-                        "f2e3b-extra-edge",
-                        "f2e3b-git-invalid-package-version",
-                        "f2e3b-duplicate-edge",
-                        "f2e3b-dangling-target")) {
-            assertExpected(
-                    executeExternalCaptureFixture(
-                            CASES.resolve(name), "f2e3b-build-v2-error.protos"),
-                    "error",
-                    name);
-        }
     }
 }

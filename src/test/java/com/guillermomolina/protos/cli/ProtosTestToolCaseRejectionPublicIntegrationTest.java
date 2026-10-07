@@ -16,48 +16,45 @@
  */
 package com.guillermomolina.protos.cli;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 import org.junit.jupiter.api.Test;
 
-/** TOOL009-G2 / D185 public `protos test --list-cases` surface. */
-final class ProtosTestToolCaseSelectionPublicIntegrationTest
+/** TOOL009-G2 / D185 public `protos test --case CASE_REF` rejection before scheduling. */
+final class ProtosTestToolCaseRejectionPublicIntegrationTest
         extends ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
     @Test
-    void listCasesProjectsAuthoritativeCasePlanWithoutProgress() {
-        R result = run("test", "--list-cases", "--file", PARSE_FILE);
-
-        assertEquals(0, result.code());
-        assertEquals("", result.err());
-        assertEquals(
-                document(PARSE_SELECTORS[0], PARSE_SELECTORS[1], PARSE_SELECTORS[2], PARSE_SELECTORS[3]),
-                result.out());
+    void repeatedExactRefFailsBeforeScheduling() {
+        assertFailsBeforeScheduling(
+                run("test", "--file", PARSE_FILE, "--case", parseRef(1), "--case", parseRef(1)));
     }
 
     @Test
-    void listCasesComposesWithExactSelectionInCasePlanOrder() {
-        R result =
-                run(
-                        "test",
-                        "--list-cases",
-                        "--file",
-                        PARSE_FILE,
-                        "--case",
-                        parseRef(3),
-                        "--case",
-                        parseRef(0));
-
-        assertEquals(0, result.code());
-        assertEquals("", result.err());
-        assertEquals(document(PARSE_SELECTORS[0], PARSE_SELECTORS[3]), result.out());
+    void wellFormedUnknownRefFailsBeforeScheduling() {
+        assertFailsBeforeScheduling(
+                run("test", "--file", PARSE_FILE, "--case", ref(CORPUS, PARSE_SOURCE, "missing")));
     }
 
     @Test
-    void listCasesWithRefOutsideActiveFileScopeFails() {
+    void malformedRefFailsBeforeScheduling() {
+        assertFailsBeforeScheduling(
+                run("test", "--file", PARSE_FILE, "--case", "uri/parse.protos::parse valid"));
+    }
+
+    @Test
+    void unsupportedRefVersionFailsBeforeScheduling() {
         assertFailsBeforeScheduling(
                 run(
                         "test",
-                        "--list-cases",
+                        "--file",
+                        PARSE_FILE,
+                        "--case",
+                        "v2." + parseRef(2).substring("v1.".length())));
+    }
+
+    @Test
+    void refOutsideActiveFileScopeFailsBeforeScheduling() {
+        assertFailsBeforeScheduling(
+                run(
+                        "test",
                         "--file",
                         PARSE_FILE,
                         "--case",

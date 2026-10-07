@@ -20,47 +20,32 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import org.junit.jupiter.api.Test;
 
-/** TOOL009-G2 / D185 public `protos test --list-cases` surface. */
-final class ProtosTestToolCaseSelectionPublicIntegrationTest
+/** TOOL009-G2 / D185 public `protos test --case CASE_REF` exact execution. */
+final class ProtosTestToolCaseExecutionPublicIntegrationTest
         extends ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
     @Test
-    void listCasesProjectsAuthoritativeCasePlanWithoutProgress() {
-        R result = run("test", "--list-cases", "--file", PARSE_FILE);
+    void exactCaseExecutesOnlyThatCase() {
+        R result = run("test", "--file", PARSE_FILE, "--case", parseRef(2));
 
         assertEquals(0, result.code());
-        assertEquals("", result.err());
+        assertEquals(EXPECTED_BOOTSTRAP_STDOUT, result.out());
         assertEquals(
-                document(PARSE_SELECTORS[0], PARSE_SELECTORS[1], PARSE_SELECTORS[2], PARSE_SELECTORS[3]),
-                result.out());
+                "[library/uri] 0/1\n" + "[library/uri] 1/1 passed\n" + "1 passed, 0 failed\n",
+                result.err());
     }
 
     @Test
-    void listCasesComposesWithExactSelectionInCasePlanOrder() {
+    void exactCasesInReverseArgumentOrderExecuteOnlyThoseCases() {
         R result =
-                run(
-                        "test",
-                        "--list-cases",
-                        "--file",
-                        PARSE_FILE,
-                        "--case",
-                        parseRef(3),
-                        "--case",
-                        parseRef(0));
+                run("test", "--file", PARSE_FILE, "--case", parseRef(3), "--case", parseRef(1));
 
         assertEquals(0, result.code());
-        assertEquals("", result.err());
-        assertEquals(document(PARSE_SELECTORS[0], PARSE_SELECTORS[3]), result.out());
-    }
-
-    @Test
-    void listCasesWithRefOutsideActiveFileScopeFails() {
-        assertFailsBeforeScheduling(
-                run(
-                        "test",
-                        "--list-cases",
-                        "--file",
-                        PARSE_FILE,
-                        "--case",
-                        ref(CORPUS, "uri/format.protos", "format constructed")));
+        assertEquals(EXPECTED_BOOTSTRAP_STDOUT, result.out());
+        assertEquals(
+                "[library/uri] 0/2\n"
+                        + "[library/uri] 1/2\n"
+                        + "[library/uri] 2/2 passed\n"
+                        + "2 passed, 0 failed\n",
+                result.err());
     }
 }
