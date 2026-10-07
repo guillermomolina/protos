@@ -3469,8 +3469,9 @@ This section is implementation-independent. No runtime interoperability API,
 host wrapper class, host exception type, or provider mechanism is a Protos
 language institution by virtue of being used to realize it. Core v0.1 defines
 no syntax for foreign values, and this section does not standardize a provider
-registry, a specifier scheme, or the public API of a future explicit
-interoperability module.
+registry or a specifier scheme. The public operation contract of the explicit
+interoperability module `std:interop` is owned by "Relation to explicit
+interoperability" below.
 
 ### Ordinary Protos semantics first
 
@@ -3483,8 +3484,8 @@ Behavior that is ambiguous, incompatible with ordinary Protos semantics,
 side-effecting in a way that is not equivalent to the ordinary operation,
 provider-specific, metadata-oriented, or otherwise not faithfully projectable
 receives no automatic ordinary-syntax meaning. It is reachable only through a
-deliberate provider facade/protocol or through a future explicit
-interoperability facility (`std:interop`, see below).
+deliberate provider facade/protocol or through the explicit interoperability
+module (`std:interop`, see below).
 
 Terms used in this section:
 
@@ -3635,7 +3636,7 @@ lookup of `call` fails with the ordinary missing-member failure.
 
 Foreign instantiability creates no syntax, does not make a raw foreign reference
 callable, and does not redefine `call`. The baseline route to instantiation is
-the future explicit interoperability facility. A provider type/class/module
+the explicit `std:interop` operation `instantiate`. A provider type/class/module
 facade may deliberately publish a `call` Closure whose documented Protos
 semantics is construction. When a foreign target is both executable and
 instantiable, the generic layer does not choose between them; a provider facade
@@ -3801,15 +3802,108 @@ define those without changing this synchronous contract.
 
 ### Relation to explicit interoperability
 
-Import-based foreign access and the future `std:interop` facility share exactly
-one substrate for foreign-value admission, foreign identity, primitive
-conversion, and failure projection. This revision does not define the public API
-of `std:interop`, does not make it a one-to-one mirror of any runtime API, and
-defines no universal source-language semantic-equality operation. Operation
-classes without a faithful ordinary mapping — explicit member read/write/invoke,
-execute, instantiate, low-level array and hash access, iterator access, foreign
-identity queries, language/metaobject/source/display metadata, and explicit
-scalar conversion — are left to that facility.
+Import-based foreign access and the explicit interoperability module
+`std:interop` share exactly one substrate for foreign-value admission, foreign
+identity, primitive conversion, and failure projection. `std:interop` is not a
+one-to-one mirror of any runtime API and defines no universal source-language
+semantic-equality operation. Its public surface is exactly these four
+operations:
+
+```text
+invoke(target, ...arguments)
+instantiate(target, ...arguments)
+readMember(target, name)
+writeMember(target, name, value)
+```
+
+Each operation acts only on a foreign value the program already possesses — a
+raw foreign reference or a provider facade presenting a foreign target — and
+operates on its underlying foreign target. None of them changes any ordinary
+Protos institution of this section: ordinary lookup, member read, member write,
+member invocation, callability, `at` / `atPut`, projected `each`, and raw
+foreign identity, equality, and hashing remain exactly as defined above.
+
+**Outbound values and results.** Arguments of `invoke` and `instantiate` and the
+`value` of `writeMember` cross into the foreign operation only under the
+lossless outbound projection of this section ("Synchronous foreign callbacks",
+"Result projection"); a Protos callable passed where the provider accepts a
+callback is governed exactly by "Synchronous foreign callbacks". A value that
+cannot be so projected is rejected before the foreign operation is entered. The
+normal result of `invoke`, `instantiate`, and `readMember` is admitted under
+"Primitive admission" and "Raw foreign-reference identity".
+
+**`invoke`.** `invoke(target, ...arguments)` is explicit foreign execution of the
+underlying foreign target. It performs no ordinary Protos `call` lookup, does
+not redefine the ordinary `call` protocol (`CALLABLES.md`), and does not make a
+raw foreign reference ordinarily callable.
+
+**`instantiate`.** `instantiate(target, ...arguments)` is explicit foreign
+instantiation/construction of the underlying foreign target. It is semantically
+distinct from `invoke`: when a foreign target supports both execution and
+instantiation, the operation named by the program selects the meaning and Protos
+does not choose between them. Foreign instantiability does not make a raw
+foreign reference ordinarily callable, and ordinary `call` is unchanged.
+
+**`readMember`.** `readMember(target, name)` explicitly requests the foreign
+member `name` of the underlying foreign target. `name` must be a Protos
+`String`. For this explicit operation only, ordinary Protos slot and projection
+precedence ("Member read") is bypassed, so a foreign member whose name coincides
+with a protected Protos institution — including `call`, `at`, `atPut`, `each`,
+`==`, and `hash` — is reachable: `readMember(target, "call")` requests the
+foreign member `call`, while ordinary `target.call` continues to denote the
+Protos institution. `readMember` does not change the meaning of `target.name`.
+
+**`writeMember`.** `writeMember(target, name, value)` is the explicit operation
+that mutates the foreign member `name` of the underlying foreign target. `name`
+must be a Protos `String`. Ordinary assignment `target.name = value` never
+becomes foreign-member mutation ("Member write"). When the foreign write
+completes normally, `writeMember` returns the exact Protos value passed as
+`value`: it performs no readback, returns no provider completion token, does not
+readmit or reconvert `value`, and returns neither `null` nor `target` unless
+that is literally the value passed.
+
+**Failures.** The entered/not-entered boundary of "Foreign failures" applies
+unchanged. Each of the following, when detected before the foreign operation is
+entered, is the existing ordinary Protos failure and never a `ForeignError`: a
+target that is not a possessed foreign value or facade; invalid arity; a `name`
+that is not a `String`; an explicit operation known to be unsupported by the
+target; an outbound argument or `value` that cannot be projected; a closed
+provider session or generation; and an unavailable required provider
+capability. A failure after the foreign operation has actually been entered is a
+fresh `ForeignError` under "Foreign failures". A Protos Error or control outcome
+that traverses the same foreign operation unchanged under "Synchronous foreign
+callbacks" continues as that exact outcome. No provider- or language-specific
+public Error category is introduced.
+
+**Authority and lifetime.** `std:interop` is possession-based. Importing it
+creates no provider compartment, provider session, or Polyglot Context, performs
+no provider or language discovery and no dependency acquisition, and confers no
+authority. It publishes and selects no provider, execution profile, trusted
+mode, host, filesystem, network, process, or native access, classloading,
+reflection, cross-language evaluation, provider registration or hot-loading, or
+dependency acquisition, and it is not a service locator. Each operation uses
+only the provider, session, generation, and authority already associated with
+the possessed target; the exact provider/session/generation remains the lifetime
+authority, and a closed generation is never rebound to a later one. No
+operation performs Actor or P transfer, proxying, rematerialization, or provider
+reopening ("Actor and P boundaries").
+
+**Not defined.** This revision defines no other `std:interop` operation and in
+particular no foreign-ness or capability predicate (such as `isForeign`,
+`isExecutable`, `isInstantiable`, `supports`, `hasMembers`,
+`hasArrayElements`, `hasHashEntries`, or `hasIterator`); no explicit member
+invocation; no explicit array-element or hash-entry access; no iterator or
+cursor object or explicit iterator protocol; no explicit scalar or raw
+conversion; no metaobject, type, language, source, or display metadata; no
+provider or language discovery; no foreign class, type, or module acquisition or
+dependency acquisition; no provider registration or hot-loading; no
+session/generation/lifetime inspection; and no retained or asynchronous
+callback. Runtime-private capabilities remain private. In particular, an
+explicit member invocation is not universally equivalent to
+`invoke(readMember(target, name), ...arguments)`, because a foreign member may
+be invocable without being readable; such an operation, if added, is a distinct
+additive operation. Ordinary `foreign.member(args...)` remains as defined in
+"Member invocation".
 
 ### Actor and P boundaries
 

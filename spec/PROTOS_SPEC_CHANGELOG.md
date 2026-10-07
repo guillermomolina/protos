@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.448] - 2026-10-07
+
+### I084 / D193 A_MINUS_MINIMAL_OPERATION_ONLY_ESCAPE_HATCH — `std:interop` public operations
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` (Foreign Values, Relation to
+  explicit interoperability): `std:interop` publishes exactly `invoke(target,
+  ...arguments)` (explicit foreign execution), `instantiate(target,
+  ...arguments)` (explicit foreign construction, distinct from `invoke`),
+  `readMember(target, name)` (explicit foreign member read bypassing ordinary
+  slot/projection precedence for that operation only, reaching protected names
+  such as `call`), and `writeMember(target, name, value)` (explicit foreign
+  member mutation returning the exact original `value`). Outbound values use the
+  existing lossless projection and the 0.1.446 callback contract; normal results
+  use existing admission. Pre-entry failures are ordinary Protos Errors; entered
+  failures are fresh `ForeignError`; no provider-specific Error categories.
+  Possession-based: import creates no provider session/Context, discovery,
+  dependency acquisition, or authority. Predicates, explicit member invocation
+  (not universally equal to `invoke(readMember(...))`), indexed/hash access,
+  iterators, conversion, metadata, discovery, acquisition, and retained
+  callbacks are not defined. Section intro and "Callability and construction"
+  references to the former future facility are updated accordingly.
+- Ordinary member read/write/invocation, callability, `at`/`atPut`, projected
+  `each`, foreign identity/equality/hash, `ForeignError`, callbacks, Actor/P
+  transfer, and provider/session lifetime are unchanged.
+
 ## [0.1.447] - 2026-10-07
 
 ### I083 / D192 A_EXACT_RECEIVER — Projected foreign `each` normal result
