@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.261-SNAPSHOT
+
+- `TEST009-AD` (guillermomolina/protos#795) keeps the real, reachable
+  unsupported-representation failure of `ProtosValueLookup.delegationParent(...)`
+  out of Truffle partial evaluation. There is no specification or semantic
+  change.
+  - `CompilerDirectives.transferToInterpreter()` now precedes the existing
+    `UnsupportedOperationException` throw. The exception class, message,
+    construction site and failure timing are unchanged; compiled code is not
+    invalidated, and no `@TruffleBoundary` or stackless exception is used.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`) still
+    fails with `CodeTooLarge`, but `Throwable.fillInStackTrace()` size in the
+    method expansion tree drops from 9867 to 8294, and the 22-frame
+    `delegationParent` `UnsupportedOperationException` subtree is gone. The
+    `rejectComposedInvocationProjection` exception subtree is unchanged.
+
 ## 0.3.260-SNAPSHOT
 
 - `LIB015-D1` (guillermomolina/protos#432) adds timestamped log events and an

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
 import java.util.Objects;
@@ -323,6 +324,7 @@ public final class ProtosValueLookup {
                             representedDelegationParent(represented, prelude),
                             "represented delegation parent"));
         }
+        CompilerDirectives.transferToInterpreter();
         throw new UnsupportedOperationException(
                 "Standard delegation parent is not implemented for runtime value representation "
                         + receiver.getClass().getName());
