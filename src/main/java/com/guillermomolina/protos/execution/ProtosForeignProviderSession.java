@@ -17,23 +17,13 @@
 package com.guillermomolina.protos.execution;
 
 /**
- * Logical Process-owned compartment of one foreign provider (PLAT053).
+ * Provider-side logical execution session of one Actor/provider pair (PLAT053).
  *
- * <p>A compartment is not a Polyglot Context: the provider selects its physical topology and may
- * realize one compartment with zero, one, or many Contexts or with an isolated runtime. The
- * existing Protos Process Context is never the universal foreign Context. The Protos runtime opens
- * at most one compartment per Process and provider on first real use, and closes it at Process
- * terminal disposition.
+ * <p>A session is not necessarily a Polyglot Context, Thread, Executor, ClassLoader, or operating
+ * system process; the provider selects its physical realization. The provider never learns which
+ * Actor owns the session: that ownership map belongs to the Protos runtime.
  */
-interface ProtosForeignProviderCompartment extends AutoCloseable {
-    ProtosForeignProviderId providerId();
-
-    /**
-     * Opens one new logical session; the runtime requests at most one live session per Actor and
-     * provider and owns its Actor association.
-     */
-    ProtosForeignProviderSession openSession();
-
+interface ProtosForeignProviderSession extends AutoCloseable {
     @Override
     void close();
 }

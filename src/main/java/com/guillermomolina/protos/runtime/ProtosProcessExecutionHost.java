@@ -59,6 +59,15 @@ public interface ProtosProcessExecutionHost {
      */
     default void awaitTerminalDispositionForRuntime() {}
 
+    /**
+     * Platform lifecycle notification after one hosted Actor actually reached TERMINATED.
+     *
+     * <p>It precedes the Actor's removal from its Process, so Process terminal notification never
+     * observes host resources of a terminated Actor. Implementations release Actor-owned host
+     * resources only, must not throw, and report cleanup failure through terminal disposition.
+     */
+    default void actorTerminatedForRuntime(ProtosActor actor) {}
+
     /** Platform lifecycle notification after semantic Process termination is already complete. */
     void processTerminatedForRuntime();
 }

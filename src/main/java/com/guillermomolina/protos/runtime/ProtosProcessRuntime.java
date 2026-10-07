@@ -659,6 +659,17 @@ public final class ProtosProcessRuntime {
 
     void actorTerminatedForRuntime(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
+        ProtosProcessExecutionHost actorHost;
+        synchronized (this) {
+            if (!liveActors.contains(actor)) {
+                return;
+            }
+            actorHost = executionHost;
+        }
+        // Release host-owned Actor resources while the Actor still holds the Process open.
+        if (actorHost != null) {
+            actorHost.actorTerminatedForRuntime(actor);
+        }
         ProtosProcessExecutionHost terminatedHost = null;
         synchronized (this) {
             if (!liveActors.remove(actor)) {

@@ -20,7 +20,8 @@ package com.guillermomolina.protos.execution;
  * Host-supplied factory of logical provider compartments.
  *
  * <p>Registering a factory performs no foreign runtime initialization. It is invoked only by the
- * future lazy compartment owner, never while a RuntimeHost is constructed or a Process is hosted.
+ * lazy Process-owned compartment lifecycle on first real use, never while a RuntimeHost is
+ * constructed or a Process is hosted.
  */
 @FunctionalInterface
 interface ProtosForeignProviderFactory {

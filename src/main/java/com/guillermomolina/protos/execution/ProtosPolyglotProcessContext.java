@@ -17,11 +17,13 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -32,12 +34,16 @@ import org.graalvm.polyglot.Engine;
  *
  * <p>Object identity here is deliberately not Process identity. The semantic Process remains the
  * supplied {@link ProtosProcessRuntime}; this wrapper only routes its host execution through one
- * multithread Polyglot Context and closes that Context after semantic Process termination.
+ * multithread Polyglot Context and closes that Context after semantic Process termination. It
+ * also owns the Process-local lazy foreign provider lifecycle; no foreign compartment or session
+ * exists until an internal caller acquires one.
  */
 public final class ProtosPolyglotProcessContext implements ProtosProcessExecutionHost {
     private final ProtosPolyglotRuntimeHost runtimeHost;
     private final ProtosProcessRuntime process;
     private final ProtosPolyglotExecutionContext context;
+    private final ProtosForeignProviderProcessLifecycle foreignProviders;
+    private volatile Throwable foreignCleanupFailure;
 
     ProtosPolyglotProcessContext(
             ProtosPolyglotRuntimeHost runtimeHost,
@@ -46,6 +52,9 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         this.runtimeHost = Objects.requireNonNull(runtimeHost, "runtimeHost");
         this.process = Objects.requireNonNull(process, "process");
         this.context = Objects.requireNonNull(context, "context");
+        this.foreignProviders =
+                new ProtosForeignProviderProcessLifecycle(
+                        runtimeHost.foreignProvidersForRuntime(), process);
     }
 
     public ProtosExecutionOutcome execute(Source source, ProtosActivation activation) {
@@ -105,6 +114,15 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         }
     }
 
+    /**
+     * Internal PLAT053 boundary: returns the live session of the exact Actor/provider pair in this
+     * Process, opening the Process compartment and the Actor session lazily on first use.
+     */
+    ProtosForeignProviderSessionBinding foreignSessionForRuntime(
+            ProtosActor actor, ProtosForeignProviderId providerId) {
+        return foreignProviders.sessionForRuntime(actor, providerId);
+    }
+
     @Override
     public <T> T callForRuntime(Supplier<T> action) {
         return context.callEntered(Objects.requireNonNull(action, "action"));
@@ -116,7 +134,14 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     }
 
     @Override
+    public void actorTerminatedForRuntime(ProtosActor actor) {
+        foreignProviders.actorTerminatedForRuntime(actor);
+    }
+
+    @Override
     public void processTerminatedForRuntime() {
+        // Process-owned provider resources disappear before the Process Context is released.
+        foreignCleanupFailure = foreignProviders.closeForRuntime();
         try {
             context.requestClose();
         } catch (RuntimeException | Error failure) {
@@ -129,6 +154,15 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         Throwable failure = context.awaitCloseDispositionForRuntime();
         if (failure != null) {
             runtimeHost.recordContextCloseFailure(failure);
+        }
+        Throwable foreignFailure = foreignCleanupFailure;
+        if (failure == null) {
+            failure = foreignFailure;
+        } else if (foreignFailure != null
+                && !Arrays.asList(failure.getSuppressed()).contains(foreignFailure)) {
+            failure.addSuppressed(foreignFailure);
+        }
+        if (failure != null) {
             throw new IllegalStateException(
                     "Polyglot Process Context failed to reach clean terminal disposition",
                     failure);
@@ -141,6 +175,14 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
 
     ProtosLanguageContext currentLanguageContextForTesting() {
         return callForRuntime(ProtosLanguageContext::current);
+    }
+
+    int foreignProviderCompartmentCountForTesting() {
+        return foreignProviders.compartmentCountForTesting();
+    }
+
+    int foreignProviderSessionCountForTesting() {
+        return foreignProviders.sessionCountForTesting();
     }
 
     boolean isClosedForTesting() {

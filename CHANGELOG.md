@@ -7,6 +7,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.273-SNAPSHOT
+
+- `I082-B` adds the PLAT053 Process-owned lazy foreign provider compartment
+  and Actor-isolated session lifecycle. There is no specification change and
+  no guest-visible change; import resolution is unchanged and no foreign
+  authority, Polyglot Context, or guest language is introduced.
+  - `ProtosForeignProviderProcessLifecycle`, owned by each
+    `ProtosPolyglotProcessContext`, opens at most one compartment per
+    Process/provider on first use and at most one session per
+    Actor/provider on first use; repeated use returns the same live session.
+    Unknown providers and `UNAVAILABLE` providers fail without invoking a
+    factory. Provider code runs outside the Process-local publication lock;
+    racing first acquisitions wait for the single constructor, and failed
+    compartment or session construction is not cached.
+  - `ProtosForeignProviderCompartment.openSession()` creates a provider-side
+    `ProtosForeignProviderSession`; the runtime-owned
+    `ProtosForeignProviderSessionBinding` records the Actor association,
+    serves as the session generation, and fails closed once closed.
+  - `ProtosProcessExecutionHost.actorTerminatedForRuntime(actor)` (default
+    no-op) is notified when a hosted Actor actually reaches `TERMINATED`,
+    before it leaves its Process; the Polyglot Process Context closes that
+    Actor's sessions. Process terminal notification rejects further admission,
+    closes remaining sessions, then closes every compartment exactly once
+    before releasing the Process Context. Cleanup failures never stop the
+    remaining cleanup and surface through
+    `awaitTerminalDispositionForRuntime()` as host/runtime failure.
+  - A RuntimeHost, Process, or Actor that never acquires a provider invokes
+    no factory and creates no compartment or session.
+
 ## 0.3.272-SNAPSHOT
 
 - `I082-A` adds the provider-neutral foreign provider registry foundation
