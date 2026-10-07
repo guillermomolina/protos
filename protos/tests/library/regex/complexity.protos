@@ -1,0 +1,87 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+// Answers `text` concatenated with itself 2^doublings times.
+repeated: (text, doublings) => {
+    result: text
+    count: 0
+    (() => count < doublings).whileTrue() {
+        result = result + result
+        count = count + 1
+    }
+    result
+}
+
+// These sizes are far beyond what an exponential backtracker could finish
+// (2^128 paths for the classic forms) yet stay small for a Pike VM, whose cost
+// is bounded by pattern states times input scalars.
+tests: [
+    Test("classic catastrophic forms fail without exponential backtracking", () => {
+        subject: repeated("a", 7)
+        Array("(a+)+b", "(a|aa)*b", "(a?)*b", "(?:a*)*b", "(a|a)*b", "((a*)*)*b", "(?:a+?)+?b").each((source) => {
+            pattern: Regex.compile(source)
+            Assertions.require(pattern.search(subject) === null)
+            Assertions.require(pattern.fullMatch(subject) === null)
+        })
+        found: Regex.compile("(a+)+b").search(subject + "b")
+        Assertions.require(found.end(0) == 129)
+        Assertions.require(found.group(1) == subject)
+    }),
+    Test("counted nullable prefixes stay polynomial", () => {
+        // (a?){n}a{n} on a^n needs 2^n paths in a backtracker.
+        subject: repeated("a", 5)
+        found: Regex.compile("(a?){32}a{32}").fullMatch(subject)
+        Assertions.require(found !== null)
+        Assertions.require(Regex.compile("(?:a?){32}a{33}").fullMatch(subject) === null)
+    }),
+    Test("large alternations select by source order", () => {
+        letters: "abcdefghijklmnopqrstuvwxyz"
+        source: "zz"
+        first: 0
+        (() => first < 26).whileTrue() {
+            second: 0
+            (() => second < 26).whileTrue() {
+                source = source + "|" + letters[first] + letters[second]
+                second = second + 1
+            }
+            first = first + 1
+        }
+        pattern: Regex.compile(source)
+        Assertions.require(pattern.search("yz").group(0) == "yz")
+        Assertions.require(pattern.findAll("abzzq").size() == 2)
+        Assertions.require(pattern.search("a1b2") === null)
+    }),
+    Test("large counted repetition is bounded by the input", () => {
+        subject: repeated("a", 6)
+        Assertions.require(Regex.compile("(?:a{1000}){1000}").search(subject) === null)
+        Assertions.require(Regex.compile("a{64}").fullMatch(subject) !== null)
+        Assertions.require(Regex.compile("a{10,1000000000}?").search(subject).end(0) == 10)
+    }),
+    Test("Unicode-heavy text and many captures match in one pass", () => {
+        subject: repeated("é😀e\u{301}", 6)
+        found: Regex.compile("(?:\\p{L}|\\p{So}|\\p{Mn})+").fullMatch(subject)
+        Assertions.require(found.end(0) == 256)
+        Assertions.require(Regex.compileWithFlags("(?:É😀E\u{301})+$", "i").search(subject).start(0) == 0)
+        groups: Regex.compile(repeated("(.)", 6)).fullMatch(repeated("😀", 6))
+        Assertions.require(groups.captureCount == 64)
+        Assertions.require(groups.start(64) == 63)
+        Assertions.require(groups.group(64) == "😀")
+        Assertions.require(Regex.compile(repeated("(a)?", 6) + "b").search(repeated("a", 6)) === null)
+    })
+]

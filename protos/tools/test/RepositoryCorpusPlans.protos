@@ -161,7 +161,14 @@ load: (corpusId) => {
             Array("compile.protos", "suite-native", "-"),
             Array("rejection.protos", "suite-native", "-"),
             Array("pattern-model.protos", "suite-native", "-"),
-            Array("escape.protos", "suite-native", "-")
+            Array("escape.protos", "suite-native", "-"),
+            Array("matching.protos", "suite-native", "-"),
+            Array("captures.protos", "suite-native", "-"),
+            Array("assertions.protos", "suite-native", "-"),
+            Array("repetition.protos", "suite-native", "-"),
+            Array("traversal.protos", "suite-native", "-"),
+            Array("complexity.protos", "suite-native", "-"),
+            Array("sharing.protos", "suite-native", "-")
             )
         )
         matched = true

@@ -55,6 +55,33 @@
 /// numbered from 1 in opening-parenthesis order, and `captureNames`, a frozen
 /// Map from each capture name to its group number. Independent compilations
 /// answer distinct Patterns; equality is ordinary identity.
+///
+/// Matching works on Unicode scalars and every offset is a String scalar
+/// index. The selected match is leftmost-first: the earliest start wins, and
+/// for one start the pattern priority decides (alternatives in source order,
+/// greedy quantifiers prefer another iteration, lazy ones prefer to stop).
+/// Matching never backtracks exponentially: one search costs at most pattern
+/// size times input length. A non-String subject signals an Error.
+///
+/// - `fullMatch(text)` answers the selected match starting at 0 that ends at
+///   `text.size()`, or null.
+/// - `search(text)` answers the selected match starting anywhere, or null.
+/// - `searchFrom(text, offset)` is `search` restricted to starts at or after
+///   the Integer `offset`, `0 <= offset <= text.size()` (otherwise an Error);
+///   assertions still see the scalars before `offset`.
+/// - `eachMatch(text, block)` invokes `block(match)` for every successive
+///   non-overlapping match, ignores its result, and answers null. After an
+///   empty match at `k` the next search starts at `k + 1`, so an empty match is
+///   reported at most once per offset, including `text.size()`.
+/// - `findAll(text)` answers a fresh Array of the matches `eachMatch` visits.
+///
+/// A Match is frozen: `captureCount`; `group(key)`, `start(key)`, and
+/// `end(key)` for a group number (0 is the whole match) or a capture name,
+/// answering null for a group that did not participate; `groups()`, a fresh
+/// Array of every group's text; and `namedGroups()`, a fresh Map from each
+/// capture name to its text. A repeated group reports its last participation.
+/// An optional iteration that consumes no input is chosen under the ordinary
+/// greedy or lazy priority, keeping its captures, and ends the repetition.
 compileWithFlags: ((unicode) => {
     Arrays: import("std:collections/Array")
 
@@ -379,21 +406,7 @@ compileWithFlags: ((unicode) => {
         scalars
     }
 
-    // Private Pattern construction. The compiled `program` is reachable only
-    // from Closures created here, never from a slot; LIB014-2 adds the matching
-    // operations to this object.
-    newPattern: (patternSource, patternFlags, program) => {
-        pattern: {
-            source: patternSource
-            flags: patternFlags
-            captureCount: program.captureCount
-            captureNames: program.captureNames
-        }
-        pattern.freeze()
-        pattern
-    }
-
-    // Private immutable Match construction for the matcher (LIB014-2).
+    // Private immutable Match construction for the matcher.
     // `bounds` holds 2 * (captureCount + 1) entries: the start and end Unicode
     // scalar offsets of group g at 2g and 2g + 1 as a half-open span, both null
     // when the group did not participate in the selected match. `texts` holds
@@ -474,6 +487,556 @@ compileWithFlags: ((unicode) => {
         }
         result.freeze()
         result
+    }
+
+    // Answers whether `scalar` belongs to `ranges`, by binary search over its
+    // ascending disjoint ranges.
+    contains: (ranges, scalar) => {
+        low: 0
+        high: ranges.size().div(2) - 1
+        found: false
+        (() => !found && (low <= high)).whileTrue() {
+            middle: (low + high).div(2)
+            (scalar < ranges[2 * middle]).ifTrueIfFalse(() => {
+                high = middle - 1
+            }, () => {
+                (scalar > ranges[2 * middle + 1]).ifTrueIfFalse(() => {
+                    low = middle + 1
+                }, () => {
+                    found = true
+                })
+            })
+        }
+        found
+    }
+
+    appendScalar: (bytes, scalar) => {
+        (scalar < 128).ifTrue(() => {
+            bytes.add(scalar)
+        })
+        ((scalar >= 128) && (scalar < 2048)).ifTrue(() => {
+            bytes.add(192 + scalar.div(64))
+            bytes.add(128 + (scalar % 64))
+        })
+        ((scalar >= 2048) && (scalar < 65536)).ifTrue(() => {
+            bytes.add(224 + scalar.div(4096))
+            bytes.add(128 + (scalar.div(64) % 64))
+            bytes.add(128 + (scalar % 64))
+        })
+        (scalar >= 65536).ifTrue(() => {
+            bytes.add(240 + scalar.div(262144))
+            bytes.add(128 + (scalar.div(4096) % 64))
+            bytes.add(128 + (scalar.div(64) % 64))
+            bytes.add(128 + (scalar % 64))
+        })
+    }
+
+    // Per-operation subject: the scalars are decoded once so the matcher reads
+    // each one in constant time, and `slice` rebuilds the exact String of a
+    // half-open scalar span without normalization.
+    newInput: (text) => {
+        scalars: decodeScalars(text)
+        input: {
+            scalars: scalars
+            size: scalars.size()
+            slice: (first, last) => {
+                bytes: Encoding.UTF8.encode("")
+                index: first
+                (() => index < last).whileTrue() {
+                    appendScalar(bytes, scalars[index])
+                    index = index + 1
+                }
+                Encoding.UTF8.decode(bytes)
+            }
+        }
+        input
+    }
+
+    // Prioritized Thompson NFA (Pike VM) over the postfix node table. A thread
+    // state is a node phase: enter (3n), exit (3n + 1), or the loop decision of
+    // a repeat (3n + 2). Counted repetition is never expanded: a repeat whose
+    // count matters (anything but `?`, `*`, `{0}`, `{1}`) keeps its count
+    // in a per-thread counter, capped at `min` once unbounded repetition has
+    // met its minimum.
+    //
+    // Threads advance in lockstep over the input. At each position the epsilon
+    // closure is an explicit depth-first stack explored in priority order:
+    // ordered alternatives, greedy iterate-before-exit, lazy exit-before-
+    // iterate. The first thread to reach a (state, marker, counters) key at a
+    // position wins and the later, lower-priority ones are dropped: captures
+    // never influence the future of a match because there are no
+    // backreferences. A new start thread is seeded after every surviving thread,
+    // so an earlier start always outranks a later one, and once a match is
+    // selected every lower-priority thread and every later start is cut. This
+    // keeps a single search within O(m * n) thread steps.
+    //
+    // An optional iteration that completes without consuming input is selected
+    // under the ordinary priority, captures included, but then ends the
+    // repetition: it is never followed by another iteration at the same
+    // position, which guarantees termination of nullable bodies. `marker` names the outermost active repeat whose current
+    // iteration began at the current position (nested iterations start no
+    // earlier, so every inner active repeat is then also empty so far), or -1.
+    // A mandatory empty iteration of a body that can never consume input jumps
+    // straight to `min`: every remaining mandatory iteration would repeat the
+    // same zero-width path with the same captures.
+    //
+    // All mutable state is local to one execution; the derived tables are
+    // frozen and shared by every operation on the Pattern.
+    newMatcher: (program) => {
+        nodes: program.nodes
+        nodeCount: nodes.size()
+        root: program.root
+        groupSlots: 2 * (program.captureCount + 1)
+        parents: sized(nodeCount)
+        positions: sized(nodeCount)
+        depths: sized(nodeCount)
+        consumers: sized(nodeCount)
+        counterSlots: sized(nodeCount)
+        bounds: Map()
+        counterTotal: 0
+        index: 0
+        (() => index < nodeCount).whileTrue() {
+            node: nodes[index]
+            op: node.op
+            consumes: op == "set"
+            ((op == "concat") || (op == "alternate")).ifTrue(() => {
+                position: 0
+                node.items.each((item) => {
+                    parents[item] = index
+                    positions[item] = position
+                    position = position + 1
+                    consumes = consumes || consumers[item]
+                })
+            })
+            ((op == "capture") || (op == "repeat")).ifTrue(() => {
+                parents[node.item] = index
+                positions[node.item] = 0
+                consumes = consumers[node.item]
+            })
+            (op == "repeat").ifTrue(() => {
+                maximum: node.max
+                consumes = consumes && ((maximum === null) || (maximum > 0))
+                simple: ((maximum !== null) && (maximum <= 1)) || ((maximum === null) && (node.min == 0))
+                simple.ifFalse(() => {
+                    counterSlots[index] = counterTotal
+                    bound: maximum
+                    (maximum === null).ifTrue(() => {
+                        bound = node.min
+                    })
+                    bounds[counterTotal] = bound
+                    counterTotal = counterTotal + 1
+                })
+            })
+            consumers[index] = consumes
+            index = index + 1
+        }
+        // Repeat nesting depth; parents always have larger indexes.
+        index = nodeCount - 1
+        (() => index >= 0).whileTrue() {
+            depth: 0
+            (parents[index] === null).ifFalse(() => {
+                depth = depths[parents[index]]
+            })
+            (nodes[index].op == "repeat").ifTrue(() => {
+                depth = depth + 1
+            })
+            depths[index] = depth
+            index = index - 1
+        }
+        parents.freeze()
+        positions.freeze()
+        depths.freeze()
+        consumers.freeze()
+        counterSlots.freeze()
+        counterBounds: frozenArray(bounds, counterTotal)
+        initialCounters: null
+        (counterTotal > 0).ifTrue(() => {
+            zeros: sized(counterTotal)
+            index = 0
+            (() => index < counterTotal).whileTrue() {
+                zeros[index] = 0
+                index = index + 1
+            }
+            zeros.freeze()
+            initialCounters = zeros
+        })
+        initialCaptures: sized(groupSlots)
+        initialCaptures.freeze()
+        markerRange: nodeCount + 1
+        wordSet: program.wordSet
+
+        // Thread state, captures, and counters are immutable once shared;
+        // updates copy.
+        replaced: (values, slot, value) => {
+            copy: Array(...values)
+            copy[slot] = value
+            copy.freeze()
+            copy
+        }
+
+        // Mixed-radix identity of everything that can change the future of a
+        // thread at one position; every count lies within its bound.
+        keyOf: (state, marker, counters) => {
+            key: state * markerRange + marker + 1
+            (counters === null).ifFalse(() => {
+                slot: 0
+                (() => slot < counterTotal).whileTrue() {
+                    key = key * (counterBounds[slot] + 1) + counters[slot]
+                    slot = slot + 1
+                }
+            })
+            key
+        }
+
+        (input, from, anchored, toEnd) => {
+            scalars: input.scalars
+            size: input.size
+            position: from
+            best: null
+            pending: Map()
+            pendingCount: 0
+            visited: null
+            waiting: null
+            waitingCount: 0
+            stack: Map()
+            depth: 0
+            cut: false
+
+            push: (state, marker, counters, captures) => {
+                stack[depth] = { state: state; marker: marker; counters: counters; captures: captures }
+                depth = depth + 1
+            }
+
+            isWord: (at) => {
+                (at >= 0) && (at < size) && contains(wordSet, scalars[at])
+            }
+
+            // A CR immediately followed by LF is one line-boundary sequence.
+            holds: (kind) => {
+                result: false
+                ((kind == "textStart") || ((kind == "lineStart") && (position == 0))).ifTrue(() => {
+                    result = position == 0
+                })
+                ((kind == "textEnd") || (kind == "end") || ((kind == "lineEnd") && (position == size))).ifTrue(() => {
+                    result = position == size
+                })
+                ((kind == "lineStart") && (position > 0)).ifTrue(() => {
+                    previous: scalars[position - 1]
+                    result = isLineTerminator(previous) &&
+                        !((previous == 13) && (position < size) && (scalars[position] == 10))
+                })
+                ((kind == "lineEnd") && (position < size)).ifTrue(() => {
+                    current: scalars[position]
+                    result = isLineTerminator(current) &&
+                        !((current == 10) && (position > 0) && (scalars[position - 1] == 13))
+                })
+                ((kind == "wordBoundary") || (kind == "notWordBoundary")).ifTrue(() => {
+                    result = (isWord(position - 1) != isWord(position)) == (kind == "wordBoundary")
+                })
+                result
+            }
+
+            // Starts an iteration of repeat `at`, marking it fresh unless an
+            // outer active repeat already is.
+            iterate: (at, marker, counters, captures) => {
+                fresh: marker
+                (marker == -1).ifTrue(() => {
+                    fresh = at
+                })
+                push(3 * nodes[at].item, fresh, counters, captures)
+            }
+
+            // Pushes successors in reverse priority order, so the preferred
+            // one is explored first.
+            step: (entry) => {
+                state: entry.state
+                marker: entry.marker
+                counters: entry.counters
+                captures: entry.captures
+                at: state.div(3)
+                phase: state % 3
+                node: nodes[at]
+                op: node.op
+                (phase == 0).ifTrue(() => {
+                    (op == "set").ifTrue(() => {
+                        waiting[waitingCount] = entry
+                        waitingCount = waitingCount + 1
+                    })
+                    (op == "empty").ifTrue(() => {
+                        push(state + 1, marker, counters, captures)
+                    })
+                    (op == "assert").ifTrue(() => {
+                        holds(node.kind).ifTrue(() => {
+                            push(state + 1, marker, counters, captures)
+                        })
+                    })
+                    (op == "concat").ifTrue(() => {
+                        push(3 * node.items[0], marker, counters, captures)
+                    })
+                    (op == "alternate").ifTrue(() => {
+                        item: node.items.size() - 1
+                        (() => item >= 0).whileTrue() {
+                            push(3 * node.items[item], marker, counters, captures)
+                            item = item - 1
+                        }
+                    })
+                    (op == "capture").ifTrue(() => {
+                        push(3 * node.item, marker, counters, replaced(captures, 2 * node.group, position))
+                    })
+                    (op == "repeat").ifTrue(() => {
+                        // Counters are reset to 0 whenever a repeat exits.
+                        ((counterSlots[at] === null) && (node.max !== null) && (node.max == 0)).ifTrueIfFalse(() => {
+                            push(state + 1, marker, counters, captures)
+                        }, () => {
+                            ((counterSlots[at] === null) && (node.min == 1)).ifTrueIfFalse(() => {
+                                iterate(at, marker, counters, captures)
+                            }, () => {
+                                push(state + 2, marker, counters, captures)
+                            })
+                        })
+                    })
+                })
+                ((phase == 1) && (at == root)).ifTrue(() => {
+                    ((toEnd == false) || (position == size)).ifTrue(() => {
+                        best = replaced(captures, 1, position)
+                        cut = true
+                    })
+                })
+                ((phase == 1) && (at != root)).ifTrue(() => {
+                    parent: parents[at]
+                    owner: nodes[parent]
+                    kind: owner.op
+                    (kind == "concat").ifTrue(() => {
+                        next: positions[at] + 1
+                        (next < owner.items.size()).ifTrueIfFalse(() => {
+                            push(3 * owner.items[next], marker, counters, captures)
+                        }, () => {
+                            push(3 * parent + 1, marker, counters, captures)
+                        })
+                    })
+                    (kind == "alternate").ifTrue(() => {
+                        push(3 * parent + 1, marker, counters, captures)
+                    })
+                    (kind == "capture").ifTrue(() => {
+                        push(3 * parent + 1, marker, counters, replaced(captures, 2 * owner.group + 1, position))
+                    })
+                    (kind == "repeat").ifTrue(() => {
+                        // One iteration of `parent` is complete.
+                        empty: (marker != -1) && (depths[marker] <= depths[parent])
+                        rest: marker
+                        (marker == parent).ifTrue(() => {
+                            rest = -1
+                        })
+                        slot: counterSlots[parent]
+                        (slot === null).ifTrueIfFalse(() => {
+                            // `?` and `{1}` always exit; `*` loops back
+                            // unless the optional iteration was empty.
+                            (((owner.max !== null) && (owner.max == 1)) || empty).ifTrueIfFalse(() => {
+                                push(3 * parent + 1, rest, counters, captures)
+                            }, () => {
+                                push(3 * parent + 2, rest, counters, captures)
+                            })
+                        }, () => {
+                            count: counters[slot]
+                            (empty && (count >= owner.min)).ifTrueIfFalse(() => {
+                                push(3 * parent + 1, rest, replaced(counters, slot, 0), captures)
+                            }, () => {
+                                next: count + 1
+                                ((consumers[owner.item] == false) && (next < owner.min)).ifTrue(() => {
+                                    next = owner.min
+                                })
+                                ((owner.max === null) && (next > owner.min)).ifTrue(() => {
+                                    next = owner.min
+                                })
+                                push(3 * parent + 2, rest, replaced(counters, slot, next), captures)
+                            })
+                        })
+                    })
+                })
+                (phase == 2).ifTrue(() => {
+                    slot: counterSlots[at]
+                    canIterate: true
+                    canExit: true
+                    exitCounters: counters
+                    (slot === null).ifFalse(() => {
+                        count: counters[slot]
+                        canIterate = (node.max === null) || (count < node.max)
+                        canExit = count >= node.min
+                        exitCounters = replaced(counters, slot, 0)
+                    })
+                    node.greedy.ifTrueIfFalse(() => {
+                        canExit.ifTrue(() => {
+                            push(state - 1, marker, exitCounters, captures)
+                        })
+                        canIterate.ifTrue(() => {
+                            iterate(at, marker, counters, captures)
+                        })
+                    }, () => {
+                        canIterate.ifTrue(() => {
+                            iterate(at, marker, counters, captures)
+                        })
+                        canExit.ifTrue(() => {
+                            push(state - 1, marker, exitCounters, captures)
+                        })
+                    })
+                })
+            }
+
+            close: () => {
+                (() => (depth > 0) && !cut).whileTrue() {
+                    depth = depth - 1
+                    entry: stack[depth]
+                    key: keyOf(entry.state, entry.marker, entry.counters)
+                    visited.containsKey(key).ifFalse(() => {
+                        visited[key] = true
+                        step(entry)
+                    })
+                }
+                depth = 0
+            }
+
+            running: true
+            (() => running).whileTrue() {
+                visited = Map()
+                waiting = Map()
+                waitingCount = 0
+                cut = false
+                entryIndex: 0
+                (() => (entryIndex < pendingCount) && !cut).whileTrue() {
+                    entry: pending[entryIndex]
+                    push(entry.state, entry.marker, entry.counters, entry.captures)
+                    close()
+                    entryIndex = entryIndex + 1
+                }
+                (!cut && (best === null) && (!anchored || (position == from))).ifTrue(() => {
+                    push(3 * root, -1, initialCounters, replaced(initialCaptures, 0, position))
+                    close()
+                })
+                pending = Map()
+                pendingCount = 0
+                (position < size).ifTrue(() => {
+                    scalar: scalars[position]
+                    item: 0
+                    (() => item < waitingCount).whileTrue() {
+                        entry: waiting[item]
+                        contains(nodes[entry.state.div(3)].ranges, scalar).ifTrue(() => {
+                            // Consuming input ends the freshness of every
+                            // active iteration.
+                            pending[pendingCount] = {
+                                state: entry.state + 1
+                                marker: -1
+                                counters: entry.counters
+                                captures: entry.captures
+                            }
+                            pendingCount = pendingCount + 1
+                        })
+                        item = item + 1
+                    }
+                })
+                position = position + 1
+                running = (pendingCount > 0) || ((best === null) && !anchored && (position <= size))
+            }
+            best
+        }
+    }
+
+    // Private Pattern construction. The compiled `program` is reachable only
+    // from the Closures created here, never from a slot, and every operation
+    // keeps its execution state local.
+    newPattern: (patternSource, patternFlags, program) => {
+        execute: newMatcher(program)
+        groupTotal: program.captureCount + 1
+
+        requireText: (text) => {
+            String.recognizes(text).ifFalse(() => {
+                Error().signal()
+            })
+        }
+
+        // Answers the selected Match starting at or after `from`, or null.
+        matchIn: (input, from, anchored, toEnd) => {
+            spans: execute(input, from, anchored, toEnd)
+            result: null
+            (spans === null).ifFalse(() => {
+                texts: sized(groupTotal)
+                group: 0
+                (() => group < groupTotal).whileTrue() {
+                    (spans[2 * group] === null).ifFalse(() => {
+                        texts[group] = input.slice(spans[2 * group], spans[2 * group + 1])
+                    })
+                    group = group + 1
+                }
+                result = newMatch(program, spans, texts)
+            })
+            result
+        }
+
+        // Visits successive non-overlapping matches. After an empty match at
+        // k the next search starts at k + 1, so each position yields at most
+        // one empty match and an empty match at the end is the last one.
+        traverse: (text, visit) => {
+            requireText(text)
+            input: newInput(text)
+            from: 0
+            (() => from <= input.size).whileTrue() {
+                found: matchIn(input, from, false, false)
+                (found === null).ifTrueIfFalse(() => {
+                    from = input.size + 1
+                }, () => {
+                    visit(found)
+                    from = found.end(0)
+                    (found.start(0) == from).ifTrue(() => {
+                        from = from + 1
+                    })
+                })
+            }
+        }
+
+        searchFrom: (text, offset) => {
+            requireText(text)
+            (Integer.recognizes(offset) && (offset >= 0) && (offset <= text.size())).ifFalse(() => {
+                Error().signal()
+            })
+            matchIn(newInput(text), offset, false, false)
+        }
+
+        pattern: {
+            source: patternSource
+            flags: patternFlags
+            captureCount: program.captureCount
+            captureNames: program.captureNames
+            fullMatch: (text) => {
+                requireText(text)
+                matchIn(newInput(text), 0, true, true)
+            }
+            search: (text) => {
+                searchFrom(text, 0)
+            }
+            searchFrom: searchFrom
+            eachMatch: (text, block) => {
+                traverse(text, (found) => {
+                    block(found)
+                })
+                null
+            }
+            findAll: (text) => {
+                found: Map()
+                count: 0
+                traverse(text, (match) => {
+                    found[count] = match
+                    count = count + 1
+                })
+                result: sized(count)
+                index: 0
+                (() => index < count).whileTrue() {
+                    result[index] = found[index]
+                    index = index + 1
+                }
+                result
+            }
+        }
+        pattern.freeze()
+        pattern
     }
 
     (source, flags) => {

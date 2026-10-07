@@ -87,10 +87,11 @@ tests: [
     }),
     Test("patterns are frozen and expose no compiled representation", () => {
         pattern: Regex.compile("(?<n>a)(b)")
-        Array("source", "flags", "captureCount", "captureNames").each((name) => {
+        Array("source", "flags", "captureCount", "captureNames", "fullMatch", "search", "searchFrom", "eachMatch", "findAll").each((name) => {
             Assertions.require(pattern.hasSlot(name))
         })
-        Array("program", "nodes", "root", "fullMatch", "search", "searchFrom", "findAll", "replaceAll", "split").each((name) => {
+        Array("program", "nodes", "root", "threads", "engine", "matcher", "currentPosition", "lastIndex", "match",
+            "replaceFirst", "replaceAll", "split").each((name) => {
             Assertions.require(pattern.hasSlot(name) == false)
         })
         Assertions.signals(Error, () => { pattern.source = "b" })

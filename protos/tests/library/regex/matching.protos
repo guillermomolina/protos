@@ -1,0 +1,149 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+// Requires `found` to be a Match whose group 0 is `text` over [first, last).
+requireSpan: (found, first, last, text) => {
+    Assertions.require(found !== null)
+    Assertions.require(found.start(0) == first)
+    Assertions.require(found.end(0) == last)
+    Assertions.require(found.group(0) == text)
+    true
+}
+
+// Requires the numbered groups of `found`, from group 1, to be `texts`.
+requireGroups: (found, ...texts) => {
+    Assertions.require(found !== null)
+    Assertions.require(found.captureCount == texts.size())
+    index: 0
+    (() => index < texts.size()).whileTrue() {
+        Assertions.require(found.group(index + 1) == texts[index])
+        index = index + 1
+    }
+    true
+}
+
+tests: [
+    Test("fullMatch requires the whole String from offset 0", () => {
+        abc: Regex.compile("abc")
+        requireSpan(abc.fullMatch("abc"), 0, 3, "abc")
+        Assertions.require(abc.fullMatch("abcd") === null)
+        Assertions.require(abc.fullMatch("ab") === null)
+        Assertions.require(abc.fullMatch("xabc") === null)
+        Assertions.require(abc.fullMatch("") === null)
+
+        empty: Regex.compile("")
+        requireSpan(empty.fullMatch(""), 0, 0, "")
+        Assertions.require(empty.fullMatch("a") === null)
+
+        // A lower-priority alternative is selected when only it covers the text.
+        requireSpan(Regex.compile("a|ab").fullMatch("ab"), 0, 2, "ab")
+        requireSpan(Regex.compile("a*?").fullMatch("aaa"), 0, 3, "aaa")
+    }),
+    Test("fullMatch covers scalars, classes, properties, anchors, and flags", () => {
+        requireSpan(Regex.compile("😀.").fullMatch("😀é"), 0, 2, "😀é")
+        requireSpan(Regex.compile("\\p{Lu}\\d+").fullMatch("Ä٣4"), 0, 3, "Ä٣4")
+        requireSpan(Regex.compile("[a-c&&[^b]]+").fullMatch("acca"), 0, 4, "acca")
+        Assertions.require(Regex.compile("[a-c&&[^b]]+").fullMatch("abc") === null)
+        requireSpan(Regex.compile("^a$").fullMatch("a"), 0, 1, "a")
+        requireSpan(Regex.compileWithFlags("école", "i").fullMatch("ÉCOLE"), 0, 5, "ÉCOLE")
+        Assertions.require(Regex.compile("école").fullMatch("ÉCOLE") === null)
+        requireSpan(Regex.compileWithFlags("a b # comment", "x").fullMatch("ab"), 0, 2, "ab")
+    }),
+    Test("fullMatch keeps greedy and lazy priority inside the full span", () => {
+        requireGroups(Regex.compile("(a*)(a*)").fullMatch("aa"), "aa", "")
+        requireGroups(Regex.compile("(a*?)(a*)").fullMatch("aa"), "", "aa")
+        requireGroups(Regex.compile("(a+?)(a*)").fullMatch("aaa"), "a", "aa")
+        requireGroups(Regex.compile("(a|ab)(c|bcd)").fullMatch("abcd"), "a", "bcd")
+    }),
+    Test("search selects the earliest start before pattern priority", () => {
+        requireSpan(Regex.compile("bc|abcd").search("abcd"), 0, 4, "abcd")
+        requireSpan(Regex.compile("b+|a").search("ab"), 0, 1, "a")
+        requireSpan(Regex.compile("a*?b|a").search("xaab"), 1, 4, "aab")
+        requireSpan(Regex.compile("c|b|a").search("xyabc"), 2, 3, "a")
+    }),
+    Test("search follows ordered alternation and greedy or lazy priority", () => {
+        requireSpan(Regex.compile("a|aa").search("aa"), 0, 1, "a")
+        requireSpan(Regex.compile("aa|a").search("aa"), 0, 2, "aa")
+        requireSpan(Regex.compile("a|ab|abc").search("abc"), 0, 1, "a")
+        requireSpan(Regex.compile("a+").search("baaa"), 1, 4, "aaa")
+        requireSpan(Regex.compile("a+?").search("baaa"), 1, 2, "a")
+        requireSpan(Regex.compile("a*").search("aaa"), 0, 3, "aaa")
+        requireSpan(Regex.compile("a*?").search("aaa"), 0, 0, "")
+    }),
+    Test("ambiguous priorities select leftmost-first matches and captures", () => {
+        requireGroups(Regex.compile("(a|aa)").search("aa"), "a")
+        requireGroups(Regex.compile("(aa|a)").search("aa"), "aa")
+        requireGroups(Regex.compile("(a*)a").search("aaa"), "aa")
+        requireSpan(Regex.compile("(a*?)a").search("aaa"), 0, 1, "a")
+        requireGroups(Regex.compile("(a*?)a").search("aaa"), "")
+        requireSpan(Regex.compile("(a|ab)b").search("abb"), 0, 2, "ab")
+        requireGroups(Regex.compile("(a|ab)b").search("abb"), "a")
+        requireSpan(Regex.compile("(ab|a)b").search("abb"), 0, 3, "abb")
+        requireGroups(Regex.compile("(ab|a)b").search("abb"), "ab")
+        requireGroups(Regex.compile("(ab|a)b").search("ab"), "a")
+        requireGroups(Regex.compile("(a+)(a*)").search("aaa"), "aaa", "")
+        requireGroups(Regex.compile("(a+?)(a*)").search("aaa"), "a", "aa")
+        requireGroups(Regex.compile("(a+?)b").search("aaab"), "aaa")
+        requireGroups(Regex.compile("(a|ab)(c|bcd)(d*)").search("abcd"), "a", "bcd", "")
+    }),
+    Test("search answers empty matches, null, and scalar positions", () => {
+        requireSpan(Regex.compile("x*").search("abc"), 0, 0, "")
+        Assertions.require(Regex.compile("z").search("abc") === null)
+        Assertions.require(Regex.compile("a").search("") === null)
+        requireSpan(Regex.compile("").search(""), 0, 0, "")
+        requireSpan(Regex.compile("é").search("😀aé"), 2, 3, "é")
+        requireSpan(Regex.compile("\u{301}").search("e\u{301}"), 1, 2, "\u{301}")
+        requireSpan(Regex.compile("$").search("ab"), 2, 2, "")
+        requireSpan(Regex.compile("b?$").search("a😀"), 2, 2, "")
+    }),
+    Test("searchFrom starts at an inclusive scalar offset", () => {
+        a: Regex.compile("a")
+        requireSpan(a.searchFrom("aXa", 0), 0, 1, "a")
+        requireSpan(a.searchFrom("aXa", 1), 2, 3, "a")
+        Assertions.require(a.searchFrom("aXa", 3) === null)
+        requireSpan(Regex.compile("").searchFrom("ab", 2), 2, 2, "")
+        requireSpan(Regex.compile("\\z").searchFrom("ab", 2), 2, 2, "")
+        requireSpan(Regex.compile("b").searchFrom("😀b😀b", 2), 3, 4, "b")
+        requireSpan(Regex.compile("b").searchFrom("😀b", 1), 1, 2, "b")
+        requireSpan(Regex.compile("😀").searchFrom("😀😀", 1), 1, 2, "😀")
+        requireSpan(Regex.compile("a*").searchFrom("aaa", 1), 1, 3, "aa")
+    }),
+    Test("searchFrom assertions observe the text before the offset", () => {
+        Assertions.require(Regex.compile("\\Ab").searchFrom("ab", 1) === null)
+        Assertions.require(Regex.compile("^b").searchFrom("ab", 1) === null)
+        Assertions.require(Regex.compile("\\bb").searchFrom("ab", 1) === null)
+        requireSpan(Regex.compile("\\Bb").searchFrom("ab", 1), 1, 2, "b")
+        requireSpan(Regex.compileWithFlags("^b", "m").searchFrom("a\nb", 1), 2, 3, "b")
+    }),
+    Test("matching operations reject invalid subjects and offsets", () => {
+        pattern: Regex.compile("a")
+        Array(null, 5, true, ["a"]).each((subject) => {
+            Assertions.signals(Error, () => { pattern.fullMatch(subject) })
+            Assertions.signals(Error, () => { pattern.search(subject) })
+            Assertions.signals(Error, () => { pattern.searchFrom(subject, 0) })
+            Assertions.signals(Error, () => { pattern.eachMatch(subject, (found) => null) })
+            Assertions.signals(Error, () => { pattern.findAll(subject) })
+        })
+        Array(-1, 3, 99999999999999999999, "1", null, true).each((offset) => {
+            Assertions.signals(Error, () => { pattern.searchFrom("ab", offset) })
+        })
+        Assertions.signals(Error, () => { pattern.searchFrom("😀", 2) })
+        Assertions.require(pattern.searchFrom("😀", 1) === null)
+    })
+]

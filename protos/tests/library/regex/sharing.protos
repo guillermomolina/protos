@@ -1,0 +1,105 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+// Answers "start:end:group1;" for every match, as a comparable String.
+summary: (matches) => {
+    digits: "0123456789"
+    number: (value) => {
+        text: ""
+        remaining: value
+        (() => (remaining > 0) || (text == "")).whileTrue() {
+            text = digits[remaining % 10] + text
+            remaining = remaining.div(10)
+        }
+        text
+    }
+    result: ""
+    matches.each((found) => {
+        group: found.group(1)
+        (group === null).ifTrue(() => {
+            group = "-"
+        })
+        result = result + number(found.start(0)) + ":" + number(found.end(0)) + ":" + group + ";"
+    })
+    result
+}
+
+tests: [
+    Test("one Pattern serves concurrent Tasks without sharing execution state", () => {
+        pattern: Regex.compile("(?<word>\\p{L}+)\\d*|\\s+")
+        texts: Array("abc123 de4", "  é9 ü", "😀xyz 77", "no digits here", "", "a1b2c3d4e5", "Ωμέγα 2026")
+        expected: Map()
+        index: 0
+        (() => index < texts.size()).whileTrue() {
+            expected[index] = summary(pattern.findAll(texts[index]))
+            index = index + 1
+        }
+        futures: Map()
+        index = 0
+        (() => index < texts.size()).whileTrue() {
+            text: texts[index]
+            futures[2 * index] = (() => summary(pattern.findAll(text))).future()
+            futures[2 * index + 1] = (() => {
+                found: pattern.searchFrom(text, text.size())
+                answer: "none"
+                (found === null).ifFalse(() => {
+                    answer = summary([found])
+                })
+                answer
+            }).future()
+            index = index + 1
+        }
+        index = 0
+        (() => index < texts.size()).whileTrue() {
+            Assertions.require(futures[2 * index].value() == expected[index])
+            Assertions.require(futures[2 * index + 1].value() == "none")
+            index = index + 1
+        }
+        Assertions.require(pattern.source == "(?<word>\\p{L}+)\\d*|\\s+")
+        Assertions.require(pattern.captureCount == 1)
+    }),
+    Test("concurrent Matches from one Pattern stay independent", () => {
+        pattern: Regex.compile("(a+)(b*)")
+        workers: Map()
+        count: 8
+        index: 0
+        (() => index < count).whileTrue() {
+            size: index + 1
+            workers[index] = (() => {
+                text: ""
+                filled: 0
+                (() => filled < size).whileTrue() {
+                    text = text + "a"
+                    filled = filled + 1
+                }
+                pattern.fullMatch(text + "b")
+            }).future()
+            index = index + 1
+        }
+        index = 0
+        (() => index < count).whileTrue() {
+            found: workers[index].value()
+            Assertions.require(found.end(1) == index + 1)
+            Assertions.require(found.group(2) == "b")
+            Assertions.require(found.end(0) == index + 2)
+            index = index + 1
+        }
+        null
+    })
+]

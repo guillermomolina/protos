@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.252-SNAPSHOT
+
+- `LIB014-2` (guillermomolina/protos#431) adds `std:regex/Regex` matching under
+  the D187 restricted portable regex contract. There is no specification
+  change, and replacement and splitting remain unimplemented (LIB014-3).
+  - Patterns gain `fullMatch(text)`, `search(text)`, `searchFrom(text,
+    offset)`, `eachMatch(text, block)`, and `findAll(text)`. Offsets are
+    Unicode scalar indexes; a non-String subject or an offset outside
+    `0..text.size()` signals an Error; no match answers null.
+  - Matching is leftmost-first: the earliest start wins, then ordered
+    alternatives and greedy or lazy quantifier priority. Group 0 is the whole
+    match, a group outside the selected path is null, and a repeated group
+    reports its last participation. An optional iteration that consumes no
+    input is selected under the ordinary priority and ends the repetition.
+  - The engine is a Protos-owned prioritized Pike VM over the private
+    compiled node table: no backtracking, no host regex engine, and no
+    expansion of counted repetition. One search costs at most pattern size
+    times input length. All execution state is local to each operation, so
+    one Pattern can be shared by concurrent Tasks.
+  - `^`/`$` follow the `m` line boundaries with CRLF as one sequence, and
+    `\b`/`\B` use the D187 Unicode word set. `eachMatch`/`findAll` advance
+    one scalar after an empty match, so an empty match at the end is reported
+    once.
+  - Known limitation: Patterns and Matches hold Closures and are therefore
+    not transferable between Actors under the current runtime rules.
+  - The `library/regex` corpus gains `matching`, `captures`, `assertions`,
+    `repetition`, `traversal`, `complexity`, and `sharing`.
+
 ## 0.3.251-SNAPSHOT
 
 - `LIB013-D` (guillermomolina/protos#430) adds explicit temporal text profiles:
