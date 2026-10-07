@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.263-SNAPSHOT
+
+- `TEST009-AF` (guillermomolina/protos#795) keeps the real, reachable
+  Context-local Closure projection failure of
+  `ProtosBytecodeRootNode.rejectComposedInvocationProjection(...)` out of
+  Truffle partial evaluation. There is no specification or semantic change.
+  - `CompilerDirectives.transferToInterpreter()` now precedes the existing
+    `UnsupportedOperationException` throw. The exception class, message,
+    failure condition and timing are unchanged; compiled code is not
+    invalidated, and no `@TruffleBoundary` is added.
+  - A focal test pins the unentered composed-call rejection class and message.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`) still
+    fails with `CodeTooLarge`, but the 20-frame
+    `rejectComposedInvocationProjection` `UnsupportedOperationException`
+    subtree is gone and `Throwable.fillInStackTrace()` size in the method
+    expansion tree drops from 8294 to 6864. The `NoSuchElementException`
+    subtree is unchanged.
+
 ## 0.3.262-SNAPSHOT
 
 - `PLAT051-A2` splits Standard Library semantic-value transfer into a source

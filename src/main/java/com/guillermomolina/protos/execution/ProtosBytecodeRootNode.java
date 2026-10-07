@@ -9187,6 +9187,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosClosureValue closure) {
         if (closure.requiresContextLocalExecutionProjectionForRuntime()
                 && ProtosLanguageContext.currentIfEnteredForRuntime() == null) {
+            com.oracle.truffle.api.CompilerDirectives.transferToInterpreter();
             throw new UnsupportedOperationException(
                     "Context-local Closure projection requires an entered Protos Context");
         }

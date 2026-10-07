@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -69,6 +70,25 @@ class ProtosAPlusExecutionProjectionTest {
                         List.of(),
                         prelude.newModuleActivation()));
         assertSame(template, init.executionPlan().orElseThrow());
+    }
+
+    @Test
+    void unenteredComposedCallOfContextLocalClosureRejectsProjection() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosClosureValue init = rootClosure("init");
+
+        assertFalse(ProtosPolyglotExecutionContext.hasEnteredContextForRuntime());
+        assertTrue(init.requiresContextLocalExecutionProjectionForRuntime());
+        UnsupportedOperationException failure =
+                assertThrows(
+                        UnsupportedOperationException.class,
+                        () ->
+                                ProtosBytecodeRootNode.PrepareClosureCall.perform(
+                                        init, prelude.newModuleActivation()));
+        assertSame(UnsupportedOperationException.class, failure.getClass());
+        assertEquals(
+                "Context-local Closure projection requires an entered Protos Context",
+                failure.getMessage());
     }
 
     @Test
