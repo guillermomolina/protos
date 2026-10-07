@@ -31,6 +31,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.Supplier;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Value;
 
 /**
  * One host-owned Polyglot context that may be entered by multiple Protos carrier threads.
@@ -42,15 +43,6 @@ import org.graalvm.polyglot.Engine;
  * Semantic execution state remains explicit in {@link ProtosActivation}.
  */
 public final class ProtosPolyglotExecutionContext implements AutoCloseable {
-    /*
-     * Host-only dynamic pointer to the currently entered host wrapper. It routes bounded
-     * Context-local platform services such as PLAT022 admission to the same Polyglot Context
-     * whose Env materializes the physical Source. It is not Protos Process, Actor, Task, or
-     * semantic Context identity and carries no guest state.
-     */
-    private static final ThreadLocal<ProtosPolyglotExecutionContext> ENTERED_CONTEXT =
-            new ThreadLocal<>();
-
     private final Context context;
     private final ProtosSourceReadabilityAuthority sourceReadability;
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
@@ -103,9 +95,22 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         boolean initialized = false;
         try {
             context.initialize(ProtosLanguage.ID);
+            ProtosPolyglotExecutionContext host =
+                    new ProtosPolyglotExecutionContext(context, sourceReadability, closedCallback);
+            /*
+             * The wrapper is bound to its Context's ProtosLanguageContext once, so bounded
+             * Context-local platform services such as PLAT022 admission reach this wrapper on any
+             * entry, including framework-owned Value execution. It is not Protos Process, Actor,
+             * Task, or semantic Context identity and carries no guest state.
+             */
+            context.enter();
+            try {
+                ProtosLanguageContext.current().bindHostExecutionContextForRuntime(host);
+            } finally {
+                context.leave();
+            }
             initialized = true;
-            return new ProtosPolyglotExecutionContext(
-                    context, sourceReadability, closedCallback);
+            return host;
         } finally {
             if (!initialized) {
                 context.close();
@@ -192,8 +197,6 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         try {
             requireOpen();
             context.enter();
-            ProtosPolyglotExecutionContext previousEntryMarker = ENTERED_CONTEXT.get();
-            ENTERED_CONTEXT.set(this);
             Throwable failure = null;
             try {
                 return action.get();
@@ -209,12 +212,6 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
                     } else {
                         throw leaveFailure;
                     }
-                } finally {
-                    if (previousEntryMarker == null) {
-                        ENTERED_CONTEXT.remove();
-                    } else {
-                        ENTERED_CONTEXT.set(previousEntryMarker);
-                    }
                 }
             }
         } finally {
@@ -223,12 +220,28 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         }
     }
 
+    /** True when the current entered Polyglot Context is owned by a Protos host wrapper. */
     static boolean hasEnteredContextForRuntime() {
-        return ENTERED_CONTEXT.get() != null;
+        return enteredHostOrNull() != null;
+    }
+
+    private static ProtosPolyglotExecutionContext enteredHostOrNull() {
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        return entered == null ? null : entered.hostExecutionContextOrNullForRuntime();
+    }
+
+    /**
+     * PERF033-A: wraps a guest interop object as a {@link Value} bound to this Context, for
+     * framework-owned host-to-guest execution. No Context entry is performed here.
+     */
+    Value asValueForRuntime(Object guestObject) {
+        Objects.requireNonNull(guestObject, "guestObject");
+        requireOpen();
+        return context.asValue(guestObject);
     }
 
     static void admitPhysicalSourceForRuntime(Path path) {
-        ProtosPolyglotExecutionContext current = ENTERED_CONTEXT.get();
+        ProtosPolyglotExecutionContext current = enteredHostOrNull();
         if (current == null) {
             throw new IllegalStateException(
                     "physical Source admission requires an entered Protos Process Context");

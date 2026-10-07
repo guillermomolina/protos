@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
@@ -28,6 +29,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
 import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Value;
 
 /**
  * Current Truffle hosting placement for one semantic Protos Process.
@@ -126,6 +128,21 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     /** The immutable foreign provider registry of the RuntimeHost hosting this Process. */
     ProtosForeignProviderRegistry foreignProviderRegistryForRuntime() {
         return runtimeHost.foreignProvidersForRuntime();
+    }
+
+    /**
+     * PERF033-A: prepares, inside this Process Context, the host executable presentation of an
+     * exact source-backed Closure. {@link #asValueForRuntime} then binds it once as a {@link
+     * Value} of this Context, so repeated {@code Value.execute()} crosses only the framework
+     * host-to-guest boundary.
+     */
+    ProtosHostExecutableClosure prepareHostExecutableForRuntime(
+            ProtosClosureValue closure, ProtosActivation caller) {
+        return callForRuntime(() -> ProtosHostExecutableClosure.prepareForRuntime(closure, caller));
+    }
+
+    Value asValueForRuntime(ProtosHostExecutableClosure executable) {
+        return context.asValueForRuntime(executable);
     }
 
     @Override

@@ -44,6 +44,12 @@ final class ProtosLanguageContext {
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
     private volatile ProtosModuleResolver boundModuleResolver;
+    /*
+     * PERF033-A: the host wrapper owning this Context, bound once when the wrapper opens. It
+     * replaces a per-entry thread-local marker so framework-owned entry (Value.execute) observes
+     * the same Context-local platform services as wrapper-owned entry.
+     */
+    private volatile ProtosPolyglotExecutionContext hostExecutionContext;
     private volatile ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlan;
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
@@ -91,6 +97,20 @@ final class ProtosLanguageContext {
             }
             boundModuleResolver = resolver;
         }
+    }
+
+    void bindHostExecutionContextForRuntime(ProtosPolyglotExecutionContext host) {
+        Objects.requireNonNull(host, "host");
+        synchronized (this) {
+            if (hostExecutionContext != null) {
+                throw new IllegalStateException("host execution context is already bound");
+            }
+            hostExecutionContext = host;
+        }
+    }
+
+    ProtosPolyglotExecutionContext hostExecutionContextOrNullForRuntime() {
+        return hostExecutionContext;
     }
 
     ProtosModuleResolver boundModuleResolverForRuntime() {

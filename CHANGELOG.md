@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.277-SNAPSHOT
+
+- `PERF033-A` adds a canonical pay-as-you-grow Polyglot executable for
+  prepared hosted-session Closures. There is no specification or observable
+  Protos semantic change, and no performance claim is made yet.
+  - `ProtosStandaloneHostedSession.PreparedTopLevel.executable()` returns an
+    `org.graalvm.polyglot.Value`, created once at preparation and bound to the
+    session's live Process Context. `Value.execute()` enters through the
+    framework host-to-guest boundary and runs ordinary direct activation of
+    the exact prepared Closure. It creates no RootTask or `ProtosTask`, does
+    not register an Actor task, and performs no Protos-owned Context entry.
+  - `ProtosHostExecutableClosure` is the internal interop adapter that
+    exposes this. It is not a Protos value and has no Closure identity of its
+    own. It retains the Context-owned Bytecode target and enters the PERF025
+    compact direct-Closure frame ABI through a cached `DirectCallNode`, so
+    the literal workload materializes no rich callee activation. Only
+    zero-argument execution is supported; other arities fail through interop
+    arity.
+  - The per-entry `ENTERED_CONTEXT` thread-local is replaced by a binding of
+    each host wrapper to its `ProtosLanguageContext`, made once when the
+    wrapper opens. Standard-stream routing, physical Source admission, Core
+    bootstrap, and P rematerialization therefore behave the same under
+    framework-owned entry.
+  - `PreparedTopLevel.invoke()` is unchanged and keeps its
+    `ProtosExecutionOutcome` contract. The executable does not take the
+    session gate, so callers must not run it concurrently. After session
+    close it is rejected and does not keep the Process or Context alive.
+
 ## 0.3.276-SNAPSHOT
 
 - `I082-D2` completes the generic D188 runtime with projected foreign pull

@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantLock;
+import org.graalvm.polyglot.Value;
 
 /**
  * Supported reusable JVM embedding session: one live standalone Protos Process whose entry source
@@ -273,7 +274,11 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         Objects.requireNonNull(name, "name");
         gate.lock();
         try {
-            return new PreparedTopLevel(resolveTopLevelClosure(name));
+            ProtosClosureValue closure = resolveTopLevelClosure(name);
+            ProtosHostExecutableClosure executable =
+                    processContext.prepareHostExecutableForRuntime(closure, entryActivation);
+            return new PreparedTopLevel(
+                    closure, executable, processContext.asValueForRuntime(executable));
         } finally {
             gate.unlock();
         }
@@ -286,9 +291,38 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
      */
     public final class PreparedTopLevel {
         private final ProtosClosureValue closure;
+        private final ProtosHostExecutableClosure hostExecutable;
+        private final Value executable;
 
-        private PreparedTopLevel(ProtosClosureValue closure) {
+        private PreparedTopLevel(
+                ProtosClosureValue closure,
+                ProtosHostExecutableClosure hostExecutable,
+                Value executable) {
             this.closure = closure;
+            this.hostExecutable = hostExecutable;
+            this.executable = executable;
+        }
+
+        /**
+         * PERF033-A canonical Polyglot executable for the captured Closure, created once at
+         * preparation and bound to this session's live Process Context.
+         *
+         * <p>{@code executable().execute()} is ordinary activation of exactly the captured
+         * Closure, entered through the framework host-to-guest boundary as a synchronous
+         * RootActor-local segment that creates no Task: its result is the exact Protos result
+         * value and a guest Error surfaces as a guest {@code PolyglotException}. Only zero
+         * arguments are accepted. Unlike {@link #invoke()}, it does not take the session gate;
+         * the embedder must not execute it concurrently from several threads, nor concurrently
+         * with other session operations, because those would be concurrent entries into the same
+         * RootActor. After the session is closed the Context is closed and execution fails; the
+         * Value does not keep the Process or Context alive.
+         */
+        public Value executable() {
+            return executable;
+        }
+
+        ProtosHostExecutableClosure hostExecutableForTesting() {
+            return hostExecutable;
         }
 
         /**
