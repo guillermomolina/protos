@@ -1,0 +1,211 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Style: import("std:text/Style")
+
+foregrounds: ["default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"]
+
+// An object whose reflective and equality behavior records any invocation.
+hostile: (parentValue, log) => {
+    probe: (parentValue) {
+        parent: () => {
+            log[0] = true
+            Style
+        }
+        slotNames: () => {
+            log[0] = true
+            ["equals", "==", "hash"]
+        }
+        hasSlot: (name) => {
+            log[0] = true
+            true
+        }
+        slotValue: (name) => {
+            log[0] = true
+            null
+        }
+        equals: (other) => {
+            log[0] = true
+            true
+        }
+        hash: () => {
+            log[0] = true
+            0
+        }
+    }
+    probe
+}
+
+tests: [
+    Test("style accepts exactly the nine foregrounds", () => {
+        foregrounds.each((name) => {
+            style: Style(name)
+            Assertions.require(Style.recognizes(style) === true)
+            Assertions.require(style.parent() === Style)
+        })
+        null
+    }),
+    Test("style rejects invalid foregrounds", () => {
+        invalid: ["", "Red", "RED", " red", "red ", "bright red", "brightRed", "grey", "gray", "none", "reset", "bold", "#ff0000", "1"]
+        invalid.each((name) => {
+            Assertions.signals(Error, () => {
+                Style(name)
+            })
+        })
+        Assertions.signals(Error, () => {
+            Style(null)
+        })
+        Assertions.signals(Error, () => {
+            Style(1)
+        })
+        Assertions.signals(Error, () => {
+            Style(Style("red"))
+        })
+        Assertions.signals(Error, () => {
+            Style()
+        })
+        Assertions.signals(Error, () => {
+            Style("red", "blue")
+        })
+    }),
+    Test("style construction answers fresh identities", () => {
+        a: Style("red")
+        b: Style("red")
+        Assertions.require((a === b) === false)
+        Assertions.require((a === a) === true)
+    }),
+    Test("style semantic equality and coherent hash", () => {
+        foregrounds.each((name) => {
+            a: Style(name)
+            b: Style(name)
+            Assertions.require((a == b) === true)
+            Assertions.require((b == a) === true)
+            Assertions.require((a != b) === false)
+            Assertions.require(Integer.recognizes(a.hash()))
+            Assertions.require(a.hash() == b.hash())
+            Assertions.require(a.hash() == a.hash())
+            foregrounds.each((other) => {
+                (other == name).ifFalse(() => {
+                    Assertions.require((a == Style(other)) === false)
+                    Assertions.require((a != Style(other)) === true)
+                })
+            })
+        })
+        Assertions.require((Style("red") == "red") === false)
+        Assertions.require((Style("default") == null) === false)
+        Assertions.require((Style("red") == Style) === false)
+    }),
+    Test("styles work as Map keys", () => {
+        m: Map()
+        m[Style("red")] = "red"
+        m[Style("blue")] = "blue"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Style("red")] == "red")
+        m[Style("red")] = "replaced"
+        Assertions.require(m.size() == 2)
+        Assertions.require(m[Style("red")] == "replaced")
+        Assertions.require(m.containsKey(Style("green")) == false)
+    }),
+    Test("styles are frozen", () => {
+        style: Style("red")
+        Assertions.signals(Error, () => {
+            style.extra = 1
+        })
+        Assertions.signals(Error, () => {
+            style.hash = () => 0
+        })
+        Assertions.signals(Error, () => {
+            style.removeSlot("hash")
+        })
+        Assertions.require(style == Style("red"))
+    }),
+    Test("style state is opaque", () => {
+        style: Style("red")
+        Assertions.require(style.slotNames().size() == 3)
+        Assertions.require(style.hasSlot("equals"))
+        Assertions.require(style.hasSlot("=="))
+        Assertions.require(style.hasSlot("hash"))
+        ["foreground", "properties", "effects", "attributes", "toMap", "parts", "state"].each((name) => {
+            Assertions.require(style.hasSlot(name) === false)
+            Assertions.require(Style.hasSlot(name) === false)
+        })
+        ["RED", "red", "DEFAULT", "default", "parse", "_styleFacility"].each((name) => {
+            Assertions.require(Style.hasSlot(name) === false)
+        })
+        null
+    }),
+    Test("style recognition rejects other values", () => {
+        Assertions.require(Style.recognizes(null) === false)
+        Assertions.require(Style.recognizes(true) === false)
+        Assertions.require(Style.recognizes(1) === false)
+        Assertions.require(Style.recognizes("red") === false)
+        Assertions.require(Style.recognizes([]) === false)
+        Assertions.require(Style.recognizes(Map()) === false)
+        Assertions.require(Style.recognizes({}) === false)
+        Assertions.require(Style.recognizes(Style) === false)
+        Assertions.require(Style.recognizes(Error()) === false)
+        StyledText: import("std:text/StyledText")
+        Assertions.require(Style.recognizes(StyledText("red")) === false)
+    }),
+    Test("style recognition rejects lookalikes and forgeries", () => {
+        behavior: {
+            equals: (other) => {
+                true
+            }
+
+            hash: () => {
+                0
+            }
+        }
+
+        unfrozen: (Style) {
+            ...behavior.alias("equals", "==")
+        }
+        Assertions.require(Style.recognizes(unfrozen) === false)
+
+        frozen: (Style) {
+            ...behavior.alias("equals", "==")
+        }
+        frozen.freeze()
+        Assertions.require(Style.recognizes(frozen) === false)
+        Assertions.require((Style("red") == frozen) === false)
+
+        malformed: (Style) {
+            foreground: "red"
+            ...behavior.alias("equals", "==")
+        }
+        malformed.freeze()
+        Assertions.require(Style.recognizes(malformed) === false)
+
+        // A child of a genuine style is not a style.
+        child: (Style("red")) {}
+        child.freeze()
+        Assertions.require(Style.recognizes(child) === false)
+        Assertions.require((Style("red") == child) === false)
+    }),
+    Test("style recognition never invokes candidate behavior", () => {
+        log: [false]
+        probe: hostile(Style, log)
+        Assertions.require(Style.recognizes(probe) === false)
+        probe.freeze()
+        Assertions.require(Style.recognizes(probe) === false)
+        Assertions.require((Style("red") == probe) === false)
+        Assertions.require(log[0] === false)
+    })
+]

@@ -472,7 +472,7 @@ public final class ProtosCoreBootstrap {
 
     /**
      * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187,
-     * LIB015-B1, LIB015-C1).
+     * LIB015-B1, LIB015-C1, LIB020-A).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -482,37 +482,56 @@ public final class ProtosCoreBootstrap {
             ProtosObjectValue ipEndpointPrototype,
             ProtosObjectValue bufferedReaderFactory,
             ProtosObjectValue bufferedWriterFactory) {
-        return Map.of(
-                new ProtosModuleKey("std:network/IpAddresses"),
-                Map.of("IpAddress", ipAddressPrototype),
-                new ProtosModuleKey("std:network/IpEndpoints"),
-                Map.of("IpEndpoint", ipEndpointPrototype),
-                new ProtosModuleKey("std:io/BufferedReader"),
-                Map.of("BufferedReader", bufferedReaderFactory),
-                new ProtosModuleKey("std:io/BufferedWriter"),
-                Map.of("BufferedWriter", bufferedWriterFactory),
-                ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
-                Map.of(
-                        ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT,
-                        ProtosCommandLineArrayConstructionFacility.createFactory()),
-                ProtosRegexUnicodeFacility.MODULE_KEY,
-                Map.of(
-                        ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT,
-                        ProtosRegexUnicodeFacility.createFacility(),
-                        ProtosRegexSemanticTransferFamily.BOOTSTRAP_SLOT,
-                        REGEX_FAMILY.createFacility()),
-                ProtosLoggingFacility.EVENT_MODULE_KEY,
-                Map.of(
-                        ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT,
-                        ProtosLoggingFacility.createEventFacility()),
-                ProtosLoggingFacility.TEXT_MODULE_KEY,
-                Map.of(
-                        ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT,
-                        ProtosLoggingFacility.createTextFacility()),
-                ProtosLoggingFacility.JSON_MODULE_KEY,
-                Map.of(
-                        ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT,
-                        ProtosLoggingFacility.createTextFacility()));
+        return Map.ofEntries(
+                Map.entry(
+                        new ProtosModuleKey("std:network/IpAddresses"),
+                        Map.of("IpAddress", ipAddressPrototype)),
+                Map.entry(
+                        new ProtosModuleKey("std:network/IpEndpoints"),
+                        Map.of("IpEndpoint", ipEndpointPrototype)),
+                Map.entry(
+                        new ProtosModuleKey("std:io/BufferedReader"),
+                        Map.of("BufferedReader", bufferedReaderFactory)),
+                Map.entry(
+                        new ProtosModuleKey("std:io/BufferedWriter"),
+                        Map.of("BufferedWriter", bufferedWriterFactory)),
+                Map.entry(
+                        ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosCommandLineArrayConstructionFacility.BOOTSTRAP_SLOT,
+                                ProtosCommandLineArrayConstructionFacility.createFactory())),
+                Map.entry(
+                        ProtosRegexUnicodeFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosRegexUnicodeFacility.BOOTSTRAP_SLOT,
+                                ProtosRegexUnicodeFacility.createFacility(),
+                                ProtosRegexSemanticTransferFamily.BOOTSTRAP_SLOT,
+                                REGEX_FAMILY.createFacility())),
+                Map.entry(
+                        ProtosLoggingFacility.EVENT_MODULE_KEY,
+                        Map.of(
+                                ProtosLoggingFacility.EVENT_BOOTSTRAP_SLOT,
+                                ProtosLoggingFacility.createEventFacility())),
+                Map.entry(
+                        ProtosLoggingFacility.TEXT_MODULE_KEY,
+                        Map.of(
+                                ProtosLoggingFacility.TEXT_BOOTSTRAP_SLOT,
+                                ProtosLoggingFacility.createTextFacility())),
+                Map.entry(
+                        ProtosLoggingFacility.JSON_MODULE_KEY,
+                        Map.of(
+                                ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT,
+                                ProtosLoggingFacility.createTextFacility())),
+                Map.entry(
+                        ProtosSealedFamilyFacility.STYLE_MODULE_KEY,
+                        Map.of(
+                                ProtosSealedFamilyFacility.STYLE_BOOTSTRAP_SLOT,
+                                ProtosSealedFamilyFacility.createFacility())),
+                Map.entry(
+                        ProtosSealedFamilyFacility.STYLED_TEXT_MODULE_KEY,
+                        Map.of(
+                                ProtosSealedFamilyFacility.STYLED_TEXT_BOOTSTRAP_SLOT,
+                                ProtosSealedFamilyFacility.createFacility())));
     }
 
 

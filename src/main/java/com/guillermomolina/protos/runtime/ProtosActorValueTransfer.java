@@ -253,7 +253,9 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosFilesystemValue
                     || value instanceof ProtosNetworkCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
-                    || value instanceof ProtosTcpListenerValue) {
+                    || value instanceof ProtosTcpListenerValue
+                    // LIB020-A sealed families are not portable; copying would drop the family.
+                    || value instanceof ProtosSealedValue) {
                 throw nonTransferable();
             }
 

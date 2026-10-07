@@ -1,0 +1,127 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Immutable styled text. A styled text is a frozen value that logically
+//! holds a flat sequence of text runs, each run a String with a
+//! `std:text/Style`. It carries no rendering, terminal, or encoding behavior
+//! of its own, and its runs are opaque: no slot, method, or other public
+//! operation exposes them.
+//!
+//! Plain text has the `"default"` style. Empty text keeps no style: every
+//! logically empty styled text, styled or not, has the same content.
+//!
+//! A styled text has no semantic equality or hash: `==` and `hash` are those
+//! of ordinary object identity.
+//!
+//! Only values constructed by this module are styled texts. `recognizes`
+//! never invokes behavior of the candidate, so an object that merely has
+//! similar slots, parent, or shape is not a styled text.
+
+/// Answers a fresh frozen styled text holding `text`, which must be a String.
+/// With one argument the text is plain; with two, `style` must be a style
+/// recognized by `std:text/Style`. Any other argument signals an Error; no
+/// argument is converted, and `null` is not a style.
+call: ((facility) => (text, ...rest) => {
+    StyledText: import("std:text/StyledText")
+    Style: import("std:text/Style")
+
+    (String.recognizes(text) && (rest.size() <= 1)).ifFalse(() => {
+        Error().signal()
+    })
+    style: null
+    (rest.size() == 0).ifTrueIfFalse(() => {
+        style = Style("default")
+    }, () => {
+        style = rest[0]
+    })
+    Style.recognizes(style).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Runs are runtime-private family state, never slots; empty runs are
+    // dropped.
+    runs: []
+    (text.size() > 0).ifTrue(() => {
+        run: [text, style]
+        run.freeze()
+        runs = [run]
+    })
+    runs.freeze()
+
+    template: (StyledText) {}
+    facility.seal(template, runs)
+})(_styledTextFacility)
+
+/// Answers a fresh frozen styled text holding the content of every fragment,
+/// in argument order. Each fragment must be a String, which contributes plain
+/// text, or a styled text recognized by this module; any other fragment
+/// signals an Error. The result is always a styled text, including for no
+/// fragments or a single fragment.
+concat: ((facility) => (...fragments) => {
+    StyledText: import("std:text/StyledText")
+    Style: import("std:text/Style")
+
+    // Empty runs are dropped and adjacent runs with equal styles coalesce.
+    runs: []
+    append: (text, style) => {
+        (text.size() > 0).ifTrue(() => {
+            merged: false
+            (runs.size() > 0).ifTrue(() => {
+                last: runs[runs.size() - 1]
+                (last[1] == style).ifTrue(() => {
+                    run: [last[0].concat(text), style]
+                    run.freeze()
+                    runs[runs.size() - 1] = run
+                    merged = true
+                })
+            })
+            merged.ifFalse(() => {
+                run: [text, style]
+                run.freeze()
+                runs = Array(...runs, run)
+            })
+        })
+    }
+
+    fragments.each((fragment) => {
+        String.recognizes(fragment).ifTrueIfFalse(() => {
+            append(fragment, Style("default"))
+        }, () => {
+            StyledText.recognizes(fragment).ifFalse(() => {
+                Error().signal()
+            })
+            facility.state(fragment).each((run) => {
+                append(run[0], run[1])
+            })
+        })
+    })
+
+    result: Array(...runs)
+    result.freeze()
+    template: (StyledText) {}
+    facility.seal(template, result)
+})(_styledTextFacility)
+
+/// Answers `true` exactly when `value` is a styled text constructed by this
+/// module. Answers `false` for any other value, including this module and
+/// objects with the same slots or parent. The candidate is neither copied,
+/// converted, nor sent any message.
+recognizes: ((facility) => (value) => {
+    facility.recognizes(value)
+})(_styledTextFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_styledTextFacility")

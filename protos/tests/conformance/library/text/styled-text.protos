@@ -1,0 +1,230 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Style: import("std:text/Style")
+StyledText: import("std:text/StyledText")
+
+// Names that would expose the internal run representation or add composition
+// surface outside the ratified contract.
+hiddenNames: ["runs", "spans", "fragments", "segments", "children", "parts", "text", "style", "styles", "size", "toString", "toPlain", "render", "toAnsi"]
+
+// An object whose reflective and equality behavior records any invocation.
+hostile: (parentValue, log) => {
+    probe: (parentValue) {
+        parent: () => {
+            log[0] = true
+            StyledText
+        }
+        slotNames: () => {
+            log[0] = true
+            []
+        }
+        hasSlot: (name) => {
+            log[0] = true
+            false
+        }
+        slotValue: (name) => {
+            log[0] = true
+            null
+        }
+        equals: (other) => {
+            log[0] = true
+            true
+        }
+        hash: () => {
+            log[0] = true
+            0
+        }
+    }
+    probe
+}
+
+requireStyledText: (value) => {
+    Assertions.require(StyledText.recognizes(value) === true)
+    Assertions.require(value.parent() === StyledText)
+    true
+}
+
+tests: [
+    Test("plain and styled construction", () => {
+        requireStyledText(StyledText("plain"))
+        requireStyledText(StyledText("red", Style("red")))
+        requireStyledText(StyledText("default", Style("default")))
+        requireStyledText(StyledText(""))
+        requireStyledText(StyledText("", Style("red")))
+    }),
+    Test("construction rejects invalid text and style", () => {
+        Assertions.signals(Error, () => {
+            StyledText()
+        })
+        Assertions.signals(Error, () => {
+            StyledText(null)
+        })
+        Assertions.signals(Error, () => {
+            StyledText(1)
+        })
+        Assertions.signals(Error, () => {
+            StyledText(Style("red"))
+        })
+        Assertions.signals(Error, () => {
+            StyledText(StyledText("nested"))
+        })
+        Assertions.signals(Error, () => {
+            StyledText(null, Style("red"))
+        })
+        Assertions.signals(Error, () => {
+            StyledText("text", null)
+        })
+        Assertions.signals(Error, () => {
+            StyledText("text", "red")
+        })
+        Assertions.signals(Error, () => {
+            StyledText("text", StyledText("red"))
+        })
+        Assertions.signals(Error, () => {
+            StyledText("text", Style("red"), Style("blue"))
+        })
+    }),
+    Test("concat always answers styled text", () => {
+        existing: StyledText("b", Style("red"))
+        requireStyledText(StyledText.concat())
+        requireStyledText(StyledText.concat(""))
+        requireStyledText(StyledText.concat("plain"))
+        requireStyledText(StyledText.concat(existing))
+        requireStyledText(StyledText.concat("a", existing, "c"))
+        requireStyledText(StyledText.concat("", StyledText("", Style("blue")), ""))
+        requireStyledText(StyledText.concat(
+            "[phase] ",
+            StyledText("FAIL", Style("red")),
+            " path/to/test",
+            StyledText("ok", Style("green"))
+        ))
+        Assertions.require((StyledText.concat(existing) === existing) === false)
+    }),
+    Test("concat rejects invalid fragments", () => {
+        invalid: [null, true, 1, 1.5, Style("red"), [], ["a"], Map(), {}, StyledText]
+        invalid.each((fragment) => {
+            Assertions.signals(Error, () => {
+                StyledText.concat(fragment)
+            })
+            Assertions.signals(Error, () => {
+                StyledText.concat("a", StyledText("b"), fragment)
+            })
+        })
+        null
+    }),
+    Test("styled text has ordinary identity equality only", () => {
+        a: StyledText("same", Style("red"))
+        b: StyledText("same", Style("red"))
+        Assertions.require((a == a) === true)
+        Assertions.require((a == b) === false)
+        Assertions.require((a != b) === true)
+        Assertions.require((a === b) === false)
+        Assertions.require((StyledText("") == StyledText("")) === false)
+        Assertions.require((StyledText.concat() == StyledText.concat()) === false)
+        Assertions.require((StyledText.concat("x") == StyledText("x")) === false)
+        Assertions.require((a == "same") === false)
+        Assertions.require(a.hash() == a.hash())
+
+        m: Map()
+        m[a] = 1
+        Assertions.require(m.containsKey(a))
+        Assertions.require(m.containsKey(b) == false)
+    }),
+    Test("styled text is frozen and exposes no state", () => {
+        values: [
+            StyledText("plain"),
+            StyledText("red", Style("red")),
+            StyledText("", Style("red")),
+            StyledText.concat(),
+            StyledText.concat("a", StyledText("b", Style("blue")), "c")
+        ]
+        values.each((value) => {
+            Assertions.require(value.slotNames().size() == 0)
+            Assertions.signals(Error, () => {
+                value.runs = []
+            })
+            Assertions.signals(Error, () => {
+                value.extra = 1
+            })
+            hiddenNames.each((name) => {
+                Assertions.require(value.hasSlot(name) === false)
+            })
+        })
+        null
+    }),
+    Test("module exposes only construction, concat, and recognition", () => {
+        Assertions.require(StyledText.hasSlot("call"))
+        Assertions.require(StyledText.hasSlot("concat"))
+        Assertions.require(StyledText.hasSlot("recognizes"))
+        Assertions.require(StyledText.hasSlot("_styledTextFacility") === false)
+        Array(...hiddenNames, "+", "append", "appendAll", "join", "Builder", "Span", "Fragment", "EMPTY", "empty").each((name) => {
+            Assertions.require(StyledText.hasSlot(name) === false)
+        })
+        null
+    }),
+    Test("styled text recognition rejects other values", () => {
+        Assertions.require(StyledText.recognizes(null) === false)
+        Assertions.require(StyledText.recognizes(1) === false)
+        Assertions.require(StyledText.recognizes("text") === false)
+        Assertions.require(StyledText.recognizes([]) === false)
+        Assertions.require(StyledText.recognizes(Map()) === false)
+        Assertions.require(StyledText.recognizes({}) === false)
+        Assertions.require(StyledText.recognizes(StyledText) === false)
+        Assertions.require(StyledText.recognizes(Style("red")) === false)
+    }),
+    Test("styled text recognition rejects lookalikes and forgeries", () => {
+        unfrozen: (StyledText) {}
+        Assertions.require(StyledText.recognizes(unfrozen) === false)
+
+        frozen: (StyledText) {}
+        frozen.freeze()
+        Assertions.require(StyledText.recognizes(frozen) === false)
+        Assertions.signals(Error, () => {
+            StyledText.concat(frozen)
+        })
+
+        malformed: (StyledText) {
+            runs: [["text", Style("red")]]
+        }
+        malformed.freeze()
+        Assertions.require(StyledText.recognizes(malformed) === false)
+        Assertions.signals(Error, () => {
+            StyledText.concat(malformed)
+        })
+
+        child: (StyledText("text")) {}
+        child.freeze()
+        Assertions.require(StyledText.recognizes(child) === false)
+    }),
+    Test("styled text recognition never invokes candidate behavior", () => {
+        log: [false]
+        probe: hostile(StyledText, log)
+        Assertions.require(StyledText.recognizes(probe) === false)
+        probe.freeze()
+        Assertions.require(StyledText.recognizes(probe) === false)
+        Assertions.signals(Error, () => {
+            StyledText.concat(probe)
+        })
+        Assertions.signals(Error, () => {
+            StyledText("text", probe)
+        })
+        Assertions.require(log[0] === false)
+    })
+]

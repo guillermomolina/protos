@@ -7,6 +7,43 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.267-SNAPSHOT
+
+- `LIB020-A` adds the `std:text/Style` and `std:text/StyledText` public
+  semantic-value surface ratified by D190/D191. There is no specification
+  change; ANSI rendering, `ColorMode`, terminal detection and `TextWriter`
+  integration are not part of this slice.
+  - `Style(foreground)` answers a fresh frozen style for exactly one of
+    `"default"`, `"black"`, `"red"`, `"green"`, `"yellow"`, `"blue"`,
+    `"magenta"`, `"cyan"` or `"white"`; any other argument signals an Error
+    without conversion, case folding or `null` defaulting. Styles have
+    semantic `==` with a coherent `hash` and ordinary `===` identity. Their
+    state is opaque.
+  - `StyledText(text)`, `StyledText(text, style)` and
+    `StyledText.concat(...fragments)` (Strings or styled texts) answer fresh
+    frozen styled texts that logically hold an opaque flat sequence of runs.
+    `concat` always answers a styled text; empty text keeps no style. Styled
+    texts keep ordinary identity equality and hash only.
+  - `Style.recognizes` and `StyledText.recognizes` are safe exact-family
+    recognition: no candidate behavior (`parent`, `slotNames`, `hasSlot`,
+    `slotValue`, `==`, `hash`, ...) is ever invoked, and lookalike, malformed
+    and unfrozen forgeries are rejected.
+  - New internal runtime support: `ProtosSealedValue`, an ordinary frozen
+    object minted only by a sealing family that keeps family-private state
+    outside Protos-visible slots, and `ProtosSealedFamilyFacility`, one
+    frozen per-module facility (`seal`, `recognizes`, `state`) provisioned as
+    a standard initial member of each module and removed from its surface.
+    The standard module member table now uses `Map.ofEntries`.
+  - Sealed values are not semantically portable: Actor transfer signals
+    `NonTransferableValue` and isolated-parallel transfer `NonParallelValue`
+    instead of copying them into ordinary objects that would lose their
+    family. No PLAT051 transfer family is registered.
+  - Coverage: `protos/tests/conformance/library/text/style.protos` and
+    `styled-text.protos` (including hostile candidates), and
+    `ProtosSealedFamilyFacilityTest` (run content, module surface, both
+    transfer boundaries and an ordinary-object control). The audited native
+    boundary inventory registers the new facility as a non-core provider.
+
 ## 0.3.266-SNAPSHOT
 
 - `TEST009-AJ` (guillermomolina/protos#795) keeps the real, reachable
