@@ -1,0 +1,359 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+Logger: import("std:logging/Logger")
+TextFormatter: import("std:logging/TextFormatter")
+TextSink: import("std:logging/TextSink")
+ColoredFormatter: import("std:logging/ColoredFormatter")
+ColorMode: import("std:text/ColorMode")
+Instant: import("std:datetime/Instant")
+
+Failure: Error {}
+
+esc: "\u{1B}"
+sgr: (code) => {
+    esc.concat("[", code, "m")
+}
+reset: sgr("0")
+
+colored: () => {
+    ColoredFormatter(ColorMode.ALWAYS, false)
+}
+plain: () => {
+    ColoredFormatter(ColorMode.NEVER, true)
+}
+
+// 2026-10-07T03:15:22.123456789Z
+stamp: Instant(1791342922123456789)
+
+// Number of real U+001B scalars in `text`.
+escapes: (text) => {
+    count: 0
+    index: 0
+    (() => index < text.size()).whileTrue(() => {
+        (text[index] == esc).ifTrue(() => {
+            count = count + 1
+        })
+        index = index + 1
+    })
+    count
+}
+
+// True when `sequence` occurs in `text` at scalar `start`.
+occursAt: (text, start, sequence) => {
+    matched: (start + sequence.size()) <= text.size()
+    offset: 0
+    (() => matched && (offset < sequence.size())).whileTrue(() => {
+        matched = text[start + offset] == sequence[offset]
+        offset = offset + 1
+    })
+    matched
+}
+
+// `text` without the two sequences this suite knows were generated: the SGR
+// of `code` and the reset. Anything else, including other escapes, is kept.
+withoutGenerated: (text, code) => {
+    known: [sgr(code), reset]
+    result: ""
+    index: 0
+    (() => index < text.size()).whileTrue(() => {
+        skipped: false
+        known.each((sequence) => {
+            ((skipped == false) && occursAt(text, index, sequence)).ifTrue(() => {
+                index = index + sequence.size()
+                skipped = true
+            })
+        })
+        skipped.ifFalse(() => {
+            result = result + text[index]
+            index = index + 1
+        })
+    })
+    result
+}
+
+// Events whose canonical lines exercise the TextFormatter grammar.
+corpus: () => {
+    infinity: 1.0 / 0.0
+    forward: %{ "z": 1; "a": 2; "\u{E9}": 3; "aa": 4 }
+    backward: %{ "aa": 4; "\u{E9}": 3; "a": 2; "z": 1 }
+    [
+        LogEvent(Level.INFO, "started", null, null),
+        LogEvent(Level.WARN, "retry", %{ "attempt": 2 }, null, stamp),
+        LogEvent(Level.DEBUG, "tick", null, null, Instant(1)),
+        LogEvent(Level.TRACE, "say \"hi\" C:\\dir\n\t\u{0}\u{7F}\u{85}\u{2028}", null, null, Instant(-1)),
+        LogEvent(Level.ERROR, "caf\u{E9} e\u{301} \u{1F600}", %{ "\u{1B}k": "\u{1B}[2J" }, Failure(), stamp),
+        LogEvent(Level.INFO, "nested", %{ "n": [[1, [2]], %{ "b": %{ "d": 1; "c": [] }; "a": [null, true] }] }, null),
+        LogEvent(Level.WARN, "forward", forward, null),
+        LogEvent(Level.WARN, "backward", backward, null),
+        LogEvent(Level.DEBUG, "ints", %{ "i": [0, -42, 123456789012345678901234567890] }, null),
+        LogEvent(Level.TRACE, "floats", %{ "f": [0.0, (0.0 - 1.0) * 0.0, infinity, 0.0 - infinity, infinity - infinity] }, null),
+        LogEvent(Level.ERROR, "edges", %{ "f": [0.1 + 0.2, 1e21, 1e20, 0.000001, 1e-7, 5e-324, 1.7976931348623157e308] }, Failure()),
+        LogEvent(Level.ERROR, "failed", %{ "error": "domain-value" }, Failure(), stamp)
+    ]
+}
+
+codeOf: (level) => {
+    codes: %{ "TRACE": "34"; "DEBUG": "36"; "WARN": "33"; "ERROR": "31" }
+    codes[level]
+}
+
+tests: [
+    Test("construction answers a fresh frozen formatter exposing only format", () => {
+        first: colored()
+        second: colored()
+        Assertions.require(first !== second)
+        Assertions.require(first.hasSlot("format"))
+        Assertions.require(first.slotNames().size() == 1)
+        ["mode", "autoEnabled", "stylingEnabled", "styles", "palette", "writer", "sink", "theme"].each((name) => {
+            Assertions.require(first.hasSlot(name) == false)
+        })
+        Assertions.signals(Error, () => {
+            first.format = null
+        })
+        Assertions.require(String.recognizes(first.format(LogEvent(Level.WARN, "m", null, null))))
+        null
+    }),
+    Test("the module publishes only its constructor", () => {
+        Assertions.require(ColoredFormatter.hasSlot("call"))
+        ["format", "palette", "ColorMode", "TextFormatter", "ANSI", "Style", "StyledText"].each((name) => {
+            Assertions.require(ColoredFormatter.hasSlot(name) == false)
+        })
+        null
+    }),
+    Test("every canonical mode with a Boolean constructs", () => {
+        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER].each((mode) => {
+            Assertions.require(ColoredFormatter(mode, true).hasSlot("format"))
+            Assertions.require(ColoredFormatter(mode, false).hasSlot("format"))
+        })
+        null
+    }),
+    Test("an invalid mode signals Error", () => {
+        [null, "auto", "Always", "", "ON", true, 1, ColorMode].each((mode) => {
+            Assertions.signals(Error, () => {
+                ColoredFormatter(mode, true)
+            })
+        })
+        null
+    }),
+    Test("autoEnabled must be exactly a Boolean for every mode", () => {
+        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER].each((mode) => {
+            [null, 0, 1, "true", "false", []].each((autoEnabled) => {
+                Assertions.signals(Error, () => {
+                    ColoredFormatter(mode, autoEnabled)
+                })
+            })
+        })
+        null
+    }),
+    Test("styling follows the ColorMode resolution matrix", () => {
+        event: LogEvent(Level.ERROR, "m", null, null)
+        styledLine: sgr("31").concat("ERROR", reset, " \"m\"")
+        plainLine: "ERROR \"m\""
+        Assertions.require(ColoredFormatter(ColorMode.AUTO, true).format(event) == styledLine)
+        Assertions.require(ColoredFormatter(ColorMode.AUTO, false).format(event) == plainLine)
+        Assertions.require(ColoredFormatter(ColorMode.ALWAYS, true).format(event) == styledLine)
+        Assertions.require(ColoredFormatter(ColorMode.ALWAYS, false).format(event) == styledLine)
+        Assertions.require(ColoredFormatter(ColorMode.NEVER, true).format(event) == plainLine)
+        Assertions.require(ColoredFormatter(ColorMode.NEVER, false).format(event) == plainLine)
+    }),
+    Test("the fixed palette colors each level", () => {
+        formatter: colored()
+        line: (level) => {
+            formatter.format(LogEvent(level, "m", null, null))
+        }
+        Assertions.require(line(Level.TRACE) == sgr("34").concat("TRACE", reset, " \"m\""))
+        Assertions.require(line(Level.DEBUG) == sgr("36").concat("DEBUG", reset, " \"m\""))
+        Assertions.require(line(Level.INFO) == "INFO \"m\"")
+        Assertions.require(line(Level.WARN) == sgr("33").concat("WARN", reset, " \"m\""))
+        Assertions.require(line(Level.ERROR) == sgr("31").concat("ERROR", reset, " \"m\""))
+    }),
+    Test("only the LEVEL token is styled", () => {
+        formatter: colored()
+        Assertions.require(
+            formatter.format(LogEvent(Level.WARN, "retry", %{ "attempt": 2 }, null, stamp)) ==
+                "2026-10-07T03:15:22.123456789Z ".concat(sgr("33"), "WARN", reset, " \"retry\" {\"attempt\"=2}")
+        )
+        Assertions.require(
+            formatter.format(LogEvent(Level.ERROR, "request failed", %{ "requestId": "r-7" }, Failure(), stamp)) ==
+                "2026-10-07T03:15:22.123456789Z ".concat(sgr("31"), "ERROR", reset,
+                    " \"request failed\" {\"requestId\"=\"r-7\"} error=true")
+        )
+        Assertions.require(
+            formatter.format(LogEvent(Level.DEBUG, "tick", null, null, Instant(0))) ==
+                "1970-01-01T00:00:00Z ".concat(sgr("36"), "DEBUG", reset, " \"tick\"")
+        )
+        Assertions.require(
+            formatter.format(LogEvent(Level.TRACE, "t", %{ "k": [1, "TRACE"] }, Failure())) ==
+                sgr("34").concat("TRACE", reset, " \"t\" {\"k\"=[1, \"TRACE\"]} error=true")
+        )
+    }),
+    Test("disabled styling answers exactly the TextFormatter line", () => {
+        formatters: [
+            ColoredFormatter(ColorMode.AUTO, false),
+            ColoredFormatter(ColorMode.NEVER, true),
+            ColoredFormatter(ColorMode.NEVER, false)
+        ]
+        corpus().each((event) => {
+            expected: TextFormatter.format(event)
+            formatters.each((formatter) => {
+                Assertions.require(formatter.format(event) == expected)
+            })
+        })
+        null
+    }),
+    Test("enabled styling keeps the TextFormatter line outside generated sequences", () => {
+        formatter: colored()
+        corpus().each((event) => {
+            expected: TextFormatter.format(event)
+            line: formatter.format(event)
+            (event.level == Level.INFO).ifTrueIfFalse(() => {
+                Assertions.require(line == expected)
+            }, () => {
+                Assertions.require(line != expected)
+                Assertions.require(withoutGenerated(line, codeOf(event.level)) == expected)
+                Assertions.require(escapes(line) == 2)
+            })
+        })
+        null
+    }),
+    Test("styled INFO generates no escape sequence", () => {
+        formatter: ColoredFormatter(ColorMode.AUTO, true)
+        events: [
+            LogEvent(Level.INFO, "started", null, null),
+            LogEvent(Level.INFO, "stamped", %{ "n": 1 }, Failure(), stamp)
+        ]
+        events.each((event) => {
+            line: formatter.format(event)
+            Assertions.require(line == TextFormatter.format(event))
+            Assertions.require(escapes(line) == 0)
+        })
+        null
+    }),
+    Test("escape characters in event text never reach the output", () => {
+        hostile: "\u{1B}[2J\u{1B}[31mred\u{1B}[0m"
+        fields: Map()
+        fields[hostile] = [hostile]
+        event: LogEvent(Level.WARN, hostile, fields, null, stamp)
+        line: colored().format(event)
+        Assertions.require(escapes(TextFormatter.format(event)) == 0)
+        Assertions.require(escapes(line) == 2)
+        Assertions.require(
+            line == "2026-10-07T03:15:22.123456789Z ".concat(sgr("33"), "WARN", reset,
+                " \"\\u{1B}[2J\\u{1B}[31mred\\u{1B}[0m\"",
+                " {\"\\u{1B}[2J\\u{1B}[31mred\\u{1B}[0m\"=[\"\\u{1B}[2J\\u{1B}[31mred\\u{1B}[0m\"]}")
+        )
+        Assertions.require(escapes(plain().format(event)) == 0)
+    }),
+    Test("TextFormatter failures are signalled unchanged", () => {
+        noFields: Map()
+        noFields.freeze()
+        lookalike: {
+            level: Level.WARN
+            message: "m"
+            fields: noFields
+            error: null
+            timestamp: null
+        }
+        lookalike.freeze()
+        day: 86400000000000
+        late: LogEvent(Level.WARN, "late", null, null, Instant(2932897 * day))
+        early: LogEvent(Level.ERROR, "early", null, null, Instant(-4371587 * day - 1))
+        [colored(), plain()].each((formatter) => {
+            [lookalike, null, "WARN \"m\"", LogEvent, late, early].each((candidate) => {
+                Assertions.signals(Error, () => {
+                    formatter.format(candidate)
+                })
+            })
+        })
+        null
+    }),
+    Test("a text sink writes one colored line per event to a borrowed writer", () => {
+        state: {
+            lines: []
+            flushes: 0
+            closes: 0
+        }
+        writer: {
+            writeLine: (text) => {
+                (() => {
+                    // The write completes only after further asynchronous work.
+                    gate: (() => { text }).future()
+                    state.lines = Array(...state.lines, gate.value())
+                    writer
+                }).future()
+            }
+            flush: () => {
+                state.flushes = state.flushes + 1
+                (() => { writer }).future()
+            }
+            close: () => {
+                state.closes = state.closes + 1
+                (() => { writer }).future()
+            }
+        }
+        sink: TextSink(colored(), writer)
+        event: LogEvent(Level.WARN, "retry", %{ "attempt": 2 }, null)
+        Assertions.require(sink.emit(event) === null)
+        Assertions.require(state.lines.size() == 1)
+        Assertions.require(state.lines[0] == sgr("33").concat("WARN", reset, " \"retry\" {\"attempt\"=2}"))
+        Assertions.require(state.flushes == 0)
+        Assertions.require(state.closes == 0)
+    }),
+    Test("a real TextWriter frames colored lines like plain ones", () => {
+        state: { text: "" }
+        target: {
+            write: (bytes) => {
+                state.text = state.text + Encoding.UTF8.decode(bytes)
+                (() => { target }).future()
+            }
+        }
+        writer: TextWriter(target, Encoding.UTF8)
+        logger: Logger(Level.INFO, TextSink(colored(), writer))
+        logger.info("first")
+        logger.error("last", null, Failure())
+        Assertions.require(
+            state.text == "INFO \"first\"\n".concat(sgr("31"), "ERROR", reset, " \"last\" error=true\n")
+        )
+    }),
+    Test("a Logger contains failures through a colored text sink", () => {
+        failure: Failure()
+        state: { attempts: 0 }
+        writer: {
+            writeLine: (text) => {
+                state.attempts = state.attempts + 1
+                (() => { failure.signal() }).future()
+            }
+        }
+        sink: TextSink(colored(), writer)
+        caught: Error.handle(() => {
+            sink.emit(LogEvent(Level.WARN, "m", null, null))
+            null
+        }, (signalled) => {
+            signalled
+        })
+        Assertions.require(caught === failure)
+
+        logger: Logger(Level.INFO, sink)
+        Assertions.require(logger.warn("first") === null)
+        Assertions.require(logger.error("second", %{ "k": 1 }, Error()) === null)
+        Assertions.require(state.attempts == 3)
+    })
+]
+tests.freeze()

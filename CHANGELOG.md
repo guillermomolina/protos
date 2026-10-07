@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.271-SNAPSHOT
+
+- `LIB015-E1` adds `std:logging/ColoredFormatter`, a human-readable formatter
+  that colors only the LEVEL token of the `std:logging/TextFormatter` line.
+  There is no specification change and no Java, runtime, or bootstrap change;
+  `Level`, `LogEvent`, `Logger`, `TextFormatter`, `TextSink`, `MemorySink`,
+  `JsonFormatter`, and the `std:text` modules are unchanged.
+  - `ColoredFormatter(mode, autoEnabled)` resolves
+    `std:text/ColorMode.resolve(mode, autoEnabled)` once at construction,
+    propagating its Error for invalid arguments, and answers a fresh frozen
+    formatter whose only slot is `format`.
+  - `format(event)` calls `TextFormatter.format(event)` exactly once, which
+    stays the only owner of the human line grammar and signals its Errors
+    unchanged. With styling disabled the result is exactly that line; with
+    styling enabled only the LEVEL token is wrapped by `std:text/ANSI`
+    foreground sequences, so removing them yields exactly that line.
+  - The palette is fixed: TRACE blue, DEBUG cyan, INFO default (no escape
+    sequence), WARN yellow, ERROR red. No environment, terminal, or Process
+    is consulted, and composition reuses `TextSink(formatter, writer)`.
+
 ## 0.3.270-SNAPSHOT
 
 - `TEST009-AL` removes the redundant `List.copyOf` re-copy in the prepared

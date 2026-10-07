@@ -1,0 +1,98 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Human-readable log lines with a colored level. A colored formatter decorates
+//! the line of `std:logging/TextFormatter`, which remains the only definition
+//! of the human line grammar: the formatter adds `std:text/ANSI` foreground
+//! sequences around the LEVEL token and changes nothing else.
+//!
+//! The fixed palette is TRACE blue, DEBUG cyan, INFO default, WARN yellow, and
+//! ERROR red. INFO therefore never generates an escape sequence. Timestamp,
+//! message, fields, and the ` error=true` marker are never styled, and control
+//! characters in event text stay escaped by `TextFormatter`, so the only real
+//! escape characters in a colored line are the generated sequences.
+//!
+//! Whether styling is enabled is decided by the caller. The formatter consults
+//! no environment, terminal, Process, or standard stream; a caller whose
+//! writer capability changes constructs another formatter. Composition reuses
+//! `std:logging/TextSink(formatter, writer)`.
+
+/// Answers a fresh frozen formatter that styles according to
+/// `std:text/ColorMode.resolve(mode, autoEnabled)`, resolved once now. Both
+/// arguments are validated as `resolve` validates them, signalling its Error.
+///
+/// The formatter answers `format(event)`, a String. When styling is disabled
+/// it is exactly `std:logging/TextFormatter.format(event)`; when enabled,
+/// removing the generated sequences yields exactly that String. Every Error
+/// of `TextFormatter.format`, including for an unrecognized event or an
+/// unwritable timestamp, is signalled unchanged.
+call: (mode, autoEnabled) => {
+    ColorMode: import("std:text/ColorMode")
+    TextFormatter: import("std:logging/TextFormatter")
+    Style: import("std:text/Style")
+    StyledText: import("std:text/StyledText")
+    ANSI: import("std:text/ANSI")
+
+    stylingEnabled: ColorMode.resolve(mode, autoEnabled)
+
+    // INFO is absent: its default foreground generates no sequence, so its
+    // line is the plain line.
+    palette: Map()
+    palette["TRACE"] = Style("blue")
+    palette["DEBUG"] = Style("cyan")
+    palette["WARN"] = Style("yellow")
+    palette["ERROR"] = Style("red")
+    palette.freeze()
+
+    formatter: {
+        format: (event) => {
+            // Formatting first also validates the event before any slot of it
+            // is read.
+            plain: TextFormatter.format(event)
+            result: plain
+            (stylingEnabled && palette.containsKey(event.level)).ifTrue(() => {
+                // The canonical line is sliced, never re-rendered. The
+                // timestamp and LEVEL are ASCII and the ISO 8601 timestamp has
+                // no space, so octet offsets are scalar offsets here.
+                octets: Encoding.UTF8.encode(plain)
+                copy: (start, end) => {
+                    part: Encoding.UTF8.encode("")
+                    index: start
+                    (() => index < end).whileTrue(() => {
+                        part.add(octets[index])
+                        index = index + 1
+                    })
+                    Encoding.UTF8.decode(part)
+                }
+                levelStart: 0
+                (event.timestamp === null).ifFalse(() => {
+                    (() => octets[levelStart] != 32).whileTrue(() => {
+                        levelStart = levelStart + 1
+                    })
+                    levelStart = levelStart + 1
+                })
+                levelEnd: levelStart + event.level.size()
+                styled: StyledText.concat(
+                    copy(0, levelStart),
+                    StyledText(copy(levelStart, levelEnd), palette[event.level]),
+                    copy(levelEnd, octets.size())
+                )
+                result = ANSI.render(styled, stylingEnabled)
+            })
+            result
+        }
+    }
+    formatter.freeze()
+}
