@@ -17,12 +17,15 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 public final class ProtosPrelude {
@@ -472,7 +475,14 @@ public final class ProtosPrelude {
     }
 
     public ProtosObjectValue arrayPrototype() {
-        Object binding = bindings.readLocalSlot("Array").orElseThrow();
+        Optional<Object> found = bindings.readLocalSlot("Array");
+        if (found.isEmpty()) {
+            // TEST009-AI: a Prelude whose frozen bindings lack Array is a real but cold
+            // failure; keep its NoSuchElementException out of partial evaluation.
+            CompilerDirectives.transferToInterpreter();
+            throw new NoSuchElementException("No value present");
+        }
+        Object binding = found.orElse(null);
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
             throw new IllegalStateException(
                     "standard Array binding is not an ordinary object");

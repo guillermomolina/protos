@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
+import java.util.NoSuchElementException;
 import org.junit.jupiter.api.Test;
 
 class ProtosPreludeTest {
@@ -130,6 +132,26 @@ class ProtosPreludeTest {
         assertSame(error, prelude.errorPrototype());
         assertSame(prelude.errorPrototype(), prelude.errorPrototype());
         assertSame(error, prelude.newError().parent().orElseThrow());
+    }
+
+    @Test
+    void lazilyRejectsMissingArrayBindingWithUnchangedFailure() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.freeze();
+        ProtosPrelude prelude = new ProtosPrelude(bindings, contextPrototype);
+
+        // TEST009-AI: the missing Array binding is still reported only on use,
+        // with the same exception class and message as Optional.orElseThrow().
+        NoSuchElementException failure =
+                assertThrows(NoSuchElementException.class, prelude::arrayPrototype);
+        assertEquals("No value present", failure.getMessage());
+        assertThrows(NoSuchElementException.class, () -> prelude.newArray(List.of()));
     }
 
     @Test

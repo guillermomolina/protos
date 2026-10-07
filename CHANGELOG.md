@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.265-SNAPSHOT
+
+- `TEST009-AI` (guillermomolina/protos#795) keeps the real, reachable
+  missing-`Array` failure of `ProtosPrelude.arrayPrototype()` out of Truffle
+  partial evaluation. There is no specification or semantic change.
+  - The `Optional.orElseThrow()` read is split into an explicit empty check:
+    `CompilerDirectives.transferToInterpreter()` now precedes the throw of the
+    same `NoSuchElementException("No value present")`. The exception class,
+    message and lazy validation timing are unchanged; compiled code is not
+    invalidated, and no `@TruffleBoundary` is added.
+  - A focal test pins the lazy missing-`Array` failure class and message.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`) still
+    fails with `CodeTooLarge`, but the 20-frame `arrayPrototype`
+    `NoSuchElementException` subtree is gone: `NoSuchElementException`
+    size in the method expansion tree drops from 4884 to 3404 and
+    `Throwable.fillInStackTrace()` size from 6864 to 5434. The other
+    `NoSuchElementException` subtrees are unchanged.
+
 ## 0.3.264-SNAPSHOT
 
 - `PLAT051-B` opts `std:regex/Regex` Pattern and Match into PLAT051 two-stage
