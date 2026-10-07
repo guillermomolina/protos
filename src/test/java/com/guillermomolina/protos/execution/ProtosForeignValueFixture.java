@@ -60,6 +60,14 @@ final class ProtosForeignValueFixture implements AutoCloseable {
     private ProtosActivation current;
 
     ProtosForeignValueFixture() throws Exception {
+        this(List.of());
+    }
+
+    /** Also registers {@code others}, routed or not, in the same immutable RuntimeHost registry. */
+    ProtosForeignValueFixture(List<ProtosForeignProviderDescriptor> others) throws Exception {
+        List<ProtosForeignProviderDescriptor> descriptors = new ArrayList<>();
+        descriptors.add(provider.descriptor());
+        descriptors.addAll(others);
         prelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -71,7 +79,7 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                         null, null, null, null, null, null, null);
         host =
                 ProtosPolyglotRuntimeHost.openWithForeignProvidersForTesting(
-                        ProtosForeignProviderRegistry.of(List.of(provider.descriptor())));
+                        ProtosForeignProviderRegistry.of(descriptors));
         context =
                 host.hostProcess(
                         bootstrap.process(),
@@ -225,6 +233,7 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                     ProtosForeignProviderFactory,
                     ProtosForeignValueAdapter {
         final ProtosForeignProviderId id = new ProtosForeignProviderId("provider-test");
+        final ProtosForeignInertRestriction restriction = new ProtosForeignInertRestriction();
         final Map<String, Object> modules = new LinkedHashMap<>();
         final List<String> events = new CopyOnWriteArrayList<>();
         final List<List<ProtosForeignArgument>> executions = new CopyOnWriteArrayList<>();
@@ -236,6 +245,7 @@ final class ProtosForeignValueFixture implements AutoCloseable {
             return new ProtosForeignProviderDescriptor(
                     id,
                     ProtosForeignProviderExecutionProfile.RESTRICTED_IN_PROCESS,
+                    Optional.of(restriction),
                     this,
                     Optional.of(new ProtosForeignImportRoute("test", this)),
                     this);

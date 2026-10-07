@@ -22,6 +22,11 @@ import java.util.Optional;
 /**
  * Immutable host-supplied metadata and factory of one foreign provider.
  *
+ * <p>The profile and its {@code enforcement} mechanism are fixed with the host or embedder that
+ * supplies the RuntimeHost registry; import specifiers only select a provider route and never its
+ * profile. {@link ProtosForeignProviderAdmission} decides from these two components whether any
+ * provider code may run (PLAT052).
+ *
  * <p>A provider without an import route can still own a Process lifecycle but is never selected
  * by an import specifier. {@code values} is the provider's single D188 value contract; a provider
  * that declares none admits every value as an opaque raw reference.
@@ -29,15 +34,26 @@ import java.util.Optional;
 record ProtosForeignProviderDescriptor(
         ProtosForeignProviderId id,
         ProtosForeignProviderExecutionProfile profile,
+        Optional<ProtosForeignProviderEnforcement> enforcement,
         ProtosForeignProviderFactory factory,
         Optional<ProtosForeignImportRoute> importRoute,
         ProtosForeignValueAdapter values) {
     ProtosForeignProviderDescriptor {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(profile, "profile");
+        Objects.requireNonNull(enforcement, "enforcement");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(importRoute, "importRoute");
         Objects.requireNonNull(values, "values");
+    }
+
+    ProtosForeignProviderDescriptor(
+            ProtosForeignProviderId id,
+            ProtosForeignProviderExecutionProfile profile,
+            ProtosForeignProviderFactory factory,
+            Optional<ProtosForeignImportRoute> importRoute,
+            ProtosForeignValueAdapter values) {
+        this(id, profile, Optional.empty(), factory, importRoute, values);
     }
 
     ProtosForeignProviderDescriptor(

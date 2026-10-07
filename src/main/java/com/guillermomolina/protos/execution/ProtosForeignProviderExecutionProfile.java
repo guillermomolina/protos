@@ -21,14 +21,21 @@ package com.guillermomolina.protos.execution;
  *
  * <p>The profile describes the real provider/library/feature configuration, not merely a language
  * name. Selecting {@link #TRUSTED_IN_PROCESS} is reserved to the host or embedder that supplies the
- * provider registry; it is never selected by an import or by foreign code.
+ * provider registry; it is never selected by an import or by foreign code. Each profile is an
+ * enforcement state of {@link ProtosForeignProviderAdmission}, not a description.
  */
 enum ProtosForeignProviderExecutionProfile {
-    /** In-process execution backed by a real non-amplification proof. */
+    /**
+     * In-process execution confined by a provider-specific {@link
+     * ProtosForeignProviderEnforcement.InProcessRestriction}; without one, use fails closed.
+     */
     RESTRICTED_IN_PROCESS,
     /** In-process execution explicitly trusted by the host or embedder. */
     TRUSTED_IN_PROCESS,
-    /** Execution under stronger provider-specific isolation. */
+    /**
+     * Execution under a provider-specific {@link ProtosForeignProviderEnforcement.StrongIsolation};
+     * never silently degraded to in-process execution.
+     */
     STRONGLY_ISOLATED,
     /** The provider is known but cannot execute; use fails closed. */
     UNAVAILABLE

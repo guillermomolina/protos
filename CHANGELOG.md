@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.279-SNAPSHOT
+
+- `I082-F` makes the PLAT052 foreign provider execution profiles real
+  enforcement states. The specification, D188, D189, and PLAT053 are
+  unchanged, and there are no observable Protos semantic changes.
+  - New internal `ProtosForeignProviderAdmission` is the single admission
+    owner. It decides from the immutable host-supplied descriptor alone,
+    using type tests and running no provider code. It rejects:
+    - `UNAVAILABLE`;
+    - `RESTRICTED_IN_PROCESS` without a
+      `ProtosForeignProviderEnforcement.InProcessRestriction`;
+    - `STRONGLY_ISOLATED` without a
+      `ProtosForeignProviderEnforcement.StrongIsolation`, including when an
+      in-process restriction is supplied instead;
+    - a trusted provider that carries a mechanism; and
+    - an ambiguous mechanism.
+  - Admission runs before import canonicalization, before the Actor-local
+    facade is cached, before session acquisition, and before compartment
+    opening. D188/D189 operations are reachable only through session
+    bindings acquired after admission. A rejected provider has zero
+    provider-side effect.
+  - Restricted and isolated compartments are opened only through their
+    mechanism. Only host-trusted providers are opened directly from their
+    factory. Profiles and mechanisms are fixed in the RuntimeHost registry;
+    imports, dependencies, guest code, and foreign code cannot select or
+    upgrade them.
+  - Provisioned foreign authority remains none. No provider discovery, host
+    access, Context construction, or production provider is added. The test
+    conformance providers run under an inert zero-authority restriction, and
+    the new `ProtosForeignProviderEnforcementTest` adds the negative proof.
+
 ## 0.3.278-SNAPSHOT
 
 - `I082-E` adds the D189 synchronous foreign callback bridge with

@@ -31,6 +31,10 @@ import java.util.Objects;
  * acquires the target, so a reentrant import observes the same partial facade. Provider sessions
  * come exclusively from the Process lifecycle; this class keeps no cache of its own. Target
  * acquisition is an entered foreign operation (D188): its failures are fresh ForeignErrors.
+ *
+ * <p>Routing is never an authority grant: the scheme selects the host-configured descriptor, whose
+ * profile no specifier can alter, and {@link ProtosForeignProviderAdmission} admits it before the
+ * provider canonicalizes the target and again before a facade is cached (PLAT052).
  */
 final class ProtosForeignModuleImports {
     private ProtosForeignModuleImports() {}
@@ -58,10 +62,7 @@ final class ProtosForeignModuleImports {
         if (descriptor == null) {
             return null;
         }
-        if (descriptor.profile() == ProtosForeignProviderExecutionProfile.UNAVAILABLE) {
-            throw new IllegalStateException(
-                    "foreign provider is unavailable: " + descriptor.id().value());
-        }
+        ProtosForeignProviderAdmission.require(descriptor);
         String canonicalTarget =
                 Objects.requireNonNull(
                         route(descriptor).modules().canonicalTarget(
@@ -96,6 +97,7 @@ final class ProtosForeignModuleImports {
                                 () ->
                                         new IllegalStateException(
                                                 "foreign import requires an Actor"));
+        ProtosForeignProviderAdmission.require(descriptor);
 
         ProtosForeignModuleFacadeValue facade = new ProtosForeignModuleFacadeValue();
         ProtosActorModuleState.ModuleRecord record =

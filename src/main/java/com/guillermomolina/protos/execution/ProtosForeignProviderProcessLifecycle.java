@@ -35,7 +35,9 @@ import java.util.concurrent.CompletionException;
  * this Process opens exactly one compartment; the first use of that provider by an Actor opens
  * exactly one session. Provider code always runs outside this object's monitor: the monitor only
  * publishes in-flight construction slots, so racing callers wait for the single constructor while
- * other providers and Actors proceed. Failed construction is never cached.
+ * other providers and Actors proceed. Failed construction is never cached. No compartment or
+ * session is opened for a provider that {@link ProtosForeignProviderAdmission} rejects, and an
+ * admitted compartment is opened only through its admission.
  *
  * <p>Actor terminal disposition closes that Actor's sessions; Process terminal disposition closes
  * every remaining session and then every compartment. Cleanup failures are host/runtime failures:
@@ -74,10 +76,7 @@ final class ProtosForeignProviderProcessLifecycle {
                                 () ->
                                         new IllegalArgumentException(
                                                 "unknown foreign provider: " + providerId.value()));
-        if (descriptor.profile() == ProtosForeignProviderExecutionProfile.UNAVAILABLE) {
-            throw new IllegalStateException(
-                    "foreign provider is unavailable: " + providerId.value());
-        }
+        ProtosForeignProviderAdmission.require(descriptor);
 
         Slot<ProtosForeignProviderSessionBinding> slot;
         boolean create = false;
@@ -164,9 +163,7 @@ final class ProtosForeignProviderProcessLifecycle {
 
         ProtosForeignProviderCompartment compartment;
         try {
-            compartment =
-                    Objects.requireNonNull(
-                            descriptor.factory().openCompartment(), "foreign provider compartment");
+            compartment = ProtosForeignProviderAdmission.openCompartment(descriptor);
             if (!providerId.equals(compartment.providerId())) {
                 IllegalStateException failure =
                         new IllegalStateException(

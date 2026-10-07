@@ -30,6 +30,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -535,7 +536,10 @@ class ProtosForeignProviderLifecycleTest {
                     new ProtosForeignProviderDescriptor(
                             provider.id,
                             ProtosForeignProviderExecutionProfile.RESTRICTED_IN_PROCESS,
-                            provider));
+                            ProtosForeignInertRestriction.zeroAuthority(),
+                            provider,
+                            Optional.empty(),
+                            ProtosForeignValueAdapter.opaque("unknown")));
         }
         return ProtosPolyglotRuntimeHost.openWithForeignProvidersForTesting(
                 ProtosForeignProviderRegistry.of(descriptors));

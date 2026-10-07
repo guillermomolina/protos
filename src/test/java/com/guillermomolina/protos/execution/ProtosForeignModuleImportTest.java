@@ -430,8 +430,10 @@ class ProtosForeignModuleImportTest {
             return new ProtosForeignProviderDescriptor(
                     new ProtosForeignProviderId("provider-" + idSuffix),
                     ProtosForeignProviderExecutionProfile.RESTRICTED_IN_PROCESS,
+                    ProtosForeignInertRestriction.zeroAuthority(),
                     this,
-                    Optional.of(new ProtosForeignImportRoute(routeScheme, this)));
+                    Optional.of(new ProtosForeignImportRoute(routeScheme, this)),
+                    ProtosForeignValueAdapter.opaque("unknown"));
         }
 
         int acquisitions(String target) {
