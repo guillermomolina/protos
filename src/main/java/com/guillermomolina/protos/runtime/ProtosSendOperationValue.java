@@ -179,7 +179,7 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
                     ProtosInvocation.executeMessageInTaskForRuntime(
                             behavior,
                             selector,
-                            snapshot,
+                            ProtosActorValueTransfer.materializeArguments(snapshot, turnActivation),
                             turnActivation,
                             task,
                             () ->

@@ -19,20 +19,23 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * PLAT051-A: generic privileged Standard Library semantic-value rematerialization through Actor
- * and P transfer, exercised with test-only fixture families that no guest code can reach.
+ * PLAT051-A/A2: generic privileged Standard Library semantic-value transfer through Actor and P,
+ * exercised with test-only fixture families that no guest code can reach.
+ *
+ * <p>A2 splits transfer into a synchronous source stage (validate and extract into an internal
+ * record) and a destination stage (materialize inside the destination domain). These tests drive
+ * each stage directly; {@code ProtosSemanticTransferMaterializationTest} covers the hosted Actor/P
+ * boundaries with a guest-implemented family.
  */
 final class ProtosSemanticTransferFamilyTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -57,7 +60,6 @@ final class ProtosSemanticTransferFamilyTest {
             new FixtureFamily("std:plat051-fixture/Portable", Mode.PORTABLE);
 
     private static ProtosPrelude prelude;
-    private static Method parallelCopy;
 
     @BeforeAll
     static void bootstrap() throws Exception {
@@ -72,48 +74,118 @@ final class ProtosSemanticTransferFamilyTest {
                                         OPEN_RESULT,
                                         FOREIGN_RESULT))
                         .bootstrap(CORE);
-        Class<?> transfer =
-                Class.forName("com.guillermomolina.protos.execution.ProtosParallelRuntime$Transfer");
-        parallelCopy =
-                transfer.getDeclaredMethod(
-                        "copy", Object.class, ProtosActivation.class, IdentityHashMap.class);
-        parallelCopy.setAccessible(true);
     }
 
     @Test
-    void authorizedFamilyRematerializesThroughActorWithAliasesDistinctIdentitiesAndCycles() {
+    void actorSourceStageExtractsSynchronouslyIntoInternalRecordsWithoutMaterializing() {
         ProtosSemanticTransferValue shared = PORTABLE.mint("a+b");
         ProtosSemanticTransferValue twin = PORTABLE.mint("a+b");
         ProtosObjectValue graph = surroundingGraph(shared, twin);
-        int reconstructed = PORTABLE.reconstructed;
+        int extracted = PORTABLE.extracted;
+        int materialized = PORTABLE.materialized;
 
-        List<Object> copied =
+        List<Object> snapshot =
                 ProtosActorValueTransfer.snapshotArguments(
                         List.of(shared, graph), prelude.newModuleActivation());
 
-        assertEquals(reconstructed + 2, PORTABLE.reconstructed);
-        assertRematerializedGraph(shared, twin, graph, copied.get(0), copied.get(1));
+        // One extraction per distinct source identity, completed before snapshotArguments returns.
+        assertEquals(extracted + 2, PORTABLE.extracted);
+        assertEquals(materialized, PORTABLE.materialized, "the source stage must not materialize");
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        for (Object element : snapshot) {
+            assertFalse(element instanceof ProtosObjectValue, "no guest value or OPEN shell in transit");
+        }
+        Object single = ProtosActorValueTransfer.snapshotValue(shared, prelude.newModuleActivation());
+        assertFalse(single instanceof ProtosObjectValue);
+        assertEquals(materialized, PORTABLE.materialized);
     }
 
     @Test
-    void authorizedFamilyRematerializesThroughPWithAliasesDistinctIdentitiesAndCycles()
-            throws Exception {
+    void actorDestinationStageMaterializesOncePerRecordWithAliasesDistinctIdentitiesAndCycles() {
         ProtosSemanticTransferValue shared = PORTABLE.mint("a+b");
         ProtosSemanticTransferValue twin = PORTABLE.mint("a+b");
         ProtosObjectValue graph = surroundingGraph(shared, twin);
-        ProtosActivation activation = prelude.newModuleActivation();
-        IdentityHashMap<Object, Object> memo = new IdentityHashMap<>();
-        int reconstructed = PORTABLE.reconstructed;
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(shared, graph), prelude.newModuleActivation());
+        ProtosActivation destination = prelude.newModuleActivation();
+        int materialized = PORTABLE.materialized;
 
-        Object first = parallelCopy.invoke(null, shared, activation, memo);
-        Object second = parallelCopy.invoke(null, graph, activation, memo);
+        List<?> delivered = ProtosActorValueTransfer.materializeArguments(snapshot, destination);
 
-        assertEquals(reconstructed + 2, PORTABLE.reconstructed);
-        assertRematerializedGraph(shared, twin, graph, first, second);
+        assertEquals(materialized + 2, PORTABLE.materialized);
+        assertSame(destination.executionDomain(), PORTABLE.lastDestinationDomain);
+        assertRematerializedGraph(shared, twin, graph, delivered.get(0), delivered.get(1));
     }
 
     @Test
-    void ordinaryObjectCannotForgeFamilyThroughNamesSlotsShapeOrDelegation() throws Exception {
+    void oneRecordMaterializesIndependentlyPerRecipient() {
+        ProtosSemanticTransferValue shared = PORTABLE.mint("a+b");
+        ProtosSemanticTransferValue twin = PORTABLE.mint("a+b");
+        ProtosObjectValue graph = surroundingGraph(shared, twin);
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(shared, graph), prelude.newModuleActivation());
+        int extracted = PORTABLE.extracted;
+
+        List<?> first =
+                ProtosActorValueTransfer.materializeArguments(snapshot, prelude.newModuleActivation());
+        List<?> second =
+                ProtosActorValueTransfer.materializeArguments(snapshot, prelude.newModuleActivation());
+
+        assertEquals(extracted, PORTABLE.extracted, "the inert record is reused, never re-extracted");
+        assertRematerializedGraph(shared, twin, graph, first.get(0), first.get(1));
+        assertRematerializedGraph(shared, twin, graph, second.get(0), second.get(1));
+        assertNotSame(first.get(0), second.get(0));
+        assertNotSame(first.get(1), second.get(1));
+    }
+
+    @Test
+    void pSourceAndDestinationStagesAreSeparateWithAliasesDistinctIdentitiesAndCycles() {
+        ProtosSemanticTransferValue shared = PORTABLE.mint("a+b");
+        ProtosSemanticTransferValue twin = PORTABLE.mint("a+b");
+        ProtosObjectValue graph = surroundingGraph(shared, twin);
+        boolean[] records = new boolean[1];
+        int materialized = PORTABLE.materialized;
+
+        List<Object> detached =
+                ProtosParallelRuntime.captureValuesForTesting(
+                        List.of(shared, graph), prelude.newModuleActivation(), records);
+
+        assertTrue(records[0]);
+        assertFalse(detached.get(0) instanceof ProtosObjectValue);
+        assertEquals(materialized, PORTABLE.materialized, "the P caller stage must not materialize");
+
+        ProtosActivation worker = prelude.newModuleActivation();
+        List<Object> delivered = ProtosParallelRuntime.materializeValuesForTesting(detached, worker);
+
+        assertEquals(materialized + 2, PORTABLE.materialized);
+        assertSame(worker.executionDomain(), PORTABLE.lastDestinationDomain);
+        assertRematerializedGraph(shared, twin, graph, delivered.get(0), delivered.get(1));
+    }
+
+    @Test
+    void semanticMapKeyKeepsAConsistentRecordedHashAfterMaterialization() {
+        ProtosSemanticTransferValue key = PORTABLE.mint("k");
+        ProtosMapValue map = prelude.newMap();
+        map.append(key, ProtosIdentity.identityHash(key), new ProtosIntegerValue(BigInteger.ONE));
+
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(
+                        ProtosActorValueTransfer.snapshotArguments(
+                                List.of(map), prelude.newModuleActivation()),
+                        prelude.newModuleActivation());
+
+        ProtosMapValue.Entry entry =
+                assertInstanceOf(ProtosMapValue.class, delivered.get(0)).keyedSnapshot().get(0);
+        ProtosSemanticTransferValue copiedKey =
+                assertInstanceOf(ProtosSemanticTransferValue.class, entry.key());
+        assertNotSame(key, copiedKey);
+        assertEquals(ProtosIdentity.identityHash(copiedKey), entry.recordedHash());
+    }
+
+    @Test
+    void ordinaryObjectCannotForgeFamilyThroughNamesSlotsShapeOrDelegation() {
         ProtosSemanticTransferValue genuine = PORTABLE.mint("x");
         ProtosObjectValue forged = new ProtosObjectValue(ProtosObjectValue.rootObject());
         forged.createLocalSlot("text", new ProtosStringValue("x"));
@@ -124,28 +196,36 @@ final class ProtosSemanticTransferFamilyTest {
         child.freeze();
         int extracted = PORTABLE.extracted;
 
-        Object actorForged =
-                ProtosActorValueTransfer.snapshotValue(forged, prelude.newModuleActivation());
-        Object pForged =
-                parallelCopy.invoke(
-                        null, forged, prelude.newModuleActivation(), new IdentityHashMap<>());
-        assertFalse(actorForged instanceof ProtosSemanticTransferValue);
-        assertFalse(pForged instanceof ProtosSemanticTransferValue);
+        List<Object> actorForged =
+                ProtosActorValueTransfer.snapshotArguments(List.of(forged), prelude.newModuleActivation());
+        boolean[] records = new boolean[1];
+        List<Object> pForged =
+                ProtosParallelRuntime.captureValuesForTesting(
+                        List.of(forged), prelude.newModuleActivation(), records);
+        assertFalse(ProtosActorValueTransfer.requiresMaterialization(actorForged));
+        assertFalse(records[0]);
+        assertFalse(actorForged.get(0) instanceof ProtosSemanticTransferValue);
+        assertFalse(pForged.get(0) instanceof ProtosSemanticTransferValue);
         assertEquals(extracted, PORTABLE.extracted);
 
         // Delegating to a genuine value confers nothing: the child stays ordinary while its
-        // parent edge reaches the rematerialized genuine value.
+        // parent edge reaches a materialized destination value of the genuine family.
         ProtosObjectValue actorChild =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        ProtosActorValueTransfer.snapshotValue(child, prelude.newModuleActivation()));
+                        ProtosActorValueTransfer.materializeValue(
+                                ProtosActorValueTransfer.snapshotValue(child, prelude.newModuleActivation()),
+                                prelude.newModuleActivation()));
         assertFalse(actorChild instanceof ProtosSemanticTransferValue);
         assertNotSame(genuine, actorChild.parent().orElseThrow());
-        assertInstanceOf(ProtosSemanticTransferValue.class, actorChild.parent().orElseThrow());
+        assertSame(
+                PORTABLE,
+                assertInstanceOf(ProtosSemanticTransferValue.class, actorChild.parent().orElseThrow())
+                        .family());
     }
 
     @Test
-    void unauthorizedDescriptorAndMissingAuthorityFailClosedBeforeExtraction() throws Exception {
+    void unauthorizedDescriptorAndMissingAuthorityFailSynchronouslyBeforeExtraction() throws Exception {
         ProtosSemanticTransferValue impostor = IMPOSTOR.mint("x");
         assertNonTransferable(impostor, prelude);
         assertNonParallel(impostor, prelude);
@@ -160,12 +240,12 @@ final class ProtosSemanticTransferFamilyTest {
     }
 
     @Test
-    void malformedPayloadsAndInvalidReconstructionsFailClosed() throws Exception {
-        for (FixtureFamily family :
-                List.of(NULL_PAYLOAD, MALFORMED_PAYLOAD, CLOSURE_PAYLOAD, THROWING, OPEN_RESULT, FOREIGN_RESULT)) {
+    void malformedSourceValuesFailSynchronouslyInTheSourceStage() {
+        for (FixtureFamily family : List.of(NULL_PAYLOAD, MALFORMED_PAYLOAD, CLOSURE_PAYLOAD, THROWING)) {
             ProtosSemanticTransferValue value = family.mint("x");
             assertNonTransferable(value, prelude);
             assertNonParallel(value, prelude);
+            assertEquals(0, family.materialized, family.ownerModule().canonicalId());
         }
         ProtosSemanticTransferValue open = PORTABLE.mintOpen("x");
         assertNonTransferable(open, prelude);
@@ -185,7 +265,35 @@ final class ProtosSemanticTransferFamilyTest {
     }
 
     @Test
-    void closureExecutionAndResourceRulesAreUnchanged() throws Exception {
+    void destinationFailureOfAValidatedRecordIsAnInternalInconsistencyNotAGuestError() {
+        for (FixtureFamily family : List.of(OPEN_RESULT, FOREIGN_RESULT)) {
+            ProtosSemanticTransferValue value = family.mint("x");
+            List<Object> actorSnapshot =
+                    ProtosActorValueTransfer.snapshotArguments(List.of(value), prelude.newModuleActivation());
+            boolean[] records = new boolean[1];
+            List<Object> pSnapshot =
+                    ProtosParallelRuntime.captureValuesForTesting(
+                            List.of(value), prelude.newModuleActivation(), records);
+
+            IllegalStateException actorFailure =
+                    assertThrows(
+                            IllegalStateException.class,
+                            () ->
+                                    ProtosActorValueTransfer.materializeArguments(
+                                            actorSnapshot, prelude.newModuleActivation()));
+            IllegalStateException pFailure =
+                    assertThrows(
+                            IllegalStateException.class,
+                            () ->
+                                    ProtosParallelRuntime.materializeValuesForTesting(
+                                            pSnapshot, prelude.newModuleActivation()));
+            assertTrue(actorFailure.getMessage().contains("internal inconsistency"));
+            assertTrue(pFailure.getMessage().contains("internal inconsistency"));
+        }
+    }
+
+    @Test
+    void closureExecutionAndResourceRulesAreUnchanged() {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosClosureValue closure = ProtosClosureValue.nativeClosure((a, args) -> ProtosNullValue.INSTANCE);
         ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -198,30 +306,42 @@ final class ProtosSemanticTransferFamilyTest {
         assertNonParallel(prelude.newExecutionContext(), prelude);
 
         // P keeps its existing projection rule for Closures; it does not become rematerialization.
-        Object projected = parallelCopy.invoke(null, closure, activation, new IdentityHashMap<>());
+        boolean[] records = new boolean[1];
+        Object projected =
+                ProtosParallelRuntime.captureValuesForTesting(List.of(closure), activation, records).get(0);
         assertInstanceOf(ProtosClosureValue.class, projected);
         assertNotSame(closure, projected);
+        assertFalse(records[0]);
     }
 
     @Test
-    void ordinaryGraphTransferNeitherConsultsFamiliesNorImportsModules() throws Exception {
+    void ordinaryGraphTransferNeitherConsultsFamiliesNorImportsNorPaysMaterialization() {
         ProtosObjectValue node = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosArrayValue array = prelude.newArray(List.of(node, node, new ProtosIntegerValue(BigInteger.TWO)));
         node.createLocalSlot("self", node);
         node.createLocalSlot("items", array);
         ProtosActivation activation = prelude.newModuleActivation();
         int extracted = PORTABLE.extracted;
-        int reconstructed = PORTABLE.reconstructed;
+        int materialized = PORTABLE.materialized;
 
-        ProtosObjectValue actorNode =
-                assertInstanceOf(
-                        ProtosObjectValue.class, ProtosActorValueTransfer.snapshotValue(node, activation));
-        ProtosObjectValue pNode =
-                assertInstanceOf(
-                        ProtosObjectValue.class,
-                        parallelCopy.invoke(null, node, activation, new IdentityHashMap<>()));
+        List<Object> actorSnapshot = ProtosActorValueTransfer.snapshotArguments(List.of(node), activation);
+        Object actorValue = ProtosActorValueTransfer.snapshotValue(node, activation);
+        boolean[] records = new boolean[1];
+        List<Object> pSnapshot =
+                ProtosParallelRuntime.captureValuesForTesting(List.of(node), activation, records);
 
-        for (ProtosObjectValue copy : List.of(actorNode, pNode)) {
+        // The destination stage of an ordinary snapshot is the identity: no second pass.
+        assertFalse(ProtosActorValueTransfer.requiresMaterialization(actorSnapshot));
+        assertSame(
+                actorSnapshot,
+                ProtosActorValueTransfer.materializeArguments(actorSnapshot, prelude.newModuleActivation()));
+        assertSame(
+                actorValue,
+                ProtosActorValueTransfer.materializeValue(actorValue, prelude.newModuleActivation()));
+        assertFalse(records[0]);
+
+        for (Object copied : List.of(actorSnapshot.get(0), actorValue, pSnapshot.get(0))) {
+            ProtosObjectValue copy = assertInstanceOf(ProtosObjectValue.class, copied);
             assertNotSame(node, copy);
             assertEquals(ProtosObjectValue.class, copy.getClass());
             assertSame(copy, copy.readLocalSlot("self").orElseThrow());
@@ -231,10 +351,20 @@ final class ProtosSemanticTransferFamilyTest {
             assertSame(copy, items.indexedSnapshot().get(1));
         }
         assertEquals(extracted, PORTABLE.extracted);
-        assertEquals(reconstructed, PORTABLE.reconstructed);
+        assertEquals(materialized, PORTABLE.materialized);
         assertTrue(
                 activation.actorModuleState().lookup(PORTABLE.ownerModule()).isEmpty(),
                 "recognizing values must not import or initialize any module");
+    }
+
+    @Test
+    void transferRecordIsAnInertInternalNodeWithoutGuestSurface() {
+        Class<ProtosSemanticTransferRecord> record = ProtosSemanticTransferRecord.class;
+        assertFalse(ProtosObjectValue.class.isAssignableFrom(record), "a record is not a guest value");
+        assertFalse(com.oracle.truffle.api.interop.TruffleObject.class.isAssignableFrom(record));
+        assertTrue(Modifier.isFinal(record.getModifiers()));
+        assertEquals(0, record.getConstructors().length, "records cannot be forged");
+        assertEquals(0, ProtosSemanticTransferDestination.class.getConstructors().length);
     }
 
     @Test
@@ -244,6 +374,8 @@ final class ProtosSemanticTransferFamilyTest {
                         "runtime/ProtosSemanticTransferFamily.java",
                         "runtime/ProtosSemanticTransferValue.java",
                         "runtime/ProtosSemanticTransferPayload.java",
+                        "runtime/ProtosSemanticTransferRecord.java",
+                        "runtime/ProtosSemanticTransferDestination.java",
                         "runtime/ProtosActorValueTransfer.java",
                         "runtime/ProtosPrelude.java",
                         "execution/ProtosParallelRuntime.java");
@@ -251,7 +383,7 @@ final class ProtosSemanticTransferFamilyTest {
             String source = Files.readString(MAIN.resolve(relative));
             assertFalse(source.toLowerCase(Locale.ROOT).contains("regex"), relative);
         }
-        for (String relative : generic.subList(0, 3)) {
+        for (String relative : generic.subList(0, 6)) {
             String source = Files.readString(MAIN.resolve(relative));
             for (String forbidden :
                     List.of(
@@ -300,7 +432,7 @@ final class ProtosSemanticTransferFamilyTest {
         assertSame(PORTABLE, rebuilt.family());
         assertTrue(rebuilt.isFrozen());
         assertEquals("a+b", ((ProtosStringValue) rebuilt.readLocalSlot("text").orElseThrow()).value());
-        // The callable surface was built by the destination-local reconstructor, not copied.
+        // The callable surface was built by the destination stage, not copied.
         assertNotSame(
                 shared.readLocalSlot("describe").orElseThrow(),
                 rebuilt.readLocalSlot("describe").orElseThrow());
@@ -317,17 +449,13 @@ final class ProtosSemanticTransferFamilyTest {
     }
 
     private static void assertNonParallel(Object value, ProtosPrelude owner) {
-        InvocationTargetException failure =
+        RuntimeException failure =
                 assertThrows(
-                        InvocationTargetException.class,
+                        RuntimeException.class,
                         () ->
-                                parallelCopy.invoke(
-                                        null,
-                                        value,
-                                        owner.newModuleActivation(),
-                                        new IdentityHashMap<Object, Object>()));
-        assertNotNull(failure.getCause());
-        assertEquals("NonParallel", failure.getCause().getClass().getSimpleName());
+                                ProtosParallelRuntime.captureValuesForTesting(
+                                        List.of(value), owner.newModuleActivation(), new boolean[1]));
+        assertEquals("NonParallel", failure.getClass().getSimpleName());
     }
 
     private enum Mode {
@@ -340,11 +468,16 @@ final class ProtosSemanticTransferFamilyTest {
         FOREIGN_RESULT
     }
 
-    /** Test-only family: payload is one String; values carry a native Closure slot. */
+    /**
+     * Test-only infrastructure family: payload is one String; values carry a native Closure slot.
+     * It proves only the generic mechanism; guest-implemented materialization is covered by the
+     * hosted test.
+     */
     private static final class FixtureFamily extends ProtosSemanticTransferFamily {
         private final Mode mode;
         int extracted;
-        int reconstructed;
+        int materialized;
+        ProtosActorExecutionDomain lastDestinationDomain;
 
         FixtureFamily(String ownerModule, Mode mode) {
             super(new ProtosModuleKey(ownerModule));
@@ -380,12 +513,16 @@ final class ProtosSemanticTransferFamilyTest {
         }
 
         @Override
-        protected ProtosSemanticTransferValue reconstruct(
-                ProtosSemanticTransferPayload payload, ProtosPrelude destination) {
-            reconstructed++;
-            if (payload.size() != 1 || !(payload.get(0) instanceof String text)) {
-                return null;
-            }
+        protected boolean acceptsPayload(ProtosSemanticTransferPayload payload) {
+            return payload.size() == 1 && payload.get(0) instanceof String;
+        }
+
+        @Override
+        protected ProtosSemanticTransferValue materialize(
+                ProtosSemanticTransferPayload payload, ProtosSemanticTransferDestination destination) {
+            materialized++;
+            lastDestinationDomain = destination.executionDomain();
+            String text = (String) payload.get(0);
             return switch (mode) {
                 case OPEN_RESULT -> mintOpen(text);
                 case FOREIGN_RESULT -> IMPOSTOR.mint(text);

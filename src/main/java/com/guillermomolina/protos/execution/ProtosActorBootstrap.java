@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
+import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
@@ -98,7 +99,9 @@ public final class ProtosActorBootstrap {
             Object result =
                     ProtosInvocation.invoke(
                             bootstrapBinding,
-                            List.copyOf(transferredArguments),
+                            List.copyOf(
+                                    ProtosActorValueTransfer.materializeArguments(
+                                            transferredArguments, activation)),
                             activation);
             if (!(result instanceof ProtosObjectValue behavior)) {
                 throw bootstrapError(activation);

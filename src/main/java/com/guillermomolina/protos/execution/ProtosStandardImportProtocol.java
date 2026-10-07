@@ -63,6 +63,20 @@ final class ProtosStandardImportProtocol {
                 : null;
     }
 
+    /**
+     * The Process module runtime installed behind {@code prelude}'s standard import facility, or
+     * {@code null} when that Prelude has no Core-installed import facility.
+     */
+    static ProtosModuleRuntime runtimeForPrelude(ProtosPrelude prelude) {
+        Object standardBinding = prelude.bindings().readLocalSlot("import").orElse(null);
+        if (!(standardBinding instanceof ProtosObjectValue standardFacility)
+                || !(standardFacility.readLocalSlot("call").orElse(null)
+                        instanceof ProtosClosureValue behavior)) {
+            return null;
+        }
+        return runtimeForImplementation(behavior);
+    }
+
     static ProtosModuleRuntime selectedRuntimeForBytecodeIntrinsic(
             Object receiver,
             ProtosClosureValue selectedBehavior,

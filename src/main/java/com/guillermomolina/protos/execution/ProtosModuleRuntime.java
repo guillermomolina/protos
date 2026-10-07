@@ -310,6 +310,26 @@ public final class ProtosModuleRuntime {
     }
 
     /**
+     * PLAT051-A2 destination-local Standard Library access: loads one already-canonical module in
+     * {@code caller}'s Actor-local module state through the Process module runtime installed behind
+     * the caller Prelude's standard import facility. No global registry is consulted.
+     */
+    public static ProtosObjectValue loadCanonicalModuleThroughPreludeForRuntime(
+            ProtosModuleKey key, ProtosActivation caller) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(caller, "caller");
+        ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () -> new IllegalStateException("module loading requires a Core prelude"));
+        ProtosModuleRuntime runtime = ProtosStandardImportProtocol.runtimeForPrelude(prelude);
+        if (runtime == null) {
+            throw new IllegalStateException("Core prelude has no standard import facility");
+        }
+        return runtime.loadCanonicalModule(key, caller);
+    }
+
+    /**
      * Loads the RootActor initial module after installing bootstrap-local slots and before the
      * first source expression executes.
      *

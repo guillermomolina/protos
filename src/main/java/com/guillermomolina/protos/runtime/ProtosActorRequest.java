@@ -198,7 +198,8 @@ public final class ProtosActorRequest {
         Objects.requireNonNull(result, "result");
         try {
             Object transferred = ProtosActorValueTransfer.snapshotValue(result, callerActivation);
-            future.resolve(transferred, callerActivation);
+            ProtosActorValueTransfer.resolveRequesterFuture(
+                    future, transferred, callerActivation);
         } catch (ProtosSignalException nonTransferableReply) {
             future.fail(
                     ProtosCoreErrors.newOccurrence(
@@ -229,7 +230,7 @@ public final class ProtosActorRequest {
                 ProtosInvocation.executeMessageInTaskForRuntime(
                         behavior,
                         selector,
-                        snapshot,
+                        ProtosActorValueTransfer.materializeArguments(snapshot, turnActivation),
                         turnActivation,
                         task,
                         () ->
@@ -309,7 +310,8 @@ public final class ProtosActorRequest {
                                                 "completed request handler has no result"));
         try {
             Object transferred = ProtosActorValueTransfer.snapshotValue(result, turnActivation);
-            future.resolve(transferred, callerActivation);
+            ProtosActorValueTransfer.resolveRequesterFuture(
+                    future, transferred, callerActivation);
             delivery.markCompletedForRuntime();
         } catch (ProtosSignalException nonTransferableReply) {
             future.fail(

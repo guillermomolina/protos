@@ -96,7 +96,8 @@ public final class ProtosParallelRuntime {
                 if(current.state()!=ProtosTask.State.RUNNING)return;
             }
             Outcome o=completion.outcome();
-            if(o.error!=null){if(f.fail(o.error))current.fail(o.error);else current.complete(ProtosNullValue.INSTANCE);return;}
+            if(o.semanticRecords)o=materializeOutcome(o,caller);
+            if(o.error!=null){ProtosObjectValue e=(ProtosObjectValue)o.error;if(f.fail(e))current.fail(e);else current.complete(ProtosNullValue.INSTANCE);return;}
             f.resolve(o.value,caller);
             current.complete(ProtosNullValue.INSTANCE);
         });
@@ -114,11 +115,29 @@ public final class ProtosParallelRuntime {
         void cancel(){cancelled.set(true);}
         public void waitingTaskCancelled(ProtosTask ignored){cancel();}
     }
+    /**
+     * A P outcome crossing back to the caller. When {@code semanticRecords} is set the value or
+     * error is a detached graph carrying PLAT051 semantic transfer records that the caller's
+     * producer Task materializes before the Future becomes observable.
+     */
     private static final class Outcome {
-        final Object value;final ProtosObjectValue error;
-        Outcome(Object v,ProtosObjectValue e){value=v;error=e;}
-        static Outcome ok(Object v){return new Outcome(Objects.requireNonNull(v),null);}
-        static Outcome fail(ProtosObjectValue e){return new Outcome(null,Objects.requireNonNull(e));}
+        final Object value;final Object error;final boolean semanticRecords;
+        Outcome(Object v,Object e,boolean records){value=v;error=e;semanticRecords=records;}
+        static Outcome ok(Object v){return new Outcome(Objects.requireNonNull(v),null,false);}
+        static Outcome fail(ProtosObjectValue e){return new Outcome(null,Objects.requireNonNull(e),false);}
+        static Outcome detached(Object v,Object e){return new Outcome(v,e,true);}
+    }
+
+    /**
+     * PLAT051-A2 destination stage for a P outcome, run by the producer Task inside the caller
+     * domain. A failure is an internal inconsistency and is contained as a generic Error.
+     */
+    private static Outcome materializeOutcome(Outcome o,ProtosActivation caller){
+        try{
+            TransferMemo memo=new TransferMemo(true);
+            if(o.error==null)return Outcome.ok(Transfer.copy(o.value,caller,memo));
+            return Outcome.fail((ProtosObjectValue)Transfer.copy(o.error,caller,memo));
+        }catch(RuntimeException inconsistency){return Outcome.fail(ProtosCoreErrors.newError(caller));}
     }
 
     private static void submit(Runnable r){EXECUTOR.execute(r);}
@@ -143,7 +162,7 @@ public final class ProtosParallelRuntime {
             catch(RuntimeException|Error settleFailure){fatal.addSuppressed(settleFailure);}
             throw fatal;
         }
-        if(o.error!=null)c.fail(o.error);else c.resolve(o.value);
+        c.complete(o);
     }
 
     /**
@@ -165,16 +184,33 @@ public final class ProtosParallelRuntime {
         try{
             ProtosActivation creator=s.caller.prelude().orElseThrow().newModuleActivation(
                     new ProtosActorModuleState(),null,s.caller.prelude().orElseThrow().newExecutionContext(),d);
-            ProtosTask root=d.createTask(null,t->{creator.attachTask(t);ProtosInvocation.executeInTaskForRuntime(s.callable,s.args,creator,t);});
+            ProtosTask root=d.createTask(null,t->{
+                creator.attachTask(t);
+                Snapshot local=s;
+                if(s.semanticRecords){
+                    // PLAT051-A2: records materialize inside this P domain before guest computation.
+                    try{local=s.materializedIn(creator);}
+                    catch(RuntimeException inconsistency){t.fail(ProtosCoreErrors.newError(creator));return;}
+                }
+                ProtosInvocation.executeInTaskForRuntime(local.callable,local.args,creator,t);
+            });
             d.dispatchUntilTerminal(root,()->{
                 Runnable helper=EXECUTOR.getQueue().poll();if(helper==null)return false;helper.run();return true;
             });
             if(root.state()==ProtosTask.State.COMPLETED){
-                try{return Outcome.ok(Transfer.back(root.result().orElse(ProtosNullValue.INSTANCE),s.caller));}
+                try{
+                    TransferMemo memo=new TransferMemo(false);
+                    Object v=Transfer.copy(root.result().orElse(ProtosNullValue.INSTANCE),s.caller,memo);
+                    return memo.semanticRecords?Outcome.detached(v,null):Outcome.ok(v);
+                }
                 catch(NonParallel e){return Outcome.fail(nonParallel(s.caller));}
             }
             if(root.state()==ProtosTask.State.FAILED&&root.failure().orElse(null) instanceof ProtosObjectValue e){
-                try{return Outcome.fail((ProtosObjectValue)Transfer.back(e,s.caller));}
+                try{
+                    TransferMemo memo=new TransferMemo(false);
+                    Object x=Transfer.copy(e,s.caller,memo);
+                    return memo.semanticRecords?Outcome.detached(null,x):Outcome.fail((ProtosObjectValue)x);
+                }
                 catch(NonParallel x){return Outcome.fail(nonParallel(s.caller));}
             }
             return Outcome.fail(occ(s.caller,ProtosCoreErrors.StandardError.CANCELLED));
@@ -190,22 +226,59 @@ public final class ProtosParallelRuntime {
                 .orElse(null);
     }
 
+    /**
+     * Caller-side P snapshot. {@code semanticRecords} marks a detached graph carrying PLAT051
+     * semantic transfer records; only such a snapshot pays the worker-side materialization copy.
+     */
     private static final class Snapshot {
         final Object callable;final List<Object> args;final ProtosActivation caller;
-        final ProtosProcessExecutionHost executionHost;
-        Snapshot(Object c,List<Object> a,ProtosActivation caller,ProtosProcessExecutionHost executionHost){
-            callable=c;args=List.copyOf(a);this.caller=caller;this.executionHost=executionHost;
+        final ProtosProcessExecutionHost executionHost;final boolean semanticRecords;
+        Snapshot(Object c,List<Object> a,ProtosActivation caller,ProtosProcessExecutionHost executionHost,boolean records){
+            callable=c;args=List.copyOf(a);this.caller=caller;this.executionHost=executionHost;semanticRecords=records;
         }
         static Snapshot capture(Object callable,List<?> args,ProtosActivation caller){
-            IdentityHashMap<Object,Object> memo=new IdentityHashMap<>();
+            TransferMemo memo=new TransferMemo(false);
             Object c=Transfer.copy(callable,caller,memo);
             ArrayList<Object> a=new ArrayList<>();for(Object v:args)a.add(Transfer.copy(v,caller,memo));
-            return new Snapshot(c,a,caller,executionHost(caller));
+            return new Snapshot(c,a,caller,executionHost(caller),memo.semanticRecords);
+        }
+        /** Destination stage: one more P copy in the worker domain that materializes every record once. */
+        Snapshot materializedIn(ProtosActivation destination){
+            TransferMemo memo=new TransferMemo(true);
+            Object c=Transfer.copy(callable,destination,memo);
+            ArrayList<Object> a=new ArrayList<>();for(Object v:args)a.add(Transfer.copy(v,destination,memo));
+            return new Snapshot(c,a,caller,executionHost,false);
         }
     }
+
+    /**
+     * One P transfer operation's identity memo. In the source stage semantic values become records
+     * and {@code semanticRecords} is set; in the materializing destination stage records become
+     * fresh destination values and nothing else may be rejected. Every production transfer uses
+     * this tracked memo; an untracked memo fails closed on any semantic value or record.
+     */
+    private static final class TransferMemo extends IdentityHashMap<Object,Object>{
+        private static final long serialVersionUID = 1L;
+        final boolean materializing;boolean semanticRecords;
+        TransferMemo(boolean materializing){this.materializing=materializing;}
+    }
+
+    /** PLAT051-A2 test seam: the P source stage over {@code values} sharing one memo. */
+    static List<Object> captureValuesForTesting(List<?> values,ProtosActivation caller,boolean[] semanticRecords){
+        TransferMemo memo=new TransferMemo(false);
+        ArrayList<Object> out=new ArrayList<>();for(Object v:values)out.add(Transfer.copy(v,caller,memo));
+        semanticRecords[0]=memo.semanticRecords;return out;
+    }
+
+    /** PLAT051-A2 test seam: the P destination stage over detached {@code values} sharing one memo. */
+    static List<Object> materializeValuesForTesting(List<?> values,ProtosActivation destination){
+        TransferMemo memo=new TransferMemo(true);
+        ArrayList<Object> out=new ArrayList<>();for(Object v:values)out.add(Transfer.copy(v,destination,memo));
+        return out;
+    }
+
     private static final class NonParallel extends RuntimeException{private static final long serialVersionUID = 1L; NonParallel(){super(null,null,false,false);}}
     private static final class Transfer {
-        static Object back(Object v,ProtosActivation a){return copy(v,a,new IdentityHashMap<>());}
         static Object copy(Object v,ProtosActivation a,IdentityHashMap<Object,Object> memo){
             if(v==ProtosNullValue.INSTANCE||v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE)return v;
             if(v instanceof ProtosIntegerValue x)return new ProtosIntegerValue(x.value());
@@ -224,10 +297,13 @@ public final class ProtosParallelRuntime {
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
             if(v instanceof ProtosSemanticTransferValue x){
-                // PLAT051: rebuilt from its inert payload, never copied or projected.
-                ProtosSemanticTransferValue y=ProtosSemanticTransferFamily.rematerializeForRuntime(x,p);
+                // PLAT051-A2 source stage: validated and extracted into an inert record, never
+                // copied, projected or materialized here.
+                if(!(memo instanceof TransferMemo tracked)||tracked.materializing)
+                    throw new IllegalStateException("PLAT051 internal inconsistency: semantic value outside a P source stage");
+                ProtosSemanticTransferRecord y=ProtosSemanticTransferRecord.prepareForRuntime(x,p);
                 if(y==null)throw new NonParallel();
-                memo.put(v,y);return y;
+                tracked.semanticRecords=true;memo.put(v,y);return y;
             }
             if(v instanceof ProtosClosureValue x){
                 java.util.function.Supplier<ProtosClosureExecutionPlan> rematerializer=null;
@@ -283,6 +359,12 @@ public final class ProtosParallelRuntime {
                 if(x.parent().orElse(null)==p.contextPrototype())throw new NonParallel();
                 Object parent=copy(x.parent().orElseThrow(),a,memo);ProtosObjectValue y=new ProtosObjectValue(parent);memo.put(v,y);
                 slots(x,y,a,memo);state(x,y);return y;
+            }
+            if(v instanceof ProtosSemanticTransferRecord x){
+                // PLAT051-A2 destination stage: one materialization per record identity.
+                if(!(memo instanceof TransferMemo tracked)||!tracked.materializing)
+                    throw new IllegalStateException("PLAT051 internal inconsistency: record outside a P destination stage");
+                ProtosSemanticTransferValue y=x.materializeForRuntime(a);memo.put(v,y);return y;
             }
             throw new NonParallel();
         }

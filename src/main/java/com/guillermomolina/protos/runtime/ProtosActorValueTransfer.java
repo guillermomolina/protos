@@ -37,15 +37,23 @@ import java.util.Set;
  * Closures and Actor-local execution state are non-transferable between Actors, ActorRef/GroupRef
  * communication capabilities are rematerialized without copying target mutable state, and an
  * explicitly delegated Process capability becomes a fresh Actor-local proxy to the same authority.
- * A value of a bootstrap-authorized Standard Library semantic transfer family (PLAT051) is rebuilt
- * from its inert payload by the Prelude's own implementation, never copied.
+ *
+ * <p>A value of a bootstrap-authorized Standard Library semantic transfer family (PLAT051) is
+ * never copied. Snapshot formation (the source stage) validates and extracts it into an internal
+ * {@link ProtosSemanticTransferRecord}; the snapshot is then a detached transfer graph that must be
+ * materialized inside the destination domain by {@link #materializeArguments} or
+ * {@link #materializeValue} before guest code observes it. Only snapshots that actually contain
+ * records are wrapped in an internal {@link DetachedGraph}; an ordinary snapshot is returned
+ * unwrapped and its destination materialization is an O(1) recognition check, never a second pass.
  */
 public final class ProtosActorValueTransfer {
     private ProtosActorValueTransfer() {}
 
     /** Forms one detached Actor-boundary snapshot value or signals NonTransferableValue. */
     public static Object snapshotValue(Object value, ProtosActivation source) {
-        return new Copier(source).copy(value);
+        Copier copier = new Copier(source, false);
+        Object copied = copier.copy(value);
+        return copier.semanticRecords ? new DetachedGraph(List.of(copied)) : copied;
     }
 
     /**
@@ -56,25 +64,122 @@ public final class ProtosActorValueTransfer {
      */
     public static List<Object> snapshotArguments(List<?> values, ProtosActivation source) {
         Objects.requireNonNull(values, "values");
-        Copier copier = new Copier(source);
+        Copier copier = new Copier(source, false);
         ArrayList<Object> result = new ArrayList<>(values.size());
         for (Object value : values) {
             result.add(copier.copy(value));
         }
+        List<Object> snapshot = List.copyOf(result);
+        return copier.semanticRecords ? List.of(new DetachedGraph(snapshot)) : snapshot;
+    }
+
+    /** True when an argument snapshot carries semantic transfer records needing materialization. */
+    public static boolean requiresMaterialization(List<?> snapshot) {
+        return snapshot.size() == 1 && snapshot.get(0) instanceof DetachedGraph;
+    }
+
+    /**
+     * Destination stage for an argument snapshot formed by {@link #snapshotArguments}.
+     *
+     * <p>Must run inside the destination execution domain before the arguments reach guest code.
+     * An ordinary snapshot is returned as is. A snapshot carrying semantic transfer records is
+     * copied once more under the same Actor transfer rules into a fresh destination-local graph in
+     * which every record is materialized exactly once, so aliases, cycles and distinct identities
+     * are preserved and every delivery of the same logical snapshot gets its own identities.
+     */
+    public static List<?> materializeArguments(List<?> snapshot, ProtosActivation destination) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        if (!requiresMaterialization(snapshot)) {
+            return snapshot;
+        }
+        Copier materializer = new Copier(destination, true);
+        List<Object> roots = ((DetachedGraph) snapshot.get(0)).roots;
+        ArrayList<Object> result = new ArrayList<>(roots.size());
+        for (Object root : roots) {
+            result.add(materializer.copy(root));
+        }
         return List.copyOf(result);
     }
 
+    /** Destination stage for one value formed by {@link #snapshotValue}; see {@link #materializeArguments}. */
+    public static Object materializeValue(Object snapshot, ProtosActivation destination) {
+        if (!(snapshot instanceof DetachedGraph graph)) {
+            return snapshot;
+        }
+        return new Copier(destination, true).copy(graph.roots.get(0));
+    }
+
+    /**
+     * Resolves a requester-domain request Future with one reply snapshot.
+     *
+     * <p>An ordinary reply resolves immediately. A reply carrying semantic transfer records is
+     * materialized by a targeted runtime completion inside the requester's own execution domain,
+     * with the requester's authority, before the Future becomes RESOLVED; if the requester is
+     * already terminating the Future is cancelled as termination would cancel it. A materialization
+     * failure is an internal inconsistency and fails the Future with a generic Error.
+     */
+    public static void resolveRequesterFuture(
+            ProtosFutureValue future, Object replySnapshot, ProtosActivation requester) {
+        Objects.requireNonNull(future, "future");
+        Objects.requireNonNull(requester, "requester");
+        if (!(replySnapshot instanceof DetachedGraph)) {
+            future.resolve(replySnapshot, requester);
+            return;
+        }
+        try {
+            requester.executionDomain()
+                    .enqueueTargetedFutureCompletionForRuntime(
+                            future,
+                            () -> {
+                                if (!future.isPending()) {
+                                    return false;
+                                }
+                                Object reply;
+                                try {
+                                    reply = materializeValue(replySnapshot, requester);
+                                } catch (RuntimeException inconsistency) {
+                                    // Internal inconsistency, contained as a generic Error.
+                                    return future.fail(ProtosCoreErrors.newError(requester));
+                                }
+                                return future.resolve(reply, requester);
+                            });
+        } catch (IllegalStateException requesterTerminating) {
+            future.cancelTerminal();
+        }
+    }
+
+    /**
+     * Internal carrier of a snapshot that contains semantic transfer records. It is never a Protos
+     * value and never reaches guest code: every destination boundary unwraps it by
+     * materialization.
+     */
+    private static final class DetachedGraph {
+        private final List<Object> roots;
+
+        private DetachedGraph(List<Object> roots) {
+            this.roots = roots;
+        }
+    }
+
+    /**
+     * One snapshot operation. In the source stage ({@code materializing == false}) semantic values
+     * become records. In the destination stage the input is a detached snapshot, records are
+     * materialized, and any rejection is an internal inconsistency rather than a guest error.
+     */
     private static final class Copier {
         private final ProtosActivation source;
         private final ProtosPrelude prelude;
+        private final boolean materializing;
+        private boolean semanticRecords;
         private final IdentityHashMap<Object, Object> memo = new IdentityHashMap<>();
         private final Set<Object> populating =
                 Collections.newSetFromMap(new IdentityHashMap<>());
         private final Set<Object> populated =
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
-        private Copier(ProtosActivation source) {
+        private Copier(ProtosActivation source, boolean materializing) {
             this.source = Objects.requireNonNull(source, "source");
+            this.materializing = materializing;
             this.prelude =
                     source.prelude()
                             .orElseThrow(
@@ -153,6 +258,10 @@ public final class ProtosActorValueTransfer {
             }
 
             if (!(value instanceof ProtosObjectValue object)) {
+                if (materializing && value instanceof ProtosSemanticTransferRecord record) {
+                    // PLAT051-A2 destination stage: one materialization per record identity.
+                    return remember(value, record.materializeForRuntime(source));
+                }
                 // Unknown Java/native/runtime values are non-transferable by default.
                 throw nonTransferable();
             }
@@ -163,13 +272,17 @@ public final class ProtosActorValueTransfer {
                 return value;
             }
             if (object instanceof ProtosSemanticTransferValue semantic) {
-                // PLAT051: rebuilt from its inert payload, never copied; the memo keeps aliases.
-                ProtosSemanticTransferValue rebuilt =
-                        ProtosSemanticTransferFamily.rematerializeForRuntime(semantic, prelude);
-                if (rebuilt == null) {
+                // PLAT051-A2 source stage: validated and extracted into an inert record, never
+                // copied or materialized here; the memo keeps one record per source identity.
+                ProtosSemanticTransferRecord record =
+                        materializing
+                                ? null
+                                : ProtosSemanticTransferRecord.prepareForRuntime(semantic, prelude);
+                if (record == null) {
                     throw nonTransferable();
                 }
-                return remember(value, rebuilt);
+                semanticRecords = true;
+                return remember(value, record);
             }
             if (object.parent().orElse(null) == prelude.contextPrototype()) {
                 // Module/activation execution contexts are Actor-local state.
@@ -279,19 +392,25 @@ public final class ProtosActorValueTransfer {
          * intervening override. Rebuilding that recorded hash is required because an ordinary
          * Actor copy has a fresh semantic identity. This inspection is read-only and invokes no
          * Protos hash/equality code during snapshot formation.
+         *
+         * <p>In a detached snapshot a record stands where a semantic value was, as a key or as a
+         * delegation parent; the walk continues through its already-allocated materialized value,
+         * whose lookup chain is complete.
          */
-        private static boolean usesDefaultObjectHash(Object key) {
-            if (!(key instanceof ProtosObjectValue object)) {
-                return false;
-            }
-            Object current = object;
-            while (current instanceof ProtosObjectValue candidate) {
-                if (candidate.hasLocalSlot("hash")) {
-                    return candidate == ProtosObjectValue.rootObject();
+        private boolean usesDefaultObjectHash(Object key) {
+            Object current = key;
+            while (true) {
+                if (current instanceof ProtosObjectValue candidate) {
+                    if (candidate.hasLocalSlot("hash")) {
+                        return candidate == ProtosObjectValue.rootObject();
+                    }
+                    current = candidate.parent().orElse(null);
+                } else if (current instanceof ProtosSemanticTransferRecord) {
+                    current = memo.get(current);
+                } else {
+                    return false;
                 }
-                current = candidate.parent().orElse(null);
             }
-            return false;
         }
 
         private void copyLocalSlots(ProtosObjectValue sourceObject, ProtosObjectValue destination) {
@@ -337,7 +456,11 @@ public final class ProtosActorValueTransfer {
             return destinationValue;
         }
 
-        private ProtosSignalException nonTransferable() {
+        private RuntimeException nonTransferable() {
+            if (materializing) {
+                return new IllegalStateException(
+                        "PLAT051 internal inconsistency: detached Actor snapshot is not transferable");
+            }
             return new ProtosSignalException(
                     ProtosCoreErrors.newOccurrence(
                             source, ProtosCoreErrors.StandardError.NON_TRANSFERABLE_VALUE));

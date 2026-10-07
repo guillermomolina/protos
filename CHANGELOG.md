@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.262-SNAPSHOT
+
+- `PLAT051-A2` splits Standard Library semantic-value transfer into a source
+  stage and a destination stage (Candidate C with explicit two-stage
+  transfer). There is no specification or observable semantic change.
+  - The source stage runs synchronously inside the existing Actor/P snapshot.
+    It validates the exact bootstrap-authorized family, extracts the inert
+    payload, checks it with the new `acceptsPayload` and produces an internal,
+    non-guest `ProtosSemanticTransferRecord`. `NonTransferableValue` and
+    `NonParallelValue` timing is unchanged.
+  - The destination stage materializes each record once per destination graph,
+    inside the destination domain and before guest code observes it. This
+    happens in Actor turns (send, request and Group), Actor spawn bootstrap,
+    request replies (through a targeted completion in the requester domain),
+    the P worker's root Task and the P caller's producer Task.
+  - `ProtosSemanticTransferFamily.materialize` receives a
+    `ProtosSemanticTransferDestination`. It loads the family's exact owning
+    std module in the destination Actor-local module state and invokes
+    destination guest code, so guest-implemented families are supported.
+  - Only graphs that actually contain records pay the destination copy.
+    Ordinary transfers pay an O(1) check and no second pass, scan or import.
+
 ## 0.3.261-SNAPSHOT
 
 - `TEST009-AD` (guillermomolina/protos#795) keeps the real, reachable

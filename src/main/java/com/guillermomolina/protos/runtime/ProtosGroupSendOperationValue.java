@@ -379,7 +379,7 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
                     ProtosInvocation.executeMessageInTaskForRuntime(
                             behavior,
                             selector,
-                            snapshot,
+                            ProtosActorValueTransfer.materializeArguments(snapshot, activation),
                             activation,
                             task,
                             () ->
