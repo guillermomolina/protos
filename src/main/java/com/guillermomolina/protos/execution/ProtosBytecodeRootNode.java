@@ -3450,7 +3450,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation) {
             this.kind = java.util.Objects.requireNonNull(kind, "kind");
             this.receiver = java.util.Objects.requireNonNull(receiver, "receiver");
-            this.supplied = List.copyOf(supplied);
+            // TEST009-AL: supplied is NativeCall's already-immutable List.copyOf result (the sole
+            // construction site); re-copying it only re-enters List.copyOf's erased fallback in PE.
+            this.supplied = java.util.Objects.requireNonNull(supplied, "supplied");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
             if (receiver != ProtosBooleanValue.TRUE
                     && receiver != ProtosBooleanValue.FALSE) {

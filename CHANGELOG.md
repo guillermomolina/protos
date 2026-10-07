@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.270-SNAPSHOT
+
+- `TEST009-AL` removes the redundant `List.copyOf` re-copy in the prepared
+  structured-Boolean call. Its only construction site passes the `NativeCall`
+  argument list, which is already an immutable `List.copyOf` result, so the
+  re-copy returned the same instance but forced partial evaluation through the
+  erased `Collection.isEmpty()`/`toArray()` fallback. On the focal strict SYNC
+  reproducer this removes exactly that family (performance warnings 52 -> 48,
+  compilation failures unchanged at 2); the strict gate remains red. There is
+  no semantic, specification, or public API change.
+
 ## 0.3.269-SNAPSHOT
 
 - `LIB020-C` adds `std:text/ColorMode`, the pure color-mode policy ratified by
