@@ -7,6 +7,40 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.274-SNAPSHOT
+
+- `I082-C` routes explicit foreign imports to a registered provider and
+  realizes foreign module instances as Actor-local Protos facades under the
+  ordinary module lifecycle (D188, PLAT053, `MODULES.md` "Foreign module
+  instances"). There is no specification change. Source-backed import
+  behavior is unchanged, and no concrete provider, member projection,
+  callback, or foreign authority is introduced.
+  - A provider descriptor may own one `ProtosForeignImportRoute`: an exact
+    import scheme plus a provider-neutral `ProtosForeignModuleProvider`
+    (`canonicalTarget(exactTarget)` without a session,
+    `acquireTarget(session, canonicalTarget)` inside the Actor's session).
+    Routes are fixed with the RuntimeHost registry; duplicate schemes are
+    rejected, and the source schemes `std`, `self`, `dep`, and `tool-shared`
+    cannot be routed. Only a `scheme:target` specifier whose scheme is
+    registered with the importing Process's RuntimeHost is foreign; every
+    other specifier, including unknown schemes, keeps the source resolver's
+    authority and never invokes a provider.
+  - Foreign canonical identity is `ProtosForeignModuleKey`
+    (`foreign:v1:<scheme>:<target>`, base64url fields) built only from the
+    route scheme and the provider-defined canonical target. A source
+    resolver result inside that domain is rejected, so foreign and source
+    keys cannot collide.
+  - On a cache miss, `ProtosModuleRuntime` caches a fresh
+    `ProtosForeignModuleFacadeValue` as `INITIALIZING` before obtaining the
+    Actor's I082-B session and acquiring the target. Reentrant and cyclic
+    imports see the same partial facade. Success attaches the target
+    privately and marks the same record `READY`. Failure removes the exact
+    record and surfaces as an ordinary Core Error; a retry creates a fresh
+    facade, and an escaped failed facade stays unattached and unchanged.
+    Foreign initialization completes during Bytecode import preparation, so
+    the existing immediate prepared-import result carries it without a
+    child root.
+
 ## 0.3.273-SNAPSHOT
 
 - `I082-B` adds the PLAT053 Process-owned lazy foreign provider compartment

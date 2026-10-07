@@ -26,33 +26,55 @@ import java.util.Optional;
  * Immutable registry of host-supplied foreign providers owned by one RuntimeHost (PLAT053).
  *
  * <p>The registry is fixed when its RuntimeHost is constructed. It performs no discovery, is not a
- * global singleton, is not guest-visible, and never invokes provider factories.
+ * global singleton, is not guest-visible, and never invokes provider factories. Import schemes
+ * are owned by exactly one provider and are fixed with the registry.
  */
 final class ProtosForeignProviderRegistry {
-    static final ProtosForeignProviderRegistry EMPTY = new ProtosForeignProviderRegistry(Map.of());
+    static final ProtosForeignProviderRegistry EMPTY =
+            new ProtosForeignProviderRegistry(Map.of(), Map.of());
 
     private final Map<ProtosForeignProviderId, ProtosForeignProviderDescriptor> providers;
+    private final Map<String, ProtosForeignProviderDescriptor> importSchemes;
 
     private ProtosForeignProviderRegistry(
-            Map<ProtosForeignProviderId, ProtosForeignProviderDescriptor> providers) {
+            Map<ProtosForeignProviderId, ProtosForeignProviderDescriptor> providers,
+            Map<String, ProtosForeignProviderDescriptor> importSchemes) {
         this.providers = providers;
+        this.importSchemes = importSchemes;
     }
 
-    /** Builds a registry, rejecting the first repeated identity in the supplied order. */
+    /**
+     * Builds a registry, rejecting the first repeated identity or import scheme in the supplied
+     * order.
+     */
     static ProtosForeignProviderRegistry of(List<ProtosForeignProviderDescriptor> descriptors) {
         Objects.requireNonNull(descriptors, "descriptors");
         if (descriptors.isEmpty()) {
             return EMPTY;
         }
         Map<ProtosForeignProviderId, ProtosForeignProviderDescriptor> providers = new HashMap<>();
+        Map<String, ProtosForeignProviderDescriptor> importSchemes = new HashMap<>();
         for (ProtosForeignProviderDescriptor descriptor : descriptors) {
             Objects.requireNonNull(descriptor, "descriptor");
             if (providers.putIfAbsent(descriptor.id(), descriptor) != null) {
                 throw new IllegalArgumentException(
                         "duplicate foreign provider identity: " + descriptor.id().value());
             }
+            if (descriptor.importRoute().isPresent()) {
+                String scheme = descriptor.importRoute().get().scheme();
+                if (importSchemes.putIfAbsent(scheme, descriptor) != null) {
+                    throw new IllegalArgumentException(
+                            "duplicate foreign import scheme: " + scheme);
+                }
+            }
         }
-        return new ProtosForeignProviderRegistry(Map.copyOf(providers));
+        return new ProtosForeignProviderRegistry(
+                Map.copyOf(providers), Map.copyOf(importSchemes));
+    }
+
+    /** Returns the provider that owns the exact import scheme, if any. */
+    Optional<ProtosForeignProviderDescriptor> lookupImportScheme(String scheme) {
+        return Optional.ofNullable(importSchemes.get(Objects.requireNonNull(scheme, "scheme")));
     }
 
     Optional<ProtosForeignProviderDescriptor> lookup(ProtosForeignProviderId id) {

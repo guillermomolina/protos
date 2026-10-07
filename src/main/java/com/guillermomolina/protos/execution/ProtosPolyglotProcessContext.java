@@ -123,6 +123,11 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         return foreignProviders.sessionForRuntime(actor, providerId);
     }
 
+    /** The immutable foreign provider registry of the RuntimeHost hosting this Process. */
+    ProtosForeignProviderRegistry foreignProviderRegistryForRuntime() {
+        return runtimeHost.foreignProvidersForRuntime();
+    }
+
     @Override
     public <T> T callForRuntime(Supplier<T> action) {
         return context.callEntered(Objects.requireNonNull(action, "action"));

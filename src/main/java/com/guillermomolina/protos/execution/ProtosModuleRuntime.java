@@ -230,6 +230,12 @@ public final class ProtosModuleRuntime {
             return PreparedModuleInitialization.cached(
                     key, actorState, existing, caller);
         }
+        if (ProtosForeignModuleKey.owns(key)) {
+            // Foreign initialization is provider acquisition with no Protos child root: it
+            // completes (or evicts its record) during preparation, so the result is immediate.
+            return PreparedModuleInitialization.cached(
+                    key, actorState, initializeForeignModule(key, caller, actorState), caller);
+        }
 
         ProtosPrelude prelude =
                 caller.prelude()
@@ -288,9 +294,21 @@ public final class ProtosModuleRuntime {
         }
 
         try {
-            return Objects.requireNonNull(
-                    resolver.resolve(semanticString.value(), caller.currentModuleKey()),
-                    "module resolver returned null ModuleKey");
+            ProtosModuleKey foreign =
+                    ProtosForeignModuleImports.resolveOrNull(semanticString.value(), caller);
+            if (foreign != null) {
+                return foreign;
+            }
+            ProtosModuleKey key =
+                    Objects.requireNonNull(
+                            resolver.resolve(semanticString.value(), caller.currentModuleKey()),
+                            "module resolver returned null ModuleKey");
+            if (ProtosForeignModuleKey.owns(key)) {
+                // The foreign key domain is exclusive; a source key can never alias a foreign one.
+                throw new IllegalStateException(
+                        "source module resolver returned a foreign ModuleKey");
+            }
+            return key;
         } catch (ProtosSignalException signal) {
             throw signal;
         } catch (Exception hostFailure) {
@@ -349,6 +367,24 @@ public final class ProtosModuleRuntime {
         return loadCanonicalModuleInternal(key, caller, bootstrapLocals, true);
     }
 
+    /**
+     * Initializes one foreign module absent from the Actor cache, translating every host or
+     * provider failure that crosses the import boundary into an ordinary Core Error.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static ProtosActorModuleState.ModuleRecord initializeForeignModule(
+            ProtosModuleKey key,
+            ProtosActivation caller,
+            ProtosActorModuleState actorState) {
+        try {
+            return ProtosForeignModuleImports.initialize(key, caller, actorState);
+        } catch (ProtosSignalException signal) {
+            throw signal;
+        } catch (Exception hostOrProviderFailure) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+    }
+
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private void installBootstrapLocalsForRuntime(
             ProtosObjectValue moduleInstance,
@@ -381,6 +417,12 @@ public final class ProtosModuleRuntime {
                         "RootActor initial module was cached before bootstrap-local provisioning");
             }
             return existing.instance();
+        }
+        if (ProtosForeignModuleKey.owns(key)) {
+            if (initialBootstrap) {
+                throw new IllegalStateException("RootActor initial module must be source-backed");
+            }
+            return initializeForeignModule(key, caller, actorState).instance();
         }
 
         ProtosPrelude prelude =

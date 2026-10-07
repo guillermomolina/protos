@@ -17,15 +17,30 @@
 package com.guillermomolina.protos.execution;
 
 import java.util.Objects;
+import java.util.Optional;
 
-/** Immutable host-supplied metadata and factory of one foreign provider. */
+/**
+ * Immutable host-supplied metadata and factory of one foreign provider.
+ *
+ * <p>A provider without an import route can still own a Process lifecycle but is never selected
+ * by an import specifier.
+ */
 record ProtosForeignProviderDescriptor(
         ProtosForeignProviderId id,
         ProtosForeignProviderExecutionProfile profile,
-        ProtosForeignProviderFactory factory) {
+        ProtosForeignProviderFactory factory,
+        Optional<ProtosForeignImportRoute> importRoute) {
     ProtosForeignProviderDescriptor {
         Objects.requireNonNull(id, "id");
         Objects.requireNonNull(profile, "profile");
         Objects.requireNonNull(factory, "factory");
+        Objects.requireNonNull(importRoute, "importRoute");
+    }
+
+    ProtosForeignProviderDescriptor(
+            ProtosForeignProviderId id,
+            ProtosForeignProviderExecutionProfile profile,
+            ProtosForeignProviderFactory factory) {
+        this(id, profile, factory, Optional.empty());
     }
 }
