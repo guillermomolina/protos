@@ -742,6 +742,10 @@ object with no nearer `call` is therefore constructible by inherited
 `Object.call`. An object can deliberately make itself non-invokable by shadowing
 `call` with a non-Closure value, subject to its ordinary mutability rules.
 
+A raw foreign reference does not receive this default construction: its `call`
+member exists only through the explicit projection defined in
+`VALUES_AND_COLLECTIONS.md` (Foreign Values).
+
 Thus:
 
 ```js

@@ -3454,3 +3454,265 @@ can consequently keep that particular Map mutation-restricted for the same
 unbounded time; this is an observable consequence of choosing to suspend inside
 a protocol whose dynamic extent protects that Map, not permission for the
 runtime to block unrelated Actor work.
+
+## Foreign Values
+
+This section is the primary normative owner of the semantics of values that a
+foreign provider admits into Protos: values originating in Java, Python,
+JavaScript, Ruby, another guest language, or another host runtime API. Foreign
+module identity and lifecycle are owned by `MODULES.md`; the `ForeignError`
+category is recorded in the `ERRORS.md` taxonomy and its use is owned here;
+Actor and P transfer remain owned by `../concurrency/ACTORS.md` and
+`../concurrency/PARALLEL_EXECUTION.md`.
+
+This section is implementation-independent. No runtime interoperability API,
+host wrapper class, host exception type, or provider mechanism is a Protos
+language institution by virtue of being used to realize it. Core v0.1 defines
+no syntax for foreign values, and this section does not standardize a provider
+registry, a specifier scheme, or the public API of a future explicit
+interoperability module.
+
+### Ordinary Protos semantics first
+
+A foreign value does not import the semantics of its source language or of a
+particular runtime API into Protos. A foreign capability participates in
+ordinary Protos syntax and protocols only where a faithful projection onto an
+already existing Protos institution exists, as defined by the rules below.
+
+Behavior that is ambiguous, incompatible with ordinary Protos semantics,
+side-effecting in a way that is not equivalent to the ordinary operation,
+provider-specific, metadata-oriented, or otherwise not faithfully projectable
+receives no automatic ordinary-syntax meaning. It is reachable only through a
+deliberate provider facade/protocol or through a future explicit
+interoperability facility (`std:interop`, see below).
+
+Terms used in this section:
+
+```text
+admission
+    entry of a foreign value into Protos, producing either a converted Protos
+    scalar or a raw foreign reference
+
+raw foreign reference
+    an admitted foreign value that is not converted to an existing Protos
+    value family
+
+provider facade
+    an ordinary Protos object deliberately created by a provider to present a
+    foreign capability through documented Protos-facing behavior
+```
+
+### Primitive admission
+
+A foreign value is automatically converted to an existing Protos value only
+when its source semantic category is known and the conversion is lossless:
+
+```text
+foreign Boolean                                   -> Protos Boolean
+true foreign absence/null                         -> Protos null
+valid Unicode scalar sequence                     -> Protos String
+source-classified integral value                  -> unbounded Protos Integer
+source-classified binary floating value exactly
+representable as binary64                         -> Protos Float
+```
+
+The following are not collapsed automatically and remain raw foreign references
+unless a future explicit conversion converts them:
+
+- ambiguous null-like values, including JavaScript `undefined`;
+- decimal, rational, or other custom numeric families;
+- numeric values whose conversion would be lossy;
+- text that is not a valid Unicode scalar sequence;
+- foreign arrays/lists merely because of their shape;
+- foreign maps/dictionaries/hashes merely because of their shape.
+
+A physical representability check alone does not establish the source semantic
+family. For example, a foreign value whose bits happen to fit an Integer or a
+Float is not thereby source-classified as integral or binary floating.
+
+A converted value is an ordinary value of its Protos family and has exactly that
+family's identity, equality, hashing, and transfer semantics.
+
+### Raw foreign-reference identity
+
+A raw foreign reference is an identity-bearing value under §21. It does not form
+a new value-identity family. `===` remains the authoritative identity relation:
+neither host reference identity nor physical runtime-wrapper identity is a
+Protos identity relation.
+
+- When the provider/runtime has a stable foreign identity for the underlying
+  object, distinct physical representations of the same foreign object denote
+  the same Protos foreign-reference identity.
+- When no stable foreign identity is available, independent admissions produce
+  distinct Protos identities, while an alias of an already-admitted raw foreign
+  reference preserves that reference's identity.
+- When a Protos value crosses into a foreign runtime and later returns in a form
+  the provider recognizes as that same Protos value, it is the original Protos
+  value with its original identity.
+
+No universal or global wrapper cache is required; physical representation is an
+implementation choice provided these observations hold.
+
+A provider facade is an ordinary identity-bearing Protos object. There is no
+general rule that a facade is `===` to its underlying foreign target, and no
+universal facade canonicalization. The identity of a foreign module facade is
+defined by `MODULES.md`; other facades have ordinary object identity unless a
+future normative rule says otherwise.
+
+### Equality, hashing, Map, and IdentityMap
+
+For a raw foreign reference, ordinary `==` is the default Object equality of
+"Default equality and hash behavior" (that is, `===`), and ordinary `hash` is
+the semantic identity hash (`identityHashOf`), coherent with that `==`. Source
+language or provider equality and hashing — for example Java `equals` /
+`hashCode`, Python `__eq__` / `__hash__`, JavaScript `==` / `===`, Ruby `==`,
+or a foreign hash table's key equality — are not imported.
+
+A provider facade may define ordinary `==` and `hash` like any other Protos
+object, subject to the ordinary coherence obligation.
+
+Standard `Map` keeps exactly its `==` / `hash` key rule and standard
+`IdentityMap` keeps exactly its `===` / `identityHashOf` key rule; raw foreign
+references used as keys therefore behave as identity-keyed values in both. A
+foreign hash container is not a standard `Map`, and its keying rules do not
+redefine those of standard `Map`.
+
+### Member read
+
+An ordinary member read `foreign.name` on a raw foreign reference proceeds
+conceptually as:
+
+1. the Protos-facing semantic protocol/slot projection of the receiver;
+2. after a miss there, a faithful foreign-member fallback, if available;
+3. otherwise the ordinary Protos missing-member failure.
+
+Names that denote Protos institutions — including `call`, `at`, `atPut`,
+`each`, `==`, and `hash` — are never satisfied by a same-spelling foreign member
+through step 2. The foreign member remains reachable only through explicit
+interoperability.
+
+The Protos-facing projection of a raw foreign reference supplies the default
+`==` and `hash` behavior above. It does not supply the default construction of
+the standard `Object.call` (`CALLABLES.md`); a `call` member exists only when
+explicitly projected under "Callability and construction" below.
+
+Automatic foreign-member fallback exists only when the foreign read is faithful
+to ordinary Protos member-read semantics. A foreign read that has material side
+effects incompatible with an ordinary read, that cannot preserve receiver
+binding faithfully, or that otherwise changes ordinary Protos meaning receives
+no generic automatic projection; a provider facade/protocol or explicit
+interoperability must be used.
+
+### Member write
+
+`foreign.member = value` keeps its ordinary meaning (`OBJECT_MODEL.md` §3): it
+modifies a valid existing writable local Protos slot. Writes do not delegate and
+are not redefined as hidden foreign-member writes. A raw foreign reference does
+not acquire writable local Protos slots because the foreign runtime permits
+writing a member, and slot modification or creation on it fails with the
+ordinary failure for that operation. A provider facade, being an ordinary Protos
+object, may have ordinary local slots. Foreign-member mutation belongs to
+explicit interoperability or a deliberate provider facade/protocol.
+
+### Member invocation
+
+`foreign.member(args...)` is defined as the member read above followed by
+ordinary Protos invocation of the resulting admitted/projected value. There is
+no second, hidden "invoke foreign member" semantics. An implementation may use a
+combined invoke-member primitive only when it is observably equivalent to read
+and bind followed by ordinary invocation, including evaluation order, receiver
+binding, result admission, failure projection, and side effects.
+
+### Callability and construction
+
+Foreign executability does not create a second callable predicate.
+`foreign(args...)` remains the ordinary `call` protocol of `CALLABLES.md`:
+lookup of `call`, a selected value that must be a Closure, and ordinary Closure
+activation. A foreign executable capability may be projected as a `call` member
+whose value is an adapter Closure that performs the foreign execution when
+activated. A non-executable raw foreign reference has no hidden callability:
+lookup of `call` fails with the ordinary missing-member failure.
+
+Foreign instantiability creates no syntax, does not make a raw foreign reference
+callable, and does not redefine `call`. The baseline route to instantiation is
+the future explicit interoperability facility. A provider type/class/module
+facade may deliberately publish a `call` Closure whose documented Protos
+semantics is construction. When a foreign target is both executable and
+instantiable, the generic layer does not choose between them; a provider facade
+or explicit interoperability disambiguates.
+
+### Indexed access, foreign hash containers, and iteration
+
+Bracket syntax keeps exactly its lowering to `at` / `atPut` ("Indexed Access
+Syntax"). A foreign indexed/array-like value may expose faithful Protos-facing
+`at` and `atPut`. That does not make it a standard `Array` or give it Array
+family membership, identity, copying, `each` snapshot, or Actor/P transfer
+semantics. When a foreign target presents both array-element and hash-entry
+capabilities, the generic layer does not choose the meaning of `at`; a provider
+facade or explicit interoperability resolves it.
+
+A provider may project foreign hash-entry access as custom `at` / `atPut` when
+that is an explicit, unambiguous provider semantics. Keying remains that of the
+foreign container, which is not a standard `Map`.
+
+Where ordinary foreign iteration is projected, it is `foreign.each(block)`,
+whose Protos-facing implementation repeatedly pulls the next foreign iterator
+element, admits it, and invokes `block(element)` through ordinary Protos
+invocation. The baseline mechanism does not hand the Protos callback to the
+foreign runtime. A custom foreign `each` does not acquire the shallow-snapshot
+semantics of standard `Array.each` or `Map.each`.
+
+### Foreign failures
+
+`ForeignError` (parent `Error`, see `ERRORS.md`) is the single initial standard
+category for foreign failures. Core defines no per-language Error hierarchy.
+
+Every failure produced by a foreign operation after that operation has actually
+been entered is a fresh `ForeignError` standard failure occurrence. A failure
+that occurs before any foreign operation is entered is the existing ordinary
+Protos failure; for example, a foreign target that lacks a required
+Protos-facing `call` produces the ordinary lookup/invocation failure, not a
+`ForeignError` merely because the receiver is foreign.
+
+A `ForeignError` occurrence exposes exactly these visible payload slots, each
+holding only safe Protos values:
+
+```text
+language         String naming the foreign language/provider
+operation        String naming the attempted foreign operation
+category         String classifying the failure, or null
+foreignCategory  String naming the source-language failure kind, or null
+message          String, or null
+cause            Error, or null
+```
+
+This revision does not standardize the vocabularies of these Strings. The
+`cause` projection must be cycle-safe: projecting a cyclic foreign cause chain
+terminates and never exposes a non-Error value.
+
+Host exception objects, foreign exception handles, foreign runtime objects, host
+authority handles, foreign/native or mixed-language stack objects, suppressed
+exception objects, and runtime implementation metadata are not part of the
+public structure of a `ForeignError`. Implementation-private diagnostics remain
+governed by `ERRORS.md`.
+
+### Relation to explicit interoperability
+
+Import-based foreign access and the future `std:interop` facility share exactly
+one substrate for foreign-value admission, foreign identity, primitive
+conversion, and failure projection. This revision does not define the public API
+of `std:interop`, does not make it a one-to-one mirror of any runtime API, and
+defines no universal source-language semantic-equality operation. Operation
+classes without a faithful ordinary mapping — explicit member read/write/invoke,
+execute, instantiate, low-level array and hash access, iterator access, foreign
+identity queries, language/metaobject/source/display metadata, and explicit
+scalar conversion — are left to that facility.
+
+### Actor and P boundaries
+
+Foreign values and resources have no automatic Actor transfer contract and no
+automatic P transfer contract. The rules of `../concurrency/ACTORS.md` §16,
+§24K, and §24L and of `../concurrency/PARALLEL_EXECUTION.md` §71 apply
+unchanged; an Actor-local foreign module facade does not make the underlying
+foreign state or resource transferable. Converted scalars transfer as ordinary
+values of their Protos family.

@@ -23,6 +23,40 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.445] - 2026-10-07
+
+### I080 / D188 C_HYBRID_PROTOS_SEMANTIC_PROJECTION — Foreign-value semantics
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: new section Foreign Values is the
+  primary owner of foreign-value semantics. Ordinary Protos semantics come
+  first; source-language or runtime-API semantics are never imported. Lossless,
+  source-classified primitive admission (Boolean, true null, valid Unicode
+  String, unbounded Integer, exact binary64 Float); everything else stays a raw
+  foreign reference. Raw foreign references are identity-bearing under `===`
+  (stable foreign identity when available, no global wrapper cache required)
+  and use default Object `==` and identity `hash`; Map and IdentityMap rules
+  are unchanged and foreign hash containers are not standard Maps. Member read
+  is projection first, then faithful foreign fallback, then ordinary missing
+  member; Protos institution names (`call`, `at`, `atPut`, `each`, `==`,
+  `hash`) cannot be taken over by foreign members. Writes are not redirected to
+  foreign members. Member invocation is read plus ordinary invocation.
+  Callability is only through a projected `call` adapter Closure; raw foreign
+  references get no default `Object.call` construction, and the generic layer
+  does not guess between execution and instantiation or between array and hash
+  `at`. Iteration is projected as a Protos-side pull `each` without foreign
+  callbacks. Entered foreign operations fail with a fresh `ForeignError`
+  carrying only safe payload slots. Import and a future `std:interop` share one
+  admission/identity/conversion/failure substrate; no `std:interop` API is
+  defined. No automatic Actor or P transfer of foreign values.
+- `spec/semantics/MODULES.md`: source-backed module instances remain their
+  `moduleContext`. A foreign module instance is an Actor-local Protos module
+  facade over the provider-acquired target, under the unchanged `ModuleKey`,
+  Actor-local cache, cache-before-initialization, cycle, eviction, and retry
+  rules.
+- `spec/semantics/ERRORS.md`: taxonomy adds `ForeignError` with parent `Error`.
+- `spec/semantics/CALLABLES.md`: cross-reference excluding raw foreign
+  references from inherited default construction.
+- Adds no syntax and no runtime interoperability API.
+
 ## [0.1.444] - 2026-10-05
 
 ### I060 / D167 Candidate D — Standard Library placement of the buffered byte wrappers

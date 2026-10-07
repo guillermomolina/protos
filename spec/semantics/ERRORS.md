@@ -367,6 +367,7 @@ The standard prototypes required by Core v0.1 are:
 | `RequestOutcomeUncertain` | `Error` | `../concurrency/ACTORS.md` |
 | `NonTransferableValue` | `Error` | `../concurrency/ACTORS.md` |
 | `NonParallelValue` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `ForeignError` | `Error` | `VALUES_AND_COLLECTIONS.md` (Foreign Values) |
 | `InvalidPredicateResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
 | `InvalidComparatorResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
 | `InvalidComparatorOrder` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |

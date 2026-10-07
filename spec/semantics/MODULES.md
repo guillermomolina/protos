@@ -81,14 +81,20 @@ x: value
 creates `x` as a local slot of the current `moduleContext`.
 ## Module Loading, Identity, and Cycles
 
-Each module executes inside a `moduleContext`, an ordinary execution-context object, as described in Module Contexts and Top-Level Bindings. The importable unit is the **module instance**. A module instance is an ordinary object, and in Core v0.1 it is the module's own `moduleContext` object:
+Each module executes inside a `moduleContext`, an ordinary execution-context object, as described in Module Contexts and Top-Level Bindings. The importable unit is the **module instance**. A module instance is an ordinary object, and in Core v0.1 the module instance of a Protos source-backed module is the module's own `moduleContext` object:
 
 - the module body executes with the module instance as its current execution context;
 - a top-level binding created with `:` becomes a local slot of the module instance;
 - `import(specifier)` yields the module instance;
 - reading a member of a module instance therefore observes the module's top-level binding slots exactly as they exist at that moment.
 
-There is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`), and a module's observable surface is its current top-level slot state.
+For a Protos source-backed module there is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`), and a module's observable surface is its current top-level slot state.
+
+### Foreign module instances
+
+When a successful resolution yields a canonical `ModuleKey` whose module is provided by a foreign provider rather than by Protos source, the module instance is an **Actor-local Protos module facade over the provider-acquired foreign target**. That facade is the module instance for every rule in this document: it participates in the same canonical `ModuleKey` identity, Actor-local module cache, cache-before-initialization, `INITIALIZING` / `READY` states, cycles and partial initialization, failed-initialization eviction, and retry rules as a source-backed module instance. Within one Actor the same canonical `ModuleKey` yields the same active facade under `===`; distinct Actors obtain distinct facades for the same `ModuleKey`.
+
+The facade is inserted into the Actor-local cache in state `INITIALIZING` before the provider acquisition/initialization of the foreign target that it depends on; a recursive import observing that state returns the same facade. A failure of that initialization follows Failed Initialization below. A foreign module object, host class, foreign module/class value, host wrapper, provider cache, or source-language module cache never replaces the Protos module instance identity. The facade's Protos-facing behavior and any failures it produces follow `VALUES_AND_COLLECTIONS.md` (Foreign Values). This section does not change the module instance of a Protos source-backed module.
 
 ### `import(specifier)` argument and host-resolution boundary
 
@@ -232,9 +238,9 @@ Actor B: canonical foo -> foo@B
 
 When an Actor imports a canonical module that is absent from that Actor's module cache:
 
-1. Create the module instance, creating its `moduleContext`.
+1. Create the module instance, creating its `moduleContext` (for a foreign module, its facade; see Foreign module instances).
 2. Insert that module instance into the Actor-local module cache in state `INITIALIZING`.
-3. Execute the module body in that `moduleContext`.
+3. Execute the module body in that `moduleContext` (for a foreign module, perform the provider initialization of the foreign target).
 4. If initialization completes successfully, transition the module to `READY`.
 5. If initialization fails, apply the failure semantics defined below.
 
@@ -339,7 +345,7 @@ When execution of the module body completes normally, the cached module instance
 INITIALIZING -> READY
 ```
 
-The same module instance and the same `moduleContext` remain cached. Subsequent imports in that Actor return that instance without re-executing the module body. No new module identity is created merely because initialization completed.
+The same module instance and the same `moduleContext` (for a foreign module, the same facade) remain cached. Subsequent imports in that Actor return that instance without re-executing the module body. No new module identity is created merely because initialization completed.
 
 ### Failed Initialization
 
@@ -522,8 +528,9 @@ instance is the Actor's active cached module instance for the same
 canonical identity. Both objects belong to the same Actor, so their
 coexistence does not violate Actor isolation.
 
-The full module lifecycle rules (module instance equals its
-`moduleContext`, Actor-local cache-before-execute, cache states,
+The full module lifecycle rules (a source-backed module instance equals its
+`moduleContext`, a foreign module instance is its Actor-local facade,
+Actor-local cache-before-execute, cache states,
 cyclic-import and failure handling, and the initial module of an Actor)
 are defined in the canonical module-lifecycle sections of
 `MODULES.md` and the non-normative runtime integration model. This
