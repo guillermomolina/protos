@@ -17,6 +17,8 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 Level: import("std:logging/Level")
 LogEvent: import("std:logging/LogEvent")
+Instant: import("std:datetime/Instant")
+Duration: import("std:datetime/Duration")
 
 Failure: Error {}
 
@@ -39,8 +41,40 @@ tests: [
         Assertions.require(event.fields.size() == 1)
         Assertions.require(event.fields["free"] == 12)
         Assertions.require(event.error === null)
-        Assertions.require(event.slotNames().size() == 4)
-        Assertions.require(event.hasSlot("timestamp") == false)
+        Assertions.require(event.slotNames().size() == 5)
+        Assertions.require(event.hasSlot("timestamp"))
+        Assertions.require(event.timestamp === null)
+    }),
+    Test("a fifth argument supplies the timestamp by reference", () => {
+        instant: Instant(1791342922123456789)
+        event: LogEvent(Level.INFO, "stamped", null, null, instant)
+        Assertions.require(event.timestamp === instant)
+        Assertions.require(event.slotNames().size() == 5)
+        Assertions.require(LogEvent(Level.INFO, "explicit null", null, null, null).timestamp === null)
+        Assertions.require(LogEvent(Level.INFO, "before epoch", null, null, Instant(-1)).timestamp.nanoseconds == -1)
+        Assertions.signals(Error, () => {
+            event.timestamp = Instant(0)
+        })
+    }),
+    Test("a timestamp that is not an Instant signals Error", () => {
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, 0)
+        })
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, "1970-01-01T00:00:00Z")
+        })
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, Duration(0))
+        })
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, { nanoseconds: 0 })
+        })
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, Instant)
+        })
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, Instant(0), "extra")
+        })
     }),
     Test("null fields yield an empty frozen Map", () => {
         event: LogEvent(Level.INFO, "started", null, null)

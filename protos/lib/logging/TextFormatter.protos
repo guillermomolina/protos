@@ -14,19 +14,26 @@
 // the specific language governing rights and limitations under the License.
 
 //! Deterministic plain-text rendering of `std:logging/LogEvent` values. Each
-//! event renders as exactly one line with no line terminator, timestamp,
-//! source metadata, color, or terminal control sequence:
+//! event renders as exactly one line with no line terminator, source metadata,
+//! color, or terminal control sequence:
 //!
 //! ```text
-//! LINE  = LEVEL " " STRING [" " MAP] [" error=true"]
+//! LINE  = [TIMESTAMP " "] LEVEL " " STRING [" " MAP] [" error=true"]
 //! VALUE = "null" | "true" | "false" | INTEGER | FLOAT | STRING | ARRAY | MAP
 //! ARRAY = "[" [VALUE (", " VALUE)*] "]"
 //! MAP   = "{" [STRING "=" VALUE (", " STRING "=" VALUE)*] "}"
 //! ```
 //!
-//! For example `ERROR "request failed" {"requestId"="r-7"} error=true`. The
-//! fields Map is omitted when empty, and ` error=true` appears exactly when an
-//! Error is attached; the attached Error is never inspected, so every Error
+//! For example `ERROR "request failed" {"requestId"="r-7"} error=true`.
+//!
+//! `TIMESTAMP` appears exactly when the event has a timestamp and is
+//! `std:datetime/ISO8601.formatInstant` of it, in UTC with the `Z` designator,
+//! for example `1970-01-01T00:00:00.000000001Z DEBUG "tick"`. An instant
+//! outside the civil range that format supports signals an Error; there is no
+//! other timestamp spelling.
+//!
+//! The fields Map is omitted when empty, and ` error=true` appears exactly when
+//! an Error is attached; the attached Error is never inspected, so every Error
 //! renders the same marker, distinct from a field named `"error"`.
 //!
 //! Strings, including the message and Map keys, are double-quoted. `"`, `\`,
@@ -53,10 +60,12 @@
 //! exponent and never looks like an Integer.
 
 /// Answers the plain-text line of `event`, which must be recognized by
-/// `std:logging/LogEvent`; any other argument signals an Error. Rendering is
-/// total over recognized events and invokes no behavior stored in them.
+/// `std:logging/LogEvent`; any other argument, or a timestamp that
+/// `std:datetime/ISO8601.formatInstant` cannot write, signals an Error.
+/// Rendering invokes no behavior stored in the event.
 format: ((numeric) => (event) => {
     LogEvent: import("std:logging/LogEvent")
+    ISO8601: import("std:datetime/ISO8601")
     Arrays: import("std:collections/Array")
 
     LogEvent.recognizes(event).ifFalse(() => {
@@ -352,6 +361,10 @@ format: ((numeric) => (event) => {
         })
     }
 
+    (event.timestamp === null).ifFalse(() => {
+        appendAscii(ISO8601.formatInstant(event.timestamp))
+        output.add(32)
+    })
     appendAscii(event.level)
     output.add(32)
     appendString(event.message)

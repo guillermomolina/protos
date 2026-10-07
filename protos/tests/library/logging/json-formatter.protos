@@ -21,6 +21,7 @@ LogEvent: import("std:logging/LogEvent")
 Logger: import("std:logging/Logger")
 JsonFormatter: import("std:logging/JsonFormatter")
 TextSink: import("std:logging/TextSink")
+Instant: import("std:datetime/Instant")
 
 Failure: Error {}
 
@@ -279,6 +280,58 @@ tests: [
         Assertions.require(writer.state.lines.size() == 1)
         Assertions.require(
             writer.state.lines[0] == "{\"level\":\"INFO\",\"message\":\"good\",\"fields\":{}}"
+        )
+    }),
+    Test("an event without a timestamp has no timestamp member", () => {
+        Assertions.require(
+            JsonFormatter.format(LogEvent(Level.INFO, "started", null, null, null)) ==
+                "{\"level\":\"INFO\",\"message\":\"started\",\"fields\":{}}"
+        )
+        Assertions.require(
+            render(Level.ERROR, "failed", %{ "requestId": "r-7" }, Failure()) ==
+                "{\"level\":\"ERROR\",\"message\":\"failed\",\"fields\":{\"requestId\":\"r-7\"},\"error\":true}"
+        )
+    }),
+    Test("a timestamp is the first member as exact nanoseconds", () => {
+        stamped: (nanoseconds, level, message) => {
+            JsonFormatter.format(LogEvent(level, message, null, null, Instant(nanoseconds)))
+        }
+        Assertions.require(
+            stamped(0, Level.INFO, "started") ==
+                "{\"timestamp\":0,\"level\":\"INFO\",\"message\":\"started\",\"fields\":{}}"
+        )
+        Assertions.require(
+            stamped(1, Level.DEBUG, "tick") ==
+                "{\"timestamp\":1,\"level\":\"DEBUG\",\"message\":\"tick\",\"fields\":{}}"
+        )
+        Assertions.require(
+            stamped(-1791342922123456789, Level.WARN, "past") ==
+                "{\"timestamp\":-1791342922123456789,\"level\":\"WARN\",\"message\":\"past\",\"fields\":{}}"
+        )
+        Assertions.require(
+            JsonFormatter.format(LogEvent(Level.ERROR, "failed", %{ "k": 1 }, Failure(), Instant(1791342922123456789))) ==
+                "{\"timestamp\":1791342922123456789,\"level\":\"ERROR\",\"message\":\"failed\",\"fields\":{\"k\":1},\"error\":true}"
+        )
+    }),
+    Test("a timestamp beyond the ISO 8601 civil range keeps its exact Integer", () => {
+        huge: 123456789012345678901234567890123456789
+        Assertions.require(
+            JsonFormatter.format(LogEvent(Level.INFO, "far", null, null, Instant(huge))) ==
+                "{\"timestamp\":123456789012345678901234567890123456789,\"level\":\"INFO\",\"message\":\"far\",\"fields\":{}}"
+        )
+        Assertions.require(
+            JsonFormatter.format(LogEvent(Level.INFO, "far", null, null, Instant(0 - huge))) ==
+                "{\"timestamp\":-123456789012345678901234567890123456789,\"level\":\"INFO\",\"message\":\"far\",\"fields\":{}}"
+        )
+    }),
+    Test("a field named timestamp stays inside fields", () => {
+        Assertions.require(
+            render(Level.INFO, "m", %{ "timestamp": "user value" }, null) ==
+                "{\"level\":\"INFO\",\"message\":\"m\",\"fields\":{\"timestamp\":\"user value\"}}"
+        )
+        Assertions.require(
+            JsonFormatter.format(LogEvent(Level.INFO, "m", %{ "timestamp": "user value" }, null, Instant(0))) ==
+                "{\"timestamp\":0,\"level\":\"INFO\",\"message\":\"m\",\"fields\":{\"timestamp\":\"user value\"}}"
         )
     }),
     Test("the formatter publishes only format", () => {

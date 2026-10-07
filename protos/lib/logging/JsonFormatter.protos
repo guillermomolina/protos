@@ -15,16 +15,20 @@
 
 //! Deterministic JSON rendering of `std:logging/LogEvent` values over
 //! `std:json`. Each event renders as one compact JSON object with no line
-//! terminator, timestamp, source metadata, color, or terminal control sequence:
+//! terminator, source metadata, color, or terminal control sequence:
 //!
 //! ```text
-//! {"level":LEVEL,"message":STRING,"fields":OBJECT[,"error":true]}
+//! {["timestamp":INTEGER,]"level":LEVEL,"message":STRING,"fields":OBJECT[,"error":true]}
 //! ```
 //!
 //! For example `{"level":"ERROR","message":"failed","fields":{"requestId":"r-7"},"error":true}`.
-//! The members always appear in that order. `fields` is always present, `{}`
-//! when the event has no fields, and holds every field nested inside it, so a
-//! field may use any name, including `level`, `message`, `fields`, or `error`.
+//! The members always appear in that order. `"timestamp"` appears exactly
+//! when the event has a timestamp and is the exact signed Integer count of
+//! nanoseconds of that `std:datetime/Instant` from `1970-01-01T00:00:00Z`,
+//! without range limits; an event without a timestamp has no such member.
+//! `fields` is always present, `{}` when the event has no fields, and holds
+//! every field nested inside it, so a field may use any name, including
+//! `timestamp`, `level`, `message`, `fields`, or `error`.
 //! `"error":true` appears exactly when an Error is attached; the attached Error
 //! is never inspected, so every Error renders the same marker.
 //!
@@ -147,11 +151,16 @@ format: ((numeric) => (event) => {
         node
     }
 
-    topMembers: [
+    topMembers: []
+    (event.timestamp === null).ifFalse(() => {
+        topMembers = ["timestamp", JSON.number(event.timestamp.nanoseconds, 0)]
+    })
+    topMembers = Array(
+        ...topMembers,
         "level", JSON.string(event.level),
         "message", JSON.string(event.message),
         "fields", projectMap(event.fields)
-    ]
+    )
     (event.error === null).ifFalse(() => {
         topMembers = Array(...topMembers, "error", JSON.boolean(true))
     })

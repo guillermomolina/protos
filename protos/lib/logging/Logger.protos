@@ -18,7 +18,17 @@
 //! explicitly like any other value. There is no global or default logger, no
 //! registry, no mutable configuration, and no thread-, Task-, or dynamically
 //! scoped context. A logger opens no stream, file, or connection, reads no
-//! clock, and starts no Task.
+//! ambient clock, and starts no Task.
+//!
+//! Time is an explicit capability: a logger created with a time source, a
+//! zero-argument callable answering a `std:datetime/Instant`, stamps each
+//! enabled event with the instant that source answers; a logger without one
+//! emits events whose `timestamp` is `null`. The source is invoked exactly
+//! once per enabled call, after its fields are merged and before the event is
+//! created, and never for a disabled call or a derivation. An Error signalled
+//! by the source, or a result that is not an instant, signals an Error from the
+//! logging call before anything is emitted; it is not contained like a sink
+//! failure.
 //!
 //! A sink is any object answering `emit(event)`; it is the only output
 //! authority a logger uses and it receives each enabled `std:logging/LogEvent`
@@ -29,17 +39,21 @@
 //!
 //! Level filtering happens first: a call whose level is less severe than the
 //! minimum level answers `null` after validating only its level, without
-//! inspecting its other arguments, copying data, creating an event, or invoking
-//! the sink. Callers avoid building expensive data for disabled levels with
-//! `isEnabled(level)`.
+//! inspecting its other arguments, copying data, reading the time source,
+//! creating an event, or invoking the sink. Callers avoid building expensive
+//! data for disabled levels with `isEnabled(level)`.
 //!
 //! Context and call-site fields merge by key: a derived logger's fields
 //! override its base logger's fields, and call-site fields override both.
 
 /// Answers a fresh frozen logger that emits events at least as severe as
-/// `minimumLevel` to `sink` and has no context fields. `minimumLevel` must be
-/// a canonical level and `sink` must not be `null`; otherwise an Error is
-/// signalled.
+/// `minimumLevel` to `sink`, stamped with times from `timeSource`, and has no
+/// context fields. `minimumLevel` must be a canonical level and `sink` must not
+/// be `null`; otherwise an Error is signalled. `timeSource` is a zero-argument
+/// callable answering a `std:datetime/Instant`, or `null`, the default, for
+/// events without a timestamp; it is not invoked here. The logger keeps the
+/// time source privately, since a slot holding a callable would invoke it on
+/// access.
 ///
 /// The logger answers:
 ///
@@ -47,16 +61,19 @@
 /// - `log(level, message)`, `log(level, message, fields)`, and
 ///   `log(level, message, fields, error)`: when enabled, emits a
 ///   `std:logging/LogEvent` whose fields are the logger's context merged with
-///   `fields` (a Map, or `null` for none) and whose error is `error` (an Error,
-///   or `null`); answers `null`. Invalid enabled arguments signal an Error.
+///   `fields` (a Map, or `null` for none), whose error is `error` (an Error,
+///   or `null`), and whose timestamp is the result of one `timeSource()` call
+///   (`null` without a time source); answers `null`. Invalid enabled arguments
+///   and a failing time source signal an Error.
 /// - `trace`, `debug`, `info`, `warn`, and `error`: `log` at that level with
 ///   the remaining arguments.
-/// - `with(fields)`: a derived logger with the same minimum level and sink
-///   whose context is this logger's context overridden by a snapshot of the
-///   Map `fields`. The receiver is unchanged.
-call: (minimumLevel, sink) => {
+/// - `with(fields)`: a derived logger with the same minimum level, sink, and
+///   time source whose context is this logger's context overridden by a
+///   snapshot of the Map `fields`. The receiver is unchanged.
+call: (minimumLevel, sink, timeSource = null) => {
     Level: import("std:logging/Level")
     LogEvent: import("std:logging/LogEvent")
+    Instant: import("std:datetime/Instant")
 
     Level.compare(minimumLevel, minimumLevel)
     (sink === null).ifTrue(() => {
@@ -114,7 +131,17 @@ call: (minimumLevel, sink) => {
                         })
                     })
 
-                    event: LogEvent(level, message, merged, attached)
+                    timestamp: null
+                    (timeSource === null).ifFalse(() => {
+                        timestamp = timeSource()
+                        Instant.recognizes(timestamp).ifFalse(() => {
+                            Error().signal()
+                        })
+                    })
+
+                    event: LogEvent(level, message, merged, attached, timestamp)
+                    // Only the emission is contained; time-source and event
+                    // failures reach the caller.
                     Error.handle(() => {
                         sink.emit(event)
                     }, (failure) => {

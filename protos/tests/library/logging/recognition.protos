@@ -19,6 +19,8 @@ Level: import("std:logging/Level")
 LogEvent: import("std:logging/LogEvent")
 Logger: import("std:logging/Logger")
 MemorySink: import("std:logging/MemorySink")
+Instant: import("std:datetime/Instant")
+Duration: import("std:datetime/Duration")
 
 Failure: Error {}
 
@@ -27,14 +29,20 @@ frozen: (entries) => {
 }
 
 // A frozen object with exactly the event slots under `prototype`.
-shaped: (prototype, level, message, fields, error) => {
+shaped: (prototype, level, message, fields, error, timestamp = null) => {
     candidate: (prototype) {
         level: level
         message: message
         fields: fields
         error: error
+        timestamp: timestamp
     }
     candidate.freeze()
+}
+
+// The genuine event state under the canonical parent, with `timestamp` replaced.
+withTimestamp: (timestamp) => {
+    shaped(LogEvent, Level.INFO, "m", frozen(%{}), null, timestamp)
 }
 
 // The genuine event state under the canonical parent, with one slot replaced.
@@ -60,7 +68,8 @@ tests: [
         Assertions.require(LogEvent.recognizes(rich))
         Assertions.require(plain.parent() === LogEvent)
         Assertions.require(rich.parent() === LogEvent)
-        Assertions.require(plain.slotNames().size() == 4)
+        Assertions.require(plain.slotNames().size() == 5)
+        Assertions.require(LogEvent.recognizes(LogEvent(Level.INFO, "stamped", null, null, Instant(0))))
 
         sink: MemorySink()
         Logger(Level.TRACE, sink).with(%{ "service": "api" }).debug("via logger", %{ "n": 1 })
@@ -86,6 +95,7 @@ tests: [
             message: "m"
             fields: noFields
             error: null
+            timestamp: null
         }
         literal.freeze()
         Assertions.require(LogEvent.recognizes(literal) == false)
@@ -98,23 +108,27 @@ tests: [
             fields: noFields
             error: null
             timestamp: null
+            source: null
         }
         extra.freeze()
         Assertions.require(LogEvent.recognizes(extra) == false)
 
-        missing: (LogEvent) {
+        // The four-slot shape that predates timestamps is not an event.
+        fourSlots: (LogEvent) {
             level: Level.INFO
             message: "m"
             fields: noFields
+            error: null
         }
-        missing.freeze()
-        Assertions.require(LogEvent.recognizes(missing) == false)
+        fourSlots.freeze()
+        Assertions.require(LogEvent.recognizes(fourSlots) == false)
 
         unfrozen: (LogEvent) {
             level: Level.INFO
             message: "m"
             fields: noFields
             error: null
+            timestamp: null
         }
         Assertions.require(LogEvent.recognizes(unfrozen) == false)
         unfrozen.freeze()
@@ -163,6 +177,29 @@ tests: [
         Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, Error())))
         Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, Failure())))
     }),
+    Test("timestamp must be null or an Instant", () => {
+        Assertions.require(LogEvent.recognizes(withTimestamp(null)))
+        Assertions.require(LogEvent.recognizes(withTimestamp(Instant(0))))
+        Assertions.require(LogEvent.recognizes(withTimestamp(Instant(-1))))
+        Assertions.require(LogEvent.recognizes(withTimestamp(0)) == false)
+        Assertions.require(LogEvent.recognizes(withTimestamp("1970-01-01T00:00:00Z")) == false)
+        Assertions.require(LogEvent.recognizes(withTimestamp(Duration(0))) == false)
+        Assertions.require(LogEvent.recognizes(withTimestamp(Instant)) == false)
+        Assertions.require(LogEvent.recognizes(withTimestamp({ nanoseconds: 0 })) == false)
+
+        // The instant slots plus one more under the instant parent.
+        equality: {
+            equals: (other) => { true }
+        }
+        lookalike: (Instant) {
+            nanoseconds: 0
+            ...equality.alias("equals", "==")
+            hash: () => { 0 }
+            extra: null
+        }
+        lookalike.freeze()
+        Assertions.require(LogEvent.recognizes(withTimestamp(lookalike)) == false)
+    }),
     Test("recognition invokes no behavior of the candidate", () => {
         counter: probe()
         noFields: frozen(%{})
@@ -178,13 +215,14 @@ tests: [
             message: "m"
             fields: noFields
             error: null
+            timestamp: null
             parent: () => {
                 counter.calls = counter.calls + 1
                 LogEvent
             }
             slotNames: () => {
                 counter.calls = counter.calls + 1
-                ["error", "fields", "level", "message"]
+                ["error", "fields", "level", "message", "timestamp"]
             }
             hasSlot: (name) => {
                 counter.calls = counter.calls + 1
@@ -204,6 +242,7 @@ tests: [
             message: "m"
             fields: noFields
             error: null
+            timestamp: null
             parent: () => {
                 counter.calls = counter.calls + 1
                 LogEvent
@@ -221,6 +260,19 @@ tests: [
         Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, fakeError)) == false)
         Assertions.signals(Error, () => {
             LogEvent(Level.ERROR, "m", null, fakeError)
+        })
+
+        fakeInstant: {
+            nanoseconds: 0
+            parent: () => {
+                counter.calls = counter.calls + 1
+                Instant
+            }
+        }
+        fakeInstant.freeze()
+        Assertions.require(LogEvent.recognizes(withTimestamp(fakeInstant)) == false)
+        Assertions.signals(Error, () => {
+            LogEvent(Level.INFO, "m", null, null, fakeInstant)
         })
 
         fakeMap: (Map) {

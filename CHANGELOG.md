@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.260-SNAPSHOT
+
+- `LIB015-D1` (guillermomolina/protos#432) adds timestamped log events and an
+  explicit time source to `std:logging`, implementing the ratified LIB015-D0
+  decision (E1). There is no specification change; no `std:datetime/Clock`,
+  ambient clock, or host time is introduced.
+  - `LogEvent` has one canonical family of exactly five slots: `level`,
+    `message`, `fields`, `error`, and `timestamp`, which is always present
+    and holds a `std:datetime/Instant` or `null`. `LogEvent(level, message,
+    fields, error)` remains valid with `timestamp` `null`; an optional fifth
+    argument supplies the instant. The four-slot shape is no longer
+    recognized, and the private recognition facility validates the
+    timestamp without invoking candidate behavior.
+  - `Logger(minimumLevel, sink, timeSource = null)` accepts an optional
+    zero-argument callable answering an `Instant`. It is invoked exactly
+    once per enabled call, after field merging and before event creation,
+    and never for disabled calls or `with` derivations, which share the same
+    source. A signalling source or a non-`Instant` result signals an Error
+    to the caller and emits nothing; sink containment still covers only
+    `sink.emit`.
+  - `TextFormatter` prefixes timestamped lines with
+    `std:datetime/ISO8601.formatInstant` and a space, signalling an Error
+    for instants outside that format's civil range. `JsonFormatter` emits
+    `"timestamp"` first as the exact signed Integer of nanoseconds, omitting
+    it for `null`. Output for events without a timestamp is byte-for-byte
+    unchanged.
+
 ## 0.3.259-SNAPSHOT
 
 - `TEST009-AC` (guillermomolina/protos#795) removes the logically impossible

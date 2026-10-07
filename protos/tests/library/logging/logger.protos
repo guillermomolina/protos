@@ -17,6 +17,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 Level: import("std:logging/Level")
 Logger: import("std:logging/Logger")
+Instant: import("std:datetime/Instant")
 
 Failure: Error {}
 
@@ -39,6 +40,33 @@ failingSink: () => {
             this.calls = this.calls + 1
             Failure().signal()
         }
+    }
+}
+
+// A zero-argument time source answering successive instants from `start`,
+// counting its invocations.
+countingSource: (start) => {
+    state: { calls: 0 }
+    source: () => {
+        state.calls = state.calls + 1
+        Instant(start + state.calls - 1)
+    }
+    {
+        state: state
+        source: source
+    }
+}
+
+// A time source that answers `result` and counts its invocations.
+answering: (result) => {
+    state: { calls: 0 }
+    source: () => {
+        state.calls = state.calls + 1
+        result
+    }
+    {
+        state: state
+        source: source
     }
 }
 
@@ -234,7 +262,8 @@ tests: [
         logger.error("boom", %{ "attempt": 3 }, failure)
         Assertions.require(sink.events.size() == 1)
         event: sink.events[0]
-        Assertions.require(event.slotNames().size() == 4)
+        Assertions.require(event.slotNames().size() == 5)
+        Assertions.require(event.timestamp === null)
         Assertions.require(event.level === Level.ERROR)
         Assertions.require(event.message == "boom")
         Assertions.require(event.fields.size() == 2)
@@ -276,6 +305,113 @@ tests: [
         })
         Assertions.require(sink.calls == 0)
     }),
+    Test("a logger without a time source emits events without a timestamp", () => {
+        sink: recorder()
+        Logger(Level.INFO, sink).info("two arguments")
+        Logger(Level.INFO, sink, null).with(%{ "k": 1 }).warn("explicit null")
+        Assertions.require(sink.events.size() == 2)
+        Assertions.require(sink.events[0].timestamp === null)
+        Assertions.require(sink.events[1].timestamp === null)
+    }),
+    Test("an enabled call invokes the time source exactly once and stores its Instant", () => {
+        sink: recorder()
+        instant: Instant(1791342922123456789)
+        clock: answering(instant)
+        logger: Logger(Level.INFO, sink, clock.source)
+        Assertions.require(clock.state.calls == 0)
+
+        Assertions.require(logger.error("stamped", %{ "k": 1 }, Failure()) === null)
+        Assertions.require(clock.state.calls == 1)
+        Assertions.require(sink.events.size() == 1)
+        Assertions.require(sink.events[0].timestamp === instant)
+        Assertions.require(sink.events[0].fields["k"] == 1)
+
+        logger.info("again")
+        Assertions.require(clock.state.calls == 2)
+        Assertions.require(sink.events.size() == 2)
+    }),
+    Test("a disabled call never reads the time source", () => {
+        sink: failingSink()
+        clock: countingSource(0)
+        logger: Logger(Level.WARN, sink, clock.source)
+        cyclic: [1, 1]
+        cyclic[1] = cyclic
+
+        Assertions.require(logger.isEnabled(Level.DEBUG) == false)
+        Assertions.require(logger.debug("d", %{ "cycle": cyclic; "object": { secret: 1 } }, "not an error") === null)
+        Assertions.require(logger.trace(42, ["not a map"], 7) === null)
+        Assertions.require(logger.log(Level.INFO, null, "not a map") === null)
+        Assertions.require(clock.state.calls == 0)
+        Assertions.require(sink.calls == 0)
+    }),
+    Test("invalid enabled fields fail before the time source is read", () => {
+        sink: recorder()
+        clock: countingSource(0)
+        logger: Logger(Level.INFO, sink, clock.source)
+        Assertions.signals(Error, () => {
+            logger.info("m", ["not a map"])
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", %{ 1: "integer key" })
+        })
+        Assertions.require(clock.state.calls == 0)
+        Assertions.require(sink.events.size() == 0)
+    }),
+    Test("derived loggers share the time source without reading it", () => {
+        sink: recorder()
+        clock: countingSource(10)
+        base: Logger(Level.INFO, sink, clock.source).with(%{ "key": "base" })
+        derived: base.with(%{ "key": "derived"; "onlyDerived": 2 })
+        Assertions.require(clock.state.calls == 0)
+
+        derived.info("call site wins", %{ "key": "call" })
+        base.info("base")
+        Assertions.require(clock.state.calls == 2)
+        Assertions.require(sink.events[0].timestamp.nanoseconds == 10)
+        Assertions.require(sink.events[0].fields["key"] == "call")
+        Assertions.require(sink.events[0].fields["onlyDerived"] == 2)
+        Assertions.require(sink.events[1].timestamp.nanoseconds == 11)
+        Assertions.require(sink.events[1].fields["key"] == "base")
+    }),
+    Test("a failing time source signals Error and emits nothing", () => {
+        sink: recorder()
+        calls: { count: 0 }
+        signalling: () => {
+            calls.count = calls.count + 1
+            Failure().signal()
+        }
+        Assertions.signals(Failure, () => {
+            Logger(Level.INFO, sink, signalling).info("m")
+        })
+        Assertions.require(calls.count == 1)
+
+        nullClock: answering(null)
+        Assertions.signals(Error, () => {
+            Logger(Level.INFO, sink, nullClock.source).info("m")
+        })
+        Assertions.require(nullClock.state.calls == 1)
+
+        [0, "1970-01-01T00:00:00Z", Instant, { nanoseconds: 0 }].each((result) => {
+            clock: answering(result)
+            Assertions.signals(Error, () => {
+                Logger(Level.INFO, sink, clock.source).warn("m")
+            })
+            Assertions.require(clock.state.calls == 1)
+        })
+        Assertions.require(sink.events.size() == 0)
+    }),
+    Test("a time-source failure is not contained as a sink failure", () => {
+        sink: failingSink()
+        clock: answering("not an instant")
+        Assertions.signals(Error, () => {
+            Logger(Level.INFO, sink, clock.source).info("m")
+        })
+        Assertions.require(sink.calls == 0)
+
+        stamped: Logger(Level.INFO, sink, countingSource(0).source)
+        Assertions.require(stamped.info("contained") === null)
+        Assertions.require(sink.calls == 1)
+    }),
     Test("invalid levels, sinks, and contexts signal Error", () => {
         sink: recorder()
         logger: Logger(Level.INFO, sink)
@@ -316,6 +452,7 @@ tests: [
         logger: Logger(Level.INFO, sink)
         Assertions.require(logger.slotNames().size() == 11)
         Assertions.require(logger.sink === sink)
+        Assertions.require(Logger(Level.INFO, sink, () => { Instant(0) }).slotNames().size() == 11)
         Assertions.signals(Error, () => {
             logger.minimumLevel = Level.TRACE
         })

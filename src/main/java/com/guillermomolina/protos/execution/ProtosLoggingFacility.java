@@ -40,7 +40,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Private runtime facilities for {@code std:logging} (LIB015-B1, LIB015-C1).
+ * Private runtime facilities for {@code std:logging} (LIB015-B1, LIB015-C1, LIB015-D1).
  *
  * <p>Following the D101/D187 pattern, every logging policy stays in Protos; these facilities own
  * only what Protos source cannot observe without running candidate behavior or re-deriving
@@ -49,10 +49,11 @@ import java.util.Set;
  * initialization, so it never belongs to the published module surface.
  *
  * <ul>
- *   <li>{@code std:logging/LogEvent} receives {@code recognizes(candidate, prototype)} and
- *       {@code isAttachableError(value)}. Both inspect host representation only: delegation
- *       parents, mutation state, local slot tables, and indexed/keyed state are read directly, so
- *       no slot, method, equality, hash, or other behavior of the candidate is ever invoked.
+ *   <li>{@code std:logging/LogEvent} receives {@code recognizes(candidate, prototype,
+ *       instantPrototype)} and {@code isAttachableError(value)}. Both inspect host
+ *       representation only: delegation parents, mutation state, local slot tables, and
+ *       indexed/keyed state are read directly, so no slot, method, equality, hash, or other
+ *       behavior of the candidate is ever invoked.
   *   <li>{@code std:logging/TextFormatter} and {@code std:logging/JsonFormatter} each receive a
  *       numeric facility with {@code shortestDecimal(float)}, the digits of the shortest
  *       round-tripping decimal of a finite non-zero Float magnitude, so both formatters share one
@@ -70,7 +71,9 @@ public final class ProtosLoggingFacility {
             new ProtosModuleKey("std:logging/JsonFormatter");
     public static final String JSON_BOOTSTRAP_SLOT = "_logJsonFacility";
 
-    private static final Set<String> EVENT_SLOTS = Set.of("level", "message", "fields", "error");
+    private static final Set<String> EVENT_SLOTS =
+            Set.of("level", "message", "fields", "error", "timestamp");
+    private static final Set<String> INSTANT_SLOTS = Set.of("nanoseconds", "equals", "==", "hash");
     private static final Set<String> LEVELS = Set.of("TRACE", "DEBUG", "INFO", "WARN", "ERROR");
     private static final int MAX_DOUBLE_DIGITS = 17;
 
@@ -105,10 +108,13 @@ public final class ProtosLoggingFacility {
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Object recognizes(ProtosActivation activation, List<?> supplied) {
-        if (supplied.size() != 2 || !(supplied.get(1) instanceof ProtosObjectValue prototype)) {
+        if (supplied.size() != 3
+                || !(supplied.get(1) instanceof ProtosObjectValue prototype)
+                || !(supplied.get(2) instanceof ProtosObjectValue instantPrototype)) {
             throw invalid(activation);
         }
-        return ProtosBooleanValue.of(recognizesEvent(activation, supplied.get(0), prototype));
+        return ProtosBooleanValue.of(
+                recognizesEvent(activation, supplied.get(0), prototype, instantPrototype));
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
@@ -121,12 +127,16 @@ public final class ProtosLoggingFacility {
 
     /**
      * An event is a frozen ordinary object whose immediate parent is {@code prototype} and whose
-     * local slots are exactly {@code level}, {@code message}, {@code fields}, and {@code error},
-     * holding a canonical level String, a String, a frozen structured Map, and an attachable
-     * Error or {@code null}.
+     * local slots are exactly {@code level}, {@code message}, {@code fields}, {@code error}, and
+     * {@code timestamp}, holding a canonical level String, a String, a frozen structured Map, an
+     * attachable Error or {@code null}, and an instant under {@code instantPrototype} or {@code
+     * null}.
      */
     static boolean recognizesEvent(
-            ProtosActivation activation, Object candidate, ProtosObjectValue prototype) {
+            ProtosActivation activation,
+            Object candidate,
+            ProtosObjectValue prototype,
+            ProtosObjectValue instantPrototype) {
         if (!(candidate instanceof ProtosObjectValue event)
                 || candidate instanceof ProtosArrayValue
                 || candidate instanceof ProtosMapValue
@@ -147,6 +157,10 @@ public final class ProtosLoggingFacility {
         if (error != ProtosNullValue.INSTANCE && !attachableError(activation, error)) {
             return false;
         }
+        Object timestamp = slots.get("timestamp");
+        if (timestamp != ProtosNullValue.INSTANCE && !instant(timestamp, instantPrototype)) {
+            return false;
+        }
         ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
         return slots.get("fields") instanceof ProtosMapValue fields
                 && structured(fields, prelude, new IdentityHashMap<>());
@@ -159,6 +173,23 @@ public final class ProtosLoggingFacility {
     private static boolean attachableError(ProtosActivation activation, Object value) {
         ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
         return value != prelude.errorPrototype() && ProtosCoreErrors.isError(activation, value);
+    }
+
+    /**
+     * The predicate of {@code std:datetime/Instant.recognizes}, read from host representation: the
+     * immediate parent is the instant module, the local slots are exactly the instant state and
+     * behavior slots, and {@code nanoseconds} holds an Integer.
+     */
+    private static boolean instant(Object value, ProtosObjectValue instantPrototype) {
+        if (!(value instanceof ProtosObjectValue object)
+                || value instanceof ProtosArrayValue
+                || value instanceof ProtosMapValue
+                || object.parent().orElse(null) != instantPrototype) {
+            return false;
+        }
+        Map<String, Object> slots = object.localSlotsSnapshot();
+        return slots.keySet().equals(INSTANT_SLOTS)
+                && slots.get("nanoseconds") instanceof ProtosIntegerValue;
     }
 
     /**

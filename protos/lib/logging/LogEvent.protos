@@ -15,8 +15,10 @@
 
 //! Immutable structured log events. An event is a frozen ordinary object with
 //! a `level` slot holding a canonical `std:logging/Level`, a String `message`,
-//! a frozen standard Map `fields` of structured data, and an `error` slot
-//! holding the attached Error or `null`.
+//! a frozen standard Map `fields` of structured data, an `error` slot holding
+//! the attached Error or `null`, and a `timestamp` slot holding a
+//! `std:datetime/Instant` or `null`. Every event has all five slots; an event
+//! without a time has `timestamp` `null`.
 //!
 //! Structured data is ordinary Protos data drawn only from `null`, `true`,
 //! `false`, Strings, Integers, Floats, standard Arrays, and normal standard
@@ -31,25 +33,29 @@
 //! or indirectly, signals an Error.
 //!
 //! The attached Error is kept by reference: it is neither copied, mutated,
-//! signalled, nor converted. An event carries no formatter, sink, writer,
-//! clock, or time, and no other ambient authority.
+//! signalled, nor converted. The timestamp is kept by reference as supplied;
+//! an event never reads a current time. An event carries no formatter, sink,
+//! writer, clock, or other ambient authority.
 //!
 //! Every event's immediate delegation parent is this module, the canonical
 //! event factory and prototype. `recognizes` accepts exactly the events of
 //! this family: frozen objects whose immediate parent is this module, whose
-//! local slots are exactly `level`, `message`, `fields`, and `error`, and whose
-//! slots hold valid event state. Recognition reads that state directly, so it
-//! never invokes behavior of the candidate; an object that merely has similar
-//! slots is not an event.
+//! local slots are exactly `level`, `message`, `fields`, `error`, and
+//! `timestamp`, and whose slots hold valid event state. Recognition reads that
+//! state directly, so it never invokes behavior of the candidate; an object
+//! that merely has similar slots is not an event.
 
-/// Answers a fresh frozen event for `level`, `message`, `fields`, and `error`.
+/// Answers a fresh frozen event for `level`, `message`, `fields`, `error`, and
+/// `timestamp`.
 /// `level` must be a canonical level and `message` a String. `fields` must be
 /// a normal standard Map of structured data, or `null` for no fields; the
 /// event's `fields` slot is always a frozen Map snapshot. `error` must be an
-/// object that delegates to `Error`, or `null`. Any other argument signals an
-/// Error.
-call: ((facility) => (level, message, fields, error) => {
+/// object that delegates to `Error`, or `null`. `timestamp` must be an instant
+/// recognized by `std:datetime/Instant`, or `null`, the default, for an event
+/// without a time. Any other argument signals an Error.
+call: ((facility) => (level, message, fields, error, timestamp = null) => {
     LogEvent: import("std:logging/LogEvent")
+    Instant: import("std:datetime/Instant")
     Level: import("std:logging/Level")
     Arrays: import("std:collections/Array")
     Level.compare(level, level)
@@ -142,10 +148,13 @@ call: ((facility) => (level, message, fields, error) => {
         message: message
         fields: eventFields
         error: error
+        timestamp: timestamp
     }
     event.freeze()
 
-    facility.recognizes(event, LogEvent).ifFalse(() => {
+    // Recognition also validates the timestamp, reading it without invoking
+    // any behavior of the candidate.
+    facility.recognizes(event, LogEvent, Instant).ifFalse(() => {
         Error().signal()
     })
     event
@@ -153,13 +162,14 @@ call: ((facility) => (level, message, fields, error) => {
 
 /// Answers `true` exactly when `value` is an event of this family: a frozen
 /// object whose immediate delegation parent is this module, whose local slots
-/// are exactly `level`, `message`, `fields`, and `error`, and whose `level` is
-/// a canonical level, `message` a String, `fields` a frozen standard Map of
-/// structured data frozen at every depth, and `error` an Error or `null`.
+/// are exactly `level`, `message`, `fields`, `error`, and `timestamp`, and
+/// whose `level` is a canonical level, `message` a String, `fields` a frozen
+/// standard Map of structured data frozen at every depth, `error` an Error or
+/// `null`, and `timestamp` a `std:datetime/Instant` or `null`.
 /// Answers `false` for any other value, including this module. The candidate
 /// is neither copied, converted, nor sent any message.
 recognizes: ((facility) => (value) => {
-    facility.recognizes(value, import("std:logging/LogEvent"))
+    facility.recognizes(value, import("std:logging/LogEvent"), import("std:datetime/Instant"))
 })(_logEventFacility)
 
 // The runtime-provisioned facility is captured privately above; it is not

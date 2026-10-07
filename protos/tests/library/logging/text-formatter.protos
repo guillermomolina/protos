@@ -20,6 +20,7 @@ LogEvent: import("std:logging/LogEvent")
 Logger: import("std:logging/Logger")
 MemorySink: import("std:logging/MemorySink")
 TextFormatter: import("std:logging/TextFormatter")
+Instant: import("std:datetime/Instant")
 
 Failure: Error {}
 
@@ -228,7 +229,48 @@ tests: [
         Assertions.require(first == second)
         Assertions.require(first == "INFO \"m\" {\"f\"=0.1, \"list\"=[3, 2, 1]} error=true")
         Assertions.require(event.fields["list"][0] == 3)
-        Assertions.require(event.slotNames().size() == 4)
+        Assertions.require(event.slotNames().size() == 5)
+    }),
+    Test("an event without a timestamp renders exactly as before", () => {
+        Assertions.require(TextFormatter.format(LogEvent(Level.INFO, "started", null, null, null)) == "INFO \"started\"")
+        Assertions.require(
+            render(Level.ERROR, "request failed", %{ "requestId": "r-7" }, Failure()) ==
+                "ERROR \"request failed\" {\"requestId\"=\"r-7\"} error=true"
+        )
+    }),
+    Test("a timestamp renders as an ISO 8601 prefix", () => {
+        Assertions.require(
+            TextFormatter.format(LogEvent(Level.INFO, "started", null, null, Instant(0))) ==
+                "1970-01-01T00:00:00Z INFO \"started\""
+        )
+        Assertions.require(
+            TextFormatter.format(LogEvent(Level.DEBUG, "tick", null, null, Instant(1))) ==
+                "1970-01-01T00:00:00.000000001Z DEBUG \"tick\""
+        )
+        Assertions.require(
+            TextFormatter.format(LogEvent(
+                Level.ERROR,
+                "request failed",
+                %{ "requestId": "r-7" },
+                Failure(),
+                Instant(1791342922123456789)
+            )) == "2026-10-07T03:15:22.123456789Z ERROR \"request failed\" {\"requestId\"=\"r-7\"} error=true"
+        )
+        Assertions.require(
+            TextFormatter.format(LogEvent(Level.WARN, "early", null, null, Instant(-1))) ==
+                "1969-12-31T23:59:59.999999999Z WARN \"early\""
+        )
+    }),
+    Test("a timestamp outside the ISO 8601 civil range signals Error", () => {
+        day: 86400000000000
+        late: LogEvent(Level.INFO, "late", null, null, Instant(2932897 * day))
+        early: LogEvent(Level.INFO, "early", null, null, Instant(-4371587 * day - 1))
+        Assertions.signals(Error, () => {
+            TextFormatter.format(late)
+        })
+        Assertions.signals(Error, () => {
+            TextFormatter.format(early)
+        })
     }),
     Test("only recognized events are formatted", () => {
         noFields: Map()

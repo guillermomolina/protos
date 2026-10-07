@@ -21,6 +21,7 @@ Logger: import("std:logging/Logger")
 MemorySink: import("std:logging/MemorySink")
 TextFormatter: import("std:logging/TextFormatter")
 TextSink: import("std:logging/TextSink")
+Instant: import("std:datetime/Instant")
 
 Failure: Error {}
 
@@ -296,6 +297,17 @@ tests: [
             sink.emit(LogEvent)
         })
         Assertions.require(sink.events().size() == 0)
+    }),
+    Test("a memory sink keeps a timestamped event exactly", () => {
+        sink: MemorySink()
+        instant: Instant(1791342922123456789)
+        event: LogEvent(Level.INFO, "stamped", null, null, instant)
+        sink.emit(event)
+        Logger(Level.INFO, sink, () => { instant }).warn("from logger")
+        Assertions.require(sink.events().size() == 2)
+        Assertions.require(sink.events()[0] === event)
+        Assertions.require(sink.events()[0].timestamp === instant)
+        Assertions.require(sink.events()[1].timestamp === instant)
     }),
     Test("a memory sink records what a Logger emits", () => {
         sink: MemorySink()
