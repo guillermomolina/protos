@@ -23,6 +23,20 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.447] - 2026-10-07
+
+### I083 / D192 A_EXACT_RECEIVER — Projected foreign `each` normal result
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` (Foreign Values, Indexed access,
+  foreign hash containers, and iteration): after normal exhaustion with every
+  reached callback completing normally, projected `foreign.each(block)` returns
+  the exact original Protos-facing receiver — the same raw foreign reference, or
+  the same Actor-local foreign module facade — never the underlying foreign
+  target; callback results do not select the result. Confers no Array/Map
+  family membership or snapshot semantics.
+- The 0.1.445 pull-iteration mechanism, admission, callback invocation, Error
+  and control propagation, `ForeignError` rules, and the 0.1.446 callback
+  contract are unchanged. No language-wide `each` result rule is introduced.
+
 ## [0.1.446] - 2026-10-07
 
 ### I081 / D189 A_DYNAMIC_SYNCHRONOUS_CALLBACK_BASELINE — Synchronous foreign callbacks

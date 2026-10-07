@@ -3662,6 +3662,15 @@ invocation. The baseline mechanism does not hand the Protos callback to the
 foreign runtime. A custom foreign `each` does not acquire the shallow-snapshot
 semantics of standard `Array.each` or `Map.each`.
 
+When the projected foreign iteration is exhausted normally and every reached
+`block(element)` invocation completes normally, `foreign.each(block)` returns
+the exact original Protos-facing receiver of that `each` invocation: for a raw
+foreign reference, that same raw foreign reference; for a foreign module
+facade, that same Actor-local Protos facade (`MODULES.md`). The result is never
+the underlying foreign target, and the results of `block(element)` invocations
+do not select it. This result rule confers no Array or Map family membership
+and no Array or Map snapshot semantics.
+
 ### Foreign failures
 
 `ForeignError` (parent `Error`, see `ERRORS.md`) is the single initial standard
