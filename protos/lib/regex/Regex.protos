@@ -74,6 +74,28 @@
 ///   empty match at `k` the next search starts at `k + 1`, so an empty match is
 ///   reported at most once per offset, including `text.size()`.
 /// - `findAll(text)` answers a fresh Array of the matches `eachMatch` visits.
+/// - `replaceFirst(text, replacement)` answers `text` with the match `search`
+///   selects replaced by the expansion of `replacement`, or a String equal to
+///   `text` when there is no match.
+/// - `replaceAll(text, replacement)` answers `text` with every match
+///   `eachMatch` visits replaced by the expansion of `replacement`. An empty
+///   match at `k` inserts the expansion at `k` and removes nothing: the scalar
+///   skipped to continue the search is kept, so `""` replaced by `"-"` in
+///   `"ab"` answers `"-a-b-"`.
+/// - `split(text)` answers a fresh Array of the fields between the matches
+///   `eachMatch` visits. Matched delimiters and their captures are omitted;
+///   leading, interior, and trailing empty fields are kept, so a subject with
+///   n matches answers n + 1 fields, and an empty match removes nothing:
+///   `""` splits `"ab"` into `"", "a", "b", ""`.
+///
+/// A replacement String is literal text except for `$`: `$$` is a literal
+/// `$`, `${0}` the whole match, `${N}` group N (decimal without leading
+/// zeros), and `${name}` the named capture. A group that did not participate
+/// expands to the empty String. Any other use of `$`, or a number or name that
+/// is not a group of the Pattern, signals an Error before any replacement,
+/// even when `text` has no match. `Regex.escapeReplacement(x)` is a
+/// replacement that inserts `x` literally. Non-String arguments signal an
+/// Error.
 ///
 /// A Match is frozen: `captureCount`; `group(key)`, `start(key)`, and
 /// `end(key)` for a group number (0 is the whole match) or a capture name,
@@ -102,14 +124,20 @@ compileWithFlags: ((unicode) => {
         result
     }
 
-    // Answers a frozen Array of the values stored under keys 0..count-1.
-    frozenArray: (entries, count) => {
+    // Answers a fresh Array of the values stored under keys 0..count-1.
+    freshArray: (entries, count) => {
         result: sized(count)
         index: 0
         (() => index < count).whileTrue() {
             result[index] = entries[index]
             index = index + 1
         }
+        result
+    }
+
+    // Answers a frozen Array of the values stored under keys 0..count-1.
+    frozenArray: (entries, count) => {
+        result: freshArray(entries, count)
         result.freeze()
         result
     }
@@ -532,20 +560,25 @@ compileWithFlags: ((unicode) => {
     }
 
     // Per-operation subject: the scalars are decoded once so the matcher reads
-    // each one in constant time, and `slice` rebuilds the exact String of a
-    // half-open scalar span without normalization.
+    // each one in constant time. `appendSpan` appends the UTF-8 encoding of a
+    // half-open scalar span to a byte buffer, and `slice` rebuilds the exact
+    // String of such a span, both without normalization.
     newInput: (text) => {
         scalars: decodeScalars(text)
+        appendSpan: (bytes, first, last) => {
+            index: first
+            (() => index < last).whileTrue() {
+                appendScalar(bytes, scalars[index])
+                index = index + 1
+            }
+        }
         input: {
             scalars: scalars
             size: scalars.size()
+            appendSpan: appendSpan
             slice: (first, last) => {
                 bytes: Encoding.UTF8.encode("")
-                index: first
-                (() => index < last).whileTrue() {
-                    appendScalar(bytes, scalars[index])
-                    index = index + 1
-                }
+                appendSpan(bytes, first, last)
                 Encoding.UTF8.decode(bytes)
             }
         }
@@ -971,12 +1004,13 @@ compileWithFlags: ((unicode) => {
             result
         }
 
-        // Visits successive non-overlapping matches. After an empty match at
-        // k the next search starts at k + 1, so each position yields at most
-        // one empty match and an empty match at the end is the last one.
-        traverse: (text, visit) => {
-            requireText(text)
-            input: newInput(text)
+        // Visits successive non-overlapping matches of a decoded subject. After
+        // an empty match at k the next search starts at k + 1, so each position
+        // yields at most one empty match and an empty match at the end is the
+        // last one. This is the only search progression: eachMatch, findAll,
+        // replaceAll, and split all consume it. Skipping a scalar only advances
+        // the search; callers that copy input keep their own copy boundary.
+        traverse: (input, visit) => {
             from: 0
             (() => from <= input.size).whileTrue() {
                 found: matchIn(input, from, false, false)
@@ -990,6 +1024,135 @@ compileWithFlags: ((unicode) => {
                     })
                 })
             }
+        }
+
+        // Parses `replacement` into a frozen Array of parts, each a literal
+        // String or a group number, before any output is produced: `$$` is a
+        // literal `$`, and `${N}` (decimal, no leading zero) or `${name}` must
+        // denote a group of this Pattern. Any other `$` signals an Error, even
+        // when the subject has no match. Names resolve to numbers here.
+        parseReplacement: (replacement) => {
+            requireText(replacement)
+            scalars: decodeScalars(replacement)
+            size: scalars.size()
+            parts: Map()
+            count: 0
+            literal: Encoding.UTF8.encode("")
+            flushLiteral: () => {
+                (literal.size() > 0).ifTrue(() => {
+                    parts[count] = Encoding.UTF8.decode(literal)
+                    count = count + 1
+                    literal = Encoding.UTF8.encode("")
+                })
+            }
+            index: 0
+            (() => index < size).whileTrue() {
+                scalar: scalars[index]
+                (scalar == 36).ifTrueIfFalse(() => {
+                    marker: -1
+                    ((index + 1) < size).ifTrue(() => {
+                        marker = scalars[index + 1]
+                    })
+                    (marker == 36).ifTrueIfFalse(() => {
+                        literal.add(36)
+                        index = index + 2
+                    }, () => {
+                        (marker == 123).ifFalse(() => {
+                            Error().signal()
+                        })
+                        first: index + 2
+                        close: first
+                        (() => (close < size) && (scalars[close] != 125)).whileTrue() {
+                            close = close + 1
+                        }
+                        ((close < size) && (close > first)).ifFalse(() => {
+                            Error().signal()
+                        })
+                        group: null
+                        ((scalars[first] >= 48) && (scalars[first] <= 57)).ifTrueIfFalse(() => {
+                            ((scalars[first] == 48) && (close > (first + 1))).ifTrue(() => {
+                                Error().signal()
+                            })
+                            number: 0
+                            digit: first
+                            (() => digit < close).whileTrue() {
+                                ((scalars[digit] >= 48) && (scalars[digit] <= 57)).ifFalse(() => {
+                                    Error().signal()
+                                })
+                                number = number * 10 + (scalars[digit] - 48)
+                                digit = digit + 1
+                            }
+                            (number < groupTotal).ifFalse(() => {
+                                Error().signal()
+                            })
+                            group = number
+                        }, () => {
+                            nameBytes: Encoding.UTF8.encode("")
+                            digit: first
+                            (() => digit < close).whileTrue() {
+                                appendScalar(nameBytes, scalars[digit])
+                                digit = digit + 1
+                            }
+                            name: Encoding.UTF8.decode(nameBytes)
+                            program.captureNames.containsKey(name).ifFalse(() => {
+                                Error().signal()
+                            })
+                            group = program.captureNames[name]
+                        })
+                        flushLiteral()
+                        parts[count] = group
+                        count = count + 1
+                        index = close + 1
+                    })
+                }, () => {
+                    appendScalar(literal, scalar)
+                    index = index + 1
+                })
+            }
+            flushLiteral()
+            frozenArray(parts, count)
+        }
+
+        appendText: (output, text) => {
+            Encoding.UTF8.encode(text).each((octet) => {
+                output.add(octet)
+            })
+        }
+
+        // Replaces the first selected match, or every match `traverse` visits,
+        // reading captures from each selected Match. `copyFrom` is the first
+        // subject scalar not yet copied; after an empty match at k it stays k,
+        // so the scalar the search skips is still copied.
+        replace: (text, replacement, every) => {
+            requireText(text)
+            template: parseReplacement(replacement)
+            input: newInput(text)
+            output: Encoding.UTF8.encode("")
+            copyFrom: 0
+            replaceMatch: (found) => {
+                input.appendSpan(output, copyFrom, found.start(0))
+                template.each((part) => {
+                    String.recognizes(part).ifTrueIfFalse(() => {
+                        appendText(output, part)
+                    }, () => {
+                        captured: found.group(part)
+                        (captured === null).ifFalse(() => {
+                            appendText(output, captured)
+                        })
+                    })
+                })
+                copyFrom = found.end(0)
+            }
+            every.ifTrueIfFalse(() => {
+                traverse(input, replaceMatch)
+            }, () => {
+                found: matchIn(input, 0, false, false)
+                (found === null).ifFalse(() => {
+                    replaceMatch(found)
+                })
+            })
+            input.appendSpan(output, copyFrom, input.size)
+            Encoding.UTF8.decode(output)
         }
 
         searchFrom: (text, offset) => {
@@ -1014,25 +1177,43 @@ compileWithFlags: ((unicode) => {
             }
             searchFrom: searchFrom
             eachMatch: (text, block) => {
-                traverse(text, (found) => {
+                requireText(text)
+                traverse(newInput(text), (found) => {
                     block(found)
                 })
                 null
             }
             findAll: (text) => {
+                requireText(text)
                 found: Map()
                 count: 0
-                traverse(text, (match) => {
+                traverse(newInput(text), (match) => {
                     found[count] = match
                     count = count + 1
                 })
-                result: sized(count)
-                index: 0
-                (() => index < count).whileTrue() {
-                    result[index] = found[index]
-                    index = index + 1
-                }
-                result
+                freshArray(found, count)
+            }
+            replaceFirst: (text, replacement) => {
+                replace(text, replacement, false)
+            }
+            replaceAll: (text, replacement) => {
+                replace(text, replacement, true)
+            }
+            // Each match delimits a field; `fieldStart` is independent of the
+            // search progression, so a skipped scalar stays in its field.
+            split: (text) => {
+                requireText(text)
+                input: newInput(text)
+                fields: Map()
+                count: 0
+                fieldStart: 0
+                traverse(input, (found) => {
+                    fields[count] = input.slice(fieldStart, found.start(0))
+                    count = count + 1
+                    fieldStart = found.end(0)
+                })
+                fields[count] = input.slice(fieldStart, input.size)
+                freshArray(fields, count + 1)
             }
         }
         pattern.freeze()

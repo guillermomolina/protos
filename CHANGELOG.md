@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.254-SNAPSHOT
+
+- `LIB014-3` (guillermomolina/protos#431) completes the D187 `std:regex/Regex`
+  baseline public API with `Pattern.replaceFirst(text, replacement)`,
+  `Pattern.replaceAll(text, replacement)`, and `Pattern.split(text)`. There is
+  no specification change.
+  - Replacement Strings accept only `$$`, `${0}`, `${N}` (decimal without
+    leading zeros), and `${name}`. The template is parsed and every reference
+    validated against the Pattern before any matching, so a malformed `$` or a
+    reference to a missing group signals an Error even when the subject has no
+    match. A group that did not participate expands to the empty String.
+  - `replaceFirst` replaces the match `search` selects; `replaceAll` and
+    `split` consume the same non-overlapping progression as `eachMatch` and
+    `findAll`. The copy boundary is kept separate from the search position,
+    so the scalar skipped after an empty match is kept: `""` replaced by `"-"`
+    in `"ab"` answers `"-a-b-"`, and `""` splits `"ab"` into
+    `"", "a", "b", ""`.
+  - `split` omits delimiters and their captures and keeps leading, interior,
+    and trailing empty fields. Output is built in one UTF-8 buffer per call
+    using Unicode scalar offsets, without normalization.
+  - The `library/regex` corpus gains `replacement` and `split`. Actor/Process
+    transfer of Patterns and Matches remains gated by PLAT051.
+
 ## 0.3.253-SNAPSHOT
 
 - `LIB015-B1` (guillermomolina/protos#432) adds plain-text log formatting and

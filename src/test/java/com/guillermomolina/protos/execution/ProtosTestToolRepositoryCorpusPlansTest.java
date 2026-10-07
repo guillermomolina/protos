@@ -30,7 +30,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
         assertPlan("protos/corpus/library/datetime", 10, "datetime/construction.protos", "datetime/rfc3339.protos");
-        assertPlan("protos/corpus/library/regex", 11, "regex/compile.protos", "regex/sharing.protos");
+        assertPlan("protos/corpus/library/regex", 13, "regex/compile.protos", "regex/split.protos");
         assertPlan("protos/corpus/library/logging", 6, "logging/levels.protos", "logging/sinks.protos");
     }
 

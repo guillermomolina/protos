@@ -168,7 +168,9 @@ load: (corpusId) => {
             Array("repetition.protos", "suite-native", "-"),
             Array("traversal.protos", "suite-native", "-"),
             Array("complexity.protos", "suite-native", "-"),
-            Array("sharing.protos", "suite-native", "-")
+            Array("sharing.protos", "suite-native", "-"),
+            Array("replacement.protos", "suite-native", "-"),
+            Array("split.protos", "suite-native", "-")
             )
         )
         matched = true

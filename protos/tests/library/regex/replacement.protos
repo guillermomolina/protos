@@ -1,0 +1,132 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Regex: import("std:regex/Regex")
+
+// Requires `operation(value)` to signal an Error for every value of `values`.
+requireEachSignals: (values, operation) => {
+    values.each((value) => {
+        Assertions.signals(Error, () => { operation(value) })
+    })
+    true
+}
+
+tests: [
+    Test("replaceFirst replaces the match search selects", () => {
+        Assertions.require(Regex.compile("b+").replaceFirst("abbcbb", "-") == "a-cbb")
+        Assertions.require(Regex.compile("a|ab").replaceFirst("xab", "-") == "x-b")
+        Assertions.require(Regex.compile("z").replaceFirst("abc", "-") == "abc")
+        Assertions.require(Regex.compile("z").replaceFirst("", "-") == "")
+        Assertions.require(Regex.compile("abc").replaceFirst("abc", "") == "")
+    }),
+    Test("replaceFirst inserts at a zero-width match without removing input", () => {
+        Assertions.require(Regex.compile("").replaceFirst("ab", "-") == "-ab")
+        Assertions.require(Regex.compile("").replaceFirst("", "-") == "-")
+        Assertions.require(Regex.compile("$").replaceFirst("ab", "-") == "ab-")
+        Assertions.require(Regex.compile("\\b").replaceFirst("  ab", "|") == "  |ab")
+    }),
+    Test("replaceAll replaces every non-overlapping match", () => {
+        Assertions.require(Regex.compile("b").replaceAll("abc", "-") == "a-c")
+        Assertions.require(Regex.compile("\\d+").replaceAll("a1b22c333", "#") == "a#b#c#")
+        Assertions.require(Regex.compile("aa").replaceAll("aaaaa", "b") == "bba")
+        Assertions.require(Regex.compile("a").replaceAll("aaa", "xy") == "xyxyxy")
+        Assertions.require(Regex.compile("z").replaceAll("abc", "-") == "abc")
+        Assertions.require(Regex.compile("z").replaceAll("", "-") == "")
+    }),
+    Test("replaceAll keeps the scalars skipped after zero-width matches", () => {
+        Assertions.require(Regex.compile("").replaceAll("ab", "-") == "-a-b-")
+        Assertions.require(Regex.compile("").replaceAll("", "-") == "-")
+        Assertions.require(Regex.compile("").replaceAll("😀é", "|") == "|😀|é|")
+        Assertions.require(Regex.compile("x*").replaceAll("axxb", "-") == "-a--b-")
+        Assertions.require(Regex.compile("$").replaceAll("ab", "!") == "ab!")
+        Assertions.require(Regex.compile("b*$").replaceAll("abb", "-") == "a--")
+        Assertions.require(Regex.compile("\\b").replaceAll("ab c", "|") == "|ab| |c|")
+    }),
+    Test("replacement references expand the selected captures", () => {
+        Assertions.require(Regex.compile("b").replaceAll("abc", "$$") == "a$c")
+        Assertions.require(Regex.compile("b").replaceAll("abc", "[$$$$]") == "a[$$]c")
+        Assertions.require(Regex.compile("\\d+").replaceAll("a12b3", "<${0}>") == "a<12>b<3>")
+        Assertions.require(Regex.compile("(\\w)(\\d)").replaceAll("a1 b2", "${2}${1}") == "1a 2b")
+        Assertions.require(Regex.compile("(?<key>\\w+)=(?<value>\\w+)").replaceFirst("x k=v y", "${value}=${key}") ==
+            "x v=k y")
+        Assertions.require(Regex.compile("(?<key>a)").replaceAll("aa", "${1}${key}") == "aaaa")
+        pattern: Regex.compile("(a)(b)(c)(d)(e)(f)(g)(h)(i)(j)(k)")
+        Assertions.require(pattern.replaceAll("abcdefghijk", "${11}${10}${1}") == "kja")
+    }),
+    Test("absent and empty captures expand to the empty String; repeats keep their last capture", () => {
+        Assertions.require(Regex.compile("a(x)?b").replaceAll("ab axb", "[${1}]") == "[] [x]")
+        Assertions.require(Regex.compile("(?<o>x)|y").replaceAll("xy", "<${o}>") == "<x><>")
+        Assertions.require(Regex.compile("a(x*)b").replaceAll("ab", "[${1}]") == "[]")
+        Assertions.require(Regex.compile("(?:(a)|b)+").replaceAll("ab", "[${1}]") == "[a]")
+        Assertions.require(Regex.compile("(?:(\\w))+").replaceAll("abc d", "${1}") == "c d")
+    }),
+    Test("replacement works on Unicode scalars without normalization", () => {
+        Assertions.require(Regex.compile("(é)").replaceAll("aéb", "<${1}>") == "a<é>b")
+        Assertions.require(Regex.compile("😀(.)").replaceAll("x😀éy😀😀", "${1}") == "xéy😀")
+        Assertions.require(Regex.compile("b").replaceAll("😀b😀", "€") == "😀€😀")
+        Assertions.require(Regex.compile("(e\u{301})").replaceAll("ae\u{301}b", "[${1}]") == "a[e\u{301}]b")
+        Assertions.require(Regex.compile("e").replaceAll("e\u{301}", "o") == "o\u{301}")
+        Assertions.require(Regex.compile("é").replaceAll("e\u{301}", "x") == "e\u{301}")
+        Assertions.require(Regex.compile(".").replaceAll("e\u{301}😀", "-") == "---")
+    }),
+    Test("escapeReplacement inserts text literally", () => {
+        literal: "$${1}${x}$ \\1 $1"
+        Assertions.require(Regex.compile("(b)").replaceAll("abc", Regex.escapeReplacement(literal)) ==
+            "a" + literal + "c")
+        Assertions.require(Regex.compile("").replaceAll("ab", Regex.escapeReplacement("$")) == "$a$b$")
+    }),
+    Test("malformed replacements signal an Error", () => {
+        pattern: Regex.compile("(?<n>a)")
+        malformed: Array("$", "a$", "${", "${}", "${missing", "${1", "$1", "$n", "$a", "$ ", "$}", "$\\", "${-1}",
+            "${1a}", "${ 1}", "${01}", "${n }", "${{n}}")
+        requireEachSignals(malformed, (replacement) => { pattern.replaceAll("a", replacement) })
+        requireEachSignals(malformed, (replacement) => { pattern.replaceFirst("a", replacement) })
+    }),
+    Test("references to absent groups signal an Error", () => {
+        pattern: Regex.compile("(?<n>a)")
+        Array("${2}", "${missing}", "${N}", "${99999999999999999999}").each((replacement) => {
+            Assertions.signals(Error, () => { pattern.replaceAll("a", replacement) })
+            Assertions.signals(Error, () => { pattern.replaceFirst("a", replacement) })
+        })
+        Assertions.signals(Error, () => { Regex.compile("a").replaceAll("a", "${1}") })
+    }),
+    Test("replacements are validated before matching", () => {
+        Assertions.signals(Error, () => { Regex.compile("z").replaceAll("abc", "${1}") })
+        Assertions.signals(Error, () => { Regex.compile("z").replaceFirst("abc", "${name}") })
+        Assertions.signals(Error, () => { Regex.compile("z").replaceAll("", "$") })
+        Assertions.signals(Error, () => { Regex.compile("z").replaceFirst("", "${") })
+    }),
+    Test("replacement rejects non-String arguments", () => {
+        pattern: Regex.compile("a")
+        values: Array(null, 1, Encoding.UTF8.encode("a"), Array("a"))
+        requireEachSignals(values, (value) => { pattern.replaceAll(value, "b") })
+        requireEachSignals(values, (value) => { pattern.replaceAll("a", value) })
+        requireEachSignals(values, (value) => { pattern.replaceFirst(value, "b") })
+        requireEachSignals(values, (value) => { pattern.replaceFirst("a", value) })
+    }),
+    Test("replacement leaves the Pattern and its inputs unchanged", () => {
+        pattern: Regex.compile("(?<n>b)")
+        text: "abc"
+        replacement: "<${n}>"
+        Assertions.require(pattern.replaceAll(text, replacement) == "a<b>c")
+        Assertions.require(pattern.replaceAll(text, replacement) == "a<b>c")
+        Assertions.require(text == "abc")
+        Assertions.require(replacement == "<${n}>")
+        Assertions.require(pattern.source == "(?<n>b)")
+        Assertions.require(pattern.search(text).group("n") == "b")
+    })
+]
