@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.253-SNAPSHOT
+
+- `LIB015-B1` (guillermomolina/protos#432) adds plain-text log formatting and
+  explicit text and memory sinks to `std:logging`, implementing the ratified
+  LIB015-B0 contract. There is no specification change; JSON output,
+  timestamps, color, and filtering or fan-out sinks remain unimplemented.
+  - Events now delegate directly to `std:logging/LogEvent`, and the new
+    `LogEvent.recognizes(value)` accepts exactly frozen events whose four slots
+    hold valid state. A private runtime facility reads that state, including
+    the attached-Error delegation chain, without invoking any behavior of the
+    candidate, so lookalikes and objects that override `parent`, `slotNames`,
+    `each`, `==`, or `hash` are rejected safely.
+  - `std:logging/TextFormatter.format(event)` renders one line,
+    `LEVEL "message" {fields} error=true`, with no terminator. Strings escape
+    quotes, backslashes, LF, CR, and TAB, and render C0/C1 controls, DEL,
+    U+2028, and U+2029 as `\u{HEX}`, so output stays on one physical line
+    and never carries terminal control sequences. Map keys are ordered by
+    Unicode scalar sequence at every depth. Floats render as their shortest
+    round-trip decimal using the ECMAScript layout, plus `NaN`, `Infinity`,
+    `-Infinity`, and `-0.0`. An attached Error renders only `error=true`.
+  - `std:logging/TextSink(formatter, writer)` borrows an explicit TextWriter:
+    `emit` calls `writeLine` and waits for its Future, so a slow writer
+    suspends the caller and a failed write signals from `emit` (a Logger
+    contains it). The sink never flushes or closes the writer.
+  - `std:logging/MemorySink()` retains exact recognized events in emission
+    order; `events()` answers a fresh frozen snapshot.
+  - Fixes LIB015-A event construction and tests that called the nonexistent
+    Array `add`; nested Arrays in event fields now snapshot correctly.
+  - The `library/logging` corpus gains `recognition`, `text-formatter`, and
+    `sinks`.
+
 ## 0.3.252-SNAPSHOT
 
 - `LIB014-2` (guillermomolina/protos#431) adds `std:regex/Regex` matching under

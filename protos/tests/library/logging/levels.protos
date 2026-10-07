@@ -39,15 +39,17 @@ tests: [
         Assertions.require(Level.hasSlot("FATAL") == false)
         Assertions.require(Level.hasSlot("CRITICAL") == false)
         Assertions.require(Level.hasSlot("OFF") == false)
-        ordered.each((level) => {
-            Assertions.require(Level.compare(level, level) == 0)
+        index: 0
+        (() => index < ordered.size()).whileTrue(() => {
+            Assertions.require(Level.compare(ordered[index], ordered[index]) == 0)
+            index = index + 1
         })
     }),
     Test("severity order is TRACE < DEBUG < INFO < WARN < ERROR", () => {
         leftIndex: 0
-        ordered.each((left) => {
+        (() => leftIndex < ordered.size()).whileTrue(() => {
             rightIndex: 0
-            ordered.each((right) => {
+            (() => rightIndex < ordered.size()).whileTrue(() => {
                 expected: 0
                 (leftIndex < rightIndex).ifTrue(() => {
                     expected = -1
@@ -55,7 +57,9 @@ tests: [
                 (leftIndex > rightIndex).ifTrue(() => {
                     expected = 1
                 })
-                Assertions.require(Level.compare(left, right) == expected)
+                Assertions.require(
+                    Level.compare(ordered[leftIndex], ordered[rightIndex]) == expected
+                )
                 rightIndex = rightIndex + 1
             })
             leftIndex = leftIndex + 1

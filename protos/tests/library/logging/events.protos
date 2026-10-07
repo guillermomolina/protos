@@ -58,7 +58,7 @@ tests: [
             event.fields["list"] = null
         })
         Assertions.signals(Error, () => {
-            event.fields["list"].add(3)
+            event.fields["list"][0] = 3
         })
         Assertions.signals(Error, () => {
             event.fields["map"]["k"] = "w"
@@ -95,7 +95,6 @@ tests: [
 
         fields["added"] = true
         fields["list"] = "replaced"
-        nested.add(3)
         nested[0] = 100
         inner["a"] = 2
         inner["b"] = 3
@@ -122,17 +121,17 @@ tests: [
         rejectsFields({ size: 0 })
     }),
     Test("cyclic data is rejected", () => {
-        selfArray: [1]
-        selfArray.add(selfArray)
+        selfArray: [1, 1]
+        selfArray[1] = selfArray
         rejectsFields(%{ "cycle": selfArray })
 
         selfMap: %{ "k": 1 }
         selfMap["self"] = selfMap
         rejectsFields(selfMap)
 
-        outer: [1]
+        outer: [1, 1]
         middle: %{ "outer": outer }
-        outer.add(middle)
+        outer[1] = middle
         rejectsFields(%{ "cycle": outer })
     }),
     Test("shared acyclic data is accepted", () => {

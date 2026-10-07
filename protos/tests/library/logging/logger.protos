@@ -26,7 +26,7 @@ recorder: () => {
     {
         events: events
         emit: (event) => {
-            events.add(event)
+            this.events = Array(...this.events, event)
         }
     }
 }
@@ -73,8 +73,8 @@ tests: [
     Test("a disabled call inspects no data, creates no event, and skips the sink", () => {
         sink: failingSink()
         logger: Logger(Level.WARN, sink)
-        cyclic: [1]
-        cyclic.add(cyclic)
+        cyclic: [1, 1]
+        cyclic[1] = cyclic
 
         Assertions.require(logger.debug("d", %{ "cycle": cyclic; "object": { secret: 1 } }, "not an error") === null)
         Assertions.require(logger.trace(42, ["not a map"], 7) === null)
@@ -199,15 +199,16 @@ tests: [
 
         supplied["late"] = true
         supplied["list"] = "replaced"
-        nested.add(2)
+        nested[0] = 2
 
         Assertions.require(derived.fields.size() == 1)
         Assertions.require(derived.fields["list"].size() == 1)
+        Assertions.require(derived.fields["list"][0] == 1)
         derived.info("after mutation")
         Assertions.require(sink.events[0].fields.size() == 1)
         Assertions.require(sink.events[0].fields["list"].size() == 1)
         Assertions.signals(Error, () => {
-            derived.fields["list"].add(3)
+            derived.fields["list"][0] = 3
         })
     }),
     Test("mutating call-site data does not change an emitted event", () => {
@@ -219,7 +220,7 @@ tests: [
         logger.info("materialized", fields)
 
         fields["list"] = null
-        list.add("extra")
+        list[0] = "extra"
         nested["count"] = 2
 
         event: sink.events[0]

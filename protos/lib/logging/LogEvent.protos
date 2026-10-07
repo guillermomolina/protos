@@ -33,6 +33,14 @@
 //! The attached Error is kept by reference: it is neither copied, mutated,
 //! signalled, nor converted. An event carries no formatter, sink, writer,
 //! clock, or time, and no other ambient authority.
+//!
+//! Every event's immediate delegation parent is this module, the canonical
+//! event factory and prototype. `recognizes` accepts exactly the events of
+//! this family: frozen objects whose immediate parent is this module, whose
+//! local slots are exactly `level`, `message`, `fields`, and `error`, and whose
+//! slots hold valid event state. Recognition reads that state directly, so it
+//! never invokes behavior of the candidate; an object that merely has similar
+//! slots is not an event.
 
 /// Answers a fresh frozen event for `level`, `message`, `fields`, and `error`.
 /// `level` must be a canonical level and `message` a String. `fields` must be
@@ -40,30 +48,20 @@
 /// event's `fields` slot is always a frozen Map snapshot. `error` must be an
 /// object that delegates to `Error`, or `null`. Any other argument signals an
 /// Error.
-call: (level, message, fields, error) => {
+call: ((facility) => (level, message, fields, error) => {
+    LogEvent: import("std:logging/LogEvent")
     Level: import("std:logging/Level")
+    Arrays: import("std:collections/Array")
     Level.compare(level, level)
 
     String.recognizes(message).ifFalse(() => {
         Error().signal()
     })
 
-    // An attached Error is recognized through its ordinary delegation chain,
-    // the relation Error handler matching uses; the Error prototype itself is
-    // not an attachable Error.
-    isError: (value) => {
-        found: false
-        (value !== Error).ifTrue(() => {
-            current: value
-            (() => (found == false) && (current !== Object)).whileTrue() {
-                current = current.parent()
-                found = current === Error
-            }
-        })
-        found
-    }
-
-    ((error === null) || isError(error)).ifFalse(() => {
+    // An attached Error is recognized through its delegation chain, the
+    // relation Error handler matching uses, read without invoking any behavior
+    // of the candidate; the Error prototype itself is not an attachable Error.
+    ((error === null) || facility.isAttachableError(error)).ifFalse(() => {
         Error().signal()
     })
 
@@ -93,10 +91,7 @@ call: (level, message, fields, error) => {
                 })
                 active[value] = true
 
-                copy: Array()
-                Array(...value).each((element) => {
-                    copy.add(snapshot(element))
-                })
+                copy: Arrays.map(value, (element) => snapshot(element))
                 copy.freeze()
 
                 active.remove(value)
@@ -142,12 +137,31 @@ call: (level, message, fields, error) => {
         eventFields = snapshot(fields)
     })
 
-    event: {
+    event: (LogEvent) {
         level: level
         message: message
         fields: eventFields
         error: error
     }
     event.freeze()
+
+    facility.recognizes(event, LogEvent).ifFalse(() => {
+        Error().signal()
+    })
     event
-}
+})(_logEventFacility)
+
+/// Answers `true` exactly when `value` is an event of this family: a frozen
+/// object whose immediate delegation parent is this module, whose local slots
+/// are exactly `level`, `message`, `fields`, and `error`, and whose `level` is
+/// a canonical level, `message` a String, `fields` a frozen standard Map of
+/// structured data frozen at every depth, and `error` an Error or `null`.
+/// Answers `false` for any other value, including this module. The candidate
+/// is neither copied, converted, nor sent any message.
+recognizes: ((facility) => (value) => {
+    facility.recognizes(value, import("std:logging/LogEvent"))
+})(_logEventFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_logEventFacility")

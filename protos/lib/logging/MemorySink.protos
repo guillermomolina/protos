@@ -1,0 +1,51 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! In-memory sinks that retain emitted events, mainly for tests and for
+//! programs that inspect their own log output. A memory sink keeps the exact
+//! emitted events: it neither copies nor formats them, and it has no capacity
+//! limit, eviction, or clearing operation.
+
+/// Answers a fresh frozen sink with no retained events.
+///
+/// The sink answers:
+///
+/// - `emit(event)`: retains `event`, which must be recognized by
+///   `std:logging/LogEvent`, after every event retained before it, and answers
+///   `null`. Any other argument signals an Error and retains nothing.
+/// - `events()`: a fresh frozen Array of the retained events in emission order.
+///   Each call answers a new Array; later emissions do not change an Array
+///   already answered.
+call: () => {
+    LogEvent: import("std:logging/LogEvent")
+
+    retained: []
+
+    sink: {
+        emit: (event) => {
+            LogEvent.recognizes(event).ifFalse(() => {
+                Error().signal()
+            })
+            retained = Array(...retained, event)
+            null
+        }
+
+        events: () => {
+            snapshot: Array(...retained)
+            snapshot.freeze()
+        }
+    }
+    sink.freeze()
+}

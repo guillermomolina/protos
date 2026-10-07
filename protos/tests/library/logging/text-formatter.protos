@@ -1,0 +1,262 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+Logger: import("std:logging/Logger")
+MemorySink: import("std:logging/MemorySink")
+TextFormatter: import("std:logging/TextFormatter")
+
+Failure: Error {}
+
+render: (level, message, fields, error) => {
+    TextFormatter.format(LogEvent(level, message, fields, error))
+}
+
+// The rendering of `message` as an INFO line without fields.
+renderMessage: (message) => {
+    render(Level.INFO, message, null, null)
+}
+
+// The rendering of `value` as the single field "v", without the line prefix.
+renderValue: (value) => {
+    line: render(Level.INFO, "", %{ "v": value }, null)
+    prefix: "INFO \"\" {\"v\"="
+    result: ""
+    index: prefix.size()
+    (() => index < (line.size() - 1)).whileTrue(() => {
+        result = result + line[index]
+        index = index + 1
+    })
+    result
+}
+
+// No scalar of `text` is a line break or one of the escaped controls.
+singleLine: (text) => {
+    forbidden: ["\n", "\r", "\t", "\u{0}", "\u{B}", "\u{C}", "\u{1B}", "\u{7F}",
+        "\u{85}", "\u{9B}", "\u{2028}", "\u{2029}"]
+    clean: true
+    index: 0
+    (() => index < text.size()).whileTrue(() => {
+        scalar: text[index]
+        forbidden.each((control) => {
+            (scalar == control).ifTrue(() => {
+                clean = false
+            })
+        })
+        index = index + 1
+    })
+    clean
+}
+
+tests: [
+    Test("a plain logger call renders level and quoted message", () => {
+        sink: MemorySink()
+        Logger(Level.INFO, sink).info("hello")
+        Assertions.require(TextFormatter.format(sink.events()[0]) == "INFO \"hello\"")
+        Assertions.require(render(Level.TRACE, "t", null, null) == "TRACE \"t\"")
+        Assertions.require(render(Level.DEBUG, "d", null, null) == "DEBUG \"d\"")
+        Assertions.require(render(Level.WARN, "w", null, null) == "WARN \"w\"")
+        Assertions.require(render(Level.ERROR, "e", null, null) == "ERROR \"e\"")
+    }),
+    Test("empty fields are omitted", () => {
+        Assertions.require(render(Level.INFO, "hello", %{}, null) == "INFO \"hello\"")
+        Assertions.require(render(Level.INFO, "hello", null, null) == "INFO \"hello\"")
+    }),
+    Test("fields render as one sorted Map", () => {
+        Assertions.require(
+            render(Level.INFO, "cache refreshed", %{ "entries": 42 }, null) ==
+                "INFO \"cache refreshed\" {\"entries\"=42}"
+        )
+        Assertions.require(
+            render(Level.INFO, "m", %{ "b": 2; "a": 1; "c": "three" }, null) ==
+                "INFO \"m\" {\"a\"=1, \"b\"=2, \"c\"=\"three\"}"
+        )
+    }),
+    Test("an attached Error renders only a presence marker", () => {
+        Assertions.require(render(Level.ERROR, "failed", null, Error()) == "ERROR \"failed\" error=true")
+        Assertions.require(render(Level.ERROR, "failed", null, Failure()) == "ERROR \"failed\" error=true")
+        Assertions.require(
+            render(Level.ERROR, "request failed", %{ "requestId": "r-7" }, Failure()) ==
+                "ERROR \"request failed\" {\"requestId\"=\"r-7\"} error=true"
+        )
+        Assertions.require(render(Level.WARN, "retry", null, Failure()) == "WARN \"retry\" error=true")
+    }),
+    Test("a field named error stays distinct from the attached Error", () => {
+        Assertions.require(
+            render(Level.ERROR, "failed", %{ "error": "domain-value" }, Failure()) ==
+                "ERROR \"failed\" {\"error\"=\"domain-value\"} error=true"
+        )
+        Assertions.require(
+            render(Level.ERROR, "failed", %{ "error": "domain-value" }, null) ==
+                "ERROR \"failed\" {\"error\"=\"domain-value\"}"
+        )
+        Assertions.require(
+            render(Level.ERROR, "failed", %{ "error": true }, null) ==
+                "ERROR \"failed\" {\"error\"=true}"
+        )
+    }),
+    Test("Strings escape quotes, backslashes, and line breaks", () => {
+        Assertions.require(renderMessage("") == "INFO \"\"")
+        Assertions.require(renderMessage(" a  b ") == "INFO \" a  b \"")
+        Assertions.require(renderMessage("say \"hi\"") == "INFO \"say \\\"hi\\\"\"")
+        Assertions.require(renderMessage("C:\\dir") == "INFO \"C:\\\\dir\"")
+        Assertions.require(renderMessage("a\nb") == "INFO \"a\\nb\"")
+        Assertions.require(renderMessage("a\rb") == "INFO \"a\\rb\"")
+        Assertions.require(renderMessage("a\r\nb") == "INFO \"a\\r\\nb\"")
+        Assertions.require(renderMessage("a\tb") == "INFO \"a\\tb\"")
+    }),
+    Test("control scalars render as uppercase hexadecimal escapes", () => {
+        Assertions.require(renderMessage("\u{0}") == "INFO \"\\u{0}\"")
+        Assertions.require(renderMessage("\u{B}\u{C}\u{1F}") == "INFO \"\\u{B}\\u{C}\\u{1F}\"")
+        Assertions.require(renderMessage("\u{1B}[31mred\u{1B}[0m") == "INFO \"\\u{1B}[31mred\\u{1B}[0m\"")
+        Assertions.require(renderMessage("\u{7F}") == "INFO \"\\u{7F}\"")
+        Assertions.require(renderMessage("\u{80}\u{85}\u{9B}\u{9F}") == "INFO \"\\u{80}\\u{85}\\u{9B}\\u{9F}\"")
+        Assertions.require(renderMessage("\u{2028}\u{2029}") == "INFO \"\\u{2028}\\u{2029}\"")
+    }),
+    Test("other Unicode scalars are kept exactly", () => {
+        Assertions.require(renderMessage("\u{A0}~ ") == "INFO \"\u{A0}~ \"")
+        Assertions.require(renderMessage("caf\u{E9} e\u{301}") == "INFO \"caf\u{E9} e\u{301}\"")
+        Assertions.require(renderMessage("\u{20AC}\u{FFFD}") == "INFO \"\u{20AC}\u{FFFD}\"")
+        Assertions.require(renderMessage("\u{1F600}") == "INFO \"\u{1F600}\"")
+        Assertions.require(renderMessage("\u{1F600}").size() == 8)
+    }),
+    Test("keys and nested Strings are escaped the same way", () => {
+        Assertions.require(
+            render(Level.INFO, "m", %{ "a\"b": "x\ny"; "k": ["\t", %{ "\u{1B}": "\\" }] }, null) ==
+                "INFO \"m\" {\"a\\\"b\"=\"x\\ny\", \"k\"=[\"\\t\", {\"\\u{1B}\"=\"\\\\\"}]}"
+        )
+    }),
+    Test("hostile text stays on one physical line", () => {
+        hostile: "line1\nline2\r\n\u{1B}[2J\u{0}\u{7F}\u{85}\u{9B}\u{2028}\u{2029}\t\u{B}\u{C}"
+        line: render(Level.WARN, hostile, %{ "h": [hostile, %{ "nested": hostile }] }, Failure())
+        Assertions.require(singleLine(hostile) == false)
+        Assertions.require(singleLine(line))
+    }),
+    Test("Arrays and Maps render recursively", () => {
+        Assertions.require(renderValue([]) == "[]")
+        Assertions.require(renderValue(%{}) == "{}")
+        Assertions.require(renderValue([1, 2, 3]) == "[1, 2, 3]")
+        Assertions.require(renderValue([[1, [2]], []]) == "[[1, [2]], []]")
+        Assertions.require(renderValue(%{ "b": %{ "d": 1; "c": [] }; "a": %{} }) == "{\"a\"={}, \"b\"={\"c\"=[], \"d\"=1}}")
+        Assertions.require(
+            renderValue(["a", null, %{ "x": true }, false, [%{ "y": [null] }]]) ==
+                "[\"a\", null, {\"x\"=true}, false, [{\"y\"=[null]}]]"
+        )
+    }),
+    Test("Map order is Unicode scalar order, independent of insertion", () => {
+        forward: Map()
+        backward: Map()
+        keys: ["z", "a", "aa", "ab", "A", "b", "\u{E9}", "\u{20AC}", "\u{FFFD}", "\u{1F600}", ""]
+        keys.each((key) => {
+            forward[key] = key.size()
+        })
+        index: keys.size() - 1
+        (() => index >= 0).whileTrue(() => {
+            backward[keys[index]] = keys[index].size()
+            index = index - 1
+        })
+        nestedForward: %{ "outer": %{ "y": 1; "x": 2; "xx": 3 } }
+        nestedBackward: %{ "outer": %{ "xx": 3; "x": 2; "y": 1 } }
+
+        expected: "{\"\"=0, \"A\"=1, \"a\"=1, \"aa\"=2, \"ab\"=2, \"b\"=1, \"z\"=1, \"\u{E9}\"=1, \"\u{20AC}\"=1, \"\u{FFFD}\"=1, \"\u{1F600}\"=1}"
+        Assertions.require(renderValue(forward) == expected)
+        Assertions.require(renderValue(backward) == expected)
+        Assertions.require(renderValue(nestedForward) == "{\"outer\"={\"x\"=2, \"xx\"=3, \"y\"=1}}")
+        Assertions.require(renderValue(nestedBackward) == renderValue(nestedForward))
+    }),
+    Test("Integers render in canonical base 10", () => {
+        Assertions.require(renderValue(0) == "0")
+        Assertions.require(renderValue(42) == "42")
+        Assertions.require(renderValue(-42) == "-42")
+        Assertions.require(renderValue(1000000) == "1000000")
+        Assertions.require(renderValue(123456789012345678901234567890) == "123456789012345678901234567890")
+        Assertions.require(renderValue(-9223372036854775809) == "-9223372036854775809")
+        Assertions.require(renderValue([1, 1.0]) == "[1, 1.0]")
+    }),
+    Test("Float special values and zeros keep their identity", () => {
+        infinity: 1.0 / 0.0
+        Assertions.require(renderValue(0.0) == "0.0")
+        Assertions.require(renderValue((0.0 - 1.0) * 0.0) == "-0.0")
+        Assertions.require(renderValue(infinity) == "Infinity")
+        Assertions.require(renderValue(0.0 - infinity) == "-Infinity")
+        Assertions.require(renderValue(infinity - infinity) == "NaN")
+    }),
+    Test("finite Floats render their shortest round-trip decimal", () => {
+        Assertions.require(renderValue(1.0) == "1.0")
+        Assertions.require(renderValue(1.5) == "1.5")
+        Assertions.require(renderValue(-2.0) == "-2.0")
+        Assertions.require(renderValue(100.0) == "100.0")
+        Assertions.require(renderValue(0.1) == "0.1")
+        Assertions.require(renderValue(0.1 + 0.2) == "0.30000000000000004")
+        Assertions.require(renderValue(123456.789) == "123456.789")
+        Assertions.require(renderValue(-0.5) == "-0.5")
+        Assertions.require(renderValue(9007199254740993.0) == "9007199254740992.0")
+    }),
+    Test("Float exponent layout is fixed at the documented boundaries", () => {
+        Assertions.require(renderValue(1e20) == "100000000000000000000.0")
+        Assertions.require(renderValue(1.5e20) == "150000000000000000000.0")
+        Assertions.require(renderValue(1e21) == "1e+21")
+        Assertions.require(renderValue(1.25e21) == "1.25e+21")
+        Assertions.require(renderValue(1.5e300) == "1.5e+300")
+        Assertions.require(renderValue(0.000001) == "0.000001")
+        Assertions.require(renderValue(0.0000015) == "0.0000015")
+        Assertions.require(renderValue(1e-7) == "1e-7")
+        Assertions.require(renderValue(-1.5e-7) == "-1.5e-7")
+        Assertions.require(renderValue(1.7976931348623157e308) == "1.7976931348623157e+308")
+        Assertions.require(renderValue(2.2250738585072014e-308) == "2.2250738585072014e-308")
+        Assertions.require(renderValue(5e-324) == "5e-324")
+    }),
+    Test("formatting is deterministic and leaves the event unchanged", () => {
+        event: LogEvent(Level.INFO, "m", %{ "f": 0.1; "list": [3, 2, 1] }, Failure())
+        first: TextFormatter.format(event)
+        second: TextFormatter.format(event)
+        Assertions.require(first == second)
+        Assertions.require(first == "INFO \"m\" {\"f\"=0.1, \"list\"=[3, 2, 1]} error=true")
+        Assertions.require(event.fields["list"][0] == 3)
+        Assertions.require(event.slotNames().size() == 4)
+    }),
+    Test("only recognized events are formatted", () => {
+        noFields: Map()
+        noFields.freeze()
+        lookalike: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        lookalike.freeze()
+        Assertions.signals(Error, () => {
+            TextFormatter.format(lookalike)
+        })
+        Assertions.signals(Error, () => {
+            TextFormatter.format(null)
+        })
+        Assertions.signals(Error, () => {
+            TextFormatter.format("INFO \"m\"")
+        })
+        Assertions.signals(Error, () => {
+            TextFormatter.format(LogEvent)
+        })
+    }),
+    Test("the formatter publishes only format", () => {
+        Assertions.require(TextFormatter.hasSlot("format"))
+        Assertions.require(TextFormatter.hasSlot("_logTextFacility") == false)
+        Assertions.require(LogEvent.hasSlot("_logEventFacility") == false)
+    })
+]
+tests.freeze()

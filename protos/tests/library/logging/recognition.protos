@@ -1,0 +1,238 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+Logger: import("std:logging/Logger")
+MemorySink: import("std:logging/MemorySink")
+
+Failure: Error {}
+
+frozen: (entries) => {
+    entries.freeze()
+}
+
+// A frozen object with exactly the event slots under `prototype`.
+shaped: (prototype, level, message, fields, error) => {
+    candidate: (prototype) {
+        level: level
+        message: message
+        fields: fields
+        error: error
+    }
+    candidate.freeze()
+}
+
+// The genuine event state under the canonical parent, with one slot replaced.
+withFields: (fields) => {
+    shaped(LogEvent, Level.INFO, "m", fields, null)
+}
+
+// Records every behavior invocation an untrusted candidate could expose.
+probe: () => {
+    { calls: 0 }
+}
+
+tests: [
+    Test("genuine events are recognized and delegate to LogEvent", () => {
+        plain: LogEvent(Level.INFO, "hello", null, null)
+        rich: LogEvent(
+            Level.ERROR,
+            "failed",
+            %{ "nested": %{ "list": [1, 2.5, "x", null, true, [%{}]] } },
+            Failure()
+        )
+        Assertions.require(LogEvent.recognizes(plain))
+        Assertions.require(LogEvent.recognizes(rich))
+        Assertions.require(plain.parent() === LogEvent)
+        Assertions.require(rich.parent() === LogEvent)
+        Assertions.require(plain.slotNames().size() == 4)
+
+        sink: MemorySink()
+        Logger(Level.TRACE, sink).with(%{ "service": "api" }).debug("via logger", %{ "n": 1 })
+        Assertions.require(LogEvent.recognizes(sink.events()[0]))
+    }),
+    Test("the module itself, null, and non-objects are not events", () => {
+        Assertions.require(LogEvent.recognizes(LogEvent) == false)
+        Assertions.require(LogEvent.recognizes(null) == false)
+        Assertions.require(LogEvent.recognizes("INFO") == false)
+        Assertions.require(LogEvent.recognizes(42) == false)
+        Assertions.require(LogEvent.recognizes([]) == false)
+        Assertions.require(LogEvent.recognizes(%{}) == false)
+        Assertions.require(LogEvent.recognizes(Failure()) == false)
+    }),
+    Test("lookalikes under another parent are not events", () => {
+        noFields: frozen(%{})
+        Assertions.require(LogEvent.recognizes(shaped(Object, Level.INFO, "m", noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(Level, Level.INFO, "m", noFields, null)) == false)
+        genuine: LogEvent(Level.INFO, "m", null, null)
+        Assertions.require(LogEvent.recognizes(shaped(genuine, Level.INFO, "m", noFields, null)) == false)
+        literal: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        literal.freeze()
+        Assertions.require(LogEvent.recognizes(literal) == false)
+    }),
+    Test("exact frozen slot set is required", () => {
+        noFields: frozen(%{})
+        extra: (LogEvent) {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+            timestamp: null
+        }
+        extra.freeze()
+        Assertions.require(LogEvent.recognizes(extra) == false)
+
+        missing: (LogEvent) {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+        }
+        missing.freeze()
+        Assertions.require(LogEvent.recognizes(missing) == false)
+
+        unfrozen: (LogEvent) {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        Assertions.require(LogEvent.recognizes(unfrozen) == false)
+        unfrozen.freeze()
+        Assertions.require(LogEvent.recognizes(unfrozen))
+    }),
+    Test("level and message must hold valid state", () => {
+        noFields: frozen(%{})
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, "FATAL", "m", noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, "info", "m", noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, null, "m", noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.INFO, 42, noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.INFO, null, noFields, null)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.WARN, "", noFields, null)))
+    }),
+    Test("fields must be frozen structured data at every depth", () => {
+        Assertions.require(LogEvent.recognizes(withFields(null)) == false)
+        Assertions.require(LogEvent.recognizes(withFields(%{})) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen([]))) == false)
+        Assertions.require(LogEvent.recognizes(withFields(IdentityMap().freeze())) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ 1: "integer key" }))) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "object": { secret: 1 } }))) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "closure": () => { 1 } }))) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "open": [1] }))) == false)
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "open": %{ "k": 1 } }))) == false)
+
+        cyclic: [1, 1]
+        cyclic[1] = cyclic
+        cyclic.freeze()
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "cycle": cyclic }))) == false)
+
+        child: (Map) {
+            extra: 1
+        }
+        child.freeze()
+        Assertions.require(LogEvent.recognizes(withFields(child)) == false)
+
+        shared: frozen([1])
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "a": shared; "b": shared }))))
+        Assertions.require(LogEvent.recognizes(withFields(frozen(%{ "deep": frozen([frozen(%{ "x": 1.5 })]) }))))
+    }),
+    Test("error must be null or an attachable Error", () => {
+        noFields: frozen(%{})
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, "boom")) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, Error)) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, { message: "x" })) == false)
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, Error())))
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, Failure())))
+    }),
+    Test("recognition invokes no behavior of the candidate", () => {
+        counter: probe()
+        noFields: frozen(%{})
+
+        equality: {
+            equals: (other) => {
+                counter.calls = counter.calls + 1
+                true
+            }
+        }
+        reflective: (LogEvent) {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+            parent: () => {
+                counter.calls = counter.calls + 1
+                LogEvent
+            }
+            slotNames: () => {
+                counter.calls = counter.calls + 1
+                ["error", "fields", "level", "message"]
+            }
+            hasSlot: (name) => {
+                counter.calls = counter.calls + 1
+                true
+            }
+            ...equality.alias("equals", "==")
+            hash: () => {
+                counter.calls = counter.calls + 1
+                0
+            }
+        }
+        reflective.freeze()
+        Assertions.require(LogEvent.recognizes(reflective) == false)
+
+        disguised: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+            parent: () => {
+                counter.calls = counter.calls + 1
+                LogEvent
+            }
+        }
+        disguised.freeze()
+        Assertions.require(LogEvent.recognizes(disguised) == false)
+
+        fakeError: {
+            parent: () => {
+                counter.calls = counter.calls + 1
+                Error
+            }
+        }
+        Assertions.require(LogEvent.recognizes(shaped(LogEvent, Level.ERROR, "m", noFields, fakeError)) == false)
+        Assertions.signals(Error, () => {
+            LogEvent(Level.ERROR, "m", null, fakeError)
+        })
+
+        fakeMap: (Map) {
+            each: (visitor) => {
+                counter.calls = counter.calls + 1
+                null
+            }
+        }
+        fakeMap.freeze()
+        Assertions.require(LogEvent.recognizes(withFields(fakeMap)) == false)
+
+        Assertions.require(counter.calls == 0)
+    })
+]
+tests.freeze()

@@ -180,7 +180,10 @@ load: (corpusId) => {
             Array(
             Array("levels.protos", "suite-native", "-"),
             Array("events.protos", "suite-native", "-"),
-            Array("logger.protos", "suite-native", "-")
+            Array("logger.protos", "suite-native", "-"),
+            Array("recognition.protos", "suite-native", "-"),
+            Array("text-formatter.protos", "suite-native", "-"),
+            Array("sinks.protos", "suite-native", "-")
             )
         )
         matched = true

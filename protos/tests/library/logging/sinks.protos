@@ -1,0 +1,314 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+Logger: import("std:logging/Logger")
+MemorySink: import("std:logging/MemorySink")
+TextFormatter: import("std:logging/TextFormatter")
+TextSink: import("std:logging/TextSink")
+
+Failure: Error {}
+
+// A TextWriter stand-in that records every lifecycle-relevant request.
+recordingWriter: () => {
+    state: {
+        lines: []
+        texts: 0
+        flushes: 0
+        closes: 0
+    }
+    writer: {
+        state: state
+        writeLine: (text) => {
+            state.lines = Array(...state.lines, text)
+            (() => { writer }).future()
+        }
+        writeText: (text) => {
+            state.texts = state.texts + 1
+            (() => { writer }).future()
+        }
+        flush: () => {
+            state.flushes = state.flushes + 1
+            (() => { writer }).future()
+        }
+        close: () => {
+            state.closes = state.closes + 1
+            (() => { writer }).future()
+        }
+    }
+    writer
+}
+
+// A writer whose every write Future fails with `failure`.
+failingWriter: (failure) => {
+    state: { attempts: 0 }
+    {
+        state: state
+        writeLine: (text) => {
+            state.attempts = state.attempts + 1
+            (() => { failure.signal() }).future()
+        }
+    }
+}
+
+// A byte target for a real TextWriter, recording decoded output and lifecycle.
+byteTarget: () => {
+    state: {
+        text: ""
+        flushes: 0
+        closes: 0
+    }
+    target: {
+        state: state
+        write: (bytes) => {
+            state.text = state.text + Encoding.UTF8.decode(bytes)
+            (() => { target }).future()
+        }
+        flush: () => {
+            state.flushes = state.flushes + 1
+            (() => { target }).future()
+        }
+        close: () => {
+            state.closes = state.closes + 1
+            (() => { target }).future()
+        }
+    }
+    target
+}
+
+tests: [
+    Test("emit passes the formatted line to writeLine exactly once", () => {
+        writer: recordingWriter()
+        sink: TextSink(TextFormatter, writer)
+        event: LogEvent(Level.INFO, "cache refreshed", %{ "entries": 42 }, null)
+        Assertions.require(sink.emit(event) === null)
+        Assertions.require(writer.state.lines.size() == 1)
+        Assertions.require(writer.state.lines[0] == "INFO \"cache refreshed\" {\"entries\"=42}")
+        Assertions.require(writer.state.lines[0] == TextFormatter.format(event))
+        Assertions.require(writer.state.texts == 0)
+        Assertions.require(writer.state.flushes == 0)
+        Assertions.require(writer.state.closes == 0)
+    }),
+    Test("the formatter is used as supplied, once per event", () => {
+        writer: recordingWriter()
+        formatter: {
+            seen: []
+            format: (event) => {
+                this.seen = Array(...this.seen, event)
+                "custom line"
+            }
+        }
+        sink: TextSink(formatter, writer)
+        event: LogEvent(Level.WARN, "m", null, null)
+        sink.emit(event)
+        Assertions.require(formatter.seen.size() == 1)
+        Assertions.require(formatter.seen[0] === event)
+        Assertions.require(writer.state.lines[0] == "custom line")
+    }),
+    Test("a real TextWriter receives one LF-terminated line per event and stays open", () => {
+        target: byteTarget()
+        writer: TextWriter(target, Encoding.UTF8)
+        logger: Logger(Level.INFO, TextSink(TextFormatter, writer))
+        logger.info("first")
+        logger.warn("multi\nline", %{ "k": "v" })
+        logger.debug("filtered")
+        logger.error("last", null, Failure())
+        Assertions.require(
+            target.state.text ==
+                "INFO \"first\"\nWARN \"multi\\nline\" {\"k\"=\"v\"}\nERROR \"last\" error=true\n"
+        )
+        Assertions.require(target.state.flushes == 0)
+        Assertions.require(target.state.closes == 0)
+
+        // The sink only borrowed the writer: its owner can still write and close it.
+        writer.writeText("owner").value()
+        Assertions.require(target.state.text.size() == 71)
+        Assertions.require(writer.close().value() === writer)
+        Assertions.require(target.state.closes == 0)
+    }),
+    Test("repeated events are written in emission order", () => {
+        writer: recordingWriter()
+        logger: Logger(Level.TRACE, TextSink(TextFormatter, writer))
+        logger.trace("1")
+        logger.debug("2")
+        logger.info("3")
+        logger.warn("4")
+        logger.error("5")
+        Assertions.require(writer.state.lines.size() == 5)
+        Assertions.require(writer.state.lines[0] == "TRACE \"1\"")
+        Assertions.require(writer.state.lines[2] == "INFO \"3\"")
+        Assertions.require(writer.state.lines[4] == "ERROR \"5\"")
+    }),
+    Test("emit waits for a pending write Future before answering", () => {
+        state: { lines: [] }
+        writer: {
+            writeLine: (text) => {
+                (() => {
+                    // The write completes only after further asynchronous work.
+                    gate: (() => { text }).future()
+                    state.lines = Array(...state.lines, gate.value())
+                    writer
+                }).future()
+            }
+        }
+        sink: TextSink(TextFormatter, writer)
+        Assertions.require(sink.emit(LogEvent(Level.INFO, "slow", null, null)) === null)
+        Assertions.require(state.lines.size() == 1)
+        Assertions.require(state.lines[0] == "INFO \"slow\"")
+    }),
+    Test("a failed write Future is signalled by a direct emit", () => {
+        failure: Failure()
+        writer: failingWriter(failure)
+        sink: TextSink(TextFormatter, writer)
+        event: LogEvent(Level.INFO, "m", null, null)
+        caught: Error.handle(() => {
+            sink.emit(event)
+            null
+        }, (signalled) => {
+            signalled
+        })
+        Assertions.require(caught === failure)
+        Assertions.require(writer.state.attempts == 1)
+    }),
+    Test("a Logger contains a failed writer", () => {
+        writer: failingWriter(Failure())
+        logger: Logger(Level.INFO, TextSink(TextFormatter, writer))
+        Assertions.require(logger.info("first") === null)
+        Assertions.require(logger.error("second", %{ "k": 1 }, Error()) === null)
+        Assertions.require(writer.state.attempts == 2)
+    }),
+    Test("an unrecognized event signals before anything is written", () => {
+        writer: recordingWriter()
+        sink: TextSink(TextFormatter, writer)
+        noFields: Map()
+        noFields.freeze()
+        lookalike: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        lookalike.freeze()
+        Assertions.signals(Error, () => {
+            sink.emit(lookalike)
+        })
+        Assertions.signals(Error, () => {
+            sink.emit(null)
+        })
+        Assertions.require(writer.state.lines.size() == 0)
+    }),
+    Test("a text sink needs both a formatter and a writer and adds no lifecycle", () => {
+        writer: recordingWriter()
+        Assertions.signals(Error, () => {
+            TextSink(null, writer)
+        })
+        Assertions.signals(Error, () => {
+            TextSink(TextFormatter, null)
+        })
+        sink: TextSink(TextFormatter, writer)
+        Assertions.require(sink.slotNames().size() == 1)
+        Assertions.require(sink.hasSlot("emit"))
+        Assertions.require(sink.hasSlot("flush") == false)
+        Assertions.require(sink.hasSlot("close") == false)
+        Assertions.signals(Error, () => {
+            sink.emit = null
+        })
+    }),
+    Test("a memory sink starts empty", () => {
+        sink: MemorySink()
+        events: sink.events()
+        Assertions.require(events.size() == 0)
+        Assertions.require(sink.events().size() == 0)
+    }),
+    Test("a memory sink keeps exact events in emission order", () => {
+        sink: MemorySink()
+        first: LogEvent(Level.INFO, "first", %{ "n": 1 }, null)
+        second: LogEvent(Level.ERROR, "second", null, Failure())
+        Assertions.require(sink.emit(first) === null)
+        one: sink.events()
+        Assertions.require(one.size() == 1)
+        Assertions.require(one[0] === first)
+
+        sink.emit(second)
+        sink.emit(first)
+        all: sink.events()
+        Assertions.require(all.size() == 3)
+        Assertions.require(all[0] === first)
+        Assertions.require(all[1] === second)
+        Assertions.require(all[2] === first)
+    }),
+    Test("memory sink snapshots are fresh, frozen, and stable", () => {
+        sink: MemorySink()
+        e1: LogEvent(Level.INFO, "1", null, null)
+        e2: LogEvent(Level.INFO, "2", null, null)
+        sink.emit(e1)
+        sink.emit(e2)
+        snapshot: sink.events()
+        again: sink.events()
+        Assertions.require(snapshot !== again)
+        Assertions.require(snapshot[0] === e1)
+        Assertions.require(snapshot[1] === e2)
+        Assertions.signals(Error, () => {
+            snapshot[0] = e2
+        })
+
+        sink.emit(LogEvent(Level.WARN, "3", null, null))
+        Assertions.require(snapshot.size() == 2)
+        Assertions.require(again.size() == 2)
+        Assertions.require(sink.events().size() == 3)
+    }),
+    Test("a memory sink rejects anything but a recognized event", () => {
+        sink: MemorySink()
+        noFields: Map()
+        noFields.freeze()
+        lookalike: {
+            level: Level.INFO
+            message: "m"
+            fields: noFields
+            error: null
+        }
+        lookalike.freeze()
+        Assertions.signals(Error, () => {
+            sink.emit(lookalike)
+        })
+        Assertions.signals(Error, () => {
+            sink.emit(null)
+        })
+        Assertions.signals(Error, () => {
+            sink.emit("INFO \"m\"")
+        })
+        Assertions.signals(Error, () => {
+            sink.emit(LogEvent)
+        })
+        Assertions.require(sink.events().size() == 0)
+    }),
+    Test("a memory sink records what a Logger emits", () => {
+        sink: MemorySink()
+        logger: Logger(Level.INFO, sink).with(%{ "service": "api" })
+        logger.debug("filtered")
+        logger.info("kept", %{ "n": 1 })
+        events: sink.events()
+        Assertions.require(events.size() == 1)
+        Assertions.require(LogEvent.recognizes(events[0]))
+        Assertions.require(events[0].fields["service"] == "api")
+        Assertions.require(TextFormatter.format(events[0]) == "INFO \"kept\" {\"n\"=1, \"service\"=\"api\"}")
+        Assertions.require(sink.slotNames().size() == 2)
+        Assertions.require(sink.hasSlot("clear") == false)
+    })
+]
+tests.freeze()

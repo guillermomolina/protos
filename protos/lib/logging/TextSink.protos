@@ -1,0 +1,47 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Sinks that write each event as one line of text to an explicitly supplied
+//! TextWriter. The sink borrows the writer: it never opens, discovers, flushes,
+//! closes, or otherwise takes over the writer's lifecycle, which stays with the
+//! caller. Logging never looks up standard output, standard error, files,
+//! network endpoints, the Process, or the environment; a caller that wants the
+//! process streams passes, for example, the writer answered by
+//! `std:io/ProcessStreams.stdoutWriter(process)`.
+
+/// Answers a fresh frozen sink that renders each event with
+/// `formatter.format(event)` and writes the result with
+/// `writer.writeLine(text)`, so the line terminator is the writer's. Neither
+/// argument may be `null`; otherwise an Error is signalled.
+///
+/// The sink answers `emit(event)`, which formats `event`, writes the line, and
+/// waits for the write Future with `value()` before answering `null`. A slow
+/// writer therefore suspends the calling Task, and no Task, queue, or buffer is
+/// created. An Error from formatting or from the failed write Future is
+/// signalled by `emit`; a `std:logging/Logger` contains it, while a direct
+/// caller of `emit` observes it.
+call: (formatter, writer) => {
+    ((formatter === null) || (writer === null)).ifTrue(() => {
+        Error().signal()
+    })
+
+    sink: {
+        emit: (event) => {
+            writer.writeLine(formatter.format(event)).value()
+            null
+        }
+    }
+    sink.freeze()
+}
