@@ -17,9 +17,11 @@
 
 package com.guillermomolina.protos.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import org.junit.jupiter.api.Test;
 
@@ -107,5 +109,50 @@ class ProtosPreludeTest {
                 ProtosActivation.forObjectConstruction(object, module);
 
         assertSame(prelude, construction.prelude().orElseThrow());
+    }
+
+    @Test
+    void retainsTheValidatedErrorIdentityWithoutEagerOtherBindings() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue error =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot("Error", error);
+        bindings.freeze();
+
+        // TEST009-Y: only Error is retained at construction; Array and the
+        // other bindings stay lazily validated, so their absence is accepted here.
+        ProtosPrelude prelude =
+                new ProtosPrelude(bindings, contextPrototype);
+
+        assertSame(error, prelude.errorPrototype());
+        assertSame(prelude.errorPrototype(), prelude.errorPrototype());
+        assertSame(error, prelude.newError().parent().orElseThrow());
+    }
+
+    @Test
+    void rejectsMissingOrMisparentedErrorBinding() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue missing = new ProtosObjectValue(contextPrototype);
+        missing.createLocalSlot("Context", contextPrototype);
+        missing.freeze();
+        ProtosObjectValue misparented = new ProtosObjectValue(contextPrototype);
+        misparented.createLocalSlot("Context", contextPrototype);
+        misparented.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(contextPrototype));
+        misparented.freeze();
+
+        for (ProtosObjectValue bindings : new ProtosObjectValue[] {missing, misparented}) {
+            IllegalArgumentException failure = assertThrows(
+                    IllegalArgumentException.class,
+                    () -> new ProtosPrelude(bindings, contextPrototype));
+            assertEquals(
+                    "prelude Error binding must be an ordinary child of Object",
+                    failure.getMessage());
+        }
     }
 }

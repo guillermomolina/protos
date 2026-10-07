@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.255-SNAPSHOT
+
+- `TEST009-Y` (guillermomolina/protos#795) removes the host defensive
+  exception expansion that `ProtosPrelude.errorPrototype()` contributed to
+  Truffle partial evaluation. There is no specification or semantic change.
+  - `ProtosPrelude` retains the exact `Error` identity its constructor already
+    reads and validates from the frozen prelude bindings, and
+    `errorPrototype()` returns it instead of re-reading the slot through
+    `Optional.orElseThrow()`. Only `Error` is retained; every other prelude
+    binding keeps its lazy validation.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`) still
+    fails with `CodeTooLarge`, but `Throwable.fillInStackTrace()` self size in
+    the method expansion tree drops from 17303 to 11440, and
+    `errorPrototype()` no longer owns any of it.
+  - Focal tests cover retention of the validated identity, the unchanged
+    construction failures, and the absence of eager requirements on other
+    bindings.
+
 ## 0.3.254-SNAPSHOT
 
 - `LIB014-3` (guillermomolina/protos#431) completes the D187 `std:regex/Regex`

@@ -27,6 +27,7 @@ import java.util.Set;
 public final class ProtosPrelude {
     private final ProtosObjectValue bindings;
     private final ProtosObjectValue contextPrototype;
+    private final ProtosObjectValue errorPrototype;
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
@@ -159,6 +160,7 @@ public final class ProtosPrelude {
             throw new IllegalArgumentException(
                     "prelude Error binding must be an ordinary child of Object");
         }
+        this.errorPrototype = errorPrototype;
     }
 
     private static void requireFrozenDirectChildOfObject(
@@ -238,8 +240,7 @@ public final class ProtosPrelude {
 
 
     public ProtosObjectValue errorPrototype() {
-        return (ProtosObjectValue)
-                bindings.readLocalSlot("Error").orElseThrow();
+        return errorPrototype;
     }
 
     public ProtosObjectValue newError() {
