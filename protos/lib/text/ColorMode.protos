@@ -1,0 +1,63 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Reusable color-mode policy. The three modes are `AUTO`, `ALWAYS`, and
+//! `NEVER`. Each mode is its canonical String value: `ColorMode.AUTO` is
+//! exactly `"AUTO"`, so a mode is immutable, compares with `===` and `==`, and
+//! keeps its identity across Actor, Task, and Process boundaries without any
+//! shared registry. No other spelling, alias, or letter case is a mode.
+//!
+//! Resolution is pure policy: it consults no environment, Process, standard
+//! stream, terminal, or global configuration. Whether `AUTO` enables styling
+//! is decided entirely by the caller, which supplies that Boolean to `resolve`
+//! and passes the resolved Boolean to a renderer such as `std:text/ANSI`.
+
+/// Styling follows the caller-supplied automatic decision.
+AUTO: "AUTO"
+
+/// Styling is always enabled.
+ALWAYS: "ALWAYS"
+
+/// Styling is never enabled.
+NEVER: "NEVER"
+
+/// Answers `true` exactly when `value` is one of the canonical modes and
+/// `false` for any other value; it never signals an Error. Values are
+/// recognized by String identity only, so no behavior of `value` is invoked.
+recognizes: (value) => {
+    (value === "AUTO") || (value === "ALWAYS") || (value === "NEVER")
+}
+
+/// Answers whether styling is enabled under `mode`: `AUTO` answers
+/// `autoEnabled`, `ALWAYS` answers `true`, and `NEVER` answers `false`.
+/// Both arguments are always validated, whatever the mode: `mode` must be a
+/// canonical mode and `autoEnabled` must be exactly `true` or `false`; any
+/// other argument signals an Error, and no argument is converted. No
+/// environment or terminal is consulted to decide `AUTO`.
+resolve: (mode, autoEnabled) => {
+    validMode: (mode === "AUTO") || (mode === "ALWAYS") || (mode === "NEVER")
+    validAuto: (autoEnabled === true) || (autoEnabled === false)
+    (validMode && validAuto).ifFalse(() => {
+        Error().signal()
+    })
+    result: autoEnabled
+    (mode === "ALWAYS").ifTrue(() => {
+        result = true
+    })
+    (mode === "NEVER").ifTrue(() => {
+        result = false
+    })
+    result
+}

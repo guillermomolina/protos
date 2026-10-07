@@ -1,0 +1,154 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Style: import("std:text/Style")
+StyledText: import("std:text/StyledText")
+ANSI: import("std:text/ANSI")
+ColorMode: import("std:text/ColorMode")
+
+// An object whose reflective and equality behavior records any invocation.
+hostile: (log) => {
+    probe: {
+        parent: () => {
+            log[0] = true
+            Object
+        }
+        slotNames: () => {
+            log[0] = true
+            []
+        }
+        hasSlot: (name) => {
+            log[0] = true
+            false
+        }
+        equals: (other) => {
+            log[0] = true
+            true
+        }
+        hash: () => {
+            log[0] = true
+            0
+        }
+        toString: () => {
+            log[0] = true
+            "AUTO"
+        }
+    }
+    probe
+}
+
+invalidModes: [null, true, false, 0, 1, "", "auto", "always", "never", "Auto", "ON", "OFF", "DEFAULT", [], Map(), {}, Style("red"), StyledText("x"), ANSI, ColorMode]
+invalidFlags: [null, 0, 1, "true", "false", [], {}, ColorMode.AUTO]
+
+tests: [
+    Test("module exposes exactly the three modes, recognizes, and resolve", () => {
+        names: ["AUTO", "ALWAYS", "NEVER", "recognizes", "resolve"]
+        names.each((name) => {
+            Assertions.require(ColorMode.hasSlot(name))
+        })
+        Assertions.require(ColorMode.slotNames().size() == names.size())
+        ["ON", "OFF", "DEFAULT", "enabled", "detect", "auto", "fromEnvironment", "fromTTY", "current"].each((name) => {
+            Assertions.require(ColorMode.hasSlot(name) === false)
+        })
+        null
+    }),
+    Test("modes are their canonical Strings", () => {
+        Assertions.require(ColorMode.AUTO === "AUTO")
+        Assertions.require(ColorMode.ALWAYS === "ALWAYS")
+        Assertions.require(ColorMode.NEVER === "NEVER")
+        Assertions.require(ColorMode.AUTO == "AUTO")
+        Assertions.require(ColorMode.ALWAYS == "ALWAYS")
+        Assertions.require(ColorMode.NEVER == "NEVER")
+    }),
+    Test("recognizes answers true exactly for the canonical modes", () => {
+        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER, "AUTO", "ALWAYS", "NEVER"].each((mode) => {
+            Assertions.require(ColorMode.recognizes(mode) === true)
+        })
+        invalidModes.each((value) => {
+            Assertions.require(ColorMode.recognizes(value) === false)
+        })
+        Assertions.require(ColorMode.recognizes((Object) {}) === false)
+        null
+    }),
+    Test("recognition and resolution never invoke candidate behavior", () => {
+        log: [false]
+        probe: hostile(log)
+        Assertions.require(ColorMode.recognizes(probe) === false)
+        Assertions.signals(Error, () => {
+            ColorMode.resolve(probe, true)
+        })
+        Assertions.signals(Error, () => {
+            ColorMode.resolve(ColorMode.AUTO, probe)
+        })
+        Assertions.require(log[0] === false)
+    }),
+    Test("resolve answers the policy for every valid combination", () => {
+        Assertions.require(ColorMode.resolve(ColorMode.AUTO, true) === true)
+        Assertions.require(ColorMode.resolve(ColorMode.AUTO, false) === false)
+        Assertions.require(ColorMode.resolve(ColorMode.ALWAYS, true) === true)
+        Assertions.require(ColorMode.resolve(ColorMode.ALWAYS, false) === true)
+        Assertions.require(ColorMode.resolve(ColorMode.NEVER, true) === false)
+        Assertions.require(ColorMode.resolve(ColorMode.NEVER, false) === false)
+    }),
+    Test("resolve rejects values that are not modes", () => {
+        invalidModes.each((mode) => {
+            Assertions.signals(Error, () => {
+                ColorMode.resolve(mode, true)
+            })
+            Assertions.signals(Error, () => {
+                ColorMode.resolve(mode, false)
+            })
+        })
+        null
+    }),
+    Test("resolve validates autoEnabled under every mode", () => {
+        [ColorMode.AUTO, ColorMode.ALWAYS, ColorMode.NEVER].each((mode) => {
+            invalidFlags.each((flag) => {
+                Assertions.signals(Error, () => {
+                    ColorMode.resolve(mode, flag)
+                })
+            })
+        })
+        null
+    }),
+    Test("resolve requires exactly two arguments", () => {
+        Assertions.signals(Error, () => {
+            ColorMode.resolve()
+        })
+        Assertions.signals(Error, () => {
+            ColorMode.resolve(ColorMode.ALWAYS)
+        })
+        Assertions.signals(Error, () => {
+            ColorMode.resolve(ColorMode.ALWAYS, true, true)
+        })
+        Assertions.signals(Error, () => {
+            ColorMode.recognizes()
+        })
+        Assertions.signals(Error, () => {
+            ColorMode.recognizes(ColorMode.AUTO, ColorMode.AUTO)
+        })
+    }),
+    Test("resolved modes compose with ANSI rendering", () => {
+        text: StyledText("x", Style("red"))
+        Assertions.require(ANSI.render(text, ColorMode.resolve(ColorMode.ALWAYS, false)) == ANSI.render(text, true))
+        Assertions.require(ANSI.render(text, ColorMode.resolve(ColorMode.NEVER, true)) == ANSI.render(text, false))
+        Assertions.require(ANSI.render(text, ColorMode.resolve(ColorMode.AUTO, true)) == ANSI.render(text, true))
+        Assertions.require(ANSI.render(text, ColorMode.resolve(ColorMode.AUTO, false)) == ANSI.render(text, false))
+    })
+]

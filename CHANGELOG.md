@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.269-SNAPSHOT
+
+- `LIB020-C` adds `std:text/ColorMode`, the pure color-mode policy ratified by
+  D190/D191. There is no specification change and no Java, runtime, or
+  bootstrap change; no consumer (logging, Test Tool, Package Tool, CLI) is
+  integrated in this slice.
+  - `ColorMode.AUTO`, `ColorMode.ALWAYS` and `ColorMode.NEVER` are exactly the
+    canonical Strings `"AUTO"`, `"ALWAYS"` and `"NEVER"`; no alias or other
+    letter case is a mode.
+  - `ColorMode.recognizes(value)` answers `true` only for the three modes, by
+    String identity, never signals an Error and never invokes candidate
+    behavior.
+  - `ColorMode.resolve(mode, autoEnabled)` answers `autoEnabled` for `AUTO`,
+    `true` for `ALWAYS` and `false` for `NEVER`. Both arguments are always
+    validated: `mode` must be a canonical mode and `autoEnabled` exactly
+    `true` or `false`, otherwise an Error is signalled.
+  - No environment, Process, standard stream, or terminal is consulted; the
+    resolved Boolean is passed by the caller to `ANSI.render`, whose API is
+    unchanged.
+
 ## 0.3.268-SNAPSHOT
 
 - `LIB020-B` adds `std:text/ANSI` with exactly one public operation,

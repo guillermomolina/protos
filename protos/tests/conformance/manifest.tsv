@@ -164,6 +164,7 @@ library/text/writer-authority.protos	suite-native	-
 library/text/style.protos	suite-native	-
 library/text/styled-text.protos	suite-native	-
 library/text/ansi.protos	suite-native	-
+library/text/color-mode.protos	suite-native	-
 text-reader/factory-and-lifecycle.protos	suite-native	-
 text-reader/readline-framing.protos	suite-native	-
 text-reader/readline-limits-and-errors.protos	suite-native	-
