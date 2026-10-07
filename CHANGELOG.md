@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.259-SNAPSHOT
+
+- `TEST009-AC` (guillermomolina/protos#795) removes the logically impossible
+  `NoSuchElementException` construction path that the checked local-slot
+  `Optional` unwrap in `ProtosValueLookup.lookup()` contributed to Truffle
+  partial evaluation. There is no specification or semantic change.
+  - Inside the `isPresent()` branch the same immutable `Optional` is consumed
+    with `orElse(null)`, which returns its non-null value without a throwing
+    path. The unsupported-representation `UnsupportedOperationException` in
+    `delegationParent(...)` is unchanged.
+  - Re-diagnosing `protos-root:088d2ae81075aba8` (`Manifest.protos`) still
+    fails with `CodeTooLarge`, but `Throwable.fillInStackTrace()` self size in
+    the method expansion tree drops from 11440 to 9867, the local-unwrap
+    `NoSuchElementException` subtree is gone, and the `delegationParent`
+    `UnsupportedOperationException` subtree is preserved.
+  - A focal test covers the generic own-slot hit value and home, the miss, and
+    the unsupported-representation exception class and message.
+
 ## 0.3.258-SNAPSHOT
 
 - `PLAT051-A` (guillermomolina/protos#813) adds the generic privileged

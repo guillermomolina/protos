@@ -285,7 +285,9 @@ public final class ProtosValueLookup {
                 }
                 Optional<Object> local = ordinary.readLocalSlot(name);
                 if (local.isPresent()) {
-                    return Optional.of(new ProtosSlotLookupResult(local.orElseThrow(), ordinary));
+                    // TEST009-AC: local is present here, so orElse(null) yields its non-null
+                    // value without a PE-visible NoSuchElementException path.
+                    return Optional.of(new ProtosSlotLookupResult(local.orElse(null), ordinary));
                 }
             } else if (stability != null
                     && !(admitRepresentedReceiverStep && current == receiver)) {

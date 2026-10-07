@@ -17,7 +17,10 @@
 package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.io.IOException;
@@ -113,6 +116,33 @@ class ProtosRepresentedValueLookupTest {
 
         assertSame(marker, selected.value());
         assertSame(parent, selected.home());
+    }
+
+    // Deliberately Java-side (TEST009-AC): the generic loop's own-slot hit,
+    // miss and unsupported-representation host failure are internal lookup
+    // contracts that the compiler-shape repair must leave unchanged.
+    @Test
+    void genericLookupOwnSlotHitMissAndUnsupportedRepresentation() {
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object marker = new Object();
+        receiver.createLocalSlot("marker", marker);
+
+        ProtosSlotLookupResult selected =
+                ProtosValueLookup.lookup(receiver, "marker", null).orElseThrow();
+
+        assertSame(marker, selected.value());
+        assertSame(receiver, selected.home());
+        assertTrue(ProtosValueLookup.lookup(receiver, "absent", null).isEmpty());
+
+        Object unsupported = new Object();
+        UnsupportedOperationException failure = assertThrows(
+                UnsupportedOperationException.class,
+                () -> ProtosValueLookup.lookup(unsupported, "marker", null));
+        assertEquals(
+                "Standard delegation parent is not implemented for runtime value representation "
+                        + Object.class.getName(),
+                failure.getMessage());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
