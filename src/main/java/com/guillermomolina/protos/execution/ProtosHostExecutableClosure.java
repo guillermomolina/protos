@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -25,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -64,6 +66,14 @@ import java.util.Objects;
  * without a compact Bytecode target (a native body, or a non-standard {@code call} selection) runs
  * through ordinary generic invocation ({@link ProtosInvocation#invoke}); no second call engine
  * exists.
+ *
+ * <p>PLAT054-3E2: an outermost embedding execution on the compact path is a suspendible host entry
+ * ({@code FUTURES_AND_TASKS.md} §29): a pending {@code Future.value()} yields a C-prime
+ * continuation back to this adapter, which waits and resumes it through {@link
+ * ProtosHostEntrySuspension} before finishing the call. A nested (same-thread) entry is a foreign
+ * callback and never suspends. An outermost entry of a Closure without a compact target (native
+ * body or non-canonical {@code call}) runs through the shared C-prime entry root and suspends the
+ * same way.
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosHostExecutableClosure implements TruffleObject {
@@ -158,12 +168,19 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
             Thread token = embedding.enterRootActor();
+            HostEntryExtent previous = embedding.beginHostEntryExtent(token);
             try {
-                return invokeGeneric(receiver.closure, supplied, receiver.caller);
+                if (token == null) {
+                    // A nested entry is a foreign callback: ordinary synchronous invocation.
+                    return invokeGeneric(receiver.closure, supplied, receiver.caller);
+                }
+                return ProtosHostEntrySuspension.executeSelected(
+                        embedding, receiver.closure, supplied, receiver.caller);
             } catch (ProtosSignalException failure) {
                 embedding.outermostEntryFailed(token, failure);
                 throw failure;
             } finally {
+                embedding.endHostEntryExtent(previous);
                 embedding.exitRootActor(token);
             }
         }
@@ -181,9 +198,13 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
             Thread token = embedding == null ? null : embedding.enterRootActor();
+            HostEntryExtent previous =
+                    embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared = receiver.prepare(supplied);
-                return prepared.finish(
+                return finishEntry(
+                        embedding,
+                        prepared,
                         ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
                                 prepared, cachedTarget, call));
             } catch (ProtosSignalException failure) {
@@ -193,6 +214,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 throw failure;
             } finally {
                 if (embedding != null) {
+                    embedding.endHostEntryExtent(previous);
                     embedding.exitRootActor(token);
                 }
             }
@@ -208,9 +230,13 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
             Thread token = embedding == null ? null : embedding.enterRootActor();
+            HostEntryExtent previous =
+                    embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared = receiver.prepare(supplied);
-                return prepared.finish(
+                return finishEntry(
+                        embedding,
+                        prepared,
                         ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(prepared, call));
             } catch (ProtosSignalException failure) {
                 if (embedding != null) {
@@ -219,9 +245,29 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 throw failure;
             } finally {
                 if (embedding != null) {
+                    embedding.endHostEntryExtent(previous);
                     embedding.exitRootActor(token);
                 }
             }
+        }
+
+        /**
+         * PLAT054-3E2: a body that suspended yields its C-prime continuation here; only then is the
+         * host-entry driver entered. A non-suspending call pays one type check.
+         */
+        private static Object finishEntry(
+                ProtosEmbeddedProcess embedding,
+                ProtosBytecodeRootNode.OrdinarySourceCall prepared,
+                Object outcome) {
+            if (outcome instanceof ContinuationResult) {
+                if (embedding == null) {
+                    CompilerDirectives.transferToInterpreterAndInvalidate();
+                    throw new IllegalStateException(
+                            "a session host executable cannot drive a suspended continuation");
+                }
+                outcome = ProtosHostEntrySuspension.resumeAfterWaits(embedding, prepared, outcome);
+            }
+            return prepared.finish(outcome);
         }
 
         @TruffleBoundary

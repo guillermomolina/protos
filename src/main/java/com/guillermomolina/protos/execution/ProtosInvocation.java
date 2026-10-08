@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -89,7 +91,7 @@ public final class ProtosInvocation {
             Object receiver, List<?> supplied, ProtosActivation caller) {
         ProtosTask task = caller.task().orElse(null);
         if (task == null) {
-            return invoke(receiver, supplied, caller);
+            return invokeForeignCallbackOutsideTask(receiver, supplied, caller);
         }
         com.guillermomolina.protos.runtime.ProtosPrelude prelude =
                 caller.prelude()
@@ -124,6 +126,27 @@ public final class ProtosInvocation {
                         receiver, selected, supplied, caller, task),
                 true,
                 caller);
+    }
+
+    /**
+     * PLAT054-3E2: a foreign callback reached inside a suspendible host entry runs in a
+     * synchronous extent, where an actual suspension is rejected with a fresh {@code Error}
+     * ({@code FUTURES_AND_TASKS.md}, Synchronous foreign callbacks and the current Task).
+     */
+    private static Object invokeForeignCallbackOutsideTask(
+            Object receiver, List<?> supplied, ProtosActivation caller) {
+        ProtosActorExecutionDomain domain = caller.executionDomain();
+        if (domain == null
+                || domain.hostEntryExtentForRuntime() == HostEntryExtent.NONE) {
+            return invoke(receiver, supplied, caller);
+        }
+        HostEntryExtent previous =
+                domain.swapHostEntryExtentForRuntime(HostEntryExtent.SYNCHRONOUS);
+        try {
+            return invoke(receiver, supplied, caller);
+        } finally {
+            domain.swapHostEntryExtentForRuntime(previous);
+        }
     }
 
     public static void executeInTaskForRuntime(

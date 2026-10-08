@@ -18,6 +18,8 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -313,6 +315,50 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         return !stopped;
     }
 
+    ProtosActorExecutionDomain rootExecutionDomain() {
+        return rootActor.executionDomain();
+    }
+
+    /**
+     * PLAT054-3E2: opens the {@link HostEntryExtent} of a host Closure execution admitted with
+     * {@code token}. Only an outermost entry has no foreign frames between it and the host and may
+     * suspend; a nested same-thread entry is a callback inside a synchronous foreign operation
+     * ({@code FUTURES_AND_TASKS.md}, Synchronous foreign callbacks and the current Task). Returns
+     * the extent {@link #endHostEntryExtent} restores.
+     */
+    HostEntryExtent beginHostEntryExtent(Thread token) {
+        return rootActor
+                .executionDomain()
+                .swapHostEntryExtentForRuntime(
+                        token != null ? HostEntryExtent.SUSPENDIBLE : HostEntryExtent.SYNCHRONOUS);
+    }
+
+    void endHostEntryExtent(HostEntryExtent previous) {
+        rootActor.executionDomain().swapHostEntryExtentForRuntime(previous);
+    }
+
+    /** Whether a suspended host entry may still resume guest code (§29 rule 5). */
+    boolean hostEntryMayResume() {
+        if (stopped) {
+            return false;
+        }
+        ProtosActor.LifecycleState state = rootActor.lifecycleState();
+        return state != ProtosActor.LifecycleState.TERMINATING
+                && state != ProtosActor.LifecycleState.TERMINATED;
+    }
+
+    @TruffleBoundary
+    ProtosEmbeddingException suspendedEntryTerminated() {
+        return new ProtosEmbeddingException(
+                "the Protos Process of this Context terminated while a host entry was suspended");
+    }
+
+    /** Stops admission and wakes a suspended host entry so it observes the terminal boundary. */
+    private void stop() {
+        stopped = true;
+        rootActor.executionDomain().wakeHostEntryWaiterForRuntime();
+    }
+
     private void requireLive() {
         if (stopped) {
             throw terminated();
@@ -409,7 +455,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     @Override
     public void processTerminatedForRuntime() {
         // The Polyglot Context belongs to the host; Process termination does not close it.
-        stopped = true;
+        stop();
     }
 
     /**
@@ -421,7 +467,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
      */
     @TruffleBoundary
     void finalizeForContextClose() {
-        stopped = true;
+        stop();
         process.requestTerminationForRuntime();
         if (!owner.env().getContext().isCancelling() && !owner.env().getContext().isExiting()) {
             process.awaitTerminationForRuntime();
@@ -436,7 +482,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
      */
     @TruffleBoundary
     void abandonForContextDisposal() {
-        stopped = true;
+        stop();
         process.requestTerminationForRuntime();
         joinCarriers();
     }

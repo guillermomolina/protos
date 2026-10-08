@@ -42,6 +42,9 @@ public final class ProtosStandardFutureProtocol {
                     if (a.deferredCPrimeReleaseForRuntime().isPresent()) {
                         return observeValueForIoReleaseContinuation(a,observed,a.deferredCPrimeReleaseForRuntime().orElseThrow());
                     }
+                    if (ProtosHostEntrySuspension.suspendible(a)) {
+                        return ProtosHostEntrySuspension.awaitFuture(a,observed);
+                    }
                     return observed.observeValueForContinuationForRuntime(
                             a,
                             (dependency,resumer) ->

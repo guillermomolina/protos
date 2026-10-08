@@ -68,7 +68,61 @@ public final class ProtosActorExecutionDomain {
     private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
     private ProtosActor ownerActor;
     private Runnable schedulerWakeup = NOOP_WAKEUP;
+    /*
+     * PLAT054-3E2: confined to the thread that holds the RootActor host entry (entry admission
+     * publishes it between entries), so it needs no monitor.
+     */
+    private HostEntryExtent hostEntryExtent = HostEntryExtent.NONE;
     private int activeTargetedRuntimeCompletions;
+
+    /**
+     * PLAT054-3E2 ({@code FUTURES_AND_TASKS.md} §29, Suspendible host-initiated RootActor entries):
+     * what the non-Task guest code currently executing in this domain may do at an explicit
+     * suspension point. Task-owned execution never consults it.
+     */
+    public enum HostEntryExtent {
+        /** No host entry governs the current execution; ordinary non-Task rules apply. */
+        NONE,
+        /**
+         * Directly inside an outermost host entry with only Bytecode frames between the
+         * suspension point and the entry, so a C-prime continuation can reach the entry's driver.
+         */
+        SUSPENDIBLE,
+        /**
+         * Inside a host entry but within a callback of a synchronous foreign operation (including
+         * a nested host entry): an actual suspension is rejected with a fresh {@code Error}.
+         */
+        SYNCHRONOUS
+    }
+
+    public HostEntryExtent hostEntryExtentForRuntime() {
+        return hostEntryExtent;
+    }
+
+    /** Installs {@code next} and returns the previous extent, which the caller must restore. */
+    public HostEntryExtent swapHostEntryExtentForRuntime(HostEntryExtent next) {
+        HostEntryExtent previous = hostEntryExtent;
+        hostEntryExtent = Objects.requireNonNull(next, "next");
+        return previous;
+    }
+
+    /** Wakes a host entry blocked in {@link #awaitHostEntryWakeupForRuntime}. */
+    public synchronized void wakeHostEntryWaiterForRuntime() {
+        notifyAll();
+    }
+
+    /**
+     * Blocks the suspended host entry's thread until runnable Actor-local work exists or {@code
+     * wake} holds. {@code wake} is evaluated under this monitor, and every source that can make it
+     * true notifies this monitor after changing its state, so no wakeup is lost; a spurious return
+     * is harmless because the caller re-checks.
+     */
+    public synchronized void awaitHostEntryWakeupForRuntime(BooleanSupplier wake)
+            throws InterruptedException {
+        if (runnable.isEmpty() && targetedRuntimeCompletions.isEmpty() && !wake.getAsBoolean()) {
+            wait();
+        }
+    }
 
     public ProtosTask createTask(
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {

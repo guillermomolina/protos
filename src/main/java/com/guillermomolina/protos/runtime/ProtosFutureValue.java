@@ -156,6 +156,16 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         }
 
         if (snapshot == State.PENDING) {
+            if (activation.task().isEmpty()
+                    && domain.hostEntryExtentForRuntime()
+                            == ProtosActorExecutionDomain.HostEntryExtent.SYNCHRONOUS) {
+                /*
+                 * PLAT054-3E2: a foreign callback inside a host entry rejects an actual
+                 * suspension before any wait is installed (FUTURES_AND_TASKS.md, Synchronous
+                 * foreign callbacks and the current Task).
+                 */
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
             throw new IllegalStateException(
                     "pending Future.value() requires the C-prime continuation entry");
         }
@@ -325,6 +335,11 @@ public final class ProtosFutureValue extends ProtosObjectValue {
             if (!callNow) observers.add(observer);
         }
         if (callNow) observer.terminal(this);
+    }
+
+    /** Registered, not yet notified observers; test evidence that waits release their observer. */
+    public synchronized int observerCountForTesting() {
+        return observers.size();
     }
 
     public synchronized void removeObserver(Observer observer) {

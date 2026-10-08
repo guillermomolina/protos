@@ -2767,7 +2767,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             if ((activation.task().isPresent()
                             || activation.deferredCPrimeOperationForRuntime().isPresent()
-                            || activation.deferredCPrimeReleaseForRuntime().isPresent())
+                            || activation.deferredCPrimeReleaseForRuntime().isPresent()
+                            || ProtosHostEntrySuspension.suspendible(activation))
                     && nativeBody
                             instanceof ProtosSuspensionCapableNativeClosureBody
                                     suspensionCapable) {
@@ -7194,6 +7195,63 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 closure,
                 supplied,
                 activation);
+    }
+
+    /**
+     * PLAT054-3E2: Task-free counterpart of {@link #prepareTaskOwnedSelectedNativeForCPrime} for an
+     * outermost standard-embedding host entry whose Closure has no compact target. {@code selected}
+     * is the ordinary D013 {@code call} selection on {@code receiver}; only the exact canonical
+     * selection executes the receiver Closure itself (PLAT017). The callee inherits the caller's
+     * dynamic-control state exactly as a Task-free composed send does, and the returned call runs
+     * through the shared C-prime entry root, so structured control and suspension behave as on the
+     * compact path.
+     */
+    static PreparedClosureCall prepareHostEntrySelectedCall(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            List<?> supplied,
+            ProtosActivation caller) {
+        java.util.Objects.requireNonNull(receiver, "receiver");
+        java.util.Objects.requireNonNull(selected, "selected");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(caller, "caller");
+        if (caller.task().isPresent()) {
+            throw new IllegalArgumentException("host entry provenance must not own a Task");
+        }
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+        ProtosActivation activation;
+        ProtosClosureValue effective;
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        closure,
+                        selected.home())) {
+            effective = targetClosure;
+            activation =
+                    ProtosActivation.forClosureInvocation(
+                            targetClosure,
+                            supplied,
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+        } else {
+            effective = closure;
+            activation =
+                    ProtosActivation.forImmediateMethodInvocation(
+                            closure,
+                            supplied,
+                            receiver,
+                            selected.home(),
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+        }
+        rejectComposedInvocationProjection(effective);
+        activation.inheritDynamicControlState(caller);
+        return finishPreparingComposedCallByImplementation(effective, supplied, activation);
     }
 
     static PreparedClosureCall prepareTaskOwnedSelectedCallIfBytecode(

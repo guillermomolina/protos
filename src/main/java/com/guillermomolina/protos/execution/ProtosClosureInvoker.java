@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
@@ -155,6 +157,27 @@ public final class ProtosClosureInvoker {
     }
 
     private static Object invokePrepared(ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
+        /*
+         * PLAT054-3E2: a C-prime continuation cannot cross this synchronous Java boundary, so the
+         * suspendible host-entry extent ends here. Below it the ordinary non-Task rules apply, as
+         * a Task forbids this path outright ("use C-prime"): Bytecode reaches structured natives
+         * only through structured dispatch, and the outermost generic entry uses the C-prime entry
+         * root. A foreign callback marks its own synchronous extent before arriving here.
+         */
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        if (domain == null || domain.hostEntryExtentForRuntime() != HostEntryExtent.SUSPENDIBLE) {
+            return invokePreparedInExtent(closure, supplied, activation);
+        }
+        domain.swapHostEntryExtentForRuntime(HostEntryExtent.NONE);
+        try {
+            return invokePreparedInExtent(closure, supplied, activation);
+        } finally {
+            domain.swapHostEntryExtentForRuntime(HostEntryExtent.SUSPENDIBLE);
+        }
+    }
+
+    private static Object invokePreparedInExtent(
+            ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
         ProtosReturnHome returnHome =
                 activation.returnHome()
                         .orElseThrow(

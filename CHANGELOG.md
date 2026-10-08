@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.291-SNAPSHOT
+
+- `I086` `PLAT054-3E2` implements HOST-FUT-1 (`FUTURES_AND_TASKS.md` §29,
+  Suspendible host-initiated RootActor entries, spec 0.1.450) for the standard
+  Polyglot embedding: a Closure executed from Java through `Value.execute()`
+  may call `value()` on a pending Future and suspend, and `execute()` still
+  returns only the final result or propagates only the final failure.
+  - An outermost host entry suspends through the existing C-prime machinery:
+    the pending observation registers one ordinary Future observer atomically
+    with the pending check and yields the same native suspension leaf a Task
+    uses, so the exact guest continuation is resumed with no replay and no
+    second evaluator. Closures without a compact target (native bodies,
+    non-canonical `call` selections) run through the shared C-prime entry root
+    with the same behavior.
+  - While suspended, the entry thread keeps the RootActor entry (concurrent
+    entries are still rejected), dispatches the RootActor's own runnable work,
+    and otherwise parks in a Truffle-interruptible region. Process termination
+    or Context close ends the wait without resuming guest code, even when
+    termination itself terminalizes the observed Future, and releases the
+    observer. The observed Future is never cancelled by its observer.
+  - A foreign callback during a host entry, including a nested same-thread
+    entry, keeps the no-suspension rule: an actual suspension signals a fresh
+    `Error`. An unhandled Error after resumption stays fatal to the RootActor.
+  - PAY AS YOU GROW: a call that does not suspend creates no Task, RootTask,
+    waiter, continuation, or scheduler; the fixed cost is one domain extent
+    swap per entry and one result type check.
+  - `ProtosHostEntryFutureSuspensionTest` covers resolved, pending, failed, and
+    cancelled Futures, no-replay effects, races, `ensure`, non-local returns,
+    nested and structured calls, the native generic path, foreign callbacks,
+    exclusivity, Context close, Process termination, and Context independence.
+
 ## 0.3.290-SNAPSHOT
 
 - `PERF031-F` removes repeated work from Test Tool progress grouping. The
