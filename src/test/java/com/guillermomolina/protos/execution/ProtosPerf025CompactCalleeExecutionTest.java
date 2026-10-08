@@ -136,6 +136,59 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void zeroParameterLocalCreationAndReadStayCompact() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run =
+                    closure("() => { value: 1\nvalue }", module);
+
+            List<String> instructions = instructionNames(run);
+            assertContains(instructions, "CreateCurrentFrameLocal");
+            assertContains(instructions, "ReadRootFrameLocal");
+            assertNone(instructions, "CurrentActivation");
+            assertNone(instructions, "InstallFrameLexicalAuthority");
+
+            for (int iteration = 0; iteration < 3; iteration++) {
+                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                        fastDirect(run, module);
+                assertEquals(
+                        BigInteger.ONE,
+                        integerValue(enter(prepared)));
+                assertSame(
+                        run,
+                        prepared.targetArguments()[0],
+                        "ordinary local creation/read must not materialize "
+                                + "a compact activation");
+            }
+
+            Object[] method =
+                    ProtosFrameArguments.compactImmediateMethodCall(
+                            run, newObject(), newObject(), module,
+                            new Object[0]);
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(target(run).call(method)));
+            assertSame(
+                    run,
+                    method[0],
+                    "compact immediate method execution must remain compact");
+
+            ProtosClosureValue duplicate =
+                    closure("() => { value: 1\nvalue: 2\nvalue }", module);
+            ProtosBytecodeRootNode.PreparedClosureCall invalid =
+                    fastDirect(duplicate, module);
+
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(invalid));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    invalid.targetArguments()[0],
+                    "the duplicate-creation Error must materialize "
+                            + "the exact calling activation");
+        });
+    }
+
+    @Test
     void localOnlyCalleeCreatesAndAssignsWithoutMaterializing() throws Exception {
         withCore(module -> {
             ProtosClosureValue locals = closure("(a) => { b: a\nc: b\nc = a\nc }", module);

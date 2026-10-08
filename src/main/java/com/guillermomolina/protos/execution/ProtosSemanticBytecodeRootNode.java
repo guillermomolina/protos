@@ -46,6 +46,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -659,6 +660,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
                 return value;
             }
+            return slowCreate(
+                    frameBackedLocals, frameBackedLayout, ordinal,
+                    arguments, name, value, bytecodeNode, bytecodeIndex,
+                    frame.materialize());
+        }
+
+        /**
+         * PERF034-B: keep rich-activation transitions and duplicate-creation
+         * errors outside the compiled ordinary compact-local path.
+         *
+         * The frame is materialized before entering the boundary. This
+         * preserves the existing authoritative creation implementation
+         * without allowing a VirtualFrame to escape compilation.
+         */
+        @TruffleBoundary
+        private static Object slowCreate(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                Object[] arguments,
+                String name,
+                Object value,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                MaterializedFrame frame) {
             return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
                     ProtosFrameArguments.activation(arguments), name, value,
@@ -805,6 +831,24 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                  */
                 return accessor.getObject(bytecodeNode, frame);
             }
+            return slowRead(
+                    accessor, presenceContinuity, arguments,
+                    name, bytecodeNode, frame.materialize());
+        }
+
+        /**
+         * PERF034-B: observed contexts retain the authoritative D179
+         * presence-aware fallback, but do not expand that machinery into
+         * the compiled unobserved compact-local read.
+         */
+        @TruffleBoundary
+        private static Object slowRead(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                Object[] arguments,
+                String name,
+                BytecodeNode bytecodeNode,
+                MaterializedFrame frame) {
             return ProtosBytecodeRootNode.ReadFrameLocal.perform(
                     accessor,
                     presenceContinuity,

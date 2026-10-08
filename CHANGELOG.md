@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.301-SNAPSHOT
+
+- `PERF034-B` (#845): isolate cold frame-local creation and
+  lexical-read fallbacks behind Truffle boundaries.
+  - Preserve compact frame-local creation and read paths.
+  - Materialize frames before entering cold fallback helpers.
+  - Preserve observed-context, duplicate-creation and D179 semantics.
+  - Add regression coverage for compact repeated execution,
+    immediate method calls and duplicate creation.
+  - Integrated `make test` passed.
+  - Structural and timing improvements remain to be measured.
+
 ## 0.3.300-SNAPSHOT
 
 - `PERF032-G6` (#831): reconcile the PERF013 shared lexical-root grouping
