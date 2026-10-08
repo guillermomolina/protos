@@ -29,6 +29,7 @@ import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,8 @@ public final class ProtosCli {
      */
     static final String IMPLEMENTATION_VERSION_ENV = "PROTOS_IMPLEMENTATION_VERSION";
 
+    private static final Set<String> SUBCOMMANDS =
+            Set.of("language-server", "debug", "run", "package", "test", "format");
     private static final Set<String> PACKAGE_METADATA_FILES =
             Set.of("protos.toml", "protos.lock");
     private static final Set<String> PACKAGE_METADATA_STAGING_FILES =
@@ -57,6 +60,12 @@ public final class ProtosCli {
             exactPackageMaterializationProviderFactory;
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
     private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
+    /**
+     * External foreign provider paths the user explicitly authorized for this invocation
+     * (I085-A); empty unless {@code --foreign-provider-path} preceded a file, {@code -e}, or REPL
+     * execution.
+     */
+    private List<Path> foreignProviderPaths = List.of();
 
     public ProtosCli() {
         this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
@@ -121,6 +130,37 @@ public final class ProtosCli {
 
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
         try {
+            List<Path> providerPaths = new ArrayList<>();
+            int first = 0;
+            while (first < args.length && args[first].equals("--foreign-provider-path")) {
+                if (first + 1 >= args.length) {
+                    return usage(err, "--foreign-provider-path requires a path list");
+                }
+                for (String entry : args[first + 1].split(File.pathSeparator, -1)) {
+                    Path path;
+                    try {
+                        path = Path.of(entry).toAbsolutePath().normalize();
+                    } catch (InvalidPathException invalid) {
+                        path = null;
+                    }
+                    if (entry.isEmpty() || path == null || !Files.exists(path)) {
+                        return usage(err, "no such foreign provider path: " + entry);
+                    }
+                    providerPaths.add(path);
+                }
+                first += 2;
+            }
+            if (first > 0) {
+                args = Arrays.copyOfRange(args, first, args.length);
+                if (args.length > 0
+                        && !args[0].equals("-e")
+                        && (args[0].startsWith("-") || SUBCOMMANDS.contains(args[0]))) {
+                    return usage(
+                            err,
+                            "--foreign-provider-path applies only to file, -e, or REPL execution");
+                }
+            }
+            foreignProviderPaths = List.copyOf(providerPaths);
             if (args.length == 0) return repl(in, out, err);
             if (args.length == 1 && (args[0].equals("--help") || args[0].equals("-h"))) {
                 help(out);
@@ -1403,7 +1443,13 @@ public final class ProtosCli {
             PrintStream err,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+        // Only file, -e, and REPL sessions can carry explicitly authorized provider paths.
+        ProtosPolyglotRuntimeHost runtimeHost =
+                foreignProviderPaths.isEmpty()
+                        ? ProtosPolyglotRuntimeHost.open()
+                        : ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                ProtosForeignProviderConfiguration.trustedInProcess(
+                                        foreignProviderPaths));
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
         try {
@@ -1646,6 +1692,7 @@ public final class ProtosCli {
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
+                        + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"
                         + "Workspace run executes the explicit root-package logical <entry> "
@@ -1670,6 +1717,9 @@ public final class ProtosCli {
                         + "UTF-8 host-selected Encoding associations.\n"
                         + "File and -e execution write only explicit program output; "
                         + "the interactive REPL also displays evaluation results.\n"
+                        + "--foreign-provider-path loads external foreign provider plugins "
+                        + "from exactly the listed JARs or directories (separated by the "
+                        + "platform path separator; repeatable); they run trusted in process.\n"
                         + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.");
     }
 

@@ -23,6 +23,8 @@ import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
+import java.net.URLClassLoader;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -42,6 +44,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
     private final ProtosGraalDapReadinessAdapter debugReadiness;
     private final ProtosForeignProviderRegistry foreignProviders;
+    /** Class loader of external provider plugins, or null when none were configured. */
+    private final URLClassLoader foreignProviderLoader;
     private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
@@ -55,9 +59,18 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             Engine engine,
             ProtosGraalDapReadinessAdapter debugReadiness,
             ProtosForeignProviderRegistry foreignProviders) {
+        this(engine, debugReadiness, foreignProviders, null);
+    }
+
+    private ProtosPolyglotRuntimeHost(
+            Engine engine,
+            ProtosGraalDapReadinessAdapter debugReadiness,
+            ProtosForeignProviderRegistry foreignProviders,
+            URLClassLoader foreignProviderLoader) {
         this.engine = Objects.requireNonNull(engine, "engine");
         this.debugReadiness = debugReadiness;
         this.foreignProviders = Objects.requireNonNull(foreignProviders, "foreignProviders");
+        this.foreignProviderLoader = foreignProviderLoader;
         this.actorCarrierParallelism =
                 Math.max(1, Runtime.getRuntime().availableProcessors());
     }
@@ -80,6 +93,40 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                 null,
                 ProtosForeignProviderRegistry.of(
                         List.of(ProtosHostJavaProvider.descriptor(catalogue))));
+    }
+
+    /**
+     * Opens a normal host whose foreign providers are exactly the external plugins discovered on
+     * the explicitly configured provider paths (I085-A), fixed for the life of the host. An empty
+     * configuration behaves exactly like {@link #open()}: no discovery and no class loader.
+     * Plugins are registered without initializing any foreign runtime or session.
+     *
+     * @throws IllegalArgumentException when a path, plugin, identity, or scheme is invalid or
+     *     duplicated
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static ProtosPolyglotRuntimeHost openWithForeignProviders(
+            ProtosForeignProviderConfiguration configuration) {
+        Objects.requireNonNull(configuration, "configuration");
+        if (configuration.providerPaths().isEmpty()) {
+            return open();
+        }
+        ProtosExternalProviderPluginLoader.Loaded loaded =
+                ProtosExternalProviderPluginLoader.load(configuration);
+        try {
+            return new ProtosPolyglotRuntimeHost(
+                    Engine.create(ProtosLanguage.ID),
+                    null,
+                    ProtosForeignProviderRegistry.of(loaded.descriptors()),
+                    loaded.classLoader());
+        } catch (RuntimeException | Error failure) {
+            try {
+                loaded.classLoader().close();
+            } catch (IOException closeFailure) {
+                failure.addSuppressed(closeFailure);
+            }
+            throw failure;
+        }
     }
 
     /** Test-only hook: opens a normal host owning the supplied immutable provider registry. */
@@ -255,6 +302,10 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return foreignProviders;
     }
 
+    ClassLoader foreignProviderLoaderForTesting() {
+        return foreignProviderLoader;
+    }
+
     void recordContextCloseFailure(Throwable failure) {
         contextCloseFailure.compareAndSet(null, Objects.requireNonNull(failure, "failure"));
     }
@@ -288,5 +339,13 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         }
         engine.close();
         closed = true;
+        if (foreignProviderLoader != null) {
+            // Every Context that could reference plugin classes is closed by now.
+            try {
+                foreignProviderLoader.close();
+            } catch (IOException closeFailure) {
+                throw new UncheckedIOException(closeFailure);
+            }
+        }
     }
 }

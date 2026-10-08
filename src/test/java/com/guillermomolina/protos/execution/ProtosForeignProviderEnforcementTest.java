@@ -394,6 +394,32 @@ class ProtosForeignProviderEnforcementTest {
         }
     }
 
+    /**
+     * I085-A: external plugin discovery is explicit host configuration owned by exactly one
+     * non-substrate class; no other execution source performs service discovery.
+     */
+    @Test
+    void externalPluginDiscoveryIsConfinedToTheHostConfiguredLoader() throws Exception {
+        List<Path> discovering;
+        try (Stream<Path> files = Files.list(EXECUTION)) {
+            discovering =
+                    files.filter(file -> file.toString().endsWith(".java"))
+                            .filter(
+                                    file -> {
+                                        try {
+                                            return Files.readString(file)
+                                                    .contains("ServiceLoader.load");
+                                        } catch (java.io.IOException failure) {
+                                            throw new java.io.UncheckedIOException(failure);
+                                        }
+                                    })
+                            .toList();
+        }
+        assertEquals(
+                List.of(EXECUTION.resolve("ProtosExternalProviderPluginLoader.java")),
+                discovering);
+    }
+
     private static List<Path> foreignSources() throws Exception {
         try (Stream<Path> files = Files.list(EXECUTION)) {
             return files.filter(

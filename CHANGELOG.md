@@ -7,6 +7,42 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.282-SNAPSHOT
+
+- `I085-A` adds a public, execution-mechanism-independent SPI for external
+  foreign providers, so a new foreign language or native library can be used
+  from Protos by installing an external plugin, without changing or
+  rebuilding Protos. The specification is unchanged by this slice.
+  - Public SPI package `com.guillermomolina.protos.spi.foreign`:
+    `ProtosForeignProviderPlugin` (identity, scheme, canonicalization,
+    session, value operations), `ProtosForeignPluginSession` (opaque
+    `Object` module handles), `ProtosForeignPluginEnvironment` (read-only
+    host options only), and `ProtosForeignValueOperations` with
+    `ProtosForeignValueClass`, `ProtosForeignArgumentValue`, and
+    `ProtosForeignFailureInfo`. The SPI does not depend on Truffle or
+    Polyglot; the optional `spi.foreign.polyglot` package offers a reusable
+    `Value`-based implementation for Truffle-backed providers.
+  - Plugins are bridged into the existing I082 substrate (canonical
+    `ModuleKey`, Actor-local facades, cache and retry, D188 admission and
+    identity, sessions and generations, failures, Actor isolation, closure);
+    D189 callbacks do not cross the public SPI.
+  - Discovery uses `ServiceLoader` only over explicitly configured provider
+    paths, through a host-owned class loader; the global class path is never
+    scanned. The provider registry is fixed when the RuntimeHost is built
+    (PLAT053); duplicate or invalid identities and schemes, missing paths,
+    and paths without providers are rejected.
+  - Embedders use `ProtosPolyglotRuntimeHost.openWithForeignProviders` with
+    `ProtosForeignProviderConfiguration.trustedInProcess(paths)`: loading an
+    external JAR is an explicit host trust decision (PLAT052); `open()` is
+    unchanged and configures no provider.
+  - The CLI accepts `--foreign-provider-path <paths>` before a file, `-e`, or
+    REPL execution.
+  - Pay as you grow: without configured paths there is no discovery, class
+    loader, session, or foreign initialization; configured but unused
+    providers open no session.
+  - No foreign-language dependency was added. Dynamic plugin loading is
+    JVM-only; Native Image does not offer it.
+
 ## 0.3.281-SNAPSHOT
 
 - `LIB021-A` adds `std:interop`, the first public explicit
