@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.309-SNAPSHOT
+
+- `LM010-D` (#493): integrated LSP acceptance over the real JSON-RPC transport.
+  - Add `ProtosLanguageServerIntegratedEditorTest`, which connects a standard
+    LSP4J client to `ProtosLanguageServerStdio` over in-process pipes and
+    exercises the advertised capabilities, Hover, Completion, and literal-Closure
+    Signature Help (including `(`/`,` trigger contexts and UTF-16 positions)
+    together with full-sync editing, document authority, diagnostics,
+    definition, and the shutdown/exit lifecycle.
+  - Test-only; no language-server behavior changes.
+
 ## 0.3.308-SNAPSHOT
 
 - `PERF034-E` (#845): reduce intermediate state in the PERF034-C scalar-local
