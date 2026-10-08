@@ -227,6 +227,30 @@ class ProtosHostJavaProviderTest {
     }
 
     @Test
+    void explicitInteropReadsOnlyTheExposedMemberSurfaceAndAddsNoVerbs() throws Exception {
+        ProtosModuleRuntimeTest.MemoryResolver resolver =
+                new ProtosModuleRuntimeTest.MemoryResolver()
+                        .module(
+                                "std:interop",
+                                Files.readString(Path.of("protos", "lib", "interop.protos")));
+        try (Fixture fixture = new Fixture(resolver)) {
+            String i = "I: import(\"std:interop\")\n" + G;
+            assertEquals(
+                    "ann",
+                    text(fixture.eval(i + "g: G(\"ann\")\nn: I.readMember(g, \"name\")\nn()")));
+            assertEquals(
+                    "hi",
+                    text(fixture.eval(i + "e: I.readMember(G, \"staticEcho\")\nI.invoke(e, \"hi\")")));
+            assertEquals("cy", text(fixture.eval(i + "I.invoke(G, \"cy\").name()")));
+            // An unexposed member is an entered failure, never a reflective lookup.
+            assertForeign(fixture, fixture.failure(i + "I.readMember(G(\"d\"), \"hashCode\")"));
+            // The restricted baseline offers no instantiation or member write.
+            assertOrdinary(fixture, fixture.failure(i + "I.instantiate(G, \"x\")"));
+            assertOrdinary(fixture, fixture.failure(i + "I.writeMember(G(\"d\"), \"name\", \"x\")"));
+        }
+    }
+
+    @Test
     void unadmittedClassesUnexposedMembersAndOverloadsFailClosed() throws Exception {
         try (Fixture fixture = new Fixture()) {
             int denied = ProtosHostJavaFixtureTypes.DENIED_INITIALIZATIONS.get();

@@ -1,0 +1,67 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Explicit operations on foreign values the program already possesses: a raw
+//! foreign reference or a provider facade presenting a foreign target. Each
+//! operation acts on the underlying foreign target, under the provider,
+//! session, and generation already associated with it.
+//!
+//! Importing this module creates no provider session or Context, performs no
+//! discovery or acquisition, and confers no authority. None of its operations
+//! changes ordinary Protos lookup, member read, assignment, `call`, `at`,
+//! `atPut`, `each`, identity, equality, or hashing of foreign values.
+//!
+//! Arguments and written values cross into the foreign operation only when
+//! they project losslessly; a Closure crosses only as a synchronous callback
+//! scoped to that one operation. Normal results are admitted as for ordinary
+//! foreign access. A failure detected before the foreign operation is entered
+//! (a value that is not foreign, wrong arity, a `name` that is not a String, an
+//! operation the target does not support, an argument that cannot be projected,
+//! or a closed session) signals an ordinary Error. A failure after entry
+//! signals a fresh `ForeignError`.
+
+/// Explicitly executes the foreign target of `target` with `arguments` and
+/// answers its admitted result. This is foreign execution, not ordinary
+/// `call`: it applies even when the target is also instantiable.
+invoke: ((facility) => (target, ...arguments) => {
+    facility.invoke(target, ...arguments)
+})(_interopFacility)
+
+/// Explicitly instantiates the foreign target of `target` with `arguments`
+/// and answers its admitted result. This is distinct from `invoke`; it applies
+/// even when the target is also executable.
+instantiate: ((facility) => (target, ...arguments) => {
+    facility.instantiate(target, ...arguments)
+})(_interopFacility)
+
+/// Answers the admitted value of the foreign member `name`, which must be a
+/// String, of the foreign target of `target`. Ordinary Protos precedence is
+/// bypassed for this operation only, so foreign members such as `call`, `at`,
+/// `each`, `==`, or `hash` are reachable; `target.name` is unchanged.
+readMember: ((facility) => (target, name) => {
+    facility.readMember(target, name)
+})(_interopFacility)
+
+/// Sets the foreign member `name`, which must be a String, of the foreign
+/// target of `target` to `value` and answers exactly `value`. Nothing is read
+/// back. Ordinary assignment `target.name = value` never writes a foreign
+/// member.
+writeMember: ((facility) => (target, name, value) => {
+    facility.writeMember(target, name, value)
+})(_interopFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_interopFacility")

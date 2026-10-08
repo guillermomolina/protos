@@ -89,6 +89,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             Map.ofEntries(
                     Map.entry("execution/ProtosCommandLineArrayConstructionFacility.java", 3),
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
+                    // LIB021-A std:interop explicit foreign operations.
+                    Map.entry("execution/ProtosForeignInteropFacility.java", 4),
                     // I082-D2 adds the projected pull each to call/at/atPut.
                     Map.entry("execution/ProtosForeignProjectedOperations.java", 4),
                     Map.entry("execution/ProtosLoggingFacility.java", 3),
@@ -116,6 +118,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // I082-D D188 host-interop projection, not derived Core behavior.
                             || relative.equals(
                                     "execution/ProtosForeignProjectedOperations.java")
+                            // LIB021-A explicit host-interop operations, not Core behavior.
+                            || relative.equals(
+                                    "execution/ProtosForeignInteropFacility.java")
                             || relative.equals(
                                     "execution/ProtosTestToolCatalogAcquisitionFacility.java")
                             || relative.equals(

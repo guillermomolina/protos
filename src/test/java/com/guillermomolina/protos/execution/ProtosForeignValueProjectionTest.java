@@ -320,6 +320,11 @@ class ProtosForeignValueProjectionTest {
                             "writeMember",
                             "invokeMember",
                             "instantiate")) {
+                if (file.equals("execution/ProtosForeignValueAdapter.java")
+                        && (forbidden.equals("writeMember") || forbidden.equals("instantiate"))) {
+                    // LIB021-A: D193 std:interop explicit operations; never ordinary projection.
+                    continue;
+                }
                 assertFalse(source.contains(forbidden), file + " must not use " + forbidden);
             }
         }

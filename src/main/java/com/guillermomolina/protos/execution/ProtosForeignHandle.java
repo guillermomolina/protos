@@ -78,6 +78,14 @@ final class ProtosForeignHandle implements ProtosRawForeignValue.Handle {
         return target;
     }
 
+    /**
+     * Whether the admission classification declared {@code capability}; explicit {@code
+     * std:interop} operations check this before entry instead of the ordinary projection rules.
+     */
+    boolean has(ProtosForeignAdmissionDescriptor.Capability capability) {
+        return descriptor.has(capability);
+    }
+
     /** Executable and not also instantiable: the generic layer never chooses between them. */
     boolean projectsCall() {
         return descriptor.has(ProtosForeignAdmissionDescriptor.Capability.EXECUTABLE)

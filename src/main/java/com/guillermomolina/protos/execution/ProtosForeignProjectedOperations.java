@@ -283,7 +283,8 @@ final class ProtosForeignProjectedOperations {
         return supplied.get(1);
     }
 
-    private static Object admit(
+    /** D188 admission of one normal provider result under the handle's exact binding. */
+    static Object admit(
             ProtosForeignHandle handle, ProtosForeignProviderSession live, Object foreign)
             throws Exception {
         return ProtosForeignValueAdmission.admit(handle.session(), handle.adapter(), live, foreign);
@@ -292,9 +293,10 @@ final class ProtosForeignProjectedOperations {
     /**
      * Outbound arguments of one operation. The D189 callback scope exists only once a Closure
      * argument needs it; an operation without one pays nothing. A failure to export any argument
-     * is the ordinary pre-entry failure and expires callbacks already prepared.
+     * is the ordinary pre-entry failure and expires callbacks already prepared. Explicit {@code
+     * std:interop} operations ({@link ProtosForeignInteropFacility}) export through this same path.
      */
-    private static final class Outbound {
+    static final class Outbound {
         private final ProtosForeignHandle handle;
         private final ProtosActivation activation;
         private final ProtosPrelude prelude;
@@ -339,7 +341,7 @@ final class ProtosForeignProjectedOperations {
         return handle;
     }
 
-    private static ProtosPrelude prelude(ProtosActivation activation) {
+    static ProtosPrelude prelude(ProtosActivation activation) {
         return activation.prelude()
                 .orElseThrow(
                         () ->

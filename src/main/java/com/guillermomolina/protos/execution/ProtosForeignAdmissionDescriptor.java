@@ -50,7 +50,14 @@ record ProtosForeignAdmissionDescriptor(
         INDEXED_WRITE,
         HASH_ENTRIES,
         /** Ordinary pull iteration is a faithful, unambiguous projection of this value. */
-        ITERABLE
+        ITERABLE,
+        /**
+         * The explicit {@code std:interop} member-read family is supported. It never admits an
+         * ordinary member read, which still requires faithful projection per member.
+         */
+        MEMBER_READ,
+        /** The explicit {@code std:interop} member-write family is supported. */
+        MEMBER_WRITE
     }
 
     ProtosForeignAdmissionDescriptor {

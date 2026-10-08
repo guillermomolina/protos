@@ -170,17 +170,20 @@ final class ProtosHostJavaProvider
             return ProtosForeignAdmissionDescriptor.raw(
                     entry,
                     entry.constructor() == null
-                            ? EnumSet.noneOf(ProtosForeignAdmissionDescriptor.Capability.class)
-                            : EnumSet.of(ProtosForeignAdmissionDescriptor.Capability.EXECUTABLE));
+                            ? EnumSet.of(ProtosForeignAdmissionDescriptor.Capability.MEMBER_READ)
+                            : EnumSet.of(
+                                    ProtosForeignAdmissionDescriptor.Capability.EXECUTABLE,
+                                    ProtosForeignAdmissionDescriptor.Capability.MEMBER_READ));
         }
         if (value instanceof BoundMethod) {
             return ProtosForeignAdmissionDescriptor.raw(
                     null, EnumSet.of(ProtosForeignAdmissionDescriptor.Capability.EXECUTABLE));
         }
         // Every other Java object is identity-bearing: host reference identity, never equals().
+        // Explicit member reads reach exactly the exposed-method surface ordinary reads use.
         return ProtosForeignAdmissionDescriptor.raw(
                 new HostIdentity(value),
-                EnumSet.noneOf(ProtosForeignAdmissionDescriptor.Capability.class));
+                EnumSet.of(ProtosForeignAdmissionDescriptor.Capability.MEMBER_READ));
     }
 
     /** No exposed Java member takes a callback; every other kind is checked per member. */

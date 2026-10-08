@@ -72,7 +72,7 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                 new ProtosCoreBootstrap()
                         .bootstrap(
                                 Path.of("protos", "lib", "core"),
-                                new ProtosModuleRuntimeTest.MemoryResolver());
+                                new ProtosStandardLibraryModuleResolver(Path.of("protos", "lib")));
         bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
                         prelude, List.of(), exactEnvironmentDomain(), List.of(),
@@ -166,6 +166,8 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         final Map<String, Object> unfaithful = new LinkedHashMap<>();
         final List<Object> elements = new ArrayList<>();
         Function<List<ProtosForeignArgument>, Object> body = arguments -> Marker.NULL;
+        /** Explicit instantiation behavior; distinct from {@link #body}, which is execution. */
+        Function<List<ProtosForeignArgument>, Object> constructor = arguments -> Marker.NULL;
         /** Pull-iteration failure injected at "iterator", "hasNext", or "next". */
         String iteratorFailureStage;
         TestForeignFailure iteratorFailure;
@@ -237,6 +239,7 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         final Map<String, Object> modules = new LinkedHashMap<>();
         final List<String> events = new CopyOnWriteArrayList<>();
         final List<List<ProtosForeignArgument>> executions = new CopyOnWriteArrayList<>();
+        final List<List<ProtosForeignArgument>> instantiations = new CopyOnWriteArrayList<>();
         final List<ProtosForeignProviderSession> sessions = new CopyOnWriteArrayList<>();
         /** Protos runtime objects that reached an iterator operation; must stay empty. */
         final List<Object> leaks = new CopyOnWriteArrayList<>();
@@ -337,10 +340,15 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                     : false;
         }
 
+        /** Reads faithful members and, for explicit reads only, unfaithful ones too. */
         @Override
         public Object readMember(ProtosForeignProviderSession session, Object target, String name) {
             events.add("read:" + name);
-            Object value = fake(target).faithful.get(name);
+            Fake fake = fake(target);
+            Object value =
+                    fake.faithful.containsKey(name)
+                            ? fake.faithful.get(name)
+                            : fake.unfaithful.get(name);
             if (value instanceof TestForeignFailure failure) {
                 throw failure;
             }
@@ -354,6 +362,30 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                 List<ProtosForeignArgument> arguments) {
             executions.add(arguments);
             return fake(target).body.apply(arguments);
+        }
+
+        @Override
+        public Object instantiate(
+                ProtosForeignProviderSession session,
+                Object target,
+                List<ProtosForeignArgument> arguments) {
+            instantiations.add(arguments);
+            return fake(target).constructor.apply(arguments);
+        }
+
+        /** Stores the exported argument; a member holding a failure rejects the write. */
+        @Override
+        public void writeMember(
+                ProtosForeignProviderSession session,
+                Object target,
+                String name,
+                ProtosForeignArgument value) {
+            events.add("write:" + name);
+            Fake fake = fake(target);
+            if (fake.faithful.get(name) instanceof TestForeignFailure failure) {
+                throw failure;
+            }
+            fake.faithful.put(name, value);
         }
 
         @Override

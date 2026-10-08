@@ -472,7 +472,7 @@ public final class ProtosCoreBootstrap {
 
     /**
      * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187,
-     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B).
+     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B, LIB021-A).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -525,6 +525,11 @@ public final class ProtosCoreBootstrap {
                         Map.of(
                                 ProtosLoggingFacility.JSON_BOOTSTRAP_SLOT,
                                 ProtosLoggingFacility.createTextFacility())),
+                Map.entry(
+                        ProtosForeignInteropFacility.MODULE_KEY,
+                        Map.of(
+                                ProtosForeignInteropFacility.BOOTSTRAP_SLOT,
+                                ProtosForeignInteropFacility.createFacility())),
                 Map.entry(
                         ProtosSealedFamilyFacility.STYLE_MODULE_KEY,
                         Map.of(

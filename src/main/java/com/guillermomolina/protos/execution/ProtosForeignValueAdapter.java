@@ -21,8 +21,8 @@ import java.util.Objects;
 
 /**
  * Provider-neutral D188 value contract of one foreign provider: source classification and the
- * operations the generic projection may perform. Import-based values, a future {@code std:interop},
- * concrete providers, and D189 callback arguments all reach Protos through this one contract and
+ * operations the generic projection may perform. Import-based values, {@code std:interop}, concrete
+ * providers, and D189 callback arguments all reach Protos through this one contract and
  * {@link ProtosForeignValueAdmission}.
  *
  * <p>Every operation receives the live session of the exact binding that admitted the value and
@@ -62,6 +62,30 @@ interface ProtosForeignValueAdapter {
             ProtosForeignProviderSession session, Object target, List<ProtosForeignArgument> args)
             throws Exception {
         throw new UnsupportedOperationException("foreign execution");
+    }
+
+    /**
+     * Explicit foreign instantiation ({@code std:interop.instantiate}); never reached by ordinary
+     * {@code call}, which does not choose between execution and instantiation.
+     */
+    default Object instantiate(
+            ProtosForeignProviderSession session, Object target, List<ProtosForeignArgument> args)
+            throws Exception {
+        throw new UnsupportedOperationException("foreign instantiation");
+    }
+
+    /**
+     * Explicit foreign member mutation ({@code std:interop.writeMember}); ordinary assignment is
+     * never redirected here. Normal completion carries no result: the runtime answers the exact
+     * Protos value that was exported as {@code value}.
+     */
+    default void writeMember(
+            ProtosForeignProviderSession session,
+            Object target,
+            String name,
+            ProtosForeignArgument value)
+            throws Exception {
+        throw new UnsupportedOperationException("foreign member write");
     }
 
     default Object readElement(
