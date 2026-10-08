@@ -23,6 +23,27 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.451] - 2026-10-08
+
+### PLAT054-3E3-SPEC — Filesystem bootstrap failure policy (B011)
+- `spec/io/PROCESS_IO.md` (Embedding filesystem base): ratified the
+  owner-approved B011 Alternative A (bootstrap abort). When the host grants
+  effective file access but no safely representable, provider-confined base
+  can be established from the Context's working directory, initial Process
+  bootstrap fails before any source expression of the initial module executes,
+  and the failure is reported to the embedding host as a bootstrap
+  provisioning failure. The granted-but-unprovisionable case is never silently
+  converted into a successful bootstrap with the `filesystem` slot absent, and
+  no new public Protos Error category is introduced. This replaces the open
+  design decision recorded in 0.1.450.
+- Preserved: absent `filesystem` slot without effective file-access
+  authorization; provider confinement with no broader fallback; virtual and
+  custom providers need no physical host directory; ordinary post-provisioning
+  operation failures remain governed by `FILESYSTEM.md` and `IO_CORE.md`;
+  existing bootstrap cleanup and lifecycle rules; PAY AS YOU GROW (no eager
+  filesystem operation resources).
+- Only `spec/io/PROCESS_IO.md` changes as a normative owner.
+
 ## [0.1.450] - 2026-10-08
 
 ### PLAT054-3E1 — Embedding host-entry suspension and authority publication

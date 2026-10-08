@@ -206,12 +206,30 @@ The base is not implicitly the host's physical root, and no operation falls
 back to a broader host filesystem. Links, aliases, mounts, and concurrent
 namespace changes cannot carry resolution outside the authorized namespace.
 
-Provisioning fails closed: when the host grants file access but the base cannot
-be represented and confined safely, no Filesystem capability with an
-unconfined, approximated, or broader base is provisioned. This revision does not
-standardize which consequence follows in that case, aborting the initial
-bootstrap or completing it with the `filesystem` slot absent; that choice is an
-open design decision, and portable programs must not depend on either outcome.
+Provisioning fails closed. When the host grants effective file access but the
+Context's working-directory base cannot be safely represented and confined
+within the configured filesystem provider, initial Process bootstrap fails
+before any source expression of the initial module executes.
+
+The failure is reported to the embedding host as a bootstrap provisioning
+failure. It is not silently converted into a successful bootstrap with the
+`filesystem` slot absent, and it does not introduce a new public Protos Error
+category. No Filesystem capability with an unconfined, approximated, or broader
+base may be provisioned, and no partially established Filesystem capability
+becomes reachable by guest code.
+
+This failure condition does not require a physical host directory for virtual
+or custom filesystem providers. It applies when a safely representable and
+confined base cannot be established, not merely because an ordinary filesystem
+operation could subsequently fail; such operation failures after successful
+provisioning remain governed by `FILESYSTEM.md` and `IO_CORE.md`.
+
+Failed provisioning follows the existing bootstrap cleanup and lifecycle rules:
+a failed bootstrap establishes no reusable Process and is not the termination
+of an established Process. Without effective file-access authorization, the
+`filesystem` slot remains absent as stated above. Successful provisioning does
+not require eager initialization of filesystem operation resources that the
+program does not use.
 
 #### Embedding network grant and thread policy
 
