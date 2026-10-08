@@ -402,14 +402,26 @@ final class ProtosTestToolSuiteGraphTest {
         return ProtosTestExecutionSupport.execute(source, fixture.activation());
     }
 
-    private static Fixture fixture() throws Exception {
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "test",
-                        TOOL_ROOT,
-                        TOOL_ROOT.resolveSibling("shared"),
-                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    private static final class SharedPrelude {
+        private static final ProtosPrelude INSTANCE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                ProtosBundledToolModuleResolver resolver =
+                        new ProtosBundledToolModuleResolver(
+                                "test",
+                                TOOL_ROOT,
+                                TOOL_ROOT.resolveSibling("shared"),
+                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+                return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
+        }
+    }
+
+    private static Fixture fixture() {
+        ProtosPrelude prelude = SharedPrelude.INSTANCE;
         return new Fixture(prelude, prelude.newModuleActivation());
     }
 

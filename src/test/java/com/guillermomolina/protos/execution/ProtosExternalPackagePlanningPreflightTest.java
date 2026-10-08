@@ -335,10 +335,21 @@ final class ProtosExternalPackagePlanningPreflightTest {
     private static void assertBorrowedCustodiesStillOpen(
             ProtosCapturedFilesystemCustody... custodies)
             throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActivation activation = CorePrelude.INSTANCE.newModuleActivation();
         for (ProtosCapturedFilesystemCustody custody : custodies) {
             assertDoesNotThrow(() -> custody.materialize(activation));
+        }
+    }
+
+    private static final class CorePrelude {
+        private static final ProtosPrelude INSTANCE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                return new ProtosCoreBootstrap().bootstrap(CORE);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
         }
     }
 

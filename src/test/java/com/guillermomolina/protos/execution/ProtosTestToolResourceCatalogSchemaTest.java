@@ -181,15 +181,26 @@ final class ProtosTestToolResourceCatalogSchemaTest {
                 completed(source.toString(), fixture));
     }
 
-    private static Fixture fixture() throws Exception {
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "test",
-                        TOOL_ROOT,
-                        SHARED_ROOT,
-                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return new Fixture(prelude);
+    private static final class SharedPrelude {
+        private static final ProtosPrelude INSTANCE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                ProtosBundledToolModuleResolver resolver =
+                        new ProtosBundledToolModuleResolver(
+                                "test",
+                                TOOL_ROOT,
+                                SHARED_ROOT,
+                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+                return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
+        }
+    }
+
+    private static Fixture fixture() {
+        return new Fixture(SharedPrelude.INSTANCE);
     }
 
     private static Object completed(String source, Fixture fixture) throws Exception {

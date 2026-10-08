@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.287-SNAPSHOT
+
+- `PERF031-B` reduces redundant Core bootstraps in five Java test classes. The
+  specification and observable Protos behavior are unchanged.
+  - `ProtosTestToolSuiteGraphTest`,
+    `ProtosTestToolResourceCatalogSchemaTest`,
+    `ProtosTestToolResourceRequirementsSchemaTest`, and
+    `ProtosTestToolSequentialRunnerTest` bootstrap their class-invariant
+    Prelude once, lazily, through a class-local holder, following
+    `ProtosTestToolManifestPlanTest`.
+  - `ProtosExternalPackagePlanningPreflightTest` shares one lazily prepared
+    Core Prelude only in its borrowed-custody assertion helper; package
+    verification, planning, custody, and Process lifetimes are unchanged.
+  - Every fixture and evaluation still uses a fresh module activation with its
+    own Actor module state, so no mutable module instance is shared between
+    tests.
+
 ## 0.3.286-SNAPSHOT
 
 - `I086` / `PLAT054-3C` packages Core in the Protos JAR, so a standard
