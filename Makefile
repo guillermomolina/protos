@@ -63,7 +63,7 @@ TRUFFLE_ROOT_SELECTOR ?=
 TRUFFLE_ROOT_EXPANSION ?= method
 TRUFFLE_ROOT_DUMP_LEVEL ?= 1
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation truffle-root-catalog diagnose-truffle-root test-protos test-protos-suite test-protos-foreign check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -101,6 +101,9 @@ help:
 		'                      BGV capture under target/ (handoff for external analysis)' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
+		'                      (test-protos-suite + test-protos-foreign, one build)' \
+		'  make test-protos-suite    Run the native Protos test suite (no build)' \
+		'  make test-protos-foreign  Run the external foreign-provider tests (no build)' \
 		'  make check          Run bounded compilerability / PE bailout checks only:' \
 		'                      toolchain, static PE guards and generated-dispatch BCI;' \
 		'                      never runs make test or check-truffle-compilation' \
@@ -265,14 +268,30 @@ diagnose-truffle-root:
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe
 
+# One package build, then both phases. A failing phase never prevents the
+# other from running; the target fails when either phase failed.
 test-protos:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
+	@foreign=0; suite=0; \
+	$(MAKE) --no-print-directory test-protos-foreign || foreign=$$?; \
+	$(MAKE) --no-print-directory test-protos-suite || suite=$$?; \
+	[ $$foreign -eq 0 ] || printf 'test-protos-foreign FAILED (exit %s)\n' "$$foreign"; \
+	[ $$suite -eq 0 ] || printf 'test-protos-suite FAILED (exit %s)\n' "$$suite"; \
+	[ $$foreign -eq 0 ] && [ $$suite -eq 0 ]
+
+test-protos-suite:
 	@start=$$(date +%s); \
 	bin/protos test --jobs $(PROTOS_TEST_JOBS); \
 	status=$$?; \
 	end=$$(date +%s); \
 	printf 'Protos tests total time: %s s\n' "$$((end - start))"; \
 	exit $$status
+
+# I085-B: external foreign providers exercised from Protos programs on a
+# development portable distribution built from the already-packaged jar.
+test-protos-foreign:
+	$(PYTHON) dist/build_portable.py --skip-project-build --allow-dirty
+	$(PYTHON) dist/test_external_foreign_providers.py
 
 # TEST009: compilerability validation is independent from functional tests.
 # `make check` aggregates only the bounded routine guards (static PE guards and

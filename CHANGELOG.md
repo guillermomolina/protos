@@ -7,6 +7,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.285-SNAPSHOT
+
+- `I085-B` checks the `I085-A` external foreign provider SPI end to end. Protos
+  programs run on an extracted portable distribution, as separate processes,
+  and load plugin JARs kept outside it through `--foreign-provider-path`. Only
+  tests and the test wiring change; the specification and the runtime are
+  unchanged.
+  - Three external test plugins are compiled only against the distribution's
+    `lib/protos.jar`. `inventado:demo` uses opaque Java handles. `oslib:libc`
+    calls the real C `strlen` through the JDK 25 Foreign Function and Memory
+    API on Linux x86_64, in process under the host-selected trusted
+    authority; it is not isolated. `jdk:math` and `jdk:date` call the JDK
+    `Math.abs(long)`, `Math.max(long, long)`, and `LocalDate`, with each
+    overload chosen explicitly in the plugin.
+  - The assertions live in the `.protos` programs under
+    `protos/tests/foreign-provider/`. They cover results, module-cache
+    identity, two providers loaded together, and Errors for incompatible
+    arguments and invalid dates. They also check that an unprovided scheme
+    signals an Error, and that a program which leaves it unhandled exits with
+    failure.
+  - Pay-as-you-grow checks run from separate processes. Without
+    `--foreign-provider-path` nothing is discovered, even with the plugin
+    JARs on `CLASSPATH`. Configured providers that a program never imports
+    open no session. The installed distribution is never modified. On any
+    platform other than Linux x86_64 with JDK 25, the FFM check reports
+    `UNSUPPORTED`, never a pass.
+  - `make test-protos` now packages once and then runs two phases,
+    `test-protos-foreign` (`dist/test_external_foreign_providers.py`) and
+    `test-protos-suite` (the previous `bin/protos test`). A failing phase
+    never prevents the other from running, and the target fails if either
+    phase fails. The foreign phase prints Test Tool-style progress lines.
+    These programs are not in the ordinary conformance manifest.
+
 ## 0.3.284-SNAPSHOT
 
 - `I086` / `PLAT054-3` slice B lets the standard Polyglot embedding accept Java
