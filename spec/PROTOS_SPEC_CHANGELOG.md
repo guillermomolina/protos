@@ -23,6 +23,45 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.450] - 2026-10-08
+
+### PLAT054-3E1 — Embedding host-entry suspension and authority publication
+- `spec/concurrency/FUTURES_AND_TASKS.md` §29 (Suspendible host-initiated
+  RootActor entries, HOST-FUT-1): a synchronous host-initiated RootActor entry,
+  such as executing an extracted Closure, is a non-task-backed context
+  permitted to suspend at explicit suspension points, including `value()` on a
+  pending Future. It stays synchronous to the host, resumes without re-evaluation
+  or duplicated effects, needs no task/scheduler/rich activation when it does
+  not suspend, waits under Process and Context lifecycle, never resumes after
+  termination, preserves RootActor exclusivity and §24C/§32 fatality, and
+  mandates no mechanism.
+- `spec/concurrency/FUTURES_AND_TASKS.md` (Synchronous foreign callbacks and
+  the current Task): clarified that the no-suspension rule governs Protos
+  execution nested in a synchronous foreign operation, including callbacks
+  reached during a host entry, but not the outermost host entry itself. The rule
+  is otherwise unchanged.
+- `spec/io/PROCESS_IO.md` (Standard Polyglot embedding bootstrap and authority):
+  HOST-FS-1: effective post-restriction Context file-access authorization
+  determines `filesystem` eligibility; absent, never `null`; no amplification;
+  the configured provider is binding and cannot be bypassed; Core resources
+  confer no authority; the slot remains bootstrap-local. HOST-FS-2: the base is
+  the Context's effective working directory within the provider's authorized
+  namespace, denoted by `Path.relative()`, with no global CWD, no physical-root
+  assumption, no broader fallback, and fail-closed provisioning. The consequence
+  of a failed base (bootstrap abort versus absent slot) is explicitly left as an
+  open design decision. HOST-NET-1: effective post-restriction socket
+  authorization is the explicit grant for `network`, bounded by that authority,
+  with only `connectTcp()`/`listenTcp()` acquisition and no new policy, option,
+  or transfer surface. HOST-NET-2: Network is independent of the guest-thread
+  permission; no hidden guest-executing threads; host-only machinery stays
+  under Process/Context custody; unused Network creates no resources.
+- Preserved: the PLAT054-2 embedding invariants (lazy single Process,
+  Core-resource non-authority, Env-derived Process I/O, persistent Process
+  without implicit REPL, read-only host bindings, unsafe concurrent entry
+  rejection without universal serialization, Closure extraction identity, and
+  PAY AS YOU GROW); §28 Process termination and cleanup custody; `FILESYSTEM.md`
+  §20 confinement; `NETWORK.md`; Actor isolation; cancellation rules.
+
 ## [0.1.449] - 2026-10-08
 
 ### PLAT054-2 — Standard Polyglot embedding normative publication

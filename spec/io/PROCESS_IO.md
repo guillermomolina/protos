@@ -167,10 +167,78 @@ gate. An unhandled Error that terminates the RootActor terminates the Process
 (`../concurrency/ACTORS.md` §24C and §32); a later evaluation in the same
 Context does not recreate or restart the Process.
 
+A host-initiated invocation of an extracted Closure may suspend under
+`../concurrency/FUTURES_AND_TASKS.md` §29, "Suspendible host-initiated RootActor
+entries".
+
 Closing the Context respects §28 Process-Control Boundary: Process
 termination, revocation of Process-local authority, and transfer of remaining
 resources to host cleanup custody. No guest callback executes after the
 terminal boundary. `IO_CORE.md` owns the detailed resource lifecycle rules.
+
+#### Embedding filesystem grant
+
+The Context's effective file-access authorization, after every restriction the
+host applies, is the host grant that determines eligibility for the initial
+`filesystem` slot. That authorization may come from the Context's I/O access
+configuration, from host filesystem access, from a host-supplied custom
+filesystem provider, or from a broad access grant only insofar as file access
+remains effectively authorized after restrictions. Without effective
+file-access authorization, the `filesystem` slot is absent, never bound to
+`null`.
+
+The provisioned capability never exceeds the host's effective authority. Every
+operation through it is performed through the provider configured for the
+Context and is bound by that provider's restrictions; an implementation must
+not bypass a virtual, restricted, or custom provider by accessing a broader
+host filesystem directly. Internal Core resource access creates no guest
+Filesystem authority. The slot remains bootstrap-local as stated above: it is
+not a global binding and is not injected into later host entries.
+
+#### Embedding filesystem base
+
+The base of the initial Filesystem capability is the Context's effective
+working directory, interpreted within the namespace authorized by the Context's
+filesystem provider. `Path.relative()` denotes that base, and every guest Path
+supplied to the capability is interpreted relative to it under `FILESYSTEM.md`
+§20 and §20.1. There is no mutable Process-global Protos working directory.
+The base is not implicitly the host's physical root, and no operation falls
+back to a broader host filesystem. Links, aliases, mounts, and concurrent
+namespace changes cannot carry resolution outside the authorized namespace.
+
+Provisioning fails closed: when the host grants file access but the base cannot
+be represented and confined safely, no Filesystem capability with an
+unconfined, approximated, or broader base is provisioned. This revision does not
+standardize which consequence follows in that case, aborting the initial
+bootstrap or completing it with the `filesystem` slot absent; that choice is an
+open design decision, and portable programs must not depend on either outcome.
+
+#### Embedding network grant and thread policy
+
+The Context's effective socket-access authorization, after every restriction
+the host applies, is the explicit host grant for the initial `network` slot
+under Root network capability provisioning. A broad access grant counts only
+through the socket authorization it effectively confers. Socket authorization
+is the host-side permission; the Network capability is the guest-side
+possession of authority derived from it. Without effective socket
+authorization, the `network` slot is absent. With it, the provisioned
+`Network` is bounded by the authority the host actually granted, exposes only
+the standardized `NETWORK.md` operations, and acquires connections or
+listeners only through `connectTcp()` and `listenTcp()`. Addresses and
+endpoints remain data, not authority. This grant introduces no public network
+policy object, endpoint, protocol, DNS, or datagram option, and no automatic
+Actor or isolated-parallel transfer.
+
+Network provisioning is independent of the Context's permission to create
+guest threads: that permission is not a precondition for receiving `network`.
+An implementation must respect both the socket authorization and the effective
+thread policy. When guest thread creation is not permitted, the implementation
+must not introduce hidden threads that execute guest code. Host-only threads or
+equivalent backend machinery remain under Process and Context custody, never
+execute guest code, and are retired by Process termination. An unused Network
+capability creates no poller, worker, or network resource. After termination,
+every Network-derived capability is unusable and no guest callback runs. No
+per-Actor networking model or mandatory scheduler is implied.
 
 ## 23. Process Arguments
 

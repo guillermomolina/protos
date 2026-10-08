@@ -338,6 +338,59 @@ also call `value()`. It is not manufactured into a hidden task-backed Future
 merely to wait; it waits under its enclosing lifecycle and has no task
 cancellation flag to consult.
 
+### Suspendible host-initiated RootActor entries
+
+A host-initiated entry is a synchronous invocation of Protos code by the
+embedding host from outside any Protos execution, such as invoking an extracted
+Protos Closure through the standard Polyglot execute operation of a Context
+whose Process is live (`../io/PROCESS_IO.md`, Standard Polyglot embedding
+bootstrap and authority). It is not a callback invoked by a synchronous foreign
+operation within the dynamic extent of Protos code; that case remains governed
+exclusively by "Synchronous foreign callbacks and the current Task" below.
+
+Such an entry executes in the RootActor as a synchronous RootActor entry
+(`ACTORS.md` §24C) and is a non-task-backed execution context permitted to
+suspend at explicit suspension points, including `value()` on a pending Future.
+The following rules apply:
+
+1. From the host's perspective the entry remains synchronous: it returns only
+   the entry's final result, or propagates only its final failure, after the
+   guest computation has completed or terminated.
+2. A suspension preserves the guest continuation and resumes it at the
+   suspension point. Resumption never re-evaluates expressions that completed
+   before the suspension point and never duplicates their effects.
+3. The absence of a task does not by itself prevent an explicit suspension.
+   The pending-observation, lost-wakeup, and eligibility rules of this section
+   apply unchanged.
+4. Permission to suspend imposes no cost on entries that do not suspend. An
+   entry is not required to allocate a task, root task, scheduler, waiter,
+   rich activation, or suspension machinery merely because it could suspend.
+5. A suspended entry waits under the lifecycle of its Process and of the
+   embedding Context. It has no task cancellation flag. Process termination,
+   including termination caused by closing the Context, ends the wait: the
+   suspended continuation is never resumed and no guest code executes after
+   the terminal boundary (`../io/PROCESS_IO.md` §28). The host observes the
+   entry as terminated rather than as a successful result.
+6. Suspension of the entry neither cancels nor otherwise affects the observed
+   Future, whose terminal outcome remains governed by §28; other waiters are
+   unaffected.
+7. While the entry is suspended, the RootActor's Actor-local exclusivity is
+   preserved: no other Protos code executes concurrently in the RootActor's
+   mutable domain. Whether a further host entry may run in the RootActor while
+   an earlier one is suspended follows the unsafe-concurrent-entry rule of
+   `../io/PROCESS_IO.md`; this section grants no additional interleaving.
+   Other Actors and isolated parallel work continue to make independent
+   progress as their own rules permit, including work that terminalizes the
+   observed Future.
+8. An Error that escapes the entry's outermost dynamic handler boundary,
+   including one signaled by a resumed observation, follows the fatal RootActor
+   rule of `ACTORS.md` §24C and §32.
+
+This section standardizes no host thread, carrier, lock, waiter structure,
+task representation, or continuation mechanism; an implementation may block
+the calling host thread, park a continuation, or use any other mechanism that
+preserves these observations.
+
 ## 30. Future Composition
 
 Core v0.1 standardizes the ordinary Future transformation operation:
@@ -997,6 +1050,14 @@ the ordinary cancellation-first rule (§29, "Interaction with waiting-task
 cancellation") applies and cancellation is honored instead of suspending.
 Nothing in this rule introduces preemption or standardizes cancellation of the
 foreign operation itself.
+
+This prohibition applies whenever Protos execution is nested inside the dynamic
+extent of a synchronous foreign operation, including a callback reached during
+a host-initiated entry. It does not apply to the outermost host-initiated entry
+itself, which has no enclosing Protos execution and no foreign frames between it
+and the host; that entry is governed by §29, "Suspendible host-initiated
+RootActor entries". Being host-initiated does not exempt a nested callback from
+this rule.
 
 ### Failed Future observation does not transfer producer control state
 
