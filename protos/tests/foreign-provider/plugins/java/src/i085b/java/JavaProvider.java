@@ -14,7 +14,7 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-package i085b.jdk;
+package i085b.java;
 
 import com.guillermomolina.protos.spi.foreign.ProtosForeignArgumentValue;
 import com.guillermomolina.protos.spi.foreign.ProtosForeignPluginEnvironment;
@@ -29,13 +29,13 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * I085-B external fixture: the {@code jdk:math} and {@code jdk:date} modules backed by the real
+ * I085-B external fixture: the {@code java:math} and {@code java:date} modules backed by the real
  * JDK {@link Math} and {@link LocalDate} classes. Every operation names its exact Java overload
  * here; Protos performs no overload resolution. Arguments are converted exactly: integers must
  * fit a Java {@code long}, and any other argument kind is rejected.
  */
-public final class JdkProvider implements ProtosForeignProviderPlugin {
-    private static final String ID = "i085b-jdk";
+public final class JavaProvider implements ProtosForeignProviderPlugin {
+    private static final String ID = "i085b-java";
 
     /** One module handle: its name and the operations it exposes. */
     public record Module(String name, Set<String> operations) {}
@@ -48,7 +48,7 @@ public final class JdkProvider implements ProtosForeignProviderPlugin {
                     "math", new Module("math", Set.of("abs", "max")),
                     "date", new Module("date", Set.of("year", "month")));
 
-    public JdkProvider() {
+    public JavaProvider() {
         System.err.println("I085-B-TRACE provider-loaded " + ID);
     }
 
@@ -57,7 +57,7 @@ public final class JdkProvider implements ProtosForeignProviderPlugin {
     }
 
     public String scheme() {
-        return "jdk";
+        return "java";
     }
 
     public String canonicalTarget(String target) {

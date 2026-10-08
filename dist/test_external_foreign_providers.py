@@ -44,7 +44,7 @@ SERVICE = "META-INF/services/com.guillermomolina.protos.spi.foreign.ProtosForeig
 TRACE = "I085-B-TRACE "
 OPAQUE = "i085b-opaque"
 LIBC = "i085b-libc"
-JDK = "i085b-jdk"
+JAVA = "i085b-java"
 TIMEOUT = 120
 
 PASS, FAIL, UNSUPPORTED = "PASS", "FAIL", "UNSUPPORTED"
@@ -326,7 +326,7 @@ def main() -> int:
     plan: list = []
     opaque = build_plugin(runner, "opaque", 21, protos_jar, plugins)
     libc = build_plugin(runner, "libc", 25, protos_jar, plugins) if native_supported else None
-    jdk = build_plugin(runner, "jdk", 21, protos_jar, plugins)
+    java_jar = build_plugin(runner, "java", 21, protos_jar, plugins)
 
     if opaque is not None:
         plan.append(lambda: check_program(runner, "PROTOS_OPAQUE_PROVIDER", install, "opaque-provider.protos",
@@ -350,20 +350,20 @@ def main() -> int:
                       [f"provider-loaded {OPAQUE}", f"provider-loaded {LIBC}",
                        f"session-open {OPAQUE}", f"session-open {LIBC}"]))
 
-    jdk_session = [f"provider-loaded {JDK}", f"session-open {JDK}",
-                   "jdk-origin java.base java.base"]
+    java_session = [f"provider-loaded {JAVA}", f"session-open {JAVA}",
+                    "jdk-origin java.base java.base"]
     for key, program, marker in (
-        ("PROTOS_JAVA_MATH_PROVIDER", "jdk-math.protos", "I085-B-JAVA-MATH-PASS"),
-        ("PROTOS_JAVA_DATE_PROVIDER", "jdk-date.protos", "I085-B-JAVA-DATE-PASS"),
+        ("PROTOS_JAVA_MATH_PROVIDER", "java-math.protos", "I085-B-JAVA-MATH-PASS"),
+        ("PROTOS_JAVA_DATE_PROVIDER", "java-date.protos", "I085-B-JAVA-DATE-PASS"),
     ):
-        if jdk is None:
+        if java_jar is None:
             runner.record(key, FAIL, "plugin JAR not built")
         else:
             plan.append(lambda key=key, program=program, marker=marker: check_program(
-                runner, key, install, program, [jdk], marker, jdk_session))
+                runner, key, install, program, [java_jar], marker, java_session))
 
-    ids = {opaque: OPAQUE, libc: LIBC, jdk: JDK}
-    configured = [jar for jar in (opaque, libc, jdk) if jar is not None]
+    ids = {opaque: OPAQUE, libc: LIBC, java_jar: JAVA}
+    configured = [jar for jar in (opaque, libc, java_jar) if jar is not None]
     loaded = [f"provider-loaded {ids[jar]}" for jar in configured]
 
     # The handled form: the Error is observed inside Protos.
@@ -390,8 +390,8 @@ def main() -> int:
             plan.append(lambda: check_failure(runner, "DEFAULT_ZERO_DISCOVERY", install,
                           [str(CASES / "native-ffm-provider.protos")], "zero-discovery-libc",
                           "I085-B-FFM-PASS", [], exposed))
-        if jdk is not None:
-            for program in ("jdk-math", "jdk-date"):
+        if java_jar is not None:
+            for program in ("java-math", "java-date"):
                 plan.append(lambda program=program: check_failure(runner, "DEFAULT_ZERO_DISCOVERY", install,
                               [str(CASES / f"{program}.protos")], f"zero-discovery-{program}",
                               "-PASS", [], exposed))

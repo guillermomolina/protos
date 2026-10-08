@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.312-SNAPSHOT
+
+- `I088-A` (#847): Java standard-library foreign provider namespace.
+  - The I085-B external Java provider fixture now owns the `java:` scheme
+    instead of `jdk:`: `import("java:math")` and `import("java:date")`.
+  - `jdk:` is not an alias for it and stays free for a future,
+    independently defined provider.
+  - The fixture is renamed to `plugins/java` / `JavaProvider` (provider id
+    `i085b-java`), with `java-math.protos` and `java-date.protos`. Module
+    catalogue, conversions, errors, and authority are unchanged.
+
 ## 0.3.311-SNAPSHOT
 
 - `PERF036-A`: pay-as-you-grow scalar lowering for local assignment.
