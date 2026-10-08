@@ -189,6 +189,39 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void perf034PureScalarBindingsUseBuiltinLocalLane() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue scalar =
+                    closure("() => { first: 7\nsecond: 9\nfirst }", module);
+
+            List<String> instructions = instructionNames(scalar);
+            assertContains(instructions, "IsCompactLocalFrame");
+            assertNone(instructions, "CurrentActivation");
+            assertNone(instructions, "InstallFrameLexicalAuthority");
+
+            for (int i = 0; i < 3; i++) {
+                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                        fastDirect(scalar, module);
+                assertEquals(
+                        BigInteger.valueOf(7),
+                        integerValue(enter(prepared)));
+                assertSame(
+                        scalar, prepared.targetArguments()[0],
+                        "pure scalar execution must remain compact");
+            }
+
+            ProtosClosureValue duplicate =
+                    closure("() => { first: 7\nfirst: 9\nfirst }", module);
+            assertNone(
+                    instructionNames(duplicate),
+                    "IsCompactLocalFrame");
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(duplicate, module)));
+        });
+    }
+
+    @Test
     void localOnlyCalleeCreatesAndAssignsWithoutMaterializing() throws Exception {
         withCore(module -> {
             ProtosClosureValue locals = closure("(a) => { b: a\nc: b\nc = a\nc }", module);

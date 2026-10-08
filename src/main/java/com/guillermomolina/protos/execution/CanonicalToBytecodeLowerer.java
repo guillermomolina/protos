@@ -226,6 +226,14 @@ final class CanonicalToBytecodeLowerer {
      */
     private ProtosFrameLexicalLayout currentRootIndexedParameterLayout;
 
+    /*
+     * PERF034-C: direct BytecodeLocal storage is admitted only for a
+     * statically complete, effect-free, straight-line local body.
+     * This is per-root lowering state, not runtime/global state.
+     */
+    private java.util.Set<String> currentRootScalarLocals =
+            java.util.Set.of();
+
     /**
      * PLAT041 C′ lowering-time source of the current {@link
      * com.guillermomolina.protos.runtime.ProtosActivation} consumed by {@link
@@ -613,6 +621,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
+        java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
         try {
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
@@ -624,6 +633,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
+            currentRootScalarLocals = java.util.Set.of();
             return emitRootBody(
                     builder,
                     sequence,
@@ -642,6 +652,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
+            currentRootScalarLocals = savedScalarLocals;
         }
     }
 
@@ -767,6 +778,15 @@ final class CanonicalToBytecodeLowerer {
                 currentRootFrameNativeLayout = frameLocalLayout;
             }
         }
+
+        currentRootScalarLocals =
+                currentRootFrameNativeLayout == null
+                        ? java.util.Set.of()
+                        : scalarLocalNamesForRoot(
+                                sequence,
+                                activationDefinition,
+                                currentRootAnalysis,
+                                scopeForThisRoot);
 
         BytecodeLocal defaultValue = null;
         BytecodeLocal defaultPreparedCall = null;
@@ -909,6 +929,71 @@ final class CanonicalToBytecodeLowerer {
      * in-frame transition of {@link
      * ProtosBytecodeRootNode#createCurrentFrameBinding}.
      */
+    /**
+     * PERF034-C: only a parameterless source Closure with an effect-free
+     * straight-line body may use builtin StoreLocal/LoadLocal for its own
+     * bindings. Each creation must establish a fresh, statically owned
+     * name exactly once; reads must select an already-established name.
+     *
+     * No calls, context observation, closures, objects, mutation,
+     * duplicate creation, candidate lookup or dynamic lookup are admitted.
+     * All other programs retain the existing authoritative lowering.
+     */
+    private static java.util.Set<String> scalarLocalNamesForRoot(
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (definition == null
+                || !definition.parameters().isEmpty()
+                || analysis == null
+                || scope == null) {
+            return java.util.Set.of();
+        }
+
+        java.util.LinkedHashSet<String> established =
+                new java.util.LinkedHashSet<>();
+
+        for (CanonicalExpression expression : body.expressions()) {
+            if (expression instanceof CanonicalCreate create) {
+                if (create.target().isPresent()
+                        || !(create.value() instanceof CanonicalLiteral)
+                        || analysis.identityOf(create)
+                                .map(identity ->
+                                        identity.owner() != scope
+                                                || !identity.name().equals(
+                                                        create.name()))
+                                .orElse(true)
+                        || !established.add(create.name())) {
+                    return java.util.Set.of();
+                }
+                continue;
+            }
+
+            if (expression instanceof CanonicalLookup lookup) {
+                boolean resolvedHere =
+                        analysis.resolutionOf(lookup)
+                                .map(resolution ->
+                                        resolution
+                                                instanceof CanonicalBindingResolution.Resolved resolved
+                                                && resolved.identity().owner() == scope
+                                                && established.contains(
+                                                        resolved.identity().name()))
+                                .orElse(false);
+                if (!resolvedHere) {
+                    return java.util.Set.of();
+                }
+                continue;
+            }
+
+            if (!(expression instanceof CanonicalLiteral)) {
+                return java.util.Set.of();
+            }
+        }
+
+        return java.util.Set.copyOf(established);
+    }
+
     private static boolean requiresPersistentFrameAuthority(
             CanonicalSequence body,
             CanonicalClosure activationDefinition,
@@ -1155,6 +1240,41 @@ final class CanonicalToBytecodeLowerer {
      * into {@code result}. Shared by root bodies and inline object-construction
      * bodies so both keep identical statement/expression tag membership.
      */
+    /**
+     * PERF034-C: the compact lane reads the builtin local directly.
+     * An observed activation instead uses the existing D179-aware
+     * ReadRootFrameLocal path at the same source position.
+     */
+    private void emitScalarLocalReadToResult(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalLookup lookup,
+            BytecodeLocal result) {
+        BytecodeLocal local =
+                currentRootFrameLocals.get(lookup.name());
+
+        if (local == null) {
+            throw new AssertionError(
+                    "admitted scalar local is missing: " + lookup.name());
+        }
+
+        builder.beginIfThenElse();
+        builder.emitIsCompactLocalFrame();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(local);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        emitLookup(builder, lookup);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
     private void emitStatementsToLocal(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
@@ -1202,6 +1322,10 @@ final class CanonicalToBytecodeLowerer {
                         preparedCall,
                         childResult,
                         resumeValue);
+            } else if (expression instanceof CanonicalLookup lookup
+                    && currentActivationLocal == null
+                    && currentRootScalarLocals.contains(lookup.name())) {
+                emitScalarLocalReadToResult(builder, lookup, result);
             } else {
                 builder.beginStoreLocal(result);
                 emitExpression(builder, expression);
@@ -2955,6 +3079,39 @@ final class CanonicalToBytecodeLowerer {
         if (create.target().isEmpty()) {
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
+
+            if (currentActivationLocal == null
+                    && currentRootScalarLocals.contains(create.name())) {
+                BytecodeLocal local =
+                        currentRootFrameLocals.get(create.name());
+                if (local == null) {
+                    throw new AssertionError(
+                            "admitted scalar creation is missing: "
+                                    + create.name());
+                }
+
+                builder.beginIfThenElse();
+                builder.emitIsCompactLocalFrame();
+
+                builder.beginBlock();
+                builder.beginStoreLocal(local);
+                builder.emitLoadLocal(value);
+                builder.endStoreLocal();
+                builder.beginStoreLocal(result);
+                builder.emitLoadLocal(value);
+                builder.endStoreLocal();
+                builder.endBlock();
+
+                builder.beginBlock();
+                builder.beginStoreLocal(result);
+                emitCreateCurrentBinding(builder, create, value);
+                builder.endStoreLocal();
+                builder.endBlock();
+
+                builder.endIfThenElse();
+                return;
+            }
+
             builder.beginStoreLocal(result);
             emitCreateCurrentBinding(builder, create, value);
             builder.endStoreLocal();

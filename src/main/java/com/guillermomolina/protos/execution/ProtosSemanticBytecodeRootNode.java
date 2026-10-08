@@ -624,6 +624,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF034-C: a bytecode-local scalar lane is valid only while the
+     * current source-call activation remains compact and unobserved.
+     * A materialized activation continues through the authoritative
+     * frame-local creation/read operations.
+     */
+    @Operation
+    public static final class IsCompactLocalFrame {
+        @Specialization
+        public static boolean perform(@Bind VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(
+                    frame.getArguments());
+        }
+    }
+
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,

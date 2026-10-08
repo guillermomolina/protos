@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.303-SNAPSHOT
+
+- `PERF034-C` (#845): introduce a statically admitted scalar-local
+  lowering path for simple parameterless Closures.
+  - Use native Bytecode `StoreLocal` and `LoadLocal` operations for
+    eligible straight-line local bindings.
+  - Preserve the existing authoritative frame-local execution path
+    for non-compact activations and non-admitted programs.
+  - Retain context-observation, duplicate-creation, and lexical
+    binding semantics.
+  - Add regression coverage for direct scalar execution,
+    duplicate creation, and observed versus unobserved activations.
+  - Focal tests and the integrated `make test` suite passed.
+  - Compiled-graph and timing improvements remain to be measured.
+
 ## 0.3.302-SNAPSHOT
 
 - `PERF035` (#846): separate guarded member-read slot-owner selection

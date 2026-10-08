@@ -81,6 +81,62 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     @Test
+    void perf034ScalarBodyWithObservedActivationPreservesFrameAuthority()
+            throws Exception {
+        withFixture(fixture -> {
+            ClosureUnderTest plan =
+                    closurePlan(
+                            fixture,
+                            "() => { first: 7\nsecond: 9\nfirst }");
+
+            List<String> names =
+                    instructionNames(activationNode(plan));
+            assertContains(names, "IsCompactLocalFrame");
+
+            // An unobserved rich carrier still owes no lexical authority.
+            ProtosActivation unobserved =
+                    deferredInvocation(
+                            fixture, plan.closure, List.of());
+            assertEquals(
+                    7L,
+                    unwrapNumber(
+                            plan.plan.executeBytecodeActivationForTesting(
+                                    unobserved)));
+            assertNull(privateField(unobserved, "context"));
+            assertNull(
+                    unobserved.currentLexicalBindingAuthorityForRuntime());
+
+            // Observation before entry requires the authoritative fallback.
+            ProtosActivation invocation =
+                    deferredInvocation(
+                            fixture, plan.closure, List.of());
+            ProtosObjectValue observedContext = invocation.context();
+
+            assertEquals(
+                    7L,
+                    unwrapNumber(
+                            plan.plan.executeBytecodeActivationForTesting(
+                                    invocation)));
+
+            assertNotNull(
+                    invocation.currentLexicalBindingAuthorityForRuntime());
+            assertSame(observedContext, invocation.context());
+            assertEquals(
+                    7L,
+                    unwrapNumber(
+                            invocation.context()
+                                    .readLocalSlot("first")
+                                    .orElseThrow()));
+            assertEquals(
+                    9L,
+                    unwrapNumber(
+                            invocation.context()
+                                    .readLocalSlot("second")
+                                    .orElseThrow()));
+        });
+    }
+
+    @Test
     void localOnlyClosureStaysInOrdinaryFrameLocals() throws Exception {
         withFixture(
                 fixture -> {
