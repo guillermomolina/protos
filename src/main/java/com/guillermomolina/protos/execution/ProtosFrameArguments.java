@@ -51,6 +51,19 @@ final class ProtosFrameArguments {
      * The returnHome slot always holds a ProtosReturnHome; for an owning call
      * of a plan proven return-home-unobservable it is the non-materialized
      * ProtosReturnHome.unobservable() marker (PERF025).
+     *
+     * PERF032-G7: a direct Closure call with zero supplied arguments uses a
+     * minimal header instead, distinguished by length and slot types:
+     *
+     *   A: closure, caller                    (no Task, unobservable home)
+     *   B: closure, caller, returnHome        (no Task, physical home)
+     *   C: closure, task, caller              (explicit Task, unobservable home)
+     *   D: closure, task, caller, returnHome  (explicit Task, physical home)
+     *
+     * The omitted unobservable home is the identity-stable shared marker, so
+     * it is reconstructed rather than recomputed. Argument 0 is replaced by
+     * the published activation exactly as for the full header; every other
+     * slot and the array length stay unchanged after publication.
      */
     private static final int CLOSURE_INDEX = 0;
     private static final int RECEIVER_INDEX = 1;
@@ -59,6 +72,13 @@ final class ProtosFrameArguments {
     private static final int CALLER_INDEX = 3;
     private static final int RETURN_HOME_INDEX = 4;
     private static final int USER_ARGUMENT_OFFSET = 5;
+
+    /* PERF032-G7 minimal direct-header layouts; 0 is "not minimal". */
+    private static final int MINIMAL_NONE = 0;
+    private static final int MINIMAL_A = 1;
+    private static final int MINIMAL_B = 2;
+    private static final int MINIMAL_C = 3;
+    private static final int MINIMAL_D = 4;
 
     /** Private kind marker; never a guest value, so never a method receiver. */
     private static final Object DIRECT_CLOSURE_CALL = new Object();
@@ -86,7 +106,22 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosTask task,
             Object[] supplied) {
-        return compactCall(closure, DIRECT_CLOSURE_CALL, task, caller, supplied);
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(caller, "caller");
+        Objects.requireNonNull(supplied, "supplied");
+        if (supplied.length != 0) {
+            return compactCall(closure, DIRECT_CLOSURE_CALL, task, caller, supplied);
+        }
+        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+        boolean unobservable = returnHome == ProtosReturnHome.unobservable();
+        if (task == null) {
+            return unobservable
+                    ? new Object[] {closure, caller}
+                    : new Object[] {closure, caller, returnHome};
+        }
+        return unobservable
+                ? new Object[] {closure, task, caller}
+                : new Object[] {closure, task, caller, returnHome};
     }
 
     private static Object[] compactCall(
@@ -164,6 +199,10 @@ final class ProtosFrameArguments {
 
         ProtosClosureValue closure =
                 (ProtosClosureValue) arguments[CLOSURE_INDEX];
+        int minimal = minimalLayout(arguments);
+        if (minimal != MINIMAL_NONE) {
+            return materializeMinimalDirectActivation(arguments, closure, minimal);
+        }
         ProtosActivation caller =
                 (ProtosActivation) arguments[CALLER_INDEX];
         ProtosReturnHome returnHome =
@@ -223,6 +262,35 @@ final class ProtosFrameArguments {
         return materialized;
     }
 
+    /** PERF032-G7 materialization of a minimal direct header (zero supplied). */
+    private static ProtosActivation materializeMinimalDirectActivation(
+            Object[] arguments, ProtosClosureValue closure, int minimal) {
+        ProtosActivation caller = minimalCaller(arguments, minimal);
+        ProtosReturnHome returnHome = minimalReturnHome(arguments, minimal);
+        ProtosTask explicitTask = minimalTask(arguments, minimal);
+        List<?> supplied =
+                ProtosActivation.frameBackedSuppliedArgumentsForRuntime(
+                        arguments, arguments.length);
+        ProtosActivation materialized =
+                ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
+                        closure,
+                        supplied,
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain(),
+                        returnHome);
+        if (explicitTask != null) {
+            materialized.attachTask(explicitTask);
+        } else if (caller.task().isPresent()) {
+            materialized.attachTask(caller.task().orElseThrow());
+        } else {
+            materialized.inheritDynamicControlState(caller);
+        }
+        arguments[CLOSURE_INDEX] = materialized;
+        return materialized;
+    }
+
     /**
      * PERF025-H1: true while {@code arguments} are still in compact
      * source-call form, i.e. no rich activation has been materialized and
@@ -264,11 +332,18 @@ final class ProtosFrameArguments {
 
     /** Supplied positional argument count of a compact source call. */
     static int compactSuppliedArgumentCount(Object[] arguments) {
+        if (minimalLayout(arguments) != MINIMAL_NONE) {
+            return 0;
+        }
         return arguments.length - USER_ARGUMENT_OFFSET;
     }
 
     /** Supplied positional argument {@code index} of a compact source call. */
     static Object compactSuppliedArgument(Object[] arguments, int index) {
+        if (minimalLayout(arguments) != MINIMAL_NONE) {
+            /* Never expose a header slot as a guest argument. */
+            throw new ArrayIndexOutOfBoundsException(index);
+        }
         return arguments[USER_ARGUMENT_OFFSET + index];
     }
 
@@ -289,11 +364,11 @@ final class ProtosFrameArguments {
      * with the not-yet-materialized callee activation as its caller.
      */
     static ProtosActivation compactInheritedProvenanceCaller(Object[] arguments) {
-        if (!isDirectClosureCall(arguments) || arguments[TASK_INDEX] != null) {
+        if (!isDirectClosureCall(arguments) || explicitDirectTask(arguments) != null) {
             return null;
         }
         ProtosClosureValue closure = (ProtosClosureValue) arguments[CLOSURE_INDEX];
-        ProtosActivation caller = (ProtosActivation) arguments[CALLER_INDEX];
+        ProtosActivation caller = compactCaller(arguments);
         Object ownPrelude = closure.prelude().orElse(null);
         return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
                 ? caller
@@ -302,6 +377,10 @@ final class ProtosFrameArguments {
 
     static ProtosReturnHome compactReturnHome(Object[] arguments) {
         requireCompactCall(arguments);
+        int minimal = minimalLayout(arguments);
+        if (minimal != MINIMAL_NONE) {
+            return minimalReturnHome(arguments, minimal);
+        }
         return (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
     }
 
@@ -313,6 +392,10 @@ final class ProtosFrameArguments {
     }
 
     static ProtosActivation compactCaller(Object[] arguments) {
+        int minimal = minimalLayout(arguments);
+        if (minimal != MINIMAL_NONE) {
+            return minimalCaller(arguments, minimal);
+        }
         if (arguments == null
                 || arguments.length < USER_ARGUMENT_OFFSET
                 || !(arguments[CALLER_INDEX] instanceof ProtosActivation caller)) {
@@ -331,11 +414,80 @@ final class ProtosFrameArguments {
                 && arguments[CLOSURE_INDEX] instanceof ProtosActivation materialized) {
             return materialized.task().orElse(null);
         }
+        ProtosTask explicit = explicitDirectTask(arguments);
+        if (explicit != null) {
+            return explicit;
+        }
+        return compactCaller(arguments).task().orElse(null);
+    }
+
+    /** The explicit owning Task of a direct Closure call, or {@code null}. */
+    private static ProtosTask explicitDirectTask(Object[] arguments) {
+        int minimal = minimalLayout(arguments);
+        if (minimal != MINIMAL_NONE) {
+            return minimalTask(arguments, minimal);
+        }
         if (isDirectClosureCall(arguments)
                 && arguments[TASK_INDEX] instanceof ProtosTask task) {
             return task;
         }
-        return compactCaller(arguments).task().orElse(null);
+        return null;
+    }
+
+    /**
+     * PERF032-G7 structural discriminator of the four minimal direct headers.
+     * Argument 0 is the Closure before publication and the published
+     * activation afterwards; the remaining slots and the length never change,
+     * so the layout stays recognizable in both states. Rich arrays carry a
+     * single activation and are never minimal.
+     */
+    private static int minimalLayout(Object[] arguments) {
+        if (arguments == null
+                || arguments.length < 2
+                || arguments.length > 4
+                || !(arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
+                        || arguments[CLOSURE_INDEX] instanceof ProtosActivation)) {
+            return MINIMAL_NONE;
+        }
+        Object first = arguments[1];
+        switch (arguments.length) {
+            case 2:
+                return first instanceof ProtosActivation ? MINIMAL_A : MINIMAL_NONE;
+            case 3:
+                if (first instanceof ProtosActivation
+                        && arguments[2] instanceof ProtosReturnHome) {
+                    return MINIMAL_B;
+                }
+                return first instanceof ProtosTask
+                                && arguments[2] instanceof ProtosActivation
+                        ? MINIMAL_C
+                        : MINIMAL_NONE;
+            default:
+                return first instanceof ProtosTask
+                                && arguments[2] instanceof ProtosActivation
+                                && arguments[3] instanceof ProtosReturnHome
+                        ? MINIMAL_D
+                        : MINIMAL_NONE;
+        }
+    }
+
+    private static ProtosActivation minimalCaller(Object[] arguments, int minimal) {
+        return (ProtosActivation) arguments[minimal <= MINIMAL_B ? 1 : 2];
+    }
+
+    private static ProtosTask minimalTask(Object[] arguments, int minimal) {
+        return minimal <= MINIMAL_B ? null : (ProtosTask) arguments[1];
+    }
+
+    private static ProtosReturnHome minimalReturnHome(Object[] arguments, int minimal) {
+        switch (minimal) {
+            case MINIMAL_B:
+                return (ProtosReturnHome) arguments[2];
+            case MINIMAL_D:
+                return (ProtosReturnHome) arguments[3];
+            default:
+                return ProtosReturnHome.unobservable();
+        }
     }
 
     private static boolean isCompactCall(Object[] arguments) {
@@ -351,6 +503,12 @@ final class ProtosFrameArguments {
     }
 
     private static boolean isDirectClosureCall(Object[] arguments) {
+        if (arguments != null
+                && arguments.length > 0
+                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
+                && minimalLayout(arguments) != MINIMAL_NONE) {
+            return true;
+        }
         return hasCompactHeader(arguments)
                 && arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
                 && (arguments[TASK_INDEX] == null

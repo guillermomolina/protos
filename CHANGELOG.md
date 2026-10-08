@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.310-SNAPSHOT
+
+- `PERF032-G7` (#831): minimal direct Closure call headers.
+  - A direct source-backed Closure call with zero supplied arguments passes
+    only the frame arguments it needs instead of the five-slot compact
+    header: `[closure, caller]` without an explicit Task and with the
+    unobservable return-home marker, `[closure, caller, returnHome]` with a
+    physical or captured home, `[closure, task, caller]` and
+    `[closure, task, caller, returnHome]` for Task-owned entries.
+  - The omitted marker is the identity-stable shared singleton and is
+    reconstructed, never recomputed; physical homes and explicit Tasks keep
+    their exact identities.
+  - Lazy activation materialization, NodeLibrary scope observation, Task
+    inheritance and PERF034-D scalar-local discrimination support the new
+    layouts; calls with supplied arguments and immediate-method calls keep
+    the full header. No observable semantics change.
+
 ## 0.3.309-SNAPSHOT
 
 - `LM010-D` (#493): integrated LSP acceptance over the real JSON-RPC transport.
