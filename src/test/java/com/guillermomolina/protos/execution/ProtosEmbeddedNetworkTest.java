@@ -296,7 +296,8 @@ final class ProtosEmbeddedNetworkTest {
             context.eval(ProtosLanguage.ID, PROGRAM);
             ProtosEmbeddedProcess process = embedded(context);
             assertEquals(sockets, bindings.hasMember("network"), "slot present only when granted");
-            assertFalse(bindings.hasMember("filesystem"), "B011 stays out of scope");
+            assertEquals(
+                    files, bindings.hasMember("filesystem"), "Filesystem follows file access only");
             ProtosEmbeddedNetworkCustody custody = process.networkCustodyForTesting();
             if (!sockets) {
                 assertNull(custody, "no Network custody without effective socket access");

@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -53,9 +54,12 @@ import java.util.function.Supplier;
  * Polyglot embedding bootstrap and authority) and reuses the ordinary standalone bootstrap: Core
  * from the resolved Core root (see {@link #resolveCoreRoot}), {@link ProtosStandaloneProcessBootstrap} for the Process and its
  * RootActor, and arguments, environment, and standard streams taken from the embedding {@link
- * TruffleLanguage.Env}. It grants no default Filesystem. It grants the default Network only when
- * the Context effectively allows socket access, through a lazily activated {@link
- * ProtosEmbeddedNetworkCustody} retired with the Process and the Context. It is its own {@link
+ * TruffleLanguage.Env}. It grants the default Filesystem only when the Context effectively allows
+ * file access, through a {@link ProtosEmbeddedFilesystemCustody} based on the Context working
+ * directory within the configured provider (an unsafe base aborts the bootstrap), and the default
+ * Network only when the Context effectively allows socket access, through a lazily activated
+ * {@link ProtosEmbeddedNetworkCustody}; both are retired with the Process and the Context. It is
+ * its own {@link
  * ProtosProcessExecutionHost}: the Polyglot Context the host already owns is the only execution
  * placement, so entering never opens another Context.
  *
@@ -83,6 +87,8 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     private final ProtosPrelude prelude;
     private final ProtosActor rootActor;
     private final Path coreRoot;
+    /* Present exactly when the initial module received the default Filesystem. */
+    private final ProtosEmbeddedFilesystemCustody filesystemCustody;
     /* Present exactly when the initial module received the default Network. */
     private final ProtosEmbeddedNetworkCustody networkCustody;
     private final AtomicReference<Thread> entryOwner = new AtomicReference<>();
@@ -105,9 +111,11 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
             ProtosStandaloneProcessBootstrap.Result bootstrap,
             ProtosPrelude prelude,
             Path coreRoot,
+            ProtosEmbeddedFilesystemCustody filesystemCustody,
             ProtosEmbeddedNetworkCustody networkCustody) {
         this.owner = owner;
         this.coreRoot = coreRoot;
+        this.filesystemCustody = filesystemCustody;
         this.networkCustody = networkCustody;
         this.process = bootstrap.process();
         this.prelude = prelude;
@@ -123,6 +131,13 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     static ProtosEmbeddedProcess bootstrap(ProtosLanguageContext owner) {
         Objects.requireNonNull(owner, "owner");
         TruffleLanguage.Env env = owner.env();
+        /*
+         * Embedding filesystem grant and base: the effective file authorization is the grant, and
+         * an unsafe base aborts here, before anything else is created. Socket and thread
+         * permissions are deliberately not consulted. Provisioning holds only the base.
+         */
+        ProtosEmbeddedFilesystemCustody filesystemCustody =
+                ProtosEmbeddedFilesystemCustody.provisionOrNull(env);
         Path coreRoot = resolveCoreRoot(owner);
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(coreRoot.getParent());
@@ -145,6 +160,9 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                 networkCustody == null
                         ? null
                         : new ProtosNetworkCapabilityValue(prelude, networkCustody);
+        // The marker precedes the RootActor; its operations are bound to the RootActor below.
+        ProtosFilesystemValue filesystem =
+                filesystemCustody == null ? null : new ProtosFilesystemValue();
         ProtosStandaloneProcessBootstrap.Result bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
                         prelude,
@@ -157,10 +175,19 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                         utf8,
                         utf8,
                         utf8,
-                        null,
+                        filesystem,
                         network);
+        if (filesystem != null) {
+            // No guest source has executed yet, so no guest code can observe the empty marker.
+            ProtosStandardFilesystemProtocol.installOperations(
+                    filesystem,
+                    prelude.bytesPrototypeForRuntime(),
+                    bootstrap.activation(),
+                    filesystemCustody);
+        }
         ProtosEmbeddedProcess embedded =
-                new ProtosEmbeddedProcess(owner, bootstrap, prelude, coreRoot, networkCustody);
+                new ProtosEmbeddedProcess(
+                        owner, bootstrap, prelude, coreRoot, filesystemCustody, networkCustody);
         bootstrap.process().bindExecutionHostForRuntime(embedded);
         owner.bindModuleResolverForRuntime(resolver);
         return embedded;
@@ -475,7 +502,8 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     public void processTerminatedForRuntime() {
         // The Polyglot Context belongs to the host; Process termination does not close it.
         stop();
-        // Termination retires the host-only Network machinery (Embedding network grant).
+        // Termination revokes Process-local authority and retires its host resources.
+        closeFilesystem();
         closeNetwork();
     }
 
@@ -493,6 +521,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (!owner.env().getContext().isCancelling() && !owner.env().getContext().isExiting()) {
             process.awaitTerminationForRuntime();
         }
+        closeFilesystem();
         closeNetwork();
         joinCarriers();
     }
@@ -506,8 +535,19 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     void abandonForContextDisposal() {
         stop();
         process.requestTerminationForRuntime();
+        closeFilesystem();
         closeNetwork();
         joinCarriers();
+    }
+
+    /**
+     * Revokes the Filesystem custody, if granted, and closes every File still open: idempotent,
+     * never waits on guest work, and also reached on a cancelled or exiting close.
+     */
+    private void closeFilesystem() {
+        if (filesystemCustody != null) {
+            filesystemCustody.close();
+        }
     }
 
     /**
@@ -537,6 +577,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (pool != null) {
             pool.closeAndJoin();
         }
+    }
+
+    ProtosEmbeddedFilesystemCustody filesystemCustodyForTesting() {
+        return filesystemCustody;
     }
 
     ProtosEmbeddedNetworkCustody networkCustodyForTesting() {

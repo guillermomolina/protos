@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.298-SNAPSHOT
+
+- `I086` / `PLAT054-3E3` (#840, design #838, blocker B011) grants the default
+  Filesystem in the standard Polyglot embedding, implementing normative
+  specification 0.1.451 (bootstrap Alternative A). The specification is
+  unchanged.
+  - New `ProtosEmbeddedFilesystemCustody`: provisioned only when the Context
+    effectively allows file I/O; the base is the Context working directory
+    within the configured provider, and every `open`, `replace`, `remove`
+    and `entries` operation goes through `TruffleFile`, so physical,
+    restricted, read-only, custom and virtual providers keep their
+    restrictions. An unsafe or unrepresentable base aborts the initial
+    bootstrap before any guest source runs.
+  - Open-or-create re-selects after a concurrent creator; `replace` requires
+    an atomic move; writes past EOF fill an explicit zero gap. Unused grants
+    hold only the base; open Files are released on Process termination and
+    Context close.
+  - `ProtosStandardFilesystemProtocol.installOperations` binds the standard
+    operations to the RootActor after the bootstrap marker is created.
+  - New `ProtosEmbeddedFilesystemTest`; `ProtosEmbeddedNetworkTest` now
+    expects `filesystem` exactly when file access is allowed.
+
 ## 0.3.297-SNAPSHOT
 
 - `PERF031-I` (#787) removes quadratic repeated-prefix Array growth from Test

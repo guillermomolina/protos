@@ -145,6 +145,14 @@ application Filesystem merely because the launcher itself could read the source
 file. Bundled tools may receive specifically confined Filesystem capabilities
 because their launcher contract grants them explicitly.
 
+In the standard Polyglot embedding, the initial module receives `filesystem`
+only when the host Context effectively allows file access. Its base is the
+Context's working directory within the filesystem provider the host configured,
+and every operation goes through that provider, so a virtual, restricted, or
+read-only provider keeps its restrictions. If file access is allowed but that
+working directory cannot be safely established, the first evaluation fails
+before any guest code runs instead of starting without the binding.
+
 ## Process authority can be delegated to another Actor
 
 Creating another Actor does not implicitly inherit the Process capability.

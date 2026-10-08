@@ -142,11 +142,27 @@ public final class ProtosStandardFilesystemProtocol {
             ProtosObjectValue bytesPrototype,
             ProtosActivation constructionActivation,
             Backend backend) {
+        ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
+        installOperations(filesystem, bytesPrototype, constructionActivation, backend);
+        return filesystem;
+    }
+
+    /**
+     * Installs the standard operations on an already-allocated, still-empty Filesystem marker.
+     *
+     * <p>Used when the marker must exist before the Actor domain that owns its operations, such as
+     * a default Filesystem handed to a Process before its RootActor's bootstrap activation exists.
+     * The caller must install the operations before any guest code can reach the marker.
+     */
+    static void installOperations(
+            ProtosFilesystemValue filesystem,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation constructionActivation,
+            Backend backend) {
+        Objects.requireNonNull(filesystem, "filesystem");
         Objects.requireNonNull(bytesPrototype, "bytesPrototype");
         Objects.requireNonNull(constructionActivation, "constructionActivation");
         Objects.requireNonNull(backend, "backend");
-
-        ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
 
         ProtosFilesystemOpenFlow flow =
                 new ProtosFilesystemOpenFlow(
@@ -229,7 +245,6 @@ public final class ProtosStandardFilesystemProtocol {
                         namespaceMutationFlow,
                         treeObservationFlow,
                         Operation.ENTRIES));
-        return filesystem;
     }
 
     /** Host-internal rematerialization of one captured backend in a chosen Actor domain. */
