@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.305-SNAPSHOT
+
+- `LM012-C1` (#671, D195): add the static `protos lint [--output text|json]
+  [--fail-on-warning] [<file>]` CLI/CI command.
+  - Read one explicit file (symbolic links to regular files accepted) or
+    stdin as strict UTF-8, parse it once through the canonical static
+    analysis core, and run the D194 lint rules only on a successful parse;
+    an invalid document reports only its parser error.
+  - Report origin, rule code, severity, message, and zero-based UTF-16
+    range in deterministic order as text or JSON v1 on stdout; usage,
+    acquisition, and internal failures go to stderr with empty stdout.
+  - Exit 0 for valid source, 1 for a parser error or warnings under
+    `--fail-on-warning` (severity stays `warning`), 2 for usage errors,
+    3 for unreadable or malformed input, and 70 for internal errors.
+  - Dispatch lint on the calling thread without the guest carrier,
+    Polyglot Context, Process, or any guest execution; never write files.
+  - Extract the protocol-neutral `SourcePosition` mapping shared with the
+    language server, preserving its existing positions.
+  - Focal tests and the integrated `make test` suite passed.
+
 ## 0.3.304-SNAPSHOT
 
 - `LM010-C` (#493): add static LSP signature help for calls whose callee

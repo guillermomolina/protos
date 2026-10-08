@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.lsp;
 
+import com.guillermomolina.protos.source.SourcePosition;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 import java.util.OptionalInt;
@@ -85,26 +86,7 @@ final class ProtosLspSourcePositions {
     }
 
     static Position position(String source, int offset) {
-        Objects.requireNonNull(source, "source");
-        if (offset < 0 || offset > source.length()) {
-            throw new IllegalArgumentException("offset outside document");
-        }
-
-        int line = 0;
-        int lineStart = 0;
-        for (int index = 0; index < offset; index++) {
-            char current = source.charAt(index);
-            if (current == '\r') {
-                if (index + 1 < offset && source.charAt(index + 1) == '\n') {
-                    index++;
-                }
-                line++;
-                lineStart = index + 1;
-            } else if (current == '\n') {
-                line++;
-                lineStart = index + 1;
-            }
-        }
-        return new Position(line, offset - lineStart);
+        SourcePosition position = SourcePosition.at(source, offset);
+        return new Position(position.line(), position.character());
     }
 }

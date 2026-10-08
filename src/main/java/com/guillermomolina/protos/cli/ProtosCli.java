@@ -48,7 +48,7 @@ public final class ProtosCli {
     static final String IMPLEMENTATION_VERSION_ENV = "PROTOS_IMPLEMENTATION_VERSION";
 
     private static final Set<String> SUBCOMMANDS =
-            Set.of("language-server", "debug", "run", "package", "test", "format");
+            Set.of("language-server", "debug", "run", "package", "test", "format", "lint");
     private static final Set<String> PACKAGE_METADATA_FILES =
             Set.of("protos.toml", "protos.lock");
     private static final Set<String> PACKAGE_METADATA_STAGING_FILES =
@@ -98,6 +98,16 @@ public final class ProtosCli {
     }
 
     public int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        if (args.length > 0 && args[0].equals("lint")) {
+            // D195 lint is purely static: it runs on the calling thread without the guest
+            // carrier, Polyglot Context, or Process that guest-executing commands need.
+            try {
+                return ProtosLintCommand.run(
+                        Arrays.asList(args).subList(1, args.length), in, out, err);
+            } catch (Throwable e) {
+                return internalError(err, e);
+            }
+        }
         int[] exitCode = {70};
         Thread carrier =
                 new Thread(
@@ -249,10 +259,14 @@ public final class ProtosCli {
                     out,
                     err);
         } catch (Throwable e) {
-            err.println("Internal error: " + e);
-            e.printStackTrace(err);
-            return 70;
+            return internalError(err, e);
         }
+    }
+
+    private static int internalError(PrintStream err, Throwable e) {
+        err.println("Internal error: " + e);
+        e.printStackTrace(err);
+        return 70;
     }
 
     private int debugFile(
@@ -1673,7 +1687,7 @@ public final class ProtosCli {
         return ProtosToolchainRoots.core();
     }
 
-    private static int usage(PrintStream err, String message) {
+    static int usage(PrintStream err, String message) {
         err.println("protos: " + message + "\nTry 'protos --help'.");
         return 2;
     }
@@ -1689,6 +1703,7 @@ public final class ProtosCli {
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
+                        + "  protos lint [--output text|json] [--fail-on-warning] [<file>]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
@@ -1706,6 +1721,10 @@ public final class ProtosCli {
                         + "Format writes the canonical form of one UTF-8 <file>, or of stdin "
                         + "when no <file> is given, to stdout; it never modifies files. "
                         + "Invalid source is echoed unchanged with a diagnostic and exit 1.\n"
+                        + "Lint statically reports parser errors and lint warnings for one "
+                        + "UTF-8 <file>, or stdin, on stdout without executing it; exit 1 "
+                        + "on a parser error or, with --fail-on-warning, on any warning, "
+                        + "2 on usage errors, and 3 when the source cannot be read.\n"
                         + "Test Tool --jobs N selects positive logical execution capacity; "
                         + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
