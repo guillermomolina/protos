@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.292-SNAPSHOT
+
+- `PERF031-G` removes repeated Package-flavored Core bootstraps from the
+  Package Tool execution-plan and Package Run Driver Java test fixtures. The
+  specification and observable Protos behavior are unchanged.
+  - `ProtosPackageToolProtosTestSupport.executeExternalCaptureFixture`
+    reuses one lazily prepared Package-flavored Core Prelude; every invalid
+    identity, Git/edge, and capture vector still opens its own hosted
+    Process, fresh activation, project-tree backend, and per-root captured
+    custodies.
+  - `ProtosPackageRunDriverTestSupport.digest` reuses one lazily prepared
+    Package-flavored Core Prelude; every template digest still captures its
+    real tree and evaluates the bundled `ContentIdentity.digest` in its own
+    hosted Process.
+
 ## 0.3.291-SNAPSHOT
 
 - `I086` `PLAT054-3E2` implements HOST-FUT-1 (`FUTURES_AND_TASKS.md` §29,

@@ -315,17 +315,10 @@ abstract class ProtosPackageRunDriverTestSupport {
 
     /** Computes the bundled ContentIdentity of {@code root} once, through a fresh capture. */
     static ProtosPackageContentIdentity digest(Path root) throws Exception {
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "package",
-                        TOOL_ROOT,
-                        TOOL_ROOT.resolveSibling("shared"),
-                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         try (ProtosCapturedFilesystemCustody custody =
                         ProtosCapturedFilesystemCustody.captureSelectedRoot(root);
                 ProtosHostedExecutionTestFixture hosted =
-                        ProtosHostedExecutionTestFixture.open(prelude)) {
+                        ProtosHostedExecutionTestFixture.open(SharedDigestCore.PRELUDE)) {
             hosted.activation()
                     .context()
                     .createLocalSlot(
@@ -338,6 +331,31 @@ abstract class ProtosPackageRunDriverTestSupport {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             return new ProtosPackageContentIdentity(
                     METHOD, ALGORITHM, ((ProtosStringValue) outcome.value()).value());
+        }
+    }
+
+    // Holder for the immutable Package-flavored resolver configuration and its bootstrapped
+    // Core Prelude, initialized exactly once and used only by digest. The resolvers retain only
+    // fixed roots and the Prelude's shared standard graph is frozen. It holds no captured
+    // custody, hosted fixture, Process, activation, or Actor module state: every digest still
+    // captures its tree and evaluates ContentIdentity.digest in its own hosted Process.
+    private static final class SharedDigestCore {
+        private static final ProtosPrelude PRELUDE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                return new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosBundledToolModuleResolver(
+                                        "package",
+                                        TOOL_ROOT,
+                                        TOOL_ROOT.resolveSibling("shared"),
+                                        new ProtosStandardLibraryModuleResolver(
+                                                STANDARD_LIBRARY)));
+            } catch (Exception failure) {
+                throw new ExceptionInInitializerError(failure);
+            }
         }
     }
 

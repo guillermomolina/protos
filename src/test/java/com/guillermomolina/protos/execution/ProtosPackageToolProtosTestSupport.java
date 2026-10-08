@@ -202,7 +202,7 @@ abstract class ProtosPackageToolProtosTestSupport {
         try (ProtosNioReadOnlyTreeFilesystemBackend projectTree =
                         new ProtosNioReadOnlyTreeFilesystemBackend(root);
                 ProtosHostedExecutionTestFixture hosted =
-                        ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
+                        ProtosHostedExecutionTestFixture.open(SharedExecutionPlanCore.PRELUDE)) {
             hosted.installFilesystem("projectTreeFilesystem", projectTree);
 
             ArrayList<ProtosObjectValue> captures = new ArrayList<>();
@@ -368,6 +368,24 @@ abstract class ProtosPackageToolProtosTestSupport {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver("package", TOOL_ROOT, (TOOL_ROOT).resolveSibling("shared"), standard);
         return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    }
+
+    // Holder for the immutable Package-flavored resolver configuration and its bootstrapped
+    // Core Prelude, initialized exactly once and used only by executeExternalCaptureFixture.
+    // The resolvers retain only fixed roots and the Prelude's shared standard graph is frozen.
+    // It holds no project-tree backend, captured custody, hosted fixture, Process, activation,
+    // or Actor module state: every invocation still opens its own hosted Process and fresh
+    // activation and materializes its own captures into that activation.
+    private static final class SharedExecutionPlanCore {
+        private static final ProtosPrelude PRELUDE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                return newPackagePrelude();
+            } catch (Exception failure) {
+                throw new ExceptionInInitializerError(failure);
+            }
+        }
     }
 
     protected static ProtosExecutionOutcome execute(
