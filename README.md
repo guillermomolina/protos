@@ -8,17 +8,17 @@
   </a>
 </p>
 
-> ### 🚀 Latest milestone — Protos 0.3.116
+> ### 🚀 Latest release — Protos 0.3.312
 >
-> Protos now ships an official **self-contained Native prerelease** for the
+> Protos ships an official **self-contained Native prerelease** for the
 > declared Linux x86_64 / glibc 2.39+ target. Download, verify, extract, and run:
 > no external Java/GraalVM runtime, Maven, or Protos source checkout is required
 > after extraction. The portable JVM artifact remains available as the
-> compatibility fallback for external-runtime users.
+> compatibility fallback and Java-embedding runtime for GraalVM Community
+> 25.4.4.1.1 / JDK 25.0.4.1.1.
 >
 > **[Try Protos →](docs/guide/00-try-protos.md)** ·
-> **[Download 0.3.116 →](https://github.com/guillermomolina/protos/releases/tag/v0.3.116)** ·
-> **[Read the milestone story →](docs/news/2026-09-29-protos-0-3-116-download-extract-run.md)**
+> **[Download 0.3.312 →](https://github.com/guillermomolina/protos/releases/tag/v0.3.312)**
 
 # Protos
 
@@ -51,16 +51,16 @@ for durable implementation/closure history.
 
 On the supported Native target — **Linux x86_64 with dynamic glibc 2.39 or
 newer** — the recommended first-run artifact is the self-contained
-[Protos 0.3.116 Native prerelease](https://github.com/guillermomolina/protos/releases/tag/v0.3.116).
+[Protos 0.3.312 Native prerelease](https://github.com/guillermomolina/protos/releases/tag/v0.3.312).
 It requires no external Java/GraalVM runtime or Maven after extraction.
 
 ```sh
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.116/protos-0.3.116-native-linux-x86_64.zip
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.116/protos-0.3.116-native-linux-x86_64.zip.sha256
-sha256sum -c protos-0.3.116-native-linux-x86_64.zip.sha256
-unzip protos-0.3.116-native-linux-x86_64.zip
-./protos-0.3.116-native-linux-x86_64/bin/protos --version
-./protos-0.3.116-native-linux-x86_64/bin/protos -e 'print("Hello, Protos!")'
+curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip
+curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip.sha256
+sha256sum -c protos-0.3.312-native-linux-x86_64.zip.sha256
+unzip protos-0.3.312-native-linux-x86_64.zip
+./protos-0.3.312-native-linux-x86_64/bin/protos --version
+./protos-0.3.312-native-linux-x86_64/bin/protos -e 'print("Hello, Protos!")'
 ```
 
 For the Dev Container path, the portable JVM fallback, platform limitations,
@@ -545,6 +545,15 @@ failures.
     JVM compatibility fallback.
 -   [Programming guide](docs/guide/README.md) — conceptual explanations and the
     mental model behind Protos.
+-   [The `protos` command line](docs/guide/tools/cli.md) and the other
+    [toolchain guides](docs/guide/README.md#toolchain-guides) — program
+    execution, formatter, linter, language server, Package Tool, Test Tool,
+    and Native/JVM differences.
+-   [Standard Library guides](docs/guide/library/README.md) — using `std:`
+    modules.
+-   [Embedding Protos in Java](docs/guide/embedding/java.md) and
+    [foreign interoperability](docs/guide/interop/README.md) — portable JVM
+    integration.
 -   [Executable tutorials](protos/tutorials/README.md) — small progressive
     `.protos` programs that are exercised by CLI regression coverage where
     applicable.

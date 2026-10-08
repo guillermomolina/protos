@@ -2,6 +2,12 @@
 
 This directory owns the build-time layout for `DIST001`.
 
+To download and run a published release instead of building one, see
+[Try Protos](../docs/guide/00-try-protos.md). The current public prerelease is
+[`v0.3.312`](https://github.com/guillermomolina/protos/releases/tag/v0.3.312);
+its exact runtime contract is in the release notes and in each archive's
+metadata, not in the historical DIST001-A contract described below.
+
 It does not create a Git tag or GitHub Release. The resulting archive is a
 development distribution until a later explicitly selected release candidate
 passes DIST001-B/D/E.

@@ -18,9 +18,10 @@ the specification wins.
 ## Start here
 
 If you want to run Protos before reading the language guide, start with
-[Try Protos](00-try-protos.md). It covers the recommended self-contained Native
-release on its supported target, the Protos Dev Container, and the portable JVM
-compatibility fallback.
+[Try Protos](00-try-protos.md). It covers the Protos 0.3.312 prerelease: the
+recommended self-contained Native release on its supported target, the Protos
+Dev Container, and the portable JVM compatibility fallback, with checksum
+verification and Native limitations.
 
 ## How to use the learning material
 
@@ -73,6 +74,7 @@ language-teaching progression under DOC001.
 9. [Isolated parallel execution](09-isolated-parallel-execution.md)
 10. [Actors, ActorRefs, and Actor Groups](10-actors-actorrefs-and-groups.md)
 11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
+    — including what each launcher grants and Filesystem/Network examples
 12. [Protocol-first matching and case selection](12-matching-expressions.md)
 
 ## Toolchain guides

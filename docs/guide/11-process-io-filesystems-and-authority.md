@@ -5,7 +5,8 @@
 > **Primary normative owners:** `spec/io/PROCESS_IO.md`, `spec/io/IO_CORE.md`,
 > `spec/io/BYTE_IO.md`, `spec/io/TEXT_IO.md`, and `spec/io/FILESYSTEM.md`
 >
-> Related normative owners: `spec/concurrency/FUTURES_AND_TASKS.md`,
+> Related normative owners: `spec/io/NETWORK.md`,
+> `spec/concurrency/FUTURES_AND_TASKS.md`,
 > `spec/concurrency/ACTORS.md`, `spec/concurrency/PARALLEL_EXECUTION.md`,
 > `spec/semantics/VALUES_AND_COLLECTIONS.md`, and `spec/semantics/ERRORS.md`
 
@@ -1287,6 +1288,144 @@ The implementation itself reflects the capability model:
 These files are reference implementation evidence. The specification remains the
 authority.
 
+## What each launcher grants
+
+The bootstrap-local slots an initial module receives depend on who starts the
+Process. At the current revision and in the 0.3.312 release:
+
+| Launcher | `process` | `filesystem` | `network` |
+|---|---|---|---|
+| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Not bound |
+| `protos run <entry>` | Bound | Not bound | Not bound |
+| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access |
+| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound |
+
+The Native and portable JVM command lines grant the same authority. There is no
+command-line option that grants a Filesystem or a Network to an application.
+When a slot is not bound, the name is simply absent from the initial module;
+referencing it fails like any other unbound name.
+
+The embedding rules, including the `IOAccess` settings that grant each slot, are
+in [Embedding Protos in a Java application](embedding/java.md#authority-and-thread-policy).
+Code supplied through the [`app:` catalog](embedding/application-modules.md)
+receives no authority either: it must be passed capabilities explicitly.
+
+## Practical examples
+
+The examples below use only operations implemented in the current runtime.
+Each one marks the authority it needs.
+
+### Process: arguments and standard output
+
+Runs under the standalone CLI, for example
+`protos main.protos one two`:
+
+```protos
+ProcessStreams: import("std:io/ProcessStreams")
+
+writer: ProcessStreams.stdoutWriter(process)
+writer.writeLine("Process output uses explicit Process authority").value()
+writer.close().value()
+
+print(process.args().size())
+```
+
+This is the executable tutorial
+[`12-system-resources/01-process-stream-output.protos`](../../protos/tutorials/12-system-resources/01-process-stream-output.protos).
+
+### Filesystem: whole-file text helpers
+
+Needs a host that binds `filesystem`, such as a Java embedding with file
+access. `std:io/Files` provides `readAllBytes`, `writeAllBytes`,
+`readAllText`, and `writeAllText`; each takes the Filesystem explicitly and
+returns a Future:
+
+```protos
+Files: import("std:io/Files")
+
+path: Path.relative().child("notes.txt")
+Files.writeAllText(filesystem, path, "explicit authority", Encoding.UTF8).value()
+Files.readAllText(filesystem, path, Encoding.UTF8).value()
+```
+
+This is the executable tutorial
+[`12-system-resources/02-filesystem-text-roundtrip.protos`](../../protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos).
+The helpers always close the File they open.
+
+### Filesystem: explicit open, write, and close
+
+The same effect through the File capability, with the open options spelled out
+and the File closed by `ensure`:
+
+```protos
+path: Path.relative().child("data.bin")
+options: {
+    read: false
+    write: true
+    create: true
+    truncate: true
+}
+file: filesystem.open(path, options).value()
+
+(() => {
+    file.write(Encoding.UTF8.encode("hello")).value()
+}).ensure() {
+    file.close().value()
+}
+```
+
+Without an options argument, `filesystem.open(path)` opens an existing file for
+reading.
+
+### Filesystem: listing and namespace mutation
+
+```protos
+names: filesystem.entries(Path.relative()).value()
+filesystem.replace(Path.relative().child("data.bin"), Path.relative().child("data.old")).value()
+filesystem.remove(Path.relative().child("data.old")).value()
+```
+
+`entries` observes one directory, `replace` publishes one name over another,
+and `remove` is non-recursive. All paths are relative to the Filesystem's own
+base; there is no absolute or parent path that escapes it.
+
+### Network: one TCP connection
+
+Needs a host that binds `network`; currently only a Java embedding whose Context
+allows socket access. Addresses are numeric; there is no DNS lookup and no
+String endpoint:
+
+```protos
+IpAddress: import("std:network/IpAddresses").IpAddress
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+
+loopback: IpAddress(4, 2130706433)    // 127.0.0.1
+connection: network.connectTcp(IpEndpoint(loopback, 8080)).value()
+connection.write(Encoding.UTF8.encode("ping")).value()
+connection.shutdownWrite().value()
+reply: connection.read(4096).value()    // Bytes, or null at EOF
+connection.close().value()
+```
+
+A listener uses an ordinary request object with exactly the `ipVersion`,
+`address`, and `port` slots; `port: null` selects a free port:
+
+```protos
+request: {
+    ipVersion: 4
+    address: loopback
+    port: null
+}
+listener: network.listenTcp(request).value()
+listener.localPort()
+accepted: listener.accept().value()
+```
+
+Only TCP over numeric IPv4/IPv6 endpoints is standardized. The operations follow
+[`spec/io/NETWORK.md`](../../spec/io/NETWORK.md); the embedding tests in
+[`ProtosEmbeddedNetworkTest.java`](../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedNetworkTest.java)
+exercise them.
+
 ## Practical authority flow
 
 A useful conceptual flow is:
@@ -1472,6 +1611,9 @@ For exact behavior, consult:
 - [`../../spec/io/FILESYSTEM.md`](../../spec/io/FILESYSTEM.md) for Path,
   Filesystem authority, File opening, File behavior, namespace operations, and
   D046 tree-observation semantics;
+- [`../../spec/io/NETWORK.md`](../../spec/io/NETWORK.md) for Network
+  authority, numeric IP addresses and endpoints, and TCP connections and
+  listeners;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for the Future/cancellation/structured-ownership substrate reused by I/O;
 - [`../../spec/concurrency/ACTORS.md`](../../spec/concurrency/ACTORS.md) for Actor
