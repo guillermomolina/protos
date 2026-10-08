@@ -49,9 +49,15 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
         String language = readMain("execution/ProtosLanguage.java");
         String rootTask = readMain("execution/ProtosRootTaskExecution.java");
 
+        // PLAT054-3: public parse still compiles only Bytecode; the host Context.eval entry wraps
+        // that exact target, and runtime parsing unwraps it back to the Bytecode root.
+        String languageContext = readMain("execution/ProtosLanguageContext.java");
         assertTrue(
                 language.contains(
-                        "return sourceCompiler.compileBytecode(request.getSource(), this);"));
+                        "new ProtosHostEvalRootNode(\n"
+                                + "                        this, sourceCompiler.compileBytecode("
+                                + "request.getSource(), this))"));
+        assertTrue(languageContext.contains("return hostEntry.bytecodeTarget();"));
         assertTrue(
                 rootTask.contains(
                         "cooperative RootTask execution requires a semantic Bytecode root"));

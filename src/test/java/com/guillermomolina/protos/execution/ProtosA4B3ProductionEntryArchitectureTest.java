@@ -40,8 +40,12 @@ final class ProtosA4B3ProductionEntryArchitectureTest {
                                     String source = Files.readString(path);
                                     if (source.contains("ProtosStandaloneProcessBootstrap.create(")) {
                                         creators.add(path);
+                                        // PLAT054-3: a standard embedding places its Process in
+                                        // the host-built Context it is created in.
                                         assertTrue(
-                                                source.contains("hostProcess("),
+                                                source.contains("hostProcess(")
+                                                        || source.contains(
+                                                                ".bindExecutionHostForRuntime(embedded)"),
                                                 () ->
                                                         "production Process creator does not bind a Process Context: "
                                                                 + path);

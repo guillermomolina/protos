@@ -216,6 +216,16 @@ public final class ProtosValueLookup {
     }
 
     /**
+     * Returns whether {@code value} is a Protos runtime value: an ordinary
+     * object or a represented value. Host values that merely cross an interop
+     * boundary are not Protos values and are never admitted by this test.
+     */
+    public static boolean isProtosValue(Object value) {
+        return value instanceof ProtosObjectValue
+                || value instanceof ProtosRepresentedValue;
+    }
+
+    /**
      * Guarded D013 selection for a semantic Integer receiver. The Integer
      * prototype comes from the prelude's frozen bindings, so for one prelude
      * the represented step is the same for every Integer value; the remaining

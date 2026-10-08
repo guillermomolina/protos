@@ -220,9 +220,15 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         }
     }
 
-    /** True when the current entered Polyglot Context is owned by a Protos host wrapper. */
+    /**
+     * True when the current entered Polyglot Context places a Protos Process: it is owned by a
+     * Protos host wrapper, or it is a PLAT054 standard embedding placing its own Process.
+     */
     static boolean hasEnteredContextForRuntime() {
-        return enteredHostOrNull() != null;
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        return entered != null
+                && (entered.hostExecutionContextOrNullForRuntime() != null
+                        || entered.isStandardEmbeddingForRuntime());
     }
 
     private static ProtosPolyglotExecutionContext enteredHostOrNull() {

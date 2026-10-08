@@ -18,12 +18,23 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.Option;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.debug.DebuggerTags;
 import com.oracle.truffle.api.instrumentation.ProvidedTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
+import org.graalvm.options.OptionCategory;
+import org.graalvm.options.OptionDescriptors;
+import org.graalvm.options.OptionKey;
+import org.graalvm.options.OptionStability;
 
-/** Truffle language identity and per-polyglot-context entry boundary for Protos. */
+/**
+ * Truffle language identity and per-polyglot-context entry boundary for Protos.
+ *
+ * <p>PLAT054: a standard Polyglot {@code Context.eval} executes a {@link ProtosHostEvalRootNode}
+ * that places the module body in the Context's lazily created Protos Process, and {@code
+ * Context.getBindings} returns the Context's read-only {@link ProtosHostBindingsScope}.
+ */
 @ProvidedTags({
     StandardTags.StatementTag.class,
     StandardTags.ExpressionTag.class,
@@ -36,15 +47,56 @@ import com.oracle.truffle.api.instrumentation.StandardTags;
         name = "Protos",
         defaultMimeType = ProtosLanguage.MIME_TYPE,
         characterMimeTypes = ProtosLanguage.MIME_TYPE)
+@Option.Group(ProtosLanguage.ID)
 public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext> {
     public static final String ID = "protos";
     public static final String MIME_TYPE = "application/x-protos";
+
+    @Option(
+            name = "CoreRoot",
+            help =
+                    "Directory of the Protos Core library (protos/lib/core) used by a standard"
+                            + " Polyglot embedding. When set it takes precedence over the language"
+                            + " home and must name a Core directory.",
+            category = OptionCategory.USER,
+            stability = OptionStability.STABLE)
+    static final OptionKey<String> CORE_ROOT = new OptionKey<>("");
 
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     @Override
     protected ProtosLanguageContext createContext(Env env) {
         return new ProtosLanguageContext(this, env);
+    }
+
+    @Override
+    protected OptionDescriptors getOptionDescriptors() {
+        return new ProtosLanguageOptionDescriptors();
+    }
+
+    /**
+     * PLAT054 host binding scope. Querying it never creates the Process. A driver-owned Context
+     * (CLI, Test Tool, hosted session, debug host) supports no standard host evaluation and keeps
+     * having no language top scope, so debugger and tooling observation stay activation-local.
+     */
+    @Override
+    protected Object getScope(ProtosLanguageContext context) {
+        return context.hostExecutionContextOrNullForRuntime() == null
+                ? context.hostBindingsScope()
+                : null;
+    }
+
+    /**
+     * Context close: terminates the embedded Process, if one was created, while the Context can
+     * still be entered (PROCESS_IO.md §28 Process-Control Boundary).
+     */
+    @Override
+    protected void finalizeContext(ProtosLanguageContext context) {
+        context.finalizeEmbeddedProcess();
+    }
+
+    String languageHomeForRuntime() {
+        return getLanguageHome();
     }
 
     /**
@@ -64,6 +116,8 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             throw new IllegalArgumentException(
                     "Protos top-level parsing does not accept host argument names");
         }
-        return sourceCompiler.compileBytecode(request.getSource(), this);
+        return new ProtosHostEvalRootNode(
+                        this, sourceCompiler.compileBytecode(request.getSource(), this))
+                .getCallTarget();
     }
 }

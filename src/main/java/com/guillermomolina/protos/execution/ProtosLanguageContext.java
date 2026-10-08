@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.Node;
@@ -56,10 +57,66 @@ final class ProtosLanguageContext {
     private volatile ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlan;
     private volatile ProtosBufferedByteWriterCPrimeExecution.Plan bufferedByteWriterCPrimePlan;
     private volatile ProtosIoReleaseCPrimeExecution.Plan ioReleaseCPrimePlan;
+    /*
+     * PLAT054 standard Polyglot embedding. The scope exists from Context creation but is only a
+     * view; the Process is created by the first host evaluation and never replaced afterwards.
+     * standardEmbedding marks that this Context's Process is placed by the Context itself rather
+     * than by a ProtosPolyglotExecutionContext host wrapper.
+     */
+    private final ProtosHostBindingsScope hostBindingsScope = new ProtosHostBindingsScope(this);
+    private final Object embeddedProcessLock = new Object();
+    private volatile boolean standardEmbedding;
+    private volatile ProtosEmbeddedProcess embeddedProcess;
 
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
         this.env = Objects.requireNonNull(env, "env");
+    }
+
+    ProtosHostBindingsScope hostBindingsScope() {
+        return hostBindingsScope;
+    }
+
+    ProtosEmbeddedProcess embeddedProcessOrNull() {
+        return embeddedProcess;
+    }
+
+    boolean isStandardEmbeddingForRuntime() {
+        return standardEmbedding;
+    }
+
+    /**
+     * Returns the embedded Process of this Context, bootstrapping it on the first valid host
+     * evaluation. A failed bootstrap leaves no Process, so a later evaluation may bootstrap again;
+     * once created, the Process is never recreated, even after it terminates. A Context owned by a
+     * Protos host driver (CLI, Test Tool, hosted session) has its Process placed by that driver and
+     * rejects standard host evaluation.
+     */
+    @TruffleBoundary
+    ProtosEmbeddedProcess embeddedProcessForHostEntry() {
+        ProtosEmbeddedProcess existing = embeddedProcess;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (embeddedProcessLock) {
+            if (embeddedProcess == null) {
+                if (hostExecutionContext != null) {
+                    throw new ProtosEmbeddingException(
+                            "this Context hosts a driver-owned Protos Process; standard host"
+                                    + " evaluation is not available");
+                }
+                standardEmbedding = true;
+                embeddedProcess = ProtosEmbeddedProcess.bootstrap(this);
+            }
+            return embeddedProcess;
+        }
+    }
+
+    void finalizeEmbeddedProcess() {
+        ProtosEmbeddedProcess existing = embeddedProcess;
+        if (existing != null) {
+            existing.finalizeForContextClose();
+        }
     }
 
     static ProtosLanguageContext current() {
@@ -102,7 +159,7 @@ final class ProtosLanguageContext {
     void bindHostExecutionContextForRuntime(ProtosPolyglotExecutionContext host) {
         Objects.requireNonNull(host, "host");
         synchronized (this) {
-            if (hostExecutionContext != null) {
+            if (hostExecutionContext != null || standardEmbedding) {
                 throw new IllegalStateException("host execution context is already bound");
             }
             hostExecutionContext = host;
@@ -307,6 +364,17 @@ final class ProtosLanguageContext {
     Source materializeFileSource(Path path, CharSequence characters) {
         Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
         Objects.requireNonNull(characters, "characters");
+        if (hostExecutionContext == null && standardEmbedding) {
+            /*
+             * PLAT054: the host owns this Context's I/O policy, which Protos cannot widen. Core and
+             * library characters were already read as implementation resources, so the Source is
+             * built from them without a TruffleFile and the guest gains no filesystem authority.
+             */
+            return Source.newBuilder(ProtosLanguage.ID, characters, exact.toString())
+                    .uri(exact.toUri())
+                    .mimeType(ProtosLanguage.MIME_TYPE)
+                    .build();
+        }
         ProtosPolyglotExecutionContext.admitPhysicalSourceForRuntime(exact);
         TruffleFile file = env.getPublicTruffleFile(exact.toString());
         return Source.newBuilder(ProtosLanguage.ID, file)
@@ -321,7 +389,13 @@ final class ProtosLanguageContext {
         if (!ProtosLanguage.ID.equals(source.getLanguage())) {
             throw new IllegalArgumentException("Source belongs to another language");
         }
-        return env.parsePublic(source);
+        CallTarget parsed = env.parsePublic(source);
+        // Runtime execution always enters the canonical Bytecode root, never the host eval entry.
+        if (parsed instanceof RootCallTarget root
+                && root.getRootNode() instanceof ProtosHostEvalRootNode hostEntry) {
+            return hostEntry.bytecodeTarget();
+        }
+        return parsed;
     }
 
     TruffleLanguage.Env env() {

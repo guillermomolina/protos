@@ -228,7 +228,10 @@ final class ProtosI026EScopeTest {
 
     @Test
     void noArtificialLanguageTopScopeOrGlobalScopeRegistryIsIntroduced() {
-        assertFalse(
+        // PLAT054-3 ratifies the standard host binding scope through Truffle getScope. It is not a
+        // global registry: it is only offered by standard-embedding Contexts, and driver-owned
+        // Contexts still expose no language top scope (see ProtosI026EDebuggerIntegrationTest).
+        assertTrue(
                 Arrays.stream(ProtosLanguage.class.getDeclaredMethods())
                         .anyMatch(method -> method.getName().equals("getScope")));
 

@@ -267,7 +267,7 @@ public final class ProtosStandaloneHostedExecution {
                 prelude, resolver, resolver.entryModule(), activation);
     }
 
-    private static ProtosEncodingValue utf8(ProtosPrelude prelude) {
+    static ProtosEncodingValue utf8(ProtosPrelude prelude) {
         Object value =
                 prelude.encodingPrototype()
                         .readLocalSlot("UTF8")

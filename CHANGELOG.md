@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.283-SNAPSHOT
+
+- `I086` / `PLAT054-3` slice A implements the standard Polyglot embedding
+  contract of specification `0.1.449`: `Context.newBuilder("protos").build()`,
+  `context.eval(source)`, and `context.getBindings("protos").getMember(name)
+  .execute(...)` now work without `ProtosStandaloneHostedSession` or any Java
+  bootstrap.
+  - One lazy Protos Process per Context: building the Context or querying its
+    bindings creates nothing; the first valid evaluation bootstraps Core, the
+    Process, and its RootActor; a parse error precedes bootstrap. Core comes
+    from the new `protos.CoreRoot` option (an invalid override fails
+    explicitly) or else the language home. Arguments, environment, and standard
+    streams come from the embedding `TruffleLanguage.Env`; no default
+    Filesystem or Network is granted.
+  - Each evaluation is a direct RootActor entry: the first is the initial
+    module (the only one with bootstrap slots), later ones get distinct
+    standalone `moduleContext`s; `import()` uses the ordinary Actor-local cache.
+  - The binding scope is a stable, host-read-only view of the own local slots of
+    the last normally completed entry, empty after Process termination. Closure
+    reads are fresh receiver-bound extractions presented through the PERF033
+    compact executable (no Task); native Closures use ordinary invocation, and
+    Protos-valued arguments are accepted.
+  - An Error escaping an outermost host entry fails the RootActor and
+    terminates the Process, which is never recreated; concurrent RootActor
+    entry is rejected without a universal call gate; `Context.close()`
+    terminates the Process and joins its Actor carriers.
+  - Driver-owned Contexts are unchanged and still expose no language top scope.
+    Host-value argument conversion, a packaged Core resource, and
+    Filesystem/Network grant mapping remain for later slices.
+
 ## 0.3.282-SNAPSHOT
 
 - `I085-A` adds a public, execution-mechanism-independent SPI for external
