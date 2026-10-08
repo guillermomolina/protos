@@ -222,6 +222,53 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void perf034ScalarLaneFollowsPublishedActivation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue scalar =
+                    closure("() => { value: 1\nvalue }", module);
+            assertContains(instructionNames(scalar), "IsCompactLocalFrame");
+
+            Object[] direct =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            scalar, module, null, new Object[0]);
+            Object[] method =
+                    ProtosFrameArguments.compactImmediateMethodCall(
+                            scalar, newObject(), newObject(), module,
+                            new Object[0]);
+            for (Object[] arguments : List.of(direct, method)) {
+                assertTrue(
+                        ProtosFrameArguments
+                                .isUnmaterializedCompactScalarLocalCall(arguments),
+                        "an unmaterialized compact call selects the scalar lane");
+
+                ProtosActivation published =
+                        ProtosFrameArguments.activation(arguments);
+                assertSame(
+                        published, arguments[0],
+                        "materialization publishes the exact activation");
+                assertFalse(
+                        ProtosFrameArguments
+                                .isUnmaterializedCompactScalarLocalCall(arguments),
+                        "a published activation leaves the scalar lane");
+
+                assertEquals(
+                        BigInteger.ONE,
+                        integerValue(target(scalar).call(arguments)),
+                        "the authoritative path creates and reads the binding");
+                assertSame(
+                        published, arguments[0],
+                        "the observed execution context keeps its identity");
+                assertSame(published, ProtosFrameArguments.activation(arguments));
+            }
+
+            assertFalse(
+                    ProtosFrameArguments.isUnmaterializedCompactScalarLocalCall(
+                            new Object[] {ProtosFrameArguments.activation(direct)}),
+                    "a rich entry array is never in the scalar lane");
+        });
+    }
+
+    @Test
     void localOnlyCalleeCreatesAndAssignsWithoutMaterializing() throws Exception {
         withCore(module -> {
             ProtosClosureValue locals = closure("(a) => { b: a\nc: b\nc = a\nc }", module);

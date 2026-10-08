@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.306-SNAPSHOT
+
+- `PERF034-D` (#845): select the PERF034-C scalar-local lane through a
+  minimal compact/materialized discriminator instead of revalidating the
+  whole compact source-call ABI header at every local creation and read.
+  - `IsCompactLocalFrame` now tests only whether frame argument 0 is still
+    the callee Closure or has become the published activation; the full
+    ABI validation stays where compact calls are prepared.
+  - The state is re-read at every use, so a materialization between two
+    instructions still routes creation and reads through the authoritative
+    D179-aware path with the same observed activation identity.
+  - General ABI checks used by other operations are unchanged.
+  - Focal tests and the integrated `make test` suite passed.
+
 ## 0.3.305-SNAPSHOT
 
 - `LM012-C1` (#671, D195): add the static `protos lint [--output text|json]

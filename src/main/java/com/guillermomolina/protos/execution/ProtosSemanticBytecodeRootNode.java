@@ -634,7 +634,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class IsCompactLocalFrame {
         @Specialization
         public static boolean perform(@Bind VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(
+            return ProtosFrameArguments.isUnmaterializedCompactScalarLocalCall(
                     frame.getArguments());
         }
     }

@@ -235,6 +235,33 @@ final class ProtosFrameArguments {
         return isCompactCall(arguments);
     }
 
+    /**
+     * PERF034-D: the compact/materialized discriminator of a scalar-local
+     * lane. It is not an ABI validator: an arbitrary array whose argument 0
+     * is a {@link ProtosClosureValue} (for example {@code {closure}}) yields
+     * {@code true}.
+     *
+     * <p>Precondition: {@code arguments} are the frame arguments of a Closure
+     * root admitted by the PERF034-C scalar-local lowering, entered either
+     * with a rich array whose argument 0 is a {@link ProtosActivation} or
+     * with a compact array built by {@link #compactImmediateMethodCall} or
+     * {@link #compactDirectClosureCall}. Every compact source entry is
+     * carried by {@code OrdinarySourceCall} or
+     * {@code PreparedInlineLiteralCall}, whose construction already runs the
+     * full {@link #requireCompactCall} validation (through
+     * {@link #compactOwnsReturnHome}) outside the callee. The only later
+     * write of argument 0 is {@link #materializeCompactActivation}, which
+     * replaces the Closure with the published activation, so argument 0
+     * alone distinguishes the two states. It is re-read at every use so a
+     * materialization between two instructions is observed. The length test
+     * subsumes the array bounds check of the read. Callers without this
+     * precondition use {@link #isUnmaterializedCompactCall}.
+     */
+    static boolean isUnmaterializedCompactScalarLocalCall(Object[] arguments) {
+        return arguments.length > CLOSURE_INDEX
+                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue;
+    }
+
     /** Supplied positional argument count of a compact source call. */
     static int compactSuppliedArgumentCount(Object[] arguments) {
         return arguments.length - USER_ARGUMENT_OFFSET;
