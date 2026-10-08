@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.307-SNAPSHOT
+
+- `I087-2` (#841, PLAT055/#844): Java hosts supply Protos application
+  modules to a standard Polyglot Context through the new public
+  `ProtosEmbeddedModules.install(Context, Map<String, String>)`.
+  - Each entry maps an exact `app:` specifier, which is also its canonical
+    ModuleKey, to in-memory source characters; no relative lookup, alias,
+    normalization, or filesystem/classpath search takes place, and `std:`
+    and the `foreign:` key domain are unaffected.
+  - The catalog is validated and defensively copied before publication,
+    is immutable and Context-local, and may be installed once, after the
+    Context is built and before the Process bootstrap begins; the
+    installation is atomic with respect to that bootstrap. Invalid
+    arguments and late, duplicate, closed-Context, or driver-owned-Context
+    installation are host Java errors, and a driver Process cannot be
+    bound to a Context that already has a catalog.
+  - The embedded Process composes the catalog in front of the
+    standard-library resolver, so `import()` and `Actor.spawn()` share the
+    ordinary module runtime: Actor-local instances, cache-before-execute,
+    cycles, and failed-initialization retry are unchanged, and modules are
+    compiled lazily on first import. Host evaluations never acquire a
+    catalog identity.
+  - The catalog grants no Filesystem, Network, thread, or host authority.
+    Without entries the previous resolver path is kept unchanged.
+  - The portable embedding smoke runs the API from an external application
+    using only the distributed JAR. Native Image embedding hosts are out of
+    scope; the Native CLI has no Java embedding.
+  - Focal tests, the integrated `make test` suite, and the portable
+    embedding smoke passed.
+
 ## 0.3.306-SNAPSHOT
 
 - `PERF034-D` (#845): select the PERF034-C scalar-local lane through a

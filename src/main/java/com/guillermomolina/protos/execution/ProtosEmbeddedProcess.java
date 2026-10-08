@@ -69,10 +69,10 @@ import java.util.function.Supplier;
  * the RootActor and therefore terminates the Process ({@code ACTORS.md} §24C/§32); the Process is
  * never recreated in the same Context.
  *
- * <p>Host evaluations have no importable module identity and the module resolver serves only
- * {@code std:} modules, so in the current implementation {@code Actor.spawn} can name only a
- * {@code std:} module binding (an implementation limitation tracked by I087, not a normative
- * restriction of {@code Actor.spawn}).
+ * <p>Host evaluations have no importable module identity. The module resolver serves {@code std:}
+ * modules and, when the host installed one through {@link ProtosEmbeddedModules}, the {@code app:}
+ * entries of the Context's application module catalog (PLAT055); the same resolver serves both
+ * {@code import} and {@code Actor.spawn}.
  * Actor carriers are polyglot threads: when the Context does not allow thread creation, a spawned
  * Actor is terminated after its creation cutover rather than failing {@code spawn}.
  */
@@ -139,8 +139,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         ProtosEmbeddedFilesystemCustody filesystemCustody =
                 ProtosEmbeddedFilesystemCustody.provisionOrNull(env);
         Path coreRoot = resolveCoreRoot(owner);
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(coreRoot.getParent());
+        ProtosModuleResolver resolver =
+                ProtosApplicationModuleResolver.over(
+                        owner.applicationModulesForBootstrap(),
+                        new ProtosStandardLibraryModuleResolver(coreRoot.getParent()));
         ProtosPrelude prelude;
         try {
             prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);

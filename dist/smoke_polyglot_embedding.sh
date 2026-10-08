@@ -17,7 +17,9 @@
 # standard Polyglot embedding. The probe runs from a project directory outside
 # the checkout with only lib/protos.jar and lib/runtime/*.jar on the class path
 # (no protos/lib tree, no PROTOS_HOME), and checks the Core precedence
-# protos.CoreRoot > language home > packaged resource.
+# protos.CoreRoot > language home > packaged resource. I087/PLAT055: the same
+# external application installs Java-supplied app: modules through the public
+# ProtosEmbeddedModules API of the distributed JAR.
 
 set -eu
 
@@ -118,6 +120,7 @@ run_probe home -Dorg.graalvm.language.protos.home="$home" -cp "$probe_cp" \
 run_probe override -cp "$probe_cp" Plat054EmbeddingProbe override "$home/protos/lib/core"
 run_probe invalid-override -cp "$probe_cp" Plat054EmbeddingProbe invalid-override \
     "$home/protos/lib/core/missing"
+run_probe application-modules -cp "$probe_cp" Plat054EmbeddingProbe application-modules
 
 [ -z "$(find "$java_tmp" -name '*.protos' -print -quit)" ] ||
     fail "Core sources were materialized in the Java temporary directory"
@@ -125,4 +128,5 @@ run_probe invalid-override -cp "$probe_cp" Plat054EmbeddingProbe invalid-overrid
 
 echo "PLAT054_JAR_CONTAINS_CORE: PASS"
 echo "PLAT054_OUTSIDE_CHECKOUT: PASS"
+echo "PLAT055_APPLICATION_MODULES_PORTABLE: PASS"
 echo "PLAT054_3C_SMOKE: PASS"

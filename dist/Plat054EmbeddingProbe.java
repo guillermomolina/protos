@@ -15,6 +15,8 @@
  * the specific language governing rights and limitations under the License.
  */
 
+import com.guillermomolina.protos.execution.ProtosEmbeddedModules;
+import java.util.Map;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
@@ -31,6 +33,9 @@ import org.graalvm.polyglot.Value;
  *       proves the home keeps precedence over the packaged Core.
  *   <li>{@code override <core>}: a valid {@code protos.CoreRoot} wins over the packaged Core.
  *   <li>{@code invalid-override <path>}: an invalid override fails without fallback.
+ *   <li>{@code application-modules}: PLAT055 {@link ProtosEmbeddedModules} from an external
+ *       application: an {@code app:} module imported by the main source and spawned as an Actor,
+ *       with no Filesystem or Network authority implied.
  * </ul>
  */
 public final class Plat054EmbeddingProbe {
@@ -47,6 +52,7 @@ public final class Plat054EmbeddingProbe {
                             Context.newBuilder("protos").option("protos.CoreRoot", args[1]),
                             "override");
             case "invalid-override" -> invalidOverride(args[1]);
+            case "application-modules" -> applicationModules();
             default -> fail("unknown mode " + args[0]);
         }
     }
@@ -103,6 +109,38 @@ public final class Plat054EmbeddingProbe {
             }
         }
         System.out.println("PLAT054_INVALID_OVERRIDE: PASS");
+    }
+
+    private static void applicationModules() {
+        String worker =
+                """
+                greeting: "hello"
+                start: (initial) => {
+                    count: initial
+                    {
+                        increment: () => {
+                            count = count + 1
+                            count
+                        }
+                    }
+                }
+                """;
+        try (Context context = Context.newBuilder("protos").allowCreateThread(true).build()) {
+            ProtosEmbeddedModules.install(context, Map.of("app:worker", worker));
+            String greeting = context.eval("protos", "import(\"app:worker\").greeting").asString();
+            require("hello".equals(greeting), "app:worker import returned " + greeting);
+            int count =
+                    context.eval(
+                                    "protos",
+                                    "w: Actor.spawn(\"app:worker\", \"start\", 41)\n"
+                                            + "w.request(\"increment\").value()")
+                            .asInt();
+            require(count == 42, "app:worker Actor answered " + count);
+            Value bindings = context.getBindings("protos");
+            require(!bindings.hasMember("filesystem"), "the catalog granted Filesystem authority");
+            require(!bindings.hasMember("network"), "the catalog granted Network authority");
+        }
+        System.out.println("PLAT055_APPLICATION_MODULES: PASS");
     }
 
     private static void require(boolean condition, String message) {

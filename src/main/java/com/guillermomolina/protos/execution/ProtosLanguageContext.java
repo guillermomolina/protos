@@ -27,6 +27,7 @@ import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -67,6 +68,12 @@ final class ProtosLanguageContext {
     private final Object embeddedProcessLock = new Object();
     private volatile boolean standardEmbedding;
     private volatile ProtosEmbeddedProcess embeddedProcess;
+    /*
+     * PLAT055 application module catalog: immutable, installed at most once, and only before the
+     * Process bootstrap begins. Guarded by embeddedProcessLock, which the bootstrap also holds, so
+     * installation is atomic with respect to it; null when the host installed no catalog.
+     */
+    private Map<String, String> applicationModules;
 
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
@@ -110,6 +117,40 @@ final class ProtosLanguageContext {
             }
             return embeddedProcess;
         }
+    }
+
+    /**
+     * Installs the application module catalog ({@link ProtosEmbeddedModules}). Bootstrap marks
+     * {@code standardEmbedding} under the same lock before it starts, so a catalog is either fully
+     * seen by the bootstrap or rejected; a failed bootstrap also closes installation.
+     */
+    @TruffleBoundary
+    void installApplicationModules(Map<String, String> catalog) {
+        Objects.requireNonNull(catalog, "catalog");
+        synchronized (embeddedProcessLock) {
+            synchronized (this) {
+                if (applicationModules != null) {
+                    throw new IllegalStateException(
+                            "application modules are already installed in this Context");
+                }
+                if (standardEmbedding || embeddedProcess != null) {
+                    throw new IllegalStateException(
+                            "application modules must be installed before the Protos Process"
+                                    + " of this Context starts");
+                }
+                if (hostExecutionContext != null) {
+                    throw new IllegalStateException(
+                            "this Context hosts a driver-owned Protos Process; application"
+                                    + " modules are not available");
+                }
+                applicationModules = catalog;
+            }
+        }
+    }
+
+    /** The installed catalog, or {@code null}; read by the bootstrap under embeddedProcessLock. */
+    Map<String, String> applicationModulesForBootstrap() {
+        return applicationModules;
     }
 
     void finalizeEmbeddedProcess() {
@@ -166,7 +207,8 @@ final class ProtosLanguageContext {
     void bindHostExecutionContextForRuntime(ProtosPolyglotExecutionContext host) {
         Objects.requireNonNull(host, "host");
         synchronized (this) {
-            if (hostExecutionContext != null || standardEmbedding) {
+            // A driver-owned Process would silently ignore an installed catalog.
+            if (hostExecutionContext != null || standardEmbedding || applicationModules != null) {
                 throw new IllegalStateException("host execution context is already bound");
             }
             hostExecutionContext = host;
