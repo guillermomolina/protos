@@ -1004,6 +1004,28 @@ final class CanonicalToBytecodeLowerer {
                 continue;
             }
 
+            /*
+             * PERF036-A: a bare assignment whose destination is Resolved to
+             * an already-established binding of this scope, and whose RHS is
+             * a literal or an established scalar read. Such an RHS cannot
+             * observe, remove, freeze or close the destination.
+             */
+            if (expression instanceof CanonicalAssign assign) {
+                if (assign.target().isPresent()
+                        || !(assign.value() instanceof CanonicalLiteral
+                                || (assign.value() instanceof CanonicalLookup read
+                                        && readsEstablishedScalar(
+                                                read,
+                                                analysis,
+                                                scope,
+                                                established)))
+                        || !assignsEstablishedScalar(
+                                assign, analysis, scope, established)) {
+                    return java.util.Set.of();
+                }
+                continue;
+            }
+
             if (!(expression instanceof CanonicalLiteral)) {
                 return java.util.Set.of();
             }
@@ -1030,6 +1052,28 @@ final class CanonicalToBytecodeLowerer {
                                 instanceof CanonicalBindingResolution.Resolved resolved
                                 && resolved.identity().owner() == scope
                                 && resolved.identity().name().equals(lookup.name())
+                                && established.contains(
+                                        resolved.identity().name()))
+                .orElse(false);
+    }
+
+    /**
+     * PERF036-A: the assignment counterpart of {@link
+     * #readsEstablishedScalar}: {@code assign}'s destination is {@code
+     * Resolved} to a binding of {@code scope} that an earlier creation of the
+     * same straight-line body already established.
+     */
+    private static boolean assignsEstablishedScalar(
+            CanonicalAssign assign,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            java.util.Set<String> established) {
+        return analysis.resolutionOf(assign)
+                .map(resolution ->
+                        resolution
+                                instanceof CanonicalBindingResolution.Resolved resolved
+                                && resolved.identity().owner() == scope
+                                && resolved.identity().name().equals(assign.name())
                                 && established.contains(
                                         resolved.identity().name()))
                 .orElse(false);
@@ -1396,10 +1440,13 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             BytecodeLocal result) {
+        // PERF036-A: an admitted scalar assignment needs no invocation staging.
         boolean hasComposedInvocation =
                 expressions.stream()
-                        .anyMatch(
-                                CanonicalToBytecodeLowerer::requiresComposedInvocation);
+                        .anyMatch(expression ->
+                                requiresComposedInvocation(expression)
+                                        && !(expression instanceof CanonicalAssign assign
+                                                && isScalarLocalAssign(assign)));
         BytecodeLocal preparedCall =
                 hasComposedInvocation
                         ? builder.createLocal(
@@ -3323,6 +3370,84 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyAssign(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (isScalarLocalAssign(assign)) {
+            emitScalarAssign(
+                    builder, assign, result, preparedCall, childResult, resumeValue);
+            return;
+        }
+        emitResolvedBodyAssign(
+                builder, assign, result, preparedCall, childResult, resumeValue);
+    }
+
+    /**
+     * PERF036-A: whether {@code assign} is an admitted scalar assignment of
+     * the root being lowered (outside any inline activation region). Within
+     * an admitted root every bare assignment was proven by {@link
+     * #scalarLocalNamesForRoot}.
+     */
+    private boolean isScalarLocalAssign(CanonicalAssign assign) {
+        return assign.target().isEmpty()
+                && currentActivationLocal == null
+                && currentRootScalarLocals.contains(assign.name());
+    }
+
+    /**
+     * PERF036-A: one admitted scalar assignment with its own compact check.
+     * The compact lane's context is unobserved (hence OPEN), its destination
+     * is PRESENT, and its RHS is effect-free, so writing the builtin local
+     * directly is indistinguishable from selecting the destination first;
+     * the assignment yields the exact RHS value. An observed activation
+     * instead takes the unchanged authoritative assignment.
+     */
+    private void emitScalarAssign(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal local = currentRootFrameLocals.get(assign.name());
+        if (local == null) {
+            throw new AssertionError(
+                    "admitted scalar assignment is missing: " + assign.name());
+        }
+
+        builder.beginIfThenElse();
+        builder.emitIsCompactLocalFrame();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(local);
+        if (assign.value() instanceof CanonicalLiteral literal) {
+            builder.emitLoadConstant(materialize(literal));
+        } else if (assign.value() instanceof CanonicalLookup read
+                && isScalarLocalRead(read)) {
+            builder.emitLoadLocal(currentRootFrameLocals.get(read.name()));
+        } else {
+            throw new AssertionError(
+                    "admitted scalar assignment has an unproven value: "
+                            + assign.value().getClass().getSimpleName());
+        }
+        builder.endStoreLocal();
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(local);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitResolvedBodyAssign(
+                builder, assign, result, preparedCall, childResult, resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private void emitResolvedBodyAssign(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,

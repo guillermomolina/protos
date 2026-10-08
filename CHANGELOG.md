@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.311-SNAPSHOT
+
+- `PERF036-A`: pay-as-you-grow scalar lowering for local assignment.
+  - A bare assignment whose destination is statically `Resolved` to an
+    already-established binding of the current parameterless Closure root,
+    and whose right-hand side is a literal or an established scalar read, is
+    admitted to the PERF034 scalar-local lane.
+  - While the call stays compact it writes the builtin local directly with
+    `StoreLocal` and yields the exact right-hand-side value, without
+    destination resolution, mutation-target temporaries, or invocation
+    staging; an observed activation takes the unchanged authoritative
+    resolved assignment.
+  - Unadmitted assignments (explicit targets, captured, outer or dynamic
+    destinations, effectful right-hand sides) keep their existing lowering.
+    No observable semantics change.
+
 ## 0.3.310-SNAPSHOT
 
 - `PERF032-G7` (#831): minimal direct Closure call headers.

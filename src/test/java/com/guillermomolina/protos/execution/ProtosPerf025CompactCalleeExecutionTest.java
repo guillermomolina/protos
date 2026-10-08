@@ -449,6 +449,234 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
+    /** A PERF036-A scalar body with assignments, its result and final bindings. */
+    private record ScalarAssignBody(
+            String characters, long expected, int creates, int reads, int assigns,
+            String assigned, long assignedValue) {}
+
+    private static final List<ScalarAssignBody> PERF036A_ASSIGN_BODIES =
+            List.of(
+                    new ScalarAssignBody(
+                            "() => { first: 7\nfirst = 9\nfirst }", 9, 1, 1, 1, "first", 9),
+                    new ScalarAssignBody(
+                            "() => { first: 7\nfirst = 8\nfirst = 11\nfirst }",
+                            11, 1, 1, 2, "first", 11),
+                    new ScalarAssignBody(
+                            "() => { first: 7\nsecond: 3\nsecond = first\nsecond }",
+                            7, 2, 2, 1, "second", 7),
+                    new ScalarAssignBody(
+                            "() => { first: 7\nfirst = 13 }", 13, 1, 0, 1, "first", 13),
+                    new ScalarAssignBody(
+                            "() => { first: 7\nsecond: 5\nfirst = second }",
+                            5, 2, 1, 1, "first", 5));
+
+    @Test
+    void perf036aScalarAssignmentsStayInScalarLane() throws Exception {
+        withCore(module -> {
+            for (ScalarAssignBody body : PERF036A_ASSIGN_BODIES) {
+                ProtosClosureValue scalar = closure(body.characters(), module);
+                List<String> instructions = instructionNames(scalar);
+                assertNone(instructions, "CurrentActivation");
+                assertNone(instructions, "InstallFrameLexicalAuthority");
+                // Every creation, read and assignment owns its own compact
+                // check; the resolved write pair survives only as the
+                // authoritative fallback of each assignment.
+                assertEquals(
+                        body.creates() + body.reads() + body.assigns(),
+                        countOf(instructions, "IsCompactLocalFrame"),
+                        () -> body.characters() + ": " + instructions);
+                assertEquals(
+                        body.assigns(),
+                        countOf(instructions, "ResolveRootFrameLocalWriteTarget"),
+                        () -> body.characters() + ": " + instructions);
+                assertEquals(
+                        body.assigns(),
+                        countOf(instructions, "AssignRootFrameLocal"),
+                        () -> body.characters() + ": " + instructions);
+                assertContains(instructions, "store.local");
+                assertContains(instructions, "load.local");
+
+                for (int iteration = 0; iteration < 3; iteration++) {
+                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                            fastDirect(scalar, module);
+                    assertEquals(
+                            BigInteger.valueOf(body.expected()),
+                            integerValue(enter(prepared)),
+                            body.characters());
+                    assertSame(
+                            scalar, prepared.targetArguments()[0],
+                            "scalar assignment must not materialize");
+                }
+
+                Object[] method =
+                        ProtosFrameArguments.compactImmediateMethodCall(
+                                scalar, newObject(), newObject(), module,
+                                new Object[0]);
+                assertEquals(
+                        BigInteger.valueOf(body.expected()),
+                        integerValue(target(scalar).call(method)),
+                        body.characters());
+                assertSame(scalar, method[0]);
+            }
+        });
+    }
+
+    @Test
+    void perf036aObservedActivationUpdatesAuthoritativeBinding() throws Exception {
+        withCore(module -> {
+            for (ScalarAssignBody body : PERF036A_ASSIGN_BODIES) {
+                ProtosClosureValue scalar = closure(body.characters(), module);
+                List<ProtosObjectValue> contexts = new java.util.ArrayList<>();
+                for (int invocation = 0; invocation < 2; invocation++) {
+                    Object[] arguments =
+                            ProtosFrameArguments.compactDirectClosureCall(
+                                    scalar, module, null, new Object[0]);
+                    ProtosActivation published =
+                            ProtosFrameArguments.activation(arguments);
+                    ProtosObjectValue observed = published.context();
+                    assertEquals(
+                            BigInteger.valueOf(body.expected()),
+                            integerValue(target(scalar).call(arguments)),
+                            body.characters());
+                    assertSame(published, arguments[0]);
+                    assertSame(observed, published.context());
+                    assertEquals(
+                            BigInteger.valueOf(body.assignedValue()),
+                            integerValue(observed.readLocalSlot(body.assigned()).orElseThrow()),
+                            () -> body.characters()
+                                    + ": the observed context holds the assigned value");
+                    contexts.add(observed);
+                }
+                assertNotSame(
+                        contexts.get(0), contexts.get(1),
+                        "every invocation owns a fresh execution context");
+            }
+        });
+    }
+
+    @Test
+    void perf036aFrozenOrClosedEntryContextRejectsInitialCreation() throws Exception {
+        withCore(module -> {
+            // Scope: this rejects the body's initial *creation*, not an
+            // assignment to an existing binding. An admitted body has no
+            // effect that could freeze or close its own context between its
+            // creation and its assignment, so a FROZEN/CLOSED existing
+            // destination is unreachable in an admitted root; it stays
+            // covered only by the unchanged general assignment path.
+            ProtosClosureValue scalar =
+                    closure("() => { first: 7\nfirst = 9\nfirst }", module);
+            for (boolean freeze : List.of(true, false)) {
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                scalar, module, null, new Object[0]);
+                ProtosObjectValue observed =
+                        ProtosFrameArguments.activation(arguments).context();
+                if (freeze) {
+                    observed.freeze();
+                } else {
+                    observed.close();
+                }
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> target(scalar).call(arguments));
+                assertTrue(observed.readLocalSlot("first").isEmpty());
+            }
+        });
+    }
+
+    @Test
+    void perf036aFinalAssignmentKeepsStatementAndExpressionTags() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue scalar =
+                    closure("() => { first: 7\nfirst = 9\nfirst }", module);
+            ProtosSemanticBytecodeRootNode root =
+                    scalar.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+            TagTree tree = root.getBytecodeNode().getTagTree();
+            List<TagTree> statements =
+                    collectTags(tree, StandardTags.StatementTag.class);
+            assertEquals(
+                    List.of("first: 7", "first = 9", "first"),
+                    statements.stream()
+                            .map(tag -> tag.getSourceSection().getCharacters().toString())
+                            .toList());
+            assertEquals(
+                    statements,
+                    collectTags(tree, StandardTags.ExpressionTag.class));
+        });
+    }
+
+    @Test
+    void perf036aAssignmentAdmissionExcludesUnprovenForms() throws Exception {
+        withCore(module -> {
+            evaluate("perf036aOuter: 5", module);
+            ProtosClosureValue outer =
+                    closure("() => { first: 1\nperf036aOuter = 6\nfirst }", module);
+            assertNone(instructionNames(outer), "IsCompactLocalFrame");
+            assertEquals(BigInteger.ONE, integerValue(enter(fastDirect(outer, module))));
+            assertEquals(
+                    BigInteger.valueOf(6),
+                    integerValue(evaluate("perf036aOuter", module)),
+                    "an outer binding is assigned through the lexical chain");
+
+            ProtosClosureValue explicitTarget =
+                    closure("() => { first: 7\ncontext.first = 9\nfirst }", module);
+            assertNone(instructionNames(explicitTarget), "IsCompactLocalFrame");
+            assertContains(instructionNames(explicitTarget), "AssignLocalSlot");
+            assertEquals(
+                    BigInteger.valueOf(9),
+                    integerValue(enter(fastDirect(explicitTarget, module))),
+                    "an explicit-target assignment keeps the general lowering");
+
+            ProtosClosureValue beforeCreation =
+                    closure("() => { first = 3\nfirst: 4\nfirst }", module);
+            assertNone(instructionNames(beforeCreation), "IsCompactLocalFrame");
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(beforeCreation, module)),
+                    "an ABSENT destination is SlotNotFound");
+
+            ProtosClosureValue send =
+                    closure("() => { first: 4\nfirst = first + 1\nfirst }", module);
+            assertNone(instructionNames(send), "IsCompactLocalFrame");
+            assertEquals(
+                    BigInteger.valueOf(5),
+                    integerValue(enter(fastDirect(send, module))));
+
+            ProtosClosureValue captured =
+                    closure(
+                            "() => { first: 1\nsetter: (v) => { first = v }\nsetter(8)\nfirst }",
+                            module);
+            assertNone(instructionNames(captured), "IsCompactLocalFrame");
+            assertEquals(
+                    BigInteger.valueOf(8),
+                    integerValue(enter(fastDirect(captured, module))),
+                    "a captured assignment writes the binding by reference");
+
+            ProtosClosureValue recreated =
+                    closure(
+                            "() => { first: 1\ncontext.removeSlot(\"first\")\n"
+                                    + "first: 6\nfirst = 9\nfirst }",
+                            module);
+            assertNone(instructionNames(recreated), "IsCompactLocalFrame");
+            assertEquals(
+                    BigInteger.valueOf(9),
+                    integerValue(enter(fastDirect(recreated, module))));
+
+            ProtosClosureValue removed =
+                    closure(
+                            "() => { first: 1\ncontext.removeSlot(\"first\")\nfirst = 3 }",
+                            module);
+            assertNone(instructionNames(removed), "IsCompactLocalFrame");
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(removed, module)),
+                    "a removed destination is SlotNotFound");
+        });
+    }
+
     @Test
     void localOnlyCalleeCreatesAndAssignsWithoutMaterializing() throws Exception {
         withCore(module -> {
