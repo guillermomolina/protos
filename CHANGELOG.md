@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.300-SNAPSHOT
+
+- `PERF032-G6` (#831): reconcile the PERF013 shared lexical-root grouping
+  regression tests with G6's cold zero-parameter Closure arity-rejection
+  roots. The tests now verify exact physical root counts and assert that
+  every rejection root belongs to its Closure's original
+  `BytecodeRootNodes` group.
+  - Six obsolete root-count expectations updated across three test classes.
+  - No runtime or language specification changes.
+  - Focal tests and the integrated `make test` suite passed.
+
 ## 0.3.299-SNAPSHOT
 
 - `PERF032-G6` (#831): a source Closure declaring no parameters no longer
