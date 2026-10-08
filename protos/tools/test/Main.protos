@@ -31,6 +31,7 @@ LogicalCaseDispatch: import("self:LogicalCaseDispatch")
 CaseRef: import("self:CaseRef")
 CaseSelection: import("self:CaseSelection")
 CasePlan: import("self:LogicalCasePlan")
+ArrayAccumulator: import("self:ArrayAccumulator")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -310,11 +311,15 @@ selectorsActive.ifTrue(() => {
 // carrying anything other than a suite-native Case fails closed here rather
 // than falling back to D108.
 logicalExecutionSuites: Array()
-logicalProjections: Array()
-logicalCaseMetadata: Array()
+// PERF031-I: the Case-scale results (projections, metadata, references and
+// each suite's progress keys) are accumulated without re-copying their prefix
+// for every element, and materialized in discovery order once discovery and
+// selection completed.
+logicalProjectionsAccumulator: ArrayAccumulator.create()
+logicalCaseMetadataAccumulator: ArrayAccumulator.create()
 // BUG020: aligned with logicalCaseMetadata; the exact Case reference each
 // failure report names.
-logicalCaseReferences: Array()
+logicalCaseReferencesAccumulator: ArrayAccumulator.create()
 // TOOL012: aligned with logicalExecutionSuites; each retained suite's
 // retained Cases, in plan order, as Array(casePath, selector), the
 // presentation-only input of RepositorySuite progress grouping.
@@ -341,7 +346,7 @@ executionSuites.each((planned) => {
         planned.leaf.executionRequirement
 
     logicalCaseCount: 0
-    suiteProgressCaseKeys: Array()
+    suiteProgressCaseKeysAccumulator: ArrayAccumulator.create()
 
     Manifest.planCases(planned.plan).each((spec) => {
         (Manifest.caseExpectation(spec) == "suite-native").ifFalse(() => {
@@ -457,19 +462,17 @@ executionSuites.each((planned) => {
         })
 
         (retainedCases.size() > 0).ifTrue(() => {
-            logicalProjections =
-                Array(
-                    ...logicalProjections,
-                    selectedProjection
-                )
+            ArrayAccumulator.append(
+                logicalProjectionsAccumulator,
+                selectedProjection
+            )
         })
 
         retainedCases.each((retainedCase) => {
-            logicalCaseReferences =
-                Array(
-                    ...logicalCaseReferences,
-                    CaseRef.display(retainedCase)
-                )
+            ArrayAccumulator.append(
+                logicalCaseReferencesAccumulator,
+                CaseRef.display(retainedCase)
+            )
 
             metadata:
                 Array(
@@ -478,11 +481,10 @@ executionSuites.each((planned) => {
                 )
             metadata.freeze()
 
-            logicalCaseMetadata =
-                Array(
-                    ...logicalCaseMetadata,
-                    metadata
-                )
+            ArrayAccumulator.append(
+                logicalCaseMetadataAccumulator,
+                metadata
+            )
 
             progressCaseKey:
                 Array(
@@ -491,11 +493,10 @@ executionSuites.each((planned) => {
                 )
             progressCaseKey.freeze()
 
-            suiteProgressCaseKeys =
-                Array(
-                    ...suiteProgressCaseKeys,
-                    progressCaseKey
-                )
+            ArrayAccumulator.append(
+                suiteProgressCaseKeysAccumulator,
+                progressCaseKey
+            )
 
             logicalCaseCount =
                 logicalCaseCount + 1
@@ -524,6 +525,8 @@ executionSuites.each((planned) => {
                 suite
             )
 
+        suiteProgressCaseKeys:
+            ArrayAccumulator.finish(suiteProgressCaseKeysAccumulator)
         suiteProgressCaseKeys.freeze()
         logicalSuiteProgressCaseKeys =
             Array(
@@ -537,6 +540,10 @@ executionSuites.each((planned) => {
 })
 
 CaseSelection.requireComplete(caseSelection)
+
+logicalProjections: ArrayAccumulator.finish(logicalProjectionsAccumulator)
+logicalCaseMetadata: ArrayAccumulator.finish(logicalCaseMetadataAccumulator)
+logicalCaseReferences: ArrayAccumulator.finish(logicalCaseReferencesAccumulator)
 
 logicalExecutionSuites.freeze()
 logicalProjections.freeze()

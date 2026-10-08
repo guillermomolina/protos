@@ -1,0 +1,68 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! PERF031-I: Test Tool-internal order-preserving Array accumulation.
+//!
+//! Ordinary Array has no append, so growing a result with
+//! `Array(...previous, value)` copies the whole prefix on every step. This
+//! binary-carry accumulator (the technique SuiteGraph.flatten,
+//! Manifest.loadWithParser and Options.projectArguments use privately) keeps
+//! chunks keyed by merge level, merges equal-size chunks older-before-newer,
+//! and copies each element O(log N) times in total. `finish` returns a fresh
+//! ordinary Array holding exactly the appended references in append order;
+//! freezing it remains the caller's decision. Map order is never consulted:
+//! chunks are read by explicit level.
+
+create: () => {
+    {
+        chunks: Map()
+        maxLevel: -1
+    }
+}
+
+append: (accumulator, value) => {
+    chunk: Array(value)
+    level: 0
+
+    // A chunk already at this level holds older elements, so it goes first.
+    (() => accumulator.chunks.containsKey(level)).whileTrue() {
+        chunk = Array(...accumulator.chunks[level], ...chunk)
+        accumulator.chunks.remove(level)
+        level = level + 1
+    }
+
+    accumulator.chunks[level] = chunk
+    (level > accumulator.maxLevel).ifTrue(() => {
+        accumulator.maxLevel = level
+    })
+
+    null
+}
+
+// Higher levels hold older elements, so chunks are concatenated from the
+// highest level down. The accumulator itself is left unchanged.
+finish: (accumulator) => {
+    result: Array()
+    level: accumulator.maxLevel
+
+    (() => level >= 0).whileTrue() {
+        accumulator.chunks.containsKey(level).ifTrue(() => {
+            result = Array(...result, ...accumulator.chunks[level])
+        })
+        level = level - 1
+    }
+
+    result
+}

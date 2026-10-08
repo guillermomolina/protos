@@ -27,6 +27,7 @@ JSON: import("std:json/JSON")
 Arrays: import("std:collections/Array")
 Discovery: import("self:Discovery")
 CaseRef: import("self:CaseRef")
+ArrayAccumulator: import("self:ArrayAccumulator")
 
 selectionError: () => {
     Error().signal()
@@ -106,13 +107,15 @@ requireComplete: (selection) => {
 
 // protos.test.cases/v1 discovery document over the final selected
 // projections, in authoritative logical CasePlan order.
+// PERF031-I: entries are accumulated without re-copying the listed prefix
+// for every Case.
 listing: (projections) => {
-    cases: Array()
+    accumulated: ArrayAccumulator.create()
 
     projections.each((selected) => {
         Discovery.projectionPlan(selected).each((entry) => {
-            cases = Array(
-                ...cases,
+            ArrayAccumulator.append(
+                accumulated,
                 JSON.object(
                     "ref", JSON.string(CaseRef.ref(entry)),
                     "display", JSON.string(CaseRef.display(entry))
@@ -120,6 +123,8 @@ listing: (projections) => {
             )
         })
     })
+
+    cases: ArrayAccumulator.finish(accumulated)
 
     JSON.encode(
         JSON.object(

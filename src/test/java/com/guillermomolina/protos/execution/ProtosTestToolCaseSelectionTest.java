@@ -243,6 +243,151 @@ final class ProtosTestToolCaseSelectionTest {
                         .value());
     }
 
+    /*
+     * PERF031-I: the listing accumulates entries across several projections in projection
+     * order, then CasePlan order within each, exactly as the former prefix-copy construction.
+     * Exact refs are supplied in reverse order and still list in CasePlan order.
+     */
+    @Test
+    void listingSpansProjectionsInOrderAfterReverseExactSelection() throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        SUITE
+                                + """
+
+                                otherSuite: {
+                                    tests: Array(
+                                        TestValue("alpha", body),
+                                        TestValue("beta", body)
+                                    )
+                                }
+                                otherProjection:
+                                    Discovery.projectionFromModule(
+                                        Array("corpus", "other.protos"),
+                                        otherSuite
+                                    )
+                                otherCases: Discovery.projectionPlan(otherProjection)
+
+                                selection: Selection.begin(Array(
+                                    CaseRef.ref(otherCases[1]),
+                                    CaseRef.ref(otherCases[0]),
+                                    CaseRef.ref(cases[2]),
+                                    CaseRef.ref(cases[0])
+                                ))
+                                retained: Selection.retain(selection, cases)
+                                otherRetained: Selection.retain(selection, otherCases)
+                                Selection.requireComplete(selection)
+
+                                Array(
+                                    Selection.listing(Array(
+                                        Selection.projection(projection, retained),
+                                        Selection.projection(otherProjection, otherRetained)
+                                    )),
+                                    Selection.listing(Array()),
+                                    calls.value
+                                )
+                                """);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        ProtosArrayValue observed =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+
+        assertEquals(
+                "{\"schema\":\"protos.test.cases/v1\",\"cases\":["
+                        + listed("first")
+                        + ","
+                        + listed("third")
+                        + ","
+                        + listedIn("other.protos", "alpha")
+                        + ","
+                        + listedIn("other.protos", "beta")
+                        + "]}",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(BigInteger.ZERO))
+                        .value());
+        assertEquals(
+                "{\"schema\":\"protos.test.cases/v1\",\"cases\":[]}",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(BigInteger.ONE))
+                        .value());
+        assertEquals(
+                BigInteger.ZERO,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(BigInteger.TWO))
+                        .value());
+    }
+
+    /*
+     * PERF031-I: the accumulator yields a fresh, unfrozen Array holding exactly the appended
+     * references, in append order, for sizes on both sides of every carry boundary up to 17;
+     * independent accumulators never share state and finishing leaves the accumulator intact.
+     */
+    @Test
+    void arrayAccumulatorPreservesOrderIdentityAndIndependence() throws Exception {
+        assertTrue(
+                """
+                ArrayAccumulator: import("self:ArrayAccumulator")
+
+                values: Array()
+                count: 0
+                (() => count < 17).whileTrue() {
+                    value: {
+                        id: count
+                    }
+                    values = Array(...values, value)
+                    count = count + 1
+                }
+
+                ok: true
+                size: 0
+                (() => size <= 17).whileTrue() {
+                    accumulator: ArrayAccumulator.create()
+                    other: ArrayAccumulator.create()
+                    index: 0
+                    (() => index < size).whileTrue() {
+                        ArrayAccumulator.append(accumulator, values[index])
+                        index = index + 1
+                    }
+                    ArrayAccumulator.append(other, values[0])
+
+                    result: ArrayAccumulator.finish(accumulator)
+                    again: ArrayAccumulator.finish(accumulator)
+                    (result.size() == size).ifFalse(() => {
+                        ok = false
+                    })
+                    (again.size() == size).ifFalse(() => {
+                        ok = false
+                    })
+                    (result === again).ifTrue(() => {
+                        ok = false
+                    })
+                    // Replacing an existing element would fail on a frozen Array.
+                    (size > 0).ifTrue(() => {
+                        result[0] = values[0]
+                    })
+                    check: 0
+                    (() => check < size).whileTrue() {
+                        (result[check] === values[check]).ifFalse(() => {
+                            ok = false
+                        })
+                        (again[check] === values[check]).ifFalse(() => {
+                            ok = false
+                        })
+                        check = check + 1
+                    }
+                    (ArrayAccumulator.finish(other).size() == 1).ifFalse(() => {
+                        ok = false
+                    })
+                    size = size + 1
+                }
+
+                ok
+                """);
+    }
+
     @Test
     void exactSelectionRetainsExistingEntriesInCasePlanOrder() throws Exception {
         assertTrue(
@@ -372,6 +517,16 @@ final class ProtosTestToolCaseSelectionTest {
         return "{\"ref\":\""
                 + ref("corpus", "suite.protos", selector)
                 + "\",\"display\":\"corpus:suite.protos::"
+                + selector
+                + "\"}";
+    }
+
+    private static String listedIn(String path, String selector) {
+        return "{\"ref\":\""
+                + ref("corpus", path, selector)
+                + "\",\"display\":\"corpus:"
+                + path
+                + "::"
                 + selector
                 + "\"}";
     }

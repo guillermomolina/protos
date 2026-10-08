@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.297-SNAPSHOT
+
+- `PERF031-I` (#787) removes quadratic repeated-prefix Array growth from Test
+  Tool Case discovery and the D185 Case listing. The specification and all
+  observable Test Tool behavior are unchanged.
+  - New Test Tool-internal `ArrayAccumulator` module (binary-carry,
+    order-preserving accumulation over ordinary `Array(...)` construction).
+  - `Main.protos` accumulates logical projections, Case metadata, Case
+    references and each suite's progress keys through it, and materializes
+    and freezes them at the existing points.
+  - `CaseSelection.listing` accumulates its `protos.test.cases/v1` entries
+    through it; the listing bytes are unchanged.
+  - `ProtosTestToolCaseSelectionTest` adds multi-projection listing order
+    and accumulator order/identity/independence coverage.
+  - No speedup has been measured or is claimed.
+
 ## 0.3.296-SNAPSHOT
 
 - `LM010-B` (#493) adds conservative static completion to the
