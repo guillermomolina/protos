@@ -131,6 +131,47 @@ these results; any value already copied across an independently permitted
 isolation boundary follows that destination value's ordinary lifetime rules.
 
 ---
+### Standard Polyglot embedding bootstrap and authority
+
+This subsection applies when a host embeds Protos through a standard Polyglot
+Context. Module placement of host evaluations is owned by
+`../semantics/MODULES.md` (Host-initiated evaluations in an embedded
+RootActor).
+
+Each Polyglot Context has at most one Protos Process, created lazily. Building
+the Context, or querying its binding scope before any evaluation, does not
+create the Process, the RootActor, or Core runtime state. The first valid host
+evaluation initializes the Process and its RootActor and executes the
+RootActor's initial module.
+
+Only that initial module receives the bootstrap-local slots defined in this
+section: `process` always, and `filesystem` and `network` only when the
+corresponding default authority is granted, under Root filesystem capability
+provisioning and Root network capability provisioning. Later host entries do
+not receive implicit duplicates of those slots.
+
+Process arguments, environment, and standard streams are derived from the
+embedding language environment supplied by the Polyglot host (the Truffle
+`TruffleLanguage.Env`), and remain governed by §§23–25, including their
+snapshot and authority rules. Filesystem authority is bounded by the authority
+the host grants to the Context. Loading Core library resources from the
+distribution, language home, or an internal packaged resource confers no
+general filesystem authority. No default `Network` capability is created
+unless the host explicitly grants network authority; `NETWORK.md` owns network
+semantics.
+
+The Process persists across host evaluations in the same Context; evaluations
+do not repeat bootstrap. Concurrent host entries that would execute unsafely in
+the same RootActor are rejected rather than serialized by a universal call
+gate. An unhandled Error that terminates the RootActor terminates the Process
+(`../concurrency/ACTORS.md` §24C and §32); a later evaluation in the same
+Context does not recreate or restart the Process.
+
+Closing the Context respects §28 Process-Control Boundary: Process
+termination, revocation of Process-local authority, and transfer of remaining
+resources to host cleanup custody. No guest callback executes after the
+terminal boundary. `IO_CORE.md` owns the detailed resource lifecycle rules.
+
 ## 23. Process Arguments
 
 `process.args()` returns an ordinary Core `Array` containing exactly the application-argument Strings supplied to the Protos execution, in the order supplied. The Array is frozen before it is exposed.

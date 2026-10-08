@@ -23,6 +23,38 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.449] - 2026-10-08
+
+### PLAT054-2 — Standard Polyglot embedding normative publication
+- `spec/semantics/MODULES.md` (Host-initiated evaluations in an embedded
+  RootActor): the first host evaluation initializes the RootActor's initial
+  module; later evaluations in the live Process are additional direct entries,
+  not Actors, implicit imports, or REPL steps. Source identity/name creates no
+  `ModuleKey`; only the resolver and importable canonical identity enable the
+  cache. A `READY` keyed entry is reused without re-execution and yields its
+  stored terminal result; unkeyed entries each create a distinct standalone
+  `moduleContext`. The host binding scope selects the last normally completed
+  entry's `moduleContext`, exposes only its own local slots, is host-read-only,
+  and exposes no live members after fatal termination. Host Closure reads
+  follow `CALLABLES.md` fresh receiver-bound extraction; retained values never
+  re-read the slot.
+- `spec/io/PROCESS_IO.md` (Standard Polyglot embedding bootstrap and
+  authority): one lazy Process per Context; Context construction and scope
+  queries create no Process/RootActor/Core; bootstrap slots only on the initial
+  module; stdio/args/environment from the embedding `TruffleLanguage.Env`;
+  Core resources confer no filesystem authority; no default Network; unsafe
+  concurrent entries are rejected without universal serialization; a fatal
+  Error is not followed by Process recreation; Context close follows §28 with
+  no guest callbacks after the terminal boundary.
+- `spec/concurrency/ACTORS.md` §24C: a synchronous host-initiated RootActor
+  entry is an Actor-local turn for unhandled Error fatality without requiring
+  RootTask/ProtosTask allocation.
+- Preserved: module cache-before-execute, `INITIALIZING`, cycles, partial
+  objects, failed-initialization eviction, no rollback, standalone identity
+  rules, §32 RootActor failure, Actor isolation, Process I/O snapshots and
+  authority, `IO_CORE.md`/`NETWORK.md` ownership, and PAY AS YOU GROW (no
+  per-call bootstrap, Task, scheduler, or universal rich activation).
+
 ## [0.1.448] - 2026-10-07
 
 ### I084 / D193 A_MINUS_MINIMAL_OPERATION_ONLY_ESCAPE_HATCH — `std:interop` public operations

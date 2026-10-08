@@ -482,6 +482,60 @@ No fake registration under an invented import identity is required for such an e
 
 If the host later makes code equivalent to that standalone entry importable under a canonical `ModuleKey`, that does not change the identity or status of the standalone instance already created; the host may add resolution capability, but the standalone instance does not thereby acquire a `ModuleKey`. A subsequent `import()` that resolves to that canonical `ModuleKey` follows the ordinary Actor-local module-cache rules of the previous subsections: on a cache miss the runtime creates a new module instance, caches it as `INITIALIZING`, and executes its body through the lifecycle described in The Initial Module of an Actor. The standalone instance and that later cached instance are therefore distinct objects under `===`, and the module body and its side effects may execute again. This is not a double initialization of a single module instance, because the standalone instance never was the cached module instance for that `ModuleKey`. No retroactive cache registration, module-instance adoption, identity mutation, cache migration, source-code deduplication, or rollback of the standalone execution is introduced.
 
+### Host-initiated evaluations in an embedded RootActor
+
+This subsection applies when a host embeds Protos through a standard Polyglot
+Context and submits sources for evaluation. `../io/PROCESS_IO.md` owns Process
+bootstrap and authority for that embedding; this subsection owns module
+placement only.
+
+The first valid host evaluation in a Context is the initialization of the
+RootActor's initial module, following The Initial Module of an Actor and
+Initial Modules Without an Importable Canonical Identity. Each later host
+evaluation submitted while that Process is live is an additional direct entry
+executed by the same RootActor. It is not a new Actor, an implicit `import()`,
+or a REPL step: no REPL namespace, accumulated top-level scope, or implicit
+binding carry-over between entries exists.
+
+Source identity, Source name, or Source content does not create a `ModuleKey`.
+Only the host's module resolver and an importable canonical identity determine
+whether an entry has a `ModuleKey` and therefore participates in the Actor-local
+module cache.
+
+- When an entry resolves to a canonical `ModuleKey` whose cached instance is
+  `READY`, the entry reuses that instance without re-executing its body and
+  produces the terminal result stored by that instance's initial successful
+  initialization. No module effect is repeated.
+- When an entry resolves to a canonical `ModuleKey` with no cached instance, it
+  follows the ordinary importable lifecycle of The Initial Module of an Actor.
+- When an entry has no `ModuleKey`, each evaluation creates a distinct
+  standalone `moduleContext`, even when the same Source is evaluated again. No
+  `ModuleKey` is invented for such an entry, and historical module identities
+  are never modified, adopted, or reassigned.
+
+Cache-before-execute, `INITIALIZING`, cyclic imports, observable partially
+initialized modules, removal of the cache entry after failed initialization,
+and absence of rollback apply to these entries exactly as defined above.
+
+The host-visible binding scope is a stable host-facing view selecting the
+`moduleContext` of the last host entry that completed normally. The selection
+changes only after a normal completion; an entry that fails leaves the previous
+selection unchanged. The scope exposes exclusively the own local slots of the
+selected `moduleContext`: it does not expose the prelude, delegated slots, an
+export registry, or any other module. The scope is read-only from the host;
+Protos code may still mutate those ordinary slots under normal semantics.
+
+A host read of a slot whose value is a Closure follows the receiver-bound
+extraction semantics owned by `CALLABLES.md`: each such read produces a fresh
+extraction. A host value retained from an earlier read keeps exactly that
+extraction (its Closure identity, lexical capture, `this`/`methodHome`
+binding, argument handling, native behavior, and non-local return semantics);
+it never re-reads the slot and is not redirected by a later evaluation or a
+later change of the selected `moduleContext`.
+
+After fatal termination of the Process, the scope exposes no live module
+members and no host entry re-enters guest execution.
+
 ### `import()` and Bindings
 
 Imports are eager by default. Lazy dependencies are expressed explicitly using ordinary language mechanisms such as closures rather than by implicit lazy-import semantics.

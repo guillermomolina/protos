@@ -975,6 +975,14 @@ existing acceptance rule: once the request was accepted, failure before a
 normal reply yields `RequestOutcomeUncertain`; the destination's internal error
 object is not sent to the requester as an implicit reply.
 
+A synchronous host-initiated entry that executes ordinary code in the
+RootActor is an Actor-local execution turn for the purposes of unhandled Error
+fatality, regardless of whether the implementation materializes a RootTask or
+ProtosTask. An Error that escapes its outermost dynamic handler boundary
+therefore follows the existing fatal RootActor rule. This classification
+introduces no requirement to allocate Task machinery for a successful ordinary
+synchronous entry.
+
 Initialization remains the same rule applied to the initialization turn:
 an unhandled initialization `Error` is fatal to that Actor incarnation and the
 Actor never reaches READY.
