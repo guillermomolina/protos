@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.299-SNAPSHOT
+
+- `PERF032-G6` (#831): a source Closure declaring no parameters no longer
+  checks argument count inside its root. Each such definition gets a cold
+  arity-rejection root in the same Bytecode group; ordinary source calls
+  supplying arguments enter it and signal the unchanged guest argument-count
+  Error without evaluating the body. Closures with parameters, defaults, rest,
+  and inline callbacks are unchanged.
+
 ## 0.3.298-SNAPSHOT
 
 - `I086` / `PLAT054-3E3` (#840, design #838, blocker B011) grants the default

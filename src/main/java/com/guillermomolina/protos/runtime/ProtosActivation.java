@@ -912,6 +912,21 @@ public final class ProtosActivation {
                 "parameter binding requires an invocation activation");
     }
 
+    /**
+     * PERF032-G6: the number of supplied arguments of this invocation
+     * activation, read without snapshotting them.
+     */
+    public int suppliedArgumentCountForRuntime() {
+        if (deferredSuppliedArguments != null) {
+            return deferredSuppliedArguments.values().size();
+        }
+        if (arguments != null) {
+            return arguments.indexedSizeForRuntime();
+        }
+        throw new IllegalStateException(
+                "parameter binding requires an invocation activation");
+    }
+
     public Optional<ProtosReturnHome> returnHome() {
         return Optional.ofNullable(returnHome);
     }

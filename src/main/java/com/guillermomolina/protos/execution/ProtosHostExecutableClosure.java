@@ -29,6 +29,7 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -193,7 +194,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 Object[] arguments,
                 @Bind("$node") Node node,
                 @Cached("receiver.target") RootCallTarget cachedTarget,
-                @Cached("create(cachedTarget)") DirectCallNode call)
+                @Cached("create(cachedTarget)") DirectCallNode call,
+                @Shared("indirectCall") @Cached IndirectCallNode rejectionCall)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
@@ -202,6 +204,17 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared = receiver.prepare(supplied);
+                if (prepared.bodyTarget() != cachedTarget) {
+                    /*
+                     * PERF032-G6: arguments supplied to a Closure declaring no parameters select
+                     * its arity-rejection root, which the cached direct call must not enter.
+                     */
+                    return finishEntry(
+                            embedding,
+                            prepared,
+                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                                    prepared, rejectionCall));
+                }
                 return finishEntry(
                         embedding,
                         prepared,
@@ -225,7 +238,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
                 @Bind("$node") Node node,
-                @Cached IndirectCallNode call)
+                @Shared("indirectCall") @Cached IndirectCallNode call)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;

@@ -2170,6 +2170,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * itself), and the return-home/ownership state that non-local return
      * completion actually requires. It never carries native-body, structured-
      * control-capability, or module-initialization state.
+     *
+     * <p>PERF032-G6: every ordinary source call is constructed here, so this
+     * is where the entered target is selected ({@link
+     * ProtosSemanticBytecodeRootNode#selectSourceEntryTarget}): a call
+     * supplying arguments to a Closure declaring no parameters enters that
+     * Closure's arity-rejection root with the same frame arguments.
      */
     static final class OrdinarySourceCall extends ReturnHomeOwningCall {
         private final RootCallTarget bodyTarget;
@@ -2185,7 +2191,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                             new IllegalStateException(
                                                     "Closure invocation requires a return home")),
                     activation.ownsReturnHome());
-            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
+            this.bodyTarget =
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
+                            activation.suppliedArgumentCountForRuntime());
             this.activation = activation;
             this.targetArguments = new Object[] {activation};
         }
@@ -2196,7 +2205,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             java.util.Objects.requireNonNull(
                                     compactTargetArguments, "compactTargetArguments")),
                     ProtosFrameArguments.compactOwnsReturnHome(compactTargetArguments));
-            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
+            this.bodyTarget =
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
+                            ProtosFrameArguments.compactSuppliedArgumentCount(
+                                    compactTargetArguments));
             this.activation = null;
             this.targetArguments = compactTargetArguments;
         }

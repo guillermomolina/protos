@@ -45,6 +45,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -148,6 +149,46 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosDiagnosticRootIdentity.targetName(diagnosticRootSpan);
         }
         return super.toString();
+    }
+
+    /*
+     * PERF032-G6: for the root of a source Closure declaring no parameters, the target of its
+     * arity-rejection root, else null. Such a root's own body carries no argument-count check: the
+     * only binding step of an empty signature is the excess-argument check (CALLABLES.md,
+     * "Normative parameter-binding algorithm"), which precedes every observable effect, so a call
+     * supplying arguments is entered at this target instead (see selectSourceEntryTarget). The
+     * rejection root is lowered once per definition in the same BytecodeRootNodes group, with the
+     * same source section, and only materializes the call's exact activation and signals the
+     * unchanged argument-count Error. Attached once, after the group's create() returns.
+     */
+    @CompilationFinal private RootCallTarget arityRejectionTarget;
+
+    final void attachArityRejectionTarget(RootCallTarget target) {
+        if (arityRejectionTarget != null) {
+            throw new IllegalStateException("arity-rejection target already attached");
+        }
+        this.arityRejectionTarget = java.util.Objects.requireNonNull(target, "target");
+    }
+
+    final RootCallTarget arityRejectionTarget() {
+        return arityRejectionTarget;
+    }
+
+    /**
+     * PERF032-G6 single selection point of the target an ordinary source Closure call enters:
+     * {@code bodyTarget} itself, except that a call supplying arguments to a Closure that declares
+     * no parameters enters that Closure's arity-rejection root. {@code suppliedArgumentCount} is
+     * read from the compact frame arguments or the existing rich activation; nothing is
+     * materialized to make this choice.
+     */
+    static RootCallTarget selectSourceEntryTarget(
+            RootCallTarget bodyTarget, int suppliedArgumentCount) {
+        if (suppliedArgumentCount != 0
+                && bodyTarget.getRootNode() instanceof ProtosSemanticBytecodeRootNode root
+                && root.arityRejectionTarget != null) {
+            return root.arityRejectionTarget;
+        }
+        return bodyTarget;
     }
 
     final void recordFrameNativeBindings(

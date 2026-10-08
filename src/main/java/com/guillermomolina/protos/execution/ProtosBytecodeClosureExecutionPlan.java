@@ -308,11 +308,17 @@ final class ProtosBytecodeClosureExecutionPlan {
     /**
      * Execute with the same activation calling convention as every existing
      * Protos AST root: frame argument 0 is the exact invocation activation.
+     * PERF032-G6: the entered target is selected exactly as for an ordinary
+     * source call, so a Closure declaring no parameters still rejects
+     * supplied arguments.
      */
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         try {
-            return activationTarget.call(activation);
+            return ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            activationTarget,
+                            activation.suppliedArgumentCountForRuntime())
+                    .call(activation);
         } catch (ProtosBytecodeControlTransferException bridged) {
             throw bridged.transfer();
         }

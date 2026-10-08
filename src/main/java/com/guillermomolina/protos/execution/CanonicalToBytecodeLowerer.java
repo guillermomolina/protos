@@ -170,6 +170,19 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNode root,
             ProtosClosureExecutionPlanCell cell) {}
 
+    /**
+     * PERF032-G6: the arity-rejection roots lowered in the group currently
+     * being built by the top-level {@link #lowerRoot} call, paired with the
+     * Closure root each belongs to. As with {@link #pendingGroupClosures},
+     * their targets are attached only once that group's {@code create()} has
+     * returned; saved and restored around each {@link #lowerRoot} call.
+     */
+    private java.util.List<PendingArityRejection> pendingArityRejections;
+
+    private record PendingArityRejection(
+            ProtosSemanticBytecodeRootNode root,
+            ProtosSemanticBytecodeRootNode rejectionRoot) {}
+
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
@@ -483,7 +496,10 @@ final class CanonicalToBytecodeLowerer {
          */
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
+        java.util.List<PendingArityRejection> savedPendingArityRejections =
+                pendingArityRejections;
         pendingGroupClosures = new java.util.ArrayList<>();
+        pendingArityRejections = new java.util.ArrayList<>();
         try {
             BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                     ProtosSemanticBytecodeRootNodeGen.create(
@@ -504,6 +520,20 @@ final class CanonicalToBytecodeLowerer {
                                 builder.endSource();
                             });
 
+            /*
+             * getCallTarget() may notify instrumentation, which can replay
+             * this group's parser; detach the list first so such a replay
+             * never records into it (see emitRootBody).
+             */
+            java.util.List<PendingArityRejection> arityRejections =
+                    pendingArityRejections;
+            pendingArityRejections = null;
+            for (PendingArityRejection pending : arityRejections) {
+                pending.root()
+                        .attachArityRejectionTarget(
+                                pending.rejectionRoot().getCallTarget());
+            }
+
             for (PendingGroupClosure pending : pendingGroupClosures) {
                 pending.cell()
                         .freeze(
@@ -518,6 +548,7 @@ final class CanonicalToBytecodeLowerer {
             return roots.getNode(0);
         } finally {
             pendingGroupClosures = savedPendingGroupClosures;
+            pendingArityRejections = savedPendingArityRejections;
         }
     }
 
@@ -667,6 +698,17 @@ final class CanonicalToBytecodeLowerer {
          */
 
         /*
+         * PERF032-G6: a Closure declaring no parameters has no argument
+         * check in this root (see emitClosureParameterBindings); its
+         * arity-rejection root is nested here, once per lowering, so every
+         * reparse replays it at the same group index.
+         */
+        ProtosSemanticBytecodeRootNode arityRejectionRoot =
+                hasArityRejectionRoot(activationDefinition)
+                        ? emitArityRejectionRoot(builder, rootSpan)
+                        : null;
+
+        /*
          * PLAT036 Candidate D, I068 Slice 4: every statically
          * declared binding owned by this genuine execution-context
          * root, including Closure parameters, receives one stable
@@ -764,6 +806,17 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
+        /*
+         * A reparse replays the group onto the same root identities, whose
+         * rejection targets are attached by the create() that first built
+         * them; a replay outside that create() records nothing.
+         */
+        if (arityRejectionRoot != null
+                && pendingArityRejections != null
+                && result.arityRejectionTarget() == null) {
+            pendingArityRejections.add(
+                    new PendingArityRejection(result, arityRejectionRoot));
+        }
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
                     result,
@@ -781,6 +834,50 @@ final class CanonicalToBytecodeLowerer {
                     currentRootFrameNativeLayout);
         }
         return result;
+    }
+
+    /**
+     * PERF032-G6: a genuine source Closure root whose signature is empty.
+     * Under the normative parameter-binding algorithm ({@code CALLABLES.md})
+     * its only binding step is the final excess-argument check, which no
+     * parameter, default, or body effect can precede; that check is therefore
+     * taken by the call's entry-target selection ({@link
+     * ProtosSemanticBytecodeRootNode#selectSourceEntryTarget}) instead of by
+     * the root's own body. Closures with any parameter keep the in-body
+     * algorithm unchanged.
+     */
+    private static boolean hasArityRejectionRoot(CanonicalClosure activationDefinition) {
+        return activationDefinition != null
+                && activationDefinition.parameters().isEmpty();
+    }
+
+    /**
+     * PERF032-G6: lowers the arity-rejection root of a Closure declaring no
+     * parameters, nested in that Closure's own open root so it belongs to the
+     * same {@code BytecodeRootNodes} group with the same source section. It
+     * is entered only by a call supplying arguments: the unchanged {@code
+     * CheckFrameClosureArgumentUpperBound} materializes that call's exact
+     * activation and signals the argument-count Error, and the ordinary root
+     * exception interception selects guest handlers and records the
+     * diagnostic origin. It never evaluates the Closure body; the trailing
+     * return only keeps the root well formed.
+     */
+    private static ProtosSemanticBytecodeRootNode emitArityRejectionRoot(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            SourceSpan rootSpan) {
+        builder.beginSourceSection(
+                rootSpan.startOffset(),
+                rootSpan.length());
+        builder.beginRoot();
+        builder.beginCheckFrameClosureArgumentUpperBound();
+        builder.emitLoadConstant(0);
+        builder.endCheckFrameClosureArgumentUpperBound();
+        builder.beginReturn();
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endReturn();
+        ProtosSemanticBytecodeRootNode rejectionRoot = builder.endRoot();
+        builder.endSourceSection();
+        return rejectionRoot;
     }
 
     /**
@@ -1586,7 +1683,14 @@ final class CanonicalToBytecodeLowerer {
             positionalIndex++;
         }
 
-        if (!hasRest) {
+        /*
+         * PERF032-G6: a genuine root with an empty signature leaves this
+         * check to its arity-rejection root (see emitArityRejectionRoot).
+         */
+        boolean checkedBeforeEntry =
+                currentActivationLocal == null
+                        && hasArityRejectionRoot(definition);
+        if (!hasRest && !checkedBeforeEntry) {
             if (currentActivationLocal == null) {
                 builder.beginCheckFrameClosureArgumentUpperBound();
                 builder.emitLoadConstant(positionalIndex);
