@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.304-SNAPSHOT
+
+- `LM010-C` (#493): add static LSP signature help for calls whose callee
+  is a literal Closure, through grouping parentheses only.
+  - Advertise `signatureHelpProvider` with `(` and `,` triggers and
+    publish one signature with source-text parameter labels, including
+    defaults and `...` rest, without types or evaluated defaults.
+  - Locate the innermost call argument list and active argument from
+    real lexer tokens; nested structures, strings, and comments never
+    contribute separators.
+  - Validate incomplete argument lists through a transient local repair
+    checked against the original tokens and the canonical parser; the
+    repaired source is never retained.
+  - Never attribute a signature to names, members, `super`, or computed
+    callees, and publish nothing instead of a false parameter highlight
+    for spreads or excess arguments.
+  - Preserve canonical-source authority, open-snapshot freshness, and
+    UTF-16 position handling.
+  - Focal tests and the integrated `make test` suite passed.
+
 ## 0.3.303-SNAPSHOT
 
 - `PERF034-C` (#845): introduce a statically admitted scalar-local

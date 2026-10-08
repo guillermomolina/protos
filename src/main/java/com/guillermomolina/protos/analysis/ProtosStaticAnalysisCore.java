@@ -133,6 +133,23 @@ public final class ProtosStaticAnalysisCore {
     }
 
     /**
+     * Projects the LM010-C static signature help for one cursor offset in the
+     * supplied immutable snapshot.
+     *
+     * <p>{@code sourceOffset} may equal the snapshot length. Only a call whose
+     * receiver is, through grouping parentheses alone, a literal Closure has a
+     * proven signature. An incomplete argument list is validated only through
+     * a transient local repair that is never retained. A position that cannot
+     * be classified with certainty is an ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticSignatureHelpResult> signatureHelp(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        return ProtosStaticSignatureHelp.resolve(snapshot, sourceOffset);
+    }
+
+    /**
      * Resolves the D124 generation-1 references relation for one exact seed
      * position in the supplied immutable snapshot.
      *

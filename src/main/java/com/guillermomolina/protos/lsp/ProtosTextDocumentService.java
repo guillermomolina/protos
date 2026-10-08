@@ -28,6 +28,7 @@ import com.guillermomolina.protos.analysis.ProtosStaticLint;
 import com.guillermomolina.protos.analysis.ProtosStaticLintDiagnostic;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.analysis.ProtosStaticReferenceResult;
+import com.guillermomolina.protos.analysis.ProtosStaticSignatureHelpResult;
 import com.guillermomolina.protos.execution.ProtosWholeDocumentFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -57,10 +58,14 @@ import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.MarkupContent;
 import org.eclipse.lsp4j.MarkupKind;
+import org.eclipse.lsp4j.ParameterInformation;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ReferenceParams;
+import org.eclipse.lsp4j.SignatureHelp;
+import org.eclipse.lsp4j.SignatureHelpParams;
+import org.eclipse.lsp4j.SignatureInformation;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
@@ -92,7 +97,10 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * publishes only D110-proven Closure parameters and parser-accepted
  * reserved-word syntax at a proven read site, under the same authority and
  * freshness checks; every response is a complete list
- * ({@code isIncomplete=false}).</p>
+ * ({@code isIncomplete=false}). LM010-C signature help publishes the one
+ * signature of a call whose callee is a literal Closure, under the same
+ * authority and freshness checks, and publishes nothing rather than a false
+ * parameter highlight.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -490,6 +498,49 @@ final class ProtosTextDocumentService implements TextDocumentService {
     }
 
     @Override
+    public CompletableFuture<SignatureHelp> signatureHelp(SignatureHelpParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        Predicate<String> authority = navigationSourceAuthority;
+        if (!authority.test(uri)) {
+            return noSignatureHelp();
+        }
+
+        Optional<ProtosDocumentSnapshot> current =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (current.isEmpty()) {
+            return noSignatureHelp();
+        }
+        OptionalInt sourceOffset =
+                ProtosLspSourcePositions.offset(
+                        current.get().characters(),
+                        Objects.requireNonNull(params.getPosition(), "position"));
+        if (sourceOffset.isEmpty()) {
+            return noSignatureHelp();
+        }
+
+        Optional<ProtosStaticSignatureHelpResult> signatureHelp =
+                session.signatureHelpCurrent(
+                        OPEN_DOCUMENTS_DOMAIN,
+                        uri,
+                        sourceOffset.getAsInt());
+        if (signatureHelp.isEmpty()) {
+            return noSignatureHelp();
+        }
+
+        ProtosStaticSignatureHelpResult projected = signatureHelp.get();
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
+                || !authority.test(uri)
+                || !projected.snapshot().documentId().equals(uri)) {
+            return noSignatureHelp();
+        }
+        return CompletableFuture.completedFuture(toLspSignatureHelp(projected));
+    }
+
+    @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
         // Save notifications are not advertised by F3 and carry no additional
@@ -543,6 +594,40 @@ final class ProtosTextDocumentService implements TextDocumentService {
         item.setFilterText(candidate.label());
         item.setTextEdit(Either.forLeft(new TextEdit(replacement, candidate.label())));
         return item;
+    }
+
+    /**
+     * Projects one signature with String parameter labels. A client treats
+     * an omitted {@code activeParameter} as 0 when the signature has
+     * parameters, and locates a String label by its first occurrence in the
+     * signature label; when either would produce a false highlight, nothing
+     * is published.
+     */
+    private static SignatureHelp toLspSignatureHelp(ProtosStaticSignatureHelpResult projected) {
+        List<ProtosStaticSignatureHelpResult.Parameter> parameters = projected.parameters();
+        if (!parameters.isEmpty() && projected.activeParameter().isEmpty()) {
+            return null;
+        }
+        String label = projected.label();
+        List<ParameterInformation> information = new ArrayList<>();
+        int position = 1;
+        for (ProtosStaticSignatureHelpResult.Parameter parameter : parameters) {
+            if (label.indexOf(parameter.label()) != position) {
+                return null;
+            }
+            information.add(new ParameterInformation(parameter.label()));
+            position += parameter.label().length() + 2;
+        }
+        SignatureInformation signature = new SignatureInformation(label);
+        signature.setParameters(information);
+        Integer activeParameter = projected.activeParameter().isPresent()
+                ? projected.activeParameter().getAsInt()
+                : null;
+        return new SignatureHelp(List.of(signature), 0, activeParameter);
+    }
+
+    private static CompletableFuture<SignatureHelp> noSignatureHelp() {
+        return CompletableFuture.completedFuture(null);
     }
 
     private static CompletableFuture<Hover> noHover() {

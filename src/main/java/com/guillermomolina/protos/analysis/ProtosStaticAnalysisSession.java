@@ -238,6 +238,26 @@ public final class ProtosStaticAnalysisSession {
     }
 
     /**
+     * Projects the LM010-C static signature help from the currently captured
+     * immutable document snapshot, if present.
+     *
+     * <p>The result may become stale after a concurrent replacement. Callers
+     * whose publication requires freshness must use
+     * {@link #isCurrent(String, ProtosStaticSignatureHelpResult)}.</p>
+     */
+    public Optional<ProtosStaticSignatureHelpResult> signatureHelpCurrent(
+            String workspaceId,
+            String documentId,
+            int sourceOffset) {
+        Optional<ProtosDocumentSnapshot> snapshot =
+                currentSnapshot(workspaceId, documentId);
+        if (snapshot.isEmpty()) {
+            return Optional.empty();
+        }
+        return core.signatureHelp(snapshot.get(), sourceOffset);
+    }
+
+    /**
      * Returns whether a parse result still corresponds exactly to the current
      * snapshot of the same document in the selected workspace.
      *
@@ -323,6 +343,25 @@ public final class ProtosStaticAnalysisSession {
     public boolean isCurrent(
             String workspaceId,
             ProtosStaticCompletionResult result) {
+        Objects.requireNonNull(workspaceId, "workspaceId");
+        Objects.requireNonNull(result, "result");
+
+        WorkspaceState workspace = workspaces.get(workspaceId);
+        if (workspace == null) {
+            return false;
+        }
+        ProtosDocumentSnapshot current =
+                workspace.documents.get(result.snapshot().documentId());
+        return result.snapshot().equals(current);
+    }
+
+    /**
+     * Returns whether a signature-help projection still corresponds exactly to
+     * the current snapshot of its document.
+     */
+    public boolean isCurrent(
+            String workspaceId,
+            ProtosStaticSignatureHelpResult result) {
         Objects.requireNonNull(workspaceId, "workspaceId");
         Objects.requireNonNull(result, "result");
 

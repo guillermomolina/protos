@@ -29,6 +29,7 @@ import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.ServerCapabilities;
+import org.eclipse.lsp4j.SignatureHelpOptions;
 import org.eclipse.lsp4j.TextDocumentSyncKind;
 import org.eclipse.lsp4j.TextDocumentSyncOptions;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -47,8 +48,9 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  * references. LM011-D1 adds whole-document formatting over TOOL010. LM010-A
  * adds static hover over D110 proofs and labeled syntax facts. LM010-B adds
  * static completion of D110-proven Closure parameters and parser-accepted
- * reserved words, without resolve support or trigger characters. Signature
- * help remains deferred to LM010.</p>
+ * reserved words, without resolve support or trigger characters. LM010-C adds
+ * static signature help for calls whose callee is a literal Closure, triggered
+ * by {@code (} and {@code ,}.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -104,6 +106,7 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
         capabilities.setReferencesProvider(Boolean.TRUE);
         capabilities.setHoverProvider(Boolean.TRUE);
         capabilities.setCompletionProvider(new CompletionOptions(Boolean.FALSE, List.of()));
+        capabilities.setSignatureHelpProvider(new SignatureHelpOptions(List.of("(", ",")));
         capabilities.setDocumentFormattingProvider(Boolean.TRUE);
 
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));

@@ -143,7 +143,7 @@ final class ProtosStaticCompletion {
         return Optional.of(new ProtosStaticCompletionResult(snapshot, replacement, candidates));
     }
 
-    private static boolean splitsSurrogatePair(String source, int offset) {
+    static boolean splitsSurrogatePair(String source, int offset) {
         return offset > 0
                 && offset < source.length()
                 && Character.isHighSurrogate(source.charAt(offset - 1))
@@ -155,7 +155,7 @@ final class ProtosStaticCompletion {
      * cursor at its end is still inside it. A cursor at the end of a block
      * comment follows the closing delimiter.
      */
-    private static boolean insideComment(ProtosLexer.TriviaOccurrence occurrence, int offset) {
+    static boolean insideComment(ProtosLexer.TriviaOccurrence occurrence, int offset) {
         SourceSpan span = occurrence.span();
         return switch (occurrence.kind()) {
             case HORIZONTAL_WHITESPACE -> false;

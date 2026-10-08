@@ -78,7 +78,9 @@ class ProtosLanguageServerFoundationTest {
         assertEquals(
                 List.of(),
                 result.getCapabilities().getCompletionProvider().getTriggerCharacters());
-        assertNull(result.getCapabilities().getSignatureHelpProvider());
+        assertEquals(
+                List.of("(", ","),
+                result.getCapabilities().getSignatureHelpProvider().getTriggerCharacters());
         assertNull(result.getCapabilities().getDocumentSymbolProvider());
         assertEquals(
                 Boolean.TRUE,
