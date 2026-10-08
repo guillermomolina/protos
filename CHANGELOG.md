@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.286-SNAPSHOT
+
+- `I086` / `PLAT054-3C` packages Core in the Protos JAR, so a standard
+  Polyglot embedding (`Context.newBuilder("protos").build()`) runs with no
+  `protos.CoreRoot` option and no language home. The specification is
+  unchanged.
+  - The build copies `protos/lib` into the JAR as the Truffle internal resource
+    `ProtosCoreResource`, with a file list and a SHA-256 content hash. Truffle
+    unpacks it once per content hash into its versioned resource cache, never
+    per Context or per call.
+  - Core resolution keeps the order `protos.CoreRoot` > language home >
+    packaged Core. An invalid override still fails without fallback; a
+    language home that has no `protos/lib/core` is not a Core origin. Module
+    identities (`std:` `ModuleKey`s), the Actor-local module cache, and lazy
+    bootstrap are unchanged.
+  - Reading the packaged Core grants the guest no Filesystem or Network
+    authority, and its unpacked location is never exposed to the guest.
+  - `ProtosPackagedCoreEmbeddingTest` checks the option-free path and asserts
+    that Core never comes from the checkout. `dist/smoke_polyglot_embedding.sh`,
+    now part of `dist/validate_portable.sh`, runs the public example against
+    the distributed `lib/protos.jar` alone from outside the checkout, and checks
+    override, language-home precedence, and invalid-override failure.
+
 ## 0.3.285-SNAPSHOT
 
 - `I085-B` checks the `I085-A` external foreign provider SPI end to end. Protos

@@ -111,6 +111,7 @@ esac
 # the archive itself must remain byte-for-byte unchanged.
 sh "$ROOT/dist/smoke_cwd_package.sh" "$archive"
 sh "$ROOT/dist/smoke_test_tool.sh" "$archive"
+sh "$ROOT/dist/smoke_polyglot_embedding.sh" "$archive"
 
 # B4B remains the exact optimizing-runtime gate, now against the already
 # provisioned DIST002 primary runtime. The smoke defaults to JAVA_HOME; the
@@ -128,5 +129,6 @@ echo "DIST_B5_ARTIFACT_MODE_CHECK: PASS mode=$artifact_mode"
 echo "DIST_B5_ARCHIVE_IDENTITY_CHECK: PASS"
 echo "DIST_B5_CWD_PACKAGE_CHECK: PASS"
 echo "DIST_B5_TEST_TOOL_CHECK: PASS"
+echo "DIST_B5_POLYGLOT_EMBEDDING_CHECK: PASS"
 echo "DIST_B5_OPTIMIZING_RUNTIME_CHECK: PASS"
 echo "DIST001_B5_CROSS_SLICE: PASS"

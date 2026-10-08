@@ -46,7 +46,8 @@ import org.graalvm.options.OptionStability;
         id = ProtosLanguage.ID,
         name = "Protos",
         defaultMimeType = ProtosLanguage.MIME_TYPE,
-        characterMimeTypes = ProtosLanguage.MIME_TYPE)
+        characterMimeTypes = ProtosLanguage.MIME_TYPE,
+        internalResources = ProtosCoreResource.class)
 @Option.Group(ProtosLanguage.ID)
 public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext> {
     public static final String ID = "protos";
@@ -57,7 +58,8 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             help =
                     "Directory of the Protos Core library (protos/lib/core) used by a standard"
                             + " Polyglot embedding. When set it takes precedence over the language"
-                            + " home and must name a Core directory.",
+                            + " home and the Core packaged in the Protos JAR, and must name a Core"
+                            + " directory.",
             category = OptionCategory.USER,
             stability = OptionStability.STABLE)
     static final OptionKey<String> CORE_ROOT = new OptionKey<>("");

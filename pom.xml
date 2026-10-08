@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.285-SNAPSHOT</version>
+    <version>0.3.286-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -95,6 +95,11 @@
                 <configuration>
                     <argLine>--enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow</argLine>
                     <reportsDirectory>${protos.surefire.reports}</reportsDirectory>
+                    <systemPropertyVariables>
+                        <!-- Unpack Truffle internal resources (packaged Core) below target,
+                             not into the user's home cache. -->
+                        <polyglot.engine.userResourceCache>${project.build.directory}/polyglot-resource-cache</polyglot.engine.userResourceCache>
+                    </systemPropertyVariables>
                 </configuration>
             </plugin>
             <plugin>
@@ -178,6 +183,36 @@
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>3.2.0</version>
                 <executions>
+                    <!-- PLAT054-3C: package protos/lib as the Truffle internal resource
+                         ProtosCoreResource (file list + content hash), so a standard
+                         Polyglot embedding needs no protos.CoreRoot or language home. -->
+                    <execution>
+                        <id>package-core-internal-resource</id>
+                        <phase>process-resources</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <property name="core.resource.root" value="${project.build.outputDirectory}/META-INF/resources/protos/core"/>
+                                <property name="core.resource.checksums" value="${project.build.directory}/core-resource-checksums"/>
+                                <delete dir="${core.resource.root}" quiet="true"/>
+                                <delete dir="${core.resource.checksums}" quiet="true"/>
+                                <copy todir="${core.resource.root}/lib">
+                                    <fileset dir="${project.basedir}/protos/lib"/>
+                                </copy>
+                                <pathconvert property="core.resource.files" pathsep="&#10;" dirsep="/">
+                                    <fileset dir="${core.resource.root}" includes="lib/**"/>
+                                    <globmapper from="${core.resource.root}/*" to="META-INF/resources/protos/core/*=rw-r--r--" handledirsep="true"/>
+                                </pathconvert>
+                                <echo file="${core.resource.root}/files" message="${core.resource.files}&#10;"/>
+                                <checksum algorithm="SHA-256" todir="${core.resource.checksums}" totalproperty="core.resource.sha256" forceoverwrite="yes">
+                                    <fileset dir="${core.resource.root}" includes="lib/**"/>
+                                </checksum>
+                                <echo file="${core.resource.root}/sha256" message="${core.resource.sha256}&#10;"/>
+                            </target>
+                        </configuration>
+                    </execution>
                     <execution>
                         <id>reset-canonical-graal-runtime-plane</id>
                         <phase>prepare-package</phase>

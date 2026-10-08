@@ -50,7 +50,7 @@ import java.util.function.Supplier;
  *
  * <p>It is created lazily by the first valid host evaluation ({@code PROCESS_IO.md}, Standard
  * Polyglot embedding bootstrap and authority) and reuses the ordinary standalone bootstrap: Core
- * from the resolved Core root, {@link ProtosStandaloneProcessBootstrap} for the Process and its
+ * from the resolved Core root (see {@link #resolveCoreRoot}), {@link ProtosStandaloneProcessBootstrap} for the Process and its
  * RootActor, and arguments, environment, and standard streams taken from the embedding {@link
  * TruffleLanguage.Env}. It grants no default Filesystem and no default Network. It is its own
  * {@link ProtosProcessExecutionHost}: the Polyglot Context the host already owns is the only
@@ -72,6 +72,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     private final ProtosProcessRuntime process;
     private final ProtosPrelude prelude;
     private final ProtosActor rootActor;
+    private final Path coreRoot;
     private final AtomicReference<Thread> entryOwner = new AtomicReference<>();
     /* Written only by the thread that holds entryOwner. */
     private int entryDepth;
@@ -90,8 +91,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     private ProtosEmbeddedProcess(
             ProtosLanguageContext owner,
             ProtosStandaloneProcessBootstrap.Result bootstrap,
-            ProtosPrelude prelude) {
+            ProtosPrelude prelude,
+            Path coreRoot) {
         this.owner = owner;
+        this.coreRoot = coreRoot;
         this.process = bootstrap.process();
         this.prelude = prelude;
         this.rootActor = process.rootActorForRuntime();
@@ -131,7 +134,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                         utf8,
                         null,
                         null);
-        ProtosEmbeddedProcess embedded = new ProtosEmbeddedProcess(owner, bootstrap, prelude);
+        ProtosEmbeddedProcess embedded = new ProtosEmbeddedProcess(owner, bootstrap, prelude, coreRoot);
         bootstrap.process().bindExecutionHostForRuntime(embedded);
         owner.bindModuleResolverForRuntime(resolver);
         return embedded;
@@ -139,9 +142,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
 
     /**
      * Core root precedence: the explicit {@code protos.CoreRoot} override, then the Core of the
-     * Protos language home. An override that does not name a Core directory fails explicitly and
-     * never falls back to another origin. Core sources are read as implementation resources; doing
-     * so grants the guest no filesystem authority.
+     * Protos language home, then the Core packaged in the Protos JAR ({@link ProtosCoreResource}).
+     * An override that does not name a Core directory fails explicitly and never falls back to
+     * another origin; a language home without a Core directory is not a Core origin. Core sources
+     * are read as implementation resources; doing so grants the guest no filesystem authority.
      */
     private static Path resolveCoreRoot(ProtosLanguageContext owner) {
         String override = owner.env().getOptions().get(ProtosLanguage.CORE_ROOT);
@@ -160,9 +164,36 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                 return homeCore;
             }
         }
-        throw new ProtosEmbeddingException(
-                "no Protos Core library is available: set the protos.CoreRoot option or install"
-                        + " Protos with a language home");
+        return packagedCoreRoot(owner.env());
+    }
+
+    /**
+     * The Core of the JAR's internal resource, unpacked by Truffle on first use. A JAR that lacks
+     * the resource (for example a build that skipped packaging) fails explicitly.
+     */
+    private static Path packagedCoreRoot(TruffleLanguage.Env env) {
+        String unpacked;
+        try {
+            unpacked =
+                    env.getInternalResource(ProtosCoreResource.class)
+                            .getAbsoluteFile()
+                            .getPath();
+        } catch (IOException | SecurityException failure) {
+            throw new ProtosEmbeddingException(
+                    "no Protos Core library is available: the packaged Core resource cannot be"
+                            + " loaded ("
+                            + failure.getMessage()
+                            + "); set the protos.CoreRoot option or install Protos with a"
+                            + " language home");
+        }
+        Path packaged =
+                coreDirectoryOrNull(
+                        unpacked + "/" + ProtosCoreResource.LIBRARY_DIRECTORY + "/core");
+        if (packaged == null) {
+            throw new ProtosEmbeddingException(
+                    "the packaged Protos Core resource contains no Core directory");
+        }
+        return packaged;
     }
 
     private static Path coreDirectoryOrNull(String spelling) {
@@ -386,6 +417,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (executor != null) {
             executor.close();
         }
+    }
+
+    Path coreRootForTesting() {
+        return coreRoot;
     }
 
     ProtosProcessRuntime processForTesting() {

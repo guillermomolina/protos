@@ -311,6 +311,26 @@ archive and its official SHA-256 are fetched from the GraalVM Community JDK
 to the Protos distribution.
 
 
+## Standard Polyglot embedding smoke
+
+`PLAT054-3C` validates that the distributed `lib/protos.jar` carries Core as a
+Truffle internal resource, so a standard `Context.newBuilder("protos").build()`
+embedding needs neither `protos.CoreRoot` nor a language home:
+
+```sh
+sh dist/smoke_polyglot_embedding.sh
+```
+
+The smoke copies only `lib/protos.jar` and `lib/runtime/*.jar` out of the
+extracted archive, removes the extracted tree, and runs
+`dist/Plat054EmbeddingProbe.java` from an empty project directory outside the
+checkout with an isolated Truffle resource cache. It checks the public example,
+a `std:` import, the absence of default Filesystem/Network bindings, and the
+precedence `protos.CoreRoot` > language home > packaged Core (an invalid
+override fails without fallback). It uses fallback Truffle because it validates
+Core packaging, not the optimizing runtime.
+
+
 ## Complete extracted-distribution gate
 
 `DIST001-B5` composes the previously independent evidence against one exact ZIP:
