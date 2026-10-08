@@ -109,7 +109,7 @@ prelude.newModuleActivation());
         // not from a positional label array in Main; there is no [main] group.
         assertTrue(!main.contains("phaseNames"));
         assertTrue(!main.contains("\"main\""));
-        assertTrue(main.contains("RepositorySuite.progressGroupNames(suite.leaf, suiteCaseKeys)"));
+        assertTrue(main.contains("RepositorySuite.progressGroupAssignment(suite.leaf, suiteCaseKeys)"));
         String repositorySuite =
                 Files.readString(TOOL_ROOT.resolve("RepositorySuite.protos"), StandardCharsets.UTF_8);
         assertTrue(repositorySuite.contains("\"conformance/values\""));

@@ -386,49 +386,103 @@ caseGroupName: (group, selector) => {
     name
 }
 
-/// Answers the ordered progress group names one repository leaf presents for
-/// `caseKeys`, its final retained Logical Cases in plan order, each an
-/// Array(casePath, selector). Conformance names follow descriptor order; a
-/// subdivided descriptor contributes its subgroup names in order of first
-/// retained Case, so only subgroups owning a retained Case appear.
-progressGroupNames: (leaf, caseKeys) => {
+/// Answers the progress grouping one repository leaf presents for `caseKeys`,
+/// its final retained Logical Cases in plan order, each an
+/// Array(casePath, selector), as a frozen object with `names`, the ordered
+/// progress group names, and `caseGroupIndexes`, aligned with `caseKeys`, the
+/// index within `names` of the group owning each Case. Conformance names follow
+/// descriptor order; a subdivided descriptor contributes its subgroup names in
+/// order of first retained Case, so only subgroups owning a retained Case
+/// appear.
+// PERF031-F: every casePath is matched against the descriptors exactly once,
+// subgroup names are collected in a single pass over `caseKeys`, and
+// membership tests use local Maps keyed by name under the same `==` String
+// equality the linear searches used. No Map iteration order is consumed; all
+// presentation order comes from descriptor order and Case order.
+progressGroupAssignment: (leaf, caseKeys) => {
     names: null
+    caseGroupIndexes: null
 
     isConformanceLeaf(leaf).ifTrue(() => {
+        // Every casePath is validated against the descriptors before any
+        // selector is examined.
         caseDescriptorIndexes: Arrays.map(caseKeys, (key) => {
             (casePath, ignoredSelector): key
             conformanceDescriptorIndex(casePath)
         })
 
+        caseNames: Arrays.map(caseKeys, (ignored) => null)
+        descriptorSubgroups: Arrays.map(conformanceProgressGroups, (ignored) => Array())
+        descriptorSeen: Arrays.map(conformanceProgressGroups, (ignored) => Map())
+
+        caseIndex: 0
+        caseKeys.each((key) => {
+            caseDescriptorIndex: caseDescriptorIndexes[caseIndex]
+            caseGroup: conformanceProgressGroups[caseDescriptorIndex]
+            (ignoredPath, selector): key
+            caseName: caseGroupName(caseGroup, selector)
+            caseNames[caseIndex] = caseName
+            caseGroup.subdivided.ifTrue(() => {
+                seen: descriptorSeen[caseDescriptorIndex]
+                seen.containsKey(caseName).ifFalse(() => {
+                    seen[caseName] = true
+                    descriptorSubgroups[caseDescriptorIndex] =
+                        Array(...descriptorSubgroups[caseDescriptorIndex], caseName)
+                })
+            })
+            caseIndex = caseIndex + 1
+        })
+
+        // Descriptor order, deduplicated against every earlier name exactly
+        // as the former linear search over the accumulated names did.
         names = Array()
+        known: Map()
         descriptorIndex: 0
         conformanceProgressGroups.each((group) => {
             group.subdivided.ifFalse(() => {
                 names = Array(...names, group.name)
+                // The lowest index answers a repeated name, as findIndex did.
+                known.containsKey(group.name).ifFalse(() => {
+                    known[group.name] = names.size() - 1
+                })
             })
             group.subdivided.ifTrue(() => {
-                caseIndex: 0
-                caseKeys.each((key) => {
-                    (caseDescriptorIndexes[caseIndex] == descriptorIndex).ifTrue(() => {
-                        (ignoredPath, selector): key
-                        name: caseGroupName(group, selector)
-                        known: Arrays.findIndex(names, (existing) => existing == name)
-                        (known === null).ifTrue(() => {
-                            names = Array(...names, name)
-                        })
+                descriptorSubgroups[descriptorIndex].each((name) => {
+                    known.containsKey(name).ifFalse(() => {
+                        names = Array(...names, name)
+                        known[name] = names.size() - 1
                     })
-                    caseIndex = caseIndex + 1
                 })
             })
             descriptorIndex = descriptorIndex + 1
         })
+
+        caseGroupIndexes = Arrays.map(caseNames, (name) => {
+            known.containsKey(name).ifFalse(() => {
+                policyError()
+            })
+            known[name]
+        })
     })
     isConformanceLeaf(leaf).ifFalse(() => {
         names = Array(ordinaryProgressGroupName(leaf))
+        caseGroupIndexes = Arrays.map(caseKeys, (ignored) => 0)
     })
 
     names.freeze()
-    names
+    caseGroupIndexes.freeze()
+
+    assignment: {
+        names: names
+        caseGroupIndexes: caseGroupIndexes
+    }
+    assignment.freeze()
+}
+
+/// Answers the ordered progress group names one repository leaf presents for
+/// `caseKeys`, exactly the `names` of progressGroupAssignment.
+progressGroupNames: (leaf, caseKeys) => {
+    progressGroupAssignment(leaf, caseKeys).names
 }
 
 /// Answers the name of the progress group owning one Case of a leaf, identified

@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.290-SNAPSHOT
+
+- `PERF031-F` removes repeated work from Test Tool progress grouping. The
+  specification and observable Protos behavior are unchanged, and no speedup
+  is claimed without a comparable measurement.
+  - `RepositorySuite.progressGroupAssignment` answers a leaf's progress group
+    names and each retained Case's group index in one pass: each casePath is
+    matched against the conformance descriptors once, and local `Map`s replace
+    repeated linear name searches. `progressGroupNames` delegates to it.
+    Group order, first-appearance subgroup order, and fail-closed rejection of
+    ambiguous descriptors and invalid selectors are preserved.
+  - Main collects each suite's retained progress keys during discovery and
+    calls the assignment once per suite, instead of refiltering every
+    retained Case for each suite and resolving each Case's group again.
+  - TOOL011/TOOL004C structural assertions follow the new call; TOOL012 checks
+    that the assignment matches `progressGroupNames` and `progressGroupIndex`
+    over the complete corpus.
+  - Residual: Arrays are still grown by spread expansion, which is quadratic
+    in a suite's retained Case count; ordinary `Array` has no append.
+
 ## 0.3.289-SNAPSHOT
 
 - `I086` / `PLAT054-3D` completes Actor threading and Context close for the

@@ -315,10 +315,12 @@ logicalCaseMetadata: Array()
 // BUG020: aligned with logicalCaseMetadata; the exact Case reference each
 // failure report names.
 logicalCaseReferences: Array()
-// TOOL012: aligned with logicalCaseMetadata; each retained Case's
-// Array(executionSuiteIndex, casePath, selector), the presentation-only input
-// of RepositorySuite progress grouping.
-logicalProgressCaseKeys: Array()
+// TOOL012: aligned with logicalExecutionSuites; each retained suite's
+// retained Cases, in plan order, as Array(casePath, selector), the
+// presentation-only input of RepositorySuite progress grouping.
+// PERF031-F: collected per suite during discovery, so progress grouping never
+// refilters every retained Case for each suite.
+logicalSuiteProgressCaseKeys: Array()
 logicalSourceSpecs: Map()
 
 // TOOL009-D: the D125 ExecutionRequirementId a logical Case must execute
@@ -339,6 +341,7 @@ executionSuites.each((planned) => {
         planned.leaf.executionRequirement
 
     logicalCaseCount: 0
+    suiteProgressCaseKeys: Array()
 
     Manifest.planCases(planned.plan).each((spec) => {
         (Manifest.caseExpectation(spec) == "suite-native").ifFalse(() => {
@@ -483,15 +486,14 @@ executionSuites.each((planned) => {
 
             progressCaseKey:
                 Array(
-                    executionSuiteIndex,
                     Manifest.casePath(spec),
                     CasePlan.selector(retainedCase)
                 )
             progressCaseKey.freeze()
 
-            logicalProgressCaseKeys =
+            suiteProgressCaseKeys =
                 Array(
-                    ...logicalProgressCaseKeys,
+                    ...suiteProgressCaseKeys,
                     progressCaseKey
                 )
 
@@ -522,6 +524,13 @@ executionSuites.each((planned) => {
                 suite
             )
 
+        suiteProgressCaseKeys.freeze()
+        logicalSuiteProgressCaseKeys =
+            Array(
+                ...logicalSuiteProgressCaseKeys,
+                suiteProgressCaseKeys
+            )
+
         executionSuiteIndex =
             executionSuiteIndex + 1
     })
@@ -533,7 +542,7 @@ logicalExecutionSuites.freeze()
 logicalProjections.freeze()
 logicalCaseMetadata.freeze()
 logicalCaseReferences.freeze()
-logicalProgressCaseKeys.freeze()
+logicalSuiteProgressCaseKeys.freeze()
 executionSuites = logicalExecutionSuites
 
 finalOutcome: null
@@ -560,38 +569,37 @@ listCases.ifFalse(() => {
     // authority, and the progress-group index below is presentation only.
     // TOOL012: each suite's group names are derived from its own retained
     // Logical Cases, in plan order.
-    suiteGroupNames: Array()
+    // PERF031-F: one RepositorySuite assignment per suite answers both the
+    // group names and each retained Case's group index.
+    suiteGroupAssignments: Array()
     namesSuiteIndex: 0
     executionSuites.each((suite) => {
-        suiteCaseKeys:
-            Arrays.map(
-                Arrays.filter(
-                    logicalProgressCaseKeys,
-                    (key) => key[0] == namesSuiteIndex
-                ),
-                (key) => Array(key[1], key[2])
-            )
-        suiteGroupNames =
+        suiteCaseKeys: logicalSuiteProgressCaseKeys[namesSuiteIndex]
+        suiteGroupAssignments =
             Array(
-                ...suiteGroupNames,
-                RepositorySuite.progressGroupNames(suite.leaf, suiteCaseKeys)
+                ...suiteGroupAssignments,
+                RepositorySuite.progressGroupAssignment(suite.leaf, suiteCaseKeys)
             )
         namesSuiteIndex = namesSuiteIndex + 1
     })
+    suiteGroupNames: Arrays.map(
+        suiteGroupAssignments,
+        (assignment) => assignment.names
+    )
     suiteGroupTotals: Arrays.map(
         suiteGroupNames,
         (names) => Arrays.map(names, (ignored) => 0)
     )
 
-    logicalGroupKeys: Arrays.map(logicalProgressCaseKeys, (key) => {
-        (caseSuiteIndex, casePath, selector): key
+    // logicalCaseMetadata and each suite's progress keys hold the suite's
+    // retained Cases in the same plan order, so a per-suite cursor aligns them.
+    suiteCaseCursors: Arrays.map(executionSuites, (ignored) => 0)
+    logicalGroupKeys: Arrays.map(logicalCaseMetadata, (metadata) => {
+        caseSuiteIndex: metadata[0]
+        cursor: suiteCaseCursors[caseSuiteIndex]
         localIndex:
-            RepositorySuite.progressGroupIndex(
-                executionSuites[caseSuiteIndex].leaf,
-                suiteGroupNames[caseSuiteIndex],
-                casePath,
-                selector
-            )
+            suiteGroupAssignments[caseSuiteIndex].caseGroupIndexes[cursor]
+        suiteCaseCursors[caseSuiteIndex] = cursor + 1
         totals: suiteGroupTotals[caseSuiteIndex]
         totals[localIndex] = totals[localIndex] + 1
         Array(caseSuiteIndex, localIndex)

@@ -112,8 +112,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "\"actor\"")) {
             assertFalse(main.contains(historical), historical);
         }
-        assertTrue(main.contains("RepositorySuite.progressGroupNames(suite.leaf, suiteCaseKeys)"));
-        assertTrue(main.contains("RepositorySuite.progressGroupIndex("));
+        assertTrue(main.contains("RepositorySuite.progressGroupAssignment(suite.leaf, suiteCaseKeys)"));
+        assertTrue(main.contains(".caseGroupIndexes[cursor]"));
         assertTrue(main.contains("Manifest.casePath(spec)"));
         assertTrue(main.contains("CasePlan.selector(retainedCase)"));
 
@@ -122,7 +122,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         int requireComplete = main.indexOf("CaseSelection.requireComplete(caseSelection)");
         int listOnly = main.indexOf("listCases.ifTrue(");
         int executing = main.indexOf("listCases.ifFalse(");
-        int grouping = main.indexOf("RepositorySuite.progressGroupNames(");
+        int grouping = main.indexOf("RepositorySuite.progressGroupAssignment(");
         int progressStart = main.indexOf("startProgress(", grouping);
         int scheduler = main.indexOf("logicalCompletions:");
         assertTrue(requireComplete >= 0);
@@ -131,7 +131,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         assertTrue(grouping > executing);
         assertTrue(progressStart > grouping);
         assertTrue(scheduler > progressStart);
-        assertEquals(1, occurrences(main, "RepositorySuite.progressGroupNames("));
+        assertEquals(1, occurrences(main, "RepositorySuite.progressGroupAssignment("));
+        assertEquals(0, occurrences(main, "RepositorySuite.progressGroupNames("));
 
         // Failure attribution targets the Case's progress group, not its suite.
         assertTrue(main.contains("groupObservers[targetGroupIndex]("));

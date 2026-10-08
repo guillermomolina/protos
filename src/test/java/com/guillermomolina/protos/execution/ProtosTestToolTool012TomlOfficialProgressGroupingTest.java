@@ -93,12 +93,21 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
                                         + "    first[RepositorySuite.progressGroupIndex("
                                         + "conformance, first, casePath, selector)]\n"
                                         + "})\n"
-                                        + "Array(first, second, owners, indexed)"));
+                                        + "assigned: RepositorySuite.progressGroupAssignment(conformance, keys)\n"
+                                        + "assignedOwners: Arrays.map(assigned.caseGroupIndexes, (groupIndex) => {\n"
+                                        + "    first[groupIndex]\n"
+                                        + "})\n"
+                                        + "Array(first, second, owners, indexed, assigned.names, assignedOwners)"));
 
         List<String> names = strings(arrayAt(result, 0));
         List<String> owners = strings(arrayAt(result, 2));
         assertEquals(names, strings(arrayAt(result, 1)));
         assertEquals(owners, strings(arrayAt(result, 3)));
+        // PERF031-F: the single-pass assignment Main consumes answers exactly
+        // the published names and, per Case, the same group as
+        // progressGroupIndex.
+        assertEquals(names, strings(arrayAt(result, 4)));
+        assertEquals(owners, strings(arrayAt(result, 5)));
         assertEquals(keys.size(), owners.size());
 
         // Each Case has exactly one owner; the toml-official subgroup names are
