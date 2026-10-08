@@ -80,9 +80,26 @@ language-teaching progression under DOC001.
 - [Bundled Tools](tools/README.md) — what an official bundled Tool is, which
   Tools currently ship, and where Tool policy stops and language/runtime
   behavior begins.
+- [The `protos` command line](tools/cli.md) — program execution, `format`,
+  `lint`, `debug`, `run`, exit codes, and Native/JVM differences.
+- [Language server](tools/language-server.md) — LSP capabilities, editor
+  configuration, project binding, and what is not provided.
+- [Package Tool](tools/package-tool.md) — `protos package manifest` and the
+  current boundary of package operations.
 - [Test Tool](tools/test-tool.md) — current `protos test` corpus and
-  expectation model, isolated case execution, deterministic reporting and
-  bounded `--jobs` parallelism.
+  expectation model, isolated case execution, deterministic reporting,
+  bounded `--jobs` parallelism, and Case selection/listing.
+
+## Standard Library guides
+
+- [Standard Library overview](library/README.md) — importing `std:` modules
+  and Native/JVM behavior.
+- [Regular expressions](library/regex.md) — `std:regex/Regex`.
+- [Dates, times, and durations](library/datetime.md) — `std:datetime/*`.
+- [Structured logging](library/logging.md) — `std:logging/*`.
+- [Text styling and encodings](library/text.md) — `std:text/*`.
+- [Semantic versions](library/semver.md) — `std:semver/SemVer`.
+- [Explicit foreign operations](library/interop.md) — `std:interop`.
 
 ## Java integration guides
 

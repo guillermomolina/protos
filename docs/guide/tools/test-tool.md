@@ -304,9 +304,72 @@ follows the ordinary Test Tool pipeline. `--file` does not change the meaning of
 classification, progress or exit status; it only reduces which Cases are
 executed.
 
-The current Test Tool also has later selection/listing options (`--directory`,
-`--case`, `--list-cases`). They are separate surfaces and are not covered by
-this section.
+## `--directory`, `--list-cases`, and `--case`
+
+Three further options refine the same authoritative plans. Like `--file`, they
+use separate-token forms only; attached forms are ignored.
+
+**`--directory DIR`** (repeatable) selects every authoritative Case whose source
+lies under `DIR`, recursively. It is a filter, not filesystem discovery: files
+under `DIR` that no plan contains are not run. Each `--directory` must match at
+least one Case. `--file` and `--directory` combine as a union, a Case selected
+twice runs once, and plan order is kept.
+
+```text
+bin/protos test --directory protos/tests/library/semver
+```
+
+**`--list-cases`** builds the normal plans, applies any `--file`,
+`--directory`, and `--case` selection, prints one JSON document on stdout, and
+stops before progress, scheduling, or running any Test body:
+
+```text
+{"schema":"protos.test.cases/v1","cases":[{"ref":"v1.…","display":"…"}, …]}
+```
+
+Cases appear in authoritative plan order. `ref` is the stable Case reference;
+`display` is presentation-only text for people and must not be parsed.
+
+**`--case CASE_REF`** (repeatable) restricts execution, or a listing, to the
+discovered Cases whose `ref` matches exactly. A ref is opaque: copy it from
+`--list-cases` output rather than building it. A malformed, repeated, unknown,
+stale, or out-of-scope ref fails the invocation before any Case runs.
+Selected Cases still run in plan order, regardless of argument order.
+
+```text
+bin/protos test --directory protos/tests/library/semver --list-cases
+bin/protos test --case v1.… --case v1.…
+```
+
+None of these options changes `--jobs`, isolation, result classification, or
+exit status; they only reduce which Cases run.
+
+### Suite-native Cases
+
+Many current corpora, including the Standard Library suites under
+`protos/tests/library/`, are *suite-native*: each source declares its own Cases
+with `std:test/Test` and `std:test/Assertions`, and the Test Tool discovers them
+from the source's `tests` Array:
+
+```protos
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+SemVer: import("std:semver/SemVer")
+
+tests: [
+    Test("build metadata is ignored by precedence", () => {
+        a: SemVer.parse("1.2.3+linux")
+        b: SemVer.parse("1.2.3+windows")
+        Assertions.require(SemVer.comparePrecedence(a, b) == 0)
+    })
+]
+```
+
+Each `Test(name, body)` is one logical Case. `Assertions.require(condition)`
+signals `Assertions.AssertionFailure` when `condition` is `false`, and
+`Assertions.signals(errorPrototype, body)` requires `body` to signal a matching
+Error. A suite-native source runs only when it belongs to a registered corpus;
+writing such a file elsewhere does not make `protos test` find it.
 
 ## What `protos test` does not mean yet
 

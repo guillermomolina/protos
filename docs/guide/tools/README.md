@@ -83,7 +83,8 @@ private toolchain support. It is **not** a third bundled Tool.
 
 The Package Tool is still evolving under
 [`TOOL001`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md), so this overview
-does not pretend that every future package operation already exists.
+does not pretend that every future package operation already exists. The
+[Package Tool guide](package-tool.md) lists the commands that work today.
 
 The Test Tool's durable lower architecture is closed under
 [`TOOL002`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL002/TOOL002_TEST_TOOL.md). A separate current
@@ -229,7 +230,16 @@ That answers the main boundary question:
 
 > **A Bundled Tool is part of the toolchain, but it is not part of the language.**
 
-Continue with the maintained [Test Tool guide](test-tool.md). DOC005-B covers
+Continue with the per-command guides:
+
+- [The `protos` command line](cli.md) — running programs, `format`, `lint`,
+  `debug`, `run`, exit codes, and Native versus portable JVM differences;
+- [Language server](language-server.md) — `protos language-server`
+  capabilities, configuration, and limits;
+- [Package Tool](package-tool.md) — what `protos package` does today;
+- [Test Tool](test-tool.md) — `protos test`.
+
+Within the maintained [Test Tool guide](test-tool.md), DOC005-B covers
 current `protos test` corpus/expectation behavior, isolated execution and
 `--jobs`; later DOC005 slices add the already-published resource and final
 result/diagnostic contracts without mixing them into this Tool-model overview.
