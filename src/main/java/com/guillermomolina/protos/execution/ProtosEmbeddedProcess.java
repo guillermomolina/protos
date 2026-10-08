@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.TruffleSafepoint;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
@@ -39,9 +40,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
@@ -61,6 +59,13 @@ import java.util.function.Supplier;
  * universal call gate serializes host calls. An unhandled Error that ends an outermost entry fails
  * the RootActor and therefore terminates the Process ({@code ACTORS.md} §24C/§32); the Process is
  * never recreated in the same Context.
+ *
+ * <p>Host evaluations have no importable module identity and the module resolver serves only
+ * {@code std:} modules, so in the current implementation {@code Actor.spawn} can name only a
+ * {@code std:} module binding (an implementation limitation tracked by I087, not a normative
+ * restriction of {@code Actor.spawn}).
+ * Actor carriers are polyglot threads: when the Context does not allow thread creation, a spawned
+ * Actor is terminated after its creation cutover rather than failing {@code spawn}.
  */
 final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     /** Distribution layout below a Protos home: the same convention as {@code PROTOS_HOME}. */
@@ -85,7 +90,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
      * Process monitor.
      */
     private volatile boolean stopped;
-    private ExecutorService actorCarrierExecutor;
+    private ProtosEmbeddedCarrierPool actorCarrierPool;
     private ProtosActorScheduler actorScheduler;
 
     private ProtosEmbeddedProcess(
@@ -377,19 +382,26 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     public synchronized Optional<ProtosActorScheduler> actorSchedulerForRuntime() {
         if (actorScheduler == null) {
             int parallelism = Math.max(1, Runtime.getRuntime().availableProcessors());
-            AtomicInteger sequence = new AtomicInteger();
             TruffleLanguage.Env env = owner.env();
-            actorCarrierExecutor =
-                    Executors.newFixedThreadPool(
+            actorCarrierPool =
+                    new ProtosEmbeddedCarrierPool(
                             parallelism,
-                            command -> {
-                                Thread carrier = env.newTruffleThreadBuilder(command).build();
-                                carrier.setName(
-                                        "protos-actor-carrier-" + sequence.incrementAndGet());
+                            (body, number) -> {
+                                // Throws when the Context forbids thread creation.
+                                Thread carrier = env.newTruffleThreadBuilder(body).build();
+                                carrier.setName("protos-actor-carrier-" + number);
                                 carrier.setDaemon(true);
                                 return carrier;
-                            });
-            actorScheduler = new ProtosActorScheduler(actorCarrierExecutor, parallelism);
+                            },
+                            take ->
+                                    TruffleSafepoint.setBlockedThreadInterruptibleFunction(
+                                            null,
+                                            ProtosEmbeddedCarrierPool.InterruptibleTake::take,
+                                            take),
+                            () ->
+                                    env.getContext().isCancelling()
+                                            || env.getContext().isExiting());
+            actorScheduler = new ProtosActorScheduler(actorCarrierPool, parallelism);
         }
         return Optional.of(actorScheduler);
     }
@@ -403,19 +415,47 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     /**
      * Context finalization: terminates the Process (revoking its Process-local authority) and
      * joins its Actor carriers while the Context can still be entered, so no guest callback runs
-     * after the terminal boundary.
+     * after the terminal boundary. A cancelled or exiting Context already stopped its threads,
+     * possibly in the middle of a turn that will never end, so Process terminality is then not
+     * awaited.
      */
     @TruffleBoundary
     void finalizeForContextClose() {
         stopped = true;
         process.requestTerminationForRuntime();
-        process.awaitTerminationForRuntime();
-        ExecutorService executor;
-        synchronized (this) {
-            executor = actorCarrierExecutor;
+        if (!owner.env().getContext().isCancelling() && !owner.env().getContext().isExiting()) {
+            process.awaitTerminationForRuntime();
         }
-        if (executor != null) {
-            executor.close();
+        joinCarriers();
+    }
+
+    /**
+     * Context disposal, reached also when a cancelled or exiting close skipped finalization: admits
+     * no further entry, requests Process termination (idempotent) without awaiting it, and joins
+     * the carriers. After an ordinary finalization this changes nothing.
+     */
+    @TruffleBoundary
+    void abandonForContextDisposal() {
+        stopped = true;
+        process.requestTerminationForRuntime();
+        joinCarriers();
+    }
+
+    /**
+     * Joins every carrier, as Truffle requires before disposal. The join cannot wait on guest
+     * work: on an ordinary close the Process is already terminated, so carriers are idle and leave
+     * when the pool closes; on a cancelled or exiting close Truffle has already waited for every
+     * thread to leave the Context, which an idle carrier does because its wait is a
+     * Truffle-interruptible blocked region. Truffle runs finalization and disposal outside its
+     * Context monitor, and never on a carrier (a carrier joining itself fails explicitly).
+     */
+    private void joinCarriers() {
+        ProtosEmbeddedCarrierPool pool;
+        synchronized (this) {
+            pool = actorCarrierPool;
+        }
+        if (pool != null) {
+            pool.closeAndJoin();
         }
     }
 
@@ -429,5 +469,22 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
 
     synchronized boolean actorCarrierSubstrateInitializedForTesting() {
         return actorScheduler != null;
+    }
+
+    synchronized ProtosEmbeddedCarrierPool actorCarrierPoolForTesting() {
+        return actorCarrierPool;
+    }
+
+    /** Carrier threads started and still alive; 0 before the substrate exists. */
+    int actorCarrierThreadCountForTesting() {
+        ProtosEmbeddedCarrierPool pool = actorCarrierPoolForTesting();
+        return pool == null
+                ? 0
+                : (int) pool.carriersForTesting().stream().filter(Thread::isAlive).count();
+    }
+
+    /** Whether every carrier thread ever started has actually ended (not only the pool state). */
+    boolean actorCarriersTerminatedForTesting() {
+        return actorCarrierThreadCountForTesting() == 0;
     }
 }

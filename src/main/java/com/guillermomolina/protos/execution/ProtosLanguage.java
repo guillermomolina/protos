@@ -97,6 +97,15 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
         context.finalizeEmbeddedProcess();
     }
 
+    /**
+     * Last close step, reached also when a cancelled or exiting close skips finalization: the
+     * embedded Process admits nothing more and its carriers are stopped without waiting.
+     */
+    @Override
+    protected void disposeContext(ProtosLanguageContext context) {
+        context.disposeEmbeddedProcess();
+    }
+
     String languageHomeForRuntime() {
         return getLanguageHome();
     }

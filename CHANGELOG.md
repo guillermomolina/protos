@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.289-SNAPSHOT
+
+- `I086` / `PLAT054-3D` completes Actor threading and Context close for the
+  standard Polyglot embedding. The specification is unchanged; Filesystem and
+  Network grants stay absent pending a design decision.
+  - Actor carriers of an embedded Process now run on the new
+    `ProtosEmbeddedCarrierPool` instead of a `ThreadPoolExecutor`. A carrier is
+    registered only after it has started, in the same critical section that
+    checks for close, so no carrier can start after the close has joined the
+    carriers. Close joins the real threads, never the pool's bookkeeping.
+  - An idle carrier waits in a Truffle-interruptible blocked region, so
+    `Context.close(true)` and other thread-local actions reach it; previously an
+    idle carrier could block `close(true)` forever. An interrupt alone is not
+    treated as close.
+  - A cancelled or exiting close no longer waits for the Process to become
+    terminal, and `disposeContext` covers closes that skip finalization.
+  - In a Context that forbids thread creation, `Actor.spawn` still returns its
+    `ActorRef`; the incarnation terminates after the creation cutover, and a
+    later `request` fails as an ordinary, non-uncertain Future.
+  - Failures escaping a carrier are not caught. If accepted work remains, a
+    replacement carrier is started; a fatal JVM failure is an exceptional
+    runtime limit, not a guaranteed recovery.
+  - New `ProtosEmbeddedCarrierPoolTest` (deterministic start/close, refusal,
+    replacement, interrupt, and self-close races) and
+    `ProtosEmbeddingLifecycleTest` (thread policy, cancellation, safepoint
+    actions, retained values after close, independent Contexts).
+  - Known limitation: in the embedding, `Actor.spawn` can name only `std:`
+    modules (I087). A pending `Future.value()` inside a host-invoked Closure
+    fails with an internal error rather than suspending; it is recorded as an
+    open I086 residual.
+
 ## 0.3.288-SNAPSHOT
 
 - `PERF031-C` reduces caller-side Core bootstraps in

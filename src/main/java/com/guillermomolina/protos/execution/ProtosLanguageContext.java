@@ -119,6 +119,13 @@ final class ProtosLanguageContext {
         }
     }
 
+    void disposeEmbeddedProcess() {
+        ProtosEmbeddedProcess existing = embeddedProcess;
+        if (existing != null) {
+            existing.abandonForContextDisposal();
+        }
+    }
+
     static ProtosLanguageContext current() {
         return REFERENCE.get(null);
     }
