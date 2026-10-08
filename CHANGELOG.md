@@ -9,6 +9,11 @@ Historical implementation changelogs:
 
 ## 0.3.312-SNAPSHOT
 
+- `DIST015-FIX`: Native Image includes the ICU4J Unicode data.
+  - `std:regex/Regex` reads ICU4J property data when it loads; the Native
+    Image now embeds `com/ibm/icu/impl/data/icudata/*.icu` and
+    `ICUConfig.properties`, so importing `std:regex` no longer fails in the
+    Native distribution (the full Native Test Tool run hung in discovery).
 - `I088-A` (#847): Java standard-library foreign provider namespace.
   - The I085-B external Java provider fixture now owns the `java:` scheme
     instead of `jdk:`: `import("java:math")` and `import("java:date")`.

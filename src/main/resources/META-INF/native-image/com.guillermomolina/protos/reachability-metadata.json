@@ -8,5 +8,13 @@
         ]
       }
     }
+  ],
+  "resources": [
+    {
+      "glob": "com/ibm/icu/ICUConfig.properties"
+    },
+    {
+      "glob": "com/ibm/icu/impl/data/icudata/*.icu"
+    }
   ]
 }
