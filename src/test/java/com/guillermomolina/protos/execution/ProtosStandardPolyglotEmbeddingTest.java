@@ -29,8 +29,10 @@ import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.ByteArrayOutputStream;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -227,8 +229,135 @@ final class ProtosStandardPolyglotEmbeddingTest {
             Value two = context.eval(ProtosLanguage.ID, "2");
             Value three = context.eval(ProtosLanguage.ID, "3");
             assertEquals(5, add.execute(two, three).asInt());
-            assertThrows(IllegalArgumentException.class, () -> add.execute(2, 3));
+            assertEquals(5, add.execute(2, 3).asInt(), "PLAT054-3B Java Integer admission");
             PolyglotException arity = assertThrows(PolyglotException.class, () -> add.execute(two));
+            assertTrue(arity.isGuestException());
+            assertFalse(embedded(context).isLive(), "an unhandled arity Error is fatal");
+        }
+    }
+
+    private static final String SCALAR_SOURCE =
+            """
+            count: 0
+            add: (a, b) => { a + b }
+            sub: (a, b) => { a - b }
+            id: (x) => { x }
+            size: (s) => { s.size() }
+            withDefault: (a, b = 10) => { a + b }
+            restSize: (first, ...rest) => { rest.size() }
+            bump: (x) => {
+                count = count + 1
+                x
+            }
+            0
+            """;
+
+    @Test
+    void javaIntegerArgumentsAreOrdinaryExactIntegers() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value add = bindings.getMember("add");
+            Value sub = bindings.getMember("sub");
+            Value id = bindings.getMember("id");
+            Value withDefault = bindings.getMember("withDefault");
+            Value restSize = bindings.getMember("restSize");
+
+            assertEquals(5, add.execute(2, 3).asInt());
+            assertEquals(7, sub.execute(10, 3).asInt(), "positional order is preserved");
+            assertEquals(-7, sub.execute(3, 10).asInt(), "positional order is preserved");
+            assertEquals(0, id.execute(0).asInt());
+            assertEquals(-5, id.execute(-5).asInt());
+            assertEquals(Integer.MIN_VALUE, id.execute(Integer.MIN_VALUE).asInt());
+            assertEquals(Integer.MAX_VALUE, id.execute(Integer.MAX_VALUE).asInt());
+            assertEquals(Long.MAX_VALUE, id.execute(Long.MAX_VALUE).asLong());
+            assertEquals(Long.MIN_VALUE, id.execute(Long.MIN_VALUE).asLong());
+            assertEquals(-128, id.execute((byte) -128).asInt());
+            assertEquals(32767, id.execute((short) 32767).asInt());
+            // The ordinary exact Integer protocol applies: no overflow at the Java boundary type.
+            assertEquals(
+                    BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
+                    add.execute(Long.MAX_VALUE, 1L).asBigInteger());
+
+            // Mixing admitted Java scalars with existing Protos values. A later evaluation moves the
+            // binding selection, so every Closure above is read before it.
+            Value two = context.eval(ProtosLanguage.ID, "2");
+            assertEquals(5, add.execute(two, 3).asInt());
+            assertEquals(-1, sub.execute(2, context.eval(ProtosLanguage.ID, "3")).asInt());
+
+            // Defaults and rest follow ordinary binding.
+            assertEquals(15, withDefault.execute(5).asInt());
+            assertEquals(6, withDefault.execute(5, 1).asInt());
+            assertEquals(0, restSize.execute(1).asInt());
+            assertEquals(2, restSize.execute(1, "a", two).asInt());
+
+            // The minimal path still allocates no Task and starts no Actor carrier.
+            assertEquals(
+                    0,
+                    embedded(context)
+                            .processForTesting()
+                            .rootActorForRuntime()
+                            .executionDomain()
+                            .liveTaskCount());
+            assertFalse(embedded(context).actorCarrierSubstrateInitializedForTesting());
+            assertTrue(embedded(context).isLive());
+        }
+    }
+
+    @Test
+    void javaStringArgumentsAreOrdinaryStrings() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value id = bindings.getMember("id");
+            Value add = bindings.getMember("add");
+            Value size = bindings.getMember("size");
+
+            assertEquals("abc", id.execute("abc").asString());
+            assertEquals("", id.execute("").asString());
+            assertEquals("\u00f1and\u00fa\u20ac", id.execute("\u00f1and\u00fa\u20ac").asString());
+            String supplementary = "\ud83d\ude00\ud834\udd1e";
+            assertEquals(supplementary, id.execute(supplementary).asString());
+            assertEquals(2, size.execute(supplementary).asInt(), "Unicode scalar count");
+            assertEquals(3, size.execute("\u00f1a\u20ac").asInt());
+            assertEquals("a" + supplementary, add.execute("a", supplementary).asString());
+            assertTrue(embedded(context).isLive());
+        }
+    }
+
+    @Test
+    void unsupportedJavaArgumentsAreRejectedBeforeGuestExecution() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value bump = bindings.getMember("bump");
+            Value add = bindings.getMember("add");
+
+            for (Object unsupported :
+                    new Object[] {
+                        "\ud800", "a\udc00b", 1.5d, 1.5f, true, 'c', new Object(), List.of(1),
+                        BigInteger.ONE, (Runnable) () -> {}
+                    }) {
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> bump.execute(unsupported),
+                        () -> "rejected: " + unsupported.getClass());
+                assertThrows(IllegalArgumentException.class, () -> add.execute(1, unsupported));
+            }
+            assertEquals(0, bindings.getMember("count").asInt(), "no guest code executed");
+            assertTrue(embedded(context).isLive(), "a boundary rejection is not fatal");
+            assertEquals(4, bump.execute(4).asInt());
+            assertEquals(1, bindings.getMember("count").asInt());
+        }
+    }
+
+    @Test
+    void javaArgumentArityErrorIsAGuestErrorAndFatal() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
+            Value add = context.getBindings(ProtosLanguage.ID).getMember("add");
+            PolyglotException arity =
+                    assertThrows(PolyglotException.class, () -> add.execute(1, 2, 3));
             assertTrue(arity.isGuestException());
             assertFalse(embedded(context).isLive(), "an unhandled arity Error is fatal");
         }

@@ -18,7 +18,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -57,7 +59,8 @@ import java.util.Objects;
  * <p>PLAT054: an adapter produced by a standard-embedding binding read additionally carries its
  * {@link #embedding} Process. Each execution is then a RootActor host entry (concurrent entry is
  * rejected, an Error escaping an outermost entry fails the RootActor), and it accepts Protos values
- * as arguments, which ordinary binding applies with its defaults, rest, and arity Errors. A Closure
+ * and exact Java integer and String scalars (PLAT054-3B) as arguments, which ordinary binding
+ * applies with its defaults, rest, and arity Errors. A Closure
  * without a compact Bytecode target (a native body, or a non-standard {@code call} selection) runs
  * through ordinary generic invocation ({@link ProtosInvocation#invoke}); no second call engine
  * exists.
@@ -230,22 +233,26 @@ final class ProtosHostExecutableClosure implements TruffleObject {
 
     /**
      * Validates the owning Context and returns the supplied Protos arguments. A session adapter
-     * admits only zero arguments; an embedding adapter admits Protos values, whose arity is then
-     * checked by ordinary binding as a guest Error. Host values that are not Protos values are not
-     * converted here.
+     * admits only zero arguments. An embedding adapter admits Protos values unchanged and, in
+     * PLAT054-3B, the exact Java scalars {@link #admitHostScalar} converts, preserving argument
+     * order; arity is then checked by ordinary binding as a guest Error. The supplied array is
+     * copied only when some argument requires conversion.
      */
     Object[] admitArguments(Object[] arguments, Node node)
             throws ArityException, UnsupportedTypeException {
+        Object[] admitted = arguments;
         if (embedding == null) {
             if (arguments.length != 0) {
                 throw ArityException.create(0, 0, arguments.length);
             }
         } else {
-            for (Object argument : arguments) {
+            for (int index = 0; index < arguments.length; index++) {
+                Object argument = arguments[index];
                 if (!ProtosValueLookup.isProtosValue(argument)) {
-                    CompilerDirectives.transferToInterpreter();
-                    throw UnsupportedTypeException.create(
-                            arguments, "Protos host execution accepts only Protos values");
+                    if (admitted == arguments) {
+                        admitted = arguments.clone();
+                    }
+                    admitted[index] = admitHostScalar(arguments, argument);
                 }
             }
         }
@@ -255,7 +262,37 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             throw new IllegalStateException(
                     "host executable Closure entered outside its owning Context");
         }
-        return arguments.length == 0 ? NO_SUPPLIED_ARGUMENTS : arguments;
+        return admitted.length == 0 ? NO_SUPPLIED_ARGUMENTS : admitted;
+    }
+
+    /**
+     * PLAT054-3B exact boundary conversion of one Java scalar argument: a Java {@code Byte},
+     * {@code Short}, {@code Integer}, or {@code Long} becomes the ordinary Protos Integer of the
+     * same value, and a Java {@code String} becomes the ordinary Protos String of the same Unicode
+     * scalar sequence. A String that is not a valid scalar sequence, and every other host value, is
+     * rejected before any guest code runs; nothing is converted lossily or through {@code
+     * toString()}.
+     */
+    @TruffleBoundary
+    private static Object admitHostScalar(Object[] arguments, Object argument)
+            throws UnsupportedTypeException {
+        if (argument instanceof Integer
+                || argument instanceof Long
+                || argument instanceof Short
+                || argument instanceof Byte) {
+            return new ProtosIntegerValue(((Number) argument).longValue());
+        }
+        if (argument instanceof String text) {
+            try {
+                return new ProtosStringValue(text);
+            } catch (IllegalArgumentException invalid) {
+                throw UnsupportedTypeException.create(
+                        arguments, "Java String argument is not a valid Unicode scalar sequence");
+            }
+        }
+        throw UnsupportedTypeException.create(
+                arguments,
+                "Protos host execution accepts only Protos values, Java integers, and Java Strings");
     }
 
     /**

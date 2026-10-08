@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.284-SNAPSHOT
+
+- `I086` / `PLAT054-3` slice B lets the standard Polyglot embedding accept Java
+  scalar arguments, so `add.execute(2, 3)` now returns `5`. The specification
+  is unchanged by this slice.
+  - Java `Byte`, `Short`, `Integer`, and `Long` arguments become ordinary
+    Protos Integers of exactly the same value, and Java `String` arguments
+    become ordinary Protos Strings. A String with an unpaired surrogate is
+    rejected.
+  - Every other host value is rejected before any guest code runs, and the
+    rejection is not fatal. This includes floating-point numbers, booleans,
+    characters, `BigInteger`, collections, callbacks, and arbitrary objects.
+  - Protos-valued arguments pass through unchanged, and argument order is
+    preserved. Defaults, rest parameters, and arity Errors follow ordinary
+    binding. The argument array is copied only when an argument needs
+    conversion, and no Task is created.
+  - The `ProtosStandaloneHostedSession` adapter still accepts only zero
+    arguments.
+
 ## 0.3.283-SNAPSHOT
 
 - `I086` / `PLAT054-3` slice A implements the standard Polyglot embedding
