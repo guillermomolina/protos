@@ -298,9 +298,23 @@ final class ProtosFrameArguments {
      * is then necessarily unobserved and has no lexical-binding authority
      * installed, so the root's frame locals are the only store of its
      * frame-native bindings.
+     *
+     * <p>PERF038-B: this is the compact/materialized discriminator of an
+     * already admitted Closure-root (or inline-callback carrier) argument
+     * array, not an ABI validator. Every such array is either a rich
+     * {@code {activation}} array or a compact array built by
+     * {@link #compactImmediateMethodCall} or {@link #compactDirectClosureCall}
+     * and validated by its {@code OrdinarySourceCall} or
+     * {@code PreparedInlineLiteralCall} carrier before entry; the only later
+     * write of argument 0 is {@link #materializeCompactActivation}, which
+     * replaces the Closure with the published activation. Argument 0 alone
+     * therefore distinguishes the two states, and the full header
+     * re-validation is not repeated at every root-level frame operation.
+     * The materialization slow path still runs the full validation.
      */
     static boolean isUnmaterializedCompactCall(Object[] arguments) {
-        return isCompactCall(arguments);
+        return arguments.length > CLOSURE_INDEX
+                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue;
     }
 
     /**
@@ -322,17 +336,26 @@ final class ProtosFrameArguments {
      * replaces the Closure with the published activation, so argument 0
      * alone distinguishes the two states. It is re-read at every use so a
      * materialization between two instructions is observed. The length test
-     * subsumes the array bounds check of the read. Callers without this
-     * precondition use {@link #isUnmaterializedCompactCall}.
+     * subsumes the array bounds check of the read. Since PERF038-B this is
+     * the same discriminator as {@link #isUnmaterializedCompactCall}, under
+     * the same precondition.
      */
     static boolean isUnmaterializedCompactScalarLocalCall(Object[] arguments) {
-        return arguments.length > CLOSURE_INDEX
-                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue;
+        return isUnmaterializedCompactCall(arguments);
     }
 
-    /** Supplied positional argument count of a compact source call. */
+    /**
+     * Supplied positional argument count of a compact source call.
+     *
+     * <p>PERF038-B: every minimal direct header (PERF032-G7) is shorter than
+     * the full header and every full header is at least
+     * {@code USER_ARGUMENT_OFFSET} long; the length never changes on
+     * publication. The length alone therefore selects the layout of a
+     * compact array, before or after materialization, without re-deriving
+     * the minimal variant.
+     */
     static int compactSuppliedArgumentCount(Object[] arguments) {
-        if (minimalLayout(arguments) != MINIMAL_NONE) {
+        if (arguments.length < USER_ARGUMENT_OFFSET) {
             return 0;
         }
         return arguments.length - USER_ARGUMENT_OFFSET;
@@ -340,7 +363,7 @@ final class ProtosFrameArguments {
 
     /** Supplied positional argument {@code index} of a compact source call. */
     static Object compactSuppliedArgument(Object[] arguments, int index) {
-        if (minimalLayout(arguments) != MINIMAL_NONE) {
+        if (arguments.length < USER_ARGUMENT_OFFSET) {
             /* Never expose a header slot as a guest argument. */
             throw new ArrayIndexOutOfBoundsException(index);
         }

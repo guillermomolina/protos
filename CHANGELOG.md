@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.313-SNAPSHOT
+
+- `PERF038-B` (#852): compact method-call graph specialization.
+  - Root-level frame operations tell a compact source call from a
+    materialized one by frame argument 0 alone; the full compact-header
+    validation stays at carrier construction and materialization.
+  - Compact supplied-argument count and reads select the header layout by
+    array length instead of re-deriving the minimal direct layout.
+  - `BindClosureFrameParameter` is split into a guarded compact slot store and
+    an authoritative fallback behind a boundary, so a binding site that only
+    sees unobserved compact frames no longer compiles activation
+    materialization or lexical-authority work. Observable semantics are
+    unchanged.
+
 ## 0.3.312-SNAPSHOT
 
 - `DIST015-FIX`: Native Image includes the ICU4J Unicode data.

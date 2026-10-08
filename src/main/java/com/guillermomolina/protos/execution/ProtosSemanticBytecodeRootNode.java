@@ -467,9 +467,32 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * <p>PERF029: {@code ordinal} is a constant operand, not a stack
          * operand, because every {@link LocalRangeAccessor} local operation
          * requires its index to be a partial-evaluation constant.
+         *
+         * <p>PERF038-B: the compact direct store and the authoritative
+         * activation path are separate specializations. A site that has only
+         * ever bound into compact unobserved frames compiles the guard and
+         * the slot store alone; the activation, lexical-authority and
+         * duplicate-creation machinery is reached only through the
+         * respecializing fallback, and even when that fallback is active it
+         * stays behind a boundary (the PERF034-B {@code CreateCurrentFrameLocal}
+         * shape). The guard is re-evaluated on every execution, so a frame
+         * materialized or an ordinal already established since the last
+         * execution always takes the fallback.
          */
-        @Specialization
-        public static void perform(
+        @Specialization(guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void compact(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+        }
+
+        @Specialization(guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void materialized(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 int ordinal,
@@ -478,12 +501,38 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
-                frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
-                return;
-            }
+            slowBind(
+                    frameBackedLocals, frameBackedLayout, ordinal,
+                    frame.getArguments(), name, value, bytecodeNode, bytecodeIndex,
+                    frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean isCompactUnbound(
+                LocalRangeAccessor frameBackedLocals,
+                int ordinal,
+                BytecodeNode bytecodeNode,
+                VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
+                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
+        }
+
+        /**
+         * The unchanged authoritative binding, including duplicate-creation
+         * Errors and activation materialization. The frame is materialized
+         * before entering the boundary so no VirtualFrame escapes.
+         */
+        @TruffleBoundary
+        private static void slowBind(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                Object[] arguments,
+                String name,
+                Object value,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                MaterializedFrame frame) {
             ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
                     ProtosFrameArguments.activation(arguments), name, value,
