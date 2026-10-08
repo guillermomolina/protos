@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.295-SNAPSHOT
+
+- `LM012-B1` (#671, D194) adds the initial canonical correctness lint
+  diagnostics to the static-analysis core and the Protos language server.
+  The specification is unchanged.
+  - `protos/unreachable-after-nonlocal-return` (Warning, enabled, no
+    autofix) reports the suffix of a braced Closure body that follows a
+    direct `^` in the same Sequence. Conditional, nested, or indirect
+    Closure execution is never inferred.
+  - `protos/always-different-fresh-object` (Warning, enabled, no autofix)
+    reports `===`/`!==` whose exact right-hand operand, optionally inside
+    parentheses, is an object literal; on normal completion the result is
+    `false`/`true` respectively.
+  - New `ProtosStaticLint` and `ProtosStaticLintDiagnostic` and
+    `ProtosStaticAnalysisCore.lint(...)` analyze only successfully parsed
+    snapshots. The language server publishes the findings with the rule ID
+    as diagnostic code in the existing single per-version publication;
+    parser errors replace them and stale snapshots publish nothing.
+
 ## 0.3.294-SNAPSHOT
 
 - `I086` / `PLAT054-3E4` provisions the default Network in the standard

@@ -108,6 +108,102 @@ class ProtosLanguageServerDiagnosticsTest {
         assertEquals(new Position(1, 1), crlf.getEnd());
     }
 
+    @Test
+    void lintWarningsPublishWithRuleCodeSeverityExactRangeAndVersion() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosTextDocumentService documents = connectedDocuments(published);
+        String uri = "file:///workspace/lint.protos";
+
+        documents.didOpen(open(uri, 3, "f: () => {\n    ^1\n    a\n    b\n}\nc === { x: 1 }"));
+
+        assertEquals(1, published.size());
+        PublishDiagnosticsParams params = published.get(0);
+        assertEquals(uri, params.getUri());
+        assertEquals(Integer.valueOf(3), params.getVersion());
+        assertEquals(2, params.getDiagnostics().size());
+
+        assertWarning(
+                params.getDiagnostics().get(0),
+                "protos/unreachable-after-nonlocal-return",
+                new Range(new Position(2, 4), new Position(3, 5)));
+        assertWarning(
+                params.getDiagnostics().get(1),
+                "protos/always-different-fresh-object",
+                new Range(new Position(5, 0), new Position(5, 14)));
+    }
+
+    @Test
+    void parserErrorReplacesLintAndRecoveryAndCloseUpdateIt() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosTextDocumentService documents = connectedDocuments(published);
+        String uri = "file:///workspace/lint.protos";
+        String linted = "a !== { x: 1 }";
+
+        documents.didOpen(open(uri, 1, linted));
+        documents.didChange(change(uri, 2, "a !== { x: 1 }\n)"));
+        documents.didChange(change(uri, 3, "a !== b"));
+        documents.didChange(change(uri, 4, linted));
+        documents.didClose(close(uri));
+
+        assertEquals(5, published.size());
+        assertEquals(Integer.valueOf(1), published.get(0).getVersion());
+        assertWarning(
+                published.get(0).getDiagnostics().get(0),
+                "protos/always-different-fresh-object",
+                new Range(new Position(0, 0), new Position(0, 14)));
+
+        assertEquals(Integer.valueOf(2), published.get(1).getVersion());
+        assertEquals(1, published.get(1).getDiagnostics().size());
+        Diagnostic parserError = published.get(1).getDiagnostics().get(0);
+        assertEquals(DiagnosticSeverity.Error, parserError.getSeverity());
+        assertNull(parserError.getCode());
+
+        assertEquals(Integer.valueOf(3), published.get(2).getVersion());
+        assertTrue(published.get(2).getDiagnostics().isEmpty());
+
+        assertEquals(Integer.valueOf(4), published.get(3).getVersion());
+        assertEquals(1, published.get(3).getDiagnostics().size());
+
+        assertNull(published.get(4).getVersion());
+        assertTrue(published.get(4).getDiagnostics().isEmpty());
+    }
+
+    @Test
+    void lintRangesUseUtf16ColumnsAndLogicalCrLfLines() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosTextDocumentService documents = connectedDocuments(published);
+
+        documents.didOpen(open(
+                "file:///workspace/utf16.protos", 1, "\"\uD83D\uDE00\" === { x: 1 }"));
+        documents.didOpen(open(
+                "file:///workspace/crlf.protos", 1, "f: () => {\r\n    ^1\r\n    a\r\n}"));
+
+        assertEquals(2, published.size());
+        assertWarning(
+                published.get(0).getDiagnostics().get(0),
+                "protos/always-different-fresh-object",
+                new Range(new Position(0, 0), new Position(0, 17)));
+        assertWarning(
+                published.get(1).getDiagnostics().get(0),
+                "protos/unreachable-after-nonlocal-return",
+                new Range(new Position(2, 4), new Position(2, 5)));
+    }
+
+    private static ProtosTextDocumentService connectedDocuments(
+            List<PublishDiagnosticsParams> published) {
+        ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+        server.connect(recordingClient(published));
+        return server.textDocuments();
+    }
+
+    private static void assertWarning(Diagnostic diagnostic, String code, Range range) {
+        assertEquals(DiagnosticSeverity.Warning, diagnostic.getSeverity());
+        assertEquals("protos", diagnostic.getSource());
+        assertTrue(diagnostic.getCode().isLeft());
+        assertEquals(code, diagnostic.getCode().getLeft());
+        assertEquals(range, diagnostic.getRange());
+    }
+
     private static LanguageClient recordingClient(List<PublishDiagnosticsParams> published) {
         return (LanguageClient) Proxy.newProxyInstance(
                 LanguageClient.class.getClassLoader(),

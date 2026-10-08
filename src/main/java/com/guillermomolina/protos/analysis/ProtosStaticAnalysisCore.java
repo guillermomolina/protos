@@ -19,6 +19,7 @@ package com.guillermomolina.protos.analysis;
 
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.parser.ProtosParser;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -116,5 +117,22 @@ public final class ProtosStaticAnalysisCore {
             return Optional.empty();
         }
         return ProtosStaticReferences.resolve(successful, sourceOffset);
+    }
+
+    /**
+     * Runs the D194 initial correctness lint rules over the supplied immutable
+     * snapshot.
+     *
+     * <p>Parse failure fails closed with no lint findings; parser diagnostics
+     * remain the only report for an unparseable snapshot.</p>
+     */
+    public List<ProtosStaticLintDiagnostic> lint(ProtosDocumentSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+
+        ProtosStaticParseResult parsed = parse(snapshot);
+        if (!(parsed instanceof ProtosStaticParseResult.Parsed successful)) {
+            return List.of();
+        }
+        return ProtosStaticLint.check(successful);
     }
 }

@@ -23,6 +23,8 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticHoverResult;
+import com.guillermomolina.protos.analysis.ProtosStaticLint;
+import com.guillermomolina.protos.analysis.ProtosStaticLintDiagnostic;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.analysis.ProtosStaticReferenceResult;
 import com.guillermomolina.protos.execution.ProtosWholeDocumentFormatter;
@@ -79,7 +81,9 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * one full-document edit; editor formatting options never select style.
  * LM010-A hover publishes only D110-proven bindings and explicitly labeled
  * parser-derived syntax facts, under the same canonical-source authority and
- * snapshot-freshness checks as definition.</p>
+ * snapshot-freshness checks as definition. LM012-B1 adds the D194 warning
+ * lint findings for a successfully parsed snapshot to the same single
+ * publication; a stale snapshot publishes nothing.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -500,8 +504,16 @@ final class ProtosTextDocumentService implements TextDocumentService {
             diagnostic.setSource("protos");
             diagnostic.setMessage(failure.message());
             diagnostics = List.of(diagnostic);
+        } else if (result instanceof ProtosStaticParseResult.Parsed success) {
+            List<ProtosStaticLintDiagnostic> findings = ProtosStaticLint.check(success);
+            if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, result)) {
+                return;
+            }
+            diagnostics = findings.stream()
+                    .map(ProtosTextDocumentService::toLspDiagnostic)
+                    .toList();
         } else {
-            diagnostics = List.of();
+            return;
         }
 
         publishDiagnostics(
@@ -509,6 +521,20 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Math.toIntExact(result.snapshot().version()),
                 diagnostics,
                 currentClient);
+    }
+
+    private static Diagnostic toLspDiagnostic(ProtosStaticLintDiagnostic finding) {
+        Diagnostic diagnostic = new Diagnostic();
+        diagnostic.setRange(ProtosLspSourcePositions.range(
+                finding.snapshot().characters(),
+                finding.span()));
+        diagnostic.setSeverity(switch (finding.severity()) {
+            case WARNING -> DiagnosticSeverity.Warning;
+        });
+        diagnostic.setCode(finding.ruleId());
+        diagnostic.setSource("protos");
+        diagnostic.setMessage(finding.message());
+        return diagnostic;
     }
 
     private void publishDiagnostics(
