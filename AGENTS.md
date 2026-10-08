@@ -256,6 +256,12 @@ The staged set must be exactly the patch-owned paths: provide explicit
 create or push temporary remote branches. Do not create releases, tags,
 branches, or pull requests unless explicitly requested.
 
+Commit messages the agent suggests to the human MUST be a single line
+(`<ID>: <summary>`, in English, matching recent history) with no body and no
+trailers, including `Co-Authored-By` or other AI-attribution trailers. The
+AI-assistance disclosure belongs in the Pull Request description per
+CONTRIBUTING.md, not in the commit message.
+
 Before publication, request the human to synchronize with current
 `origin/main`, then re-check the assumptions the change depends on.
 
