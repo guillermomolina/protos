@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.308-SNAPSHOT
+
+- `PERF034-E` (#845): reduce intermediate state in the PERF034-C scalar-local
+  lowering.
+  - A scalar creation from a literal passes the literal directly as the
+    operand of both the compact `StoreLocal` and the authoritative
+    `CreateCurrentFrameLocal`, without a `createValue` temporary.
+  - An admitted scalar root whose final expression reads one of its own
+    bindings returns that read directly from each lane instead of through
+    the `sequenceResult` local; the read keeps its own source section and
+    shared Statement/Expression tag.
+  - Scalar admission also accepts a creation whose value is a `Resolved`
+    read of an already-established binding of the same root, so simple
+    alias chains (`a: 1`, `b: a`) stay in the scalar lane.
+  - Every creation and read, including an alias right-hand side, still
+    re-checks `IsCompactLocalFrame` and keeps the D179-aware authoritative
+    fallback; no observable semantics change.
+
 ## 0.3.307-SNAPSHOT
 
 - `I087-2` (#841, PLAT055/#844): Java hosts supply Protos application

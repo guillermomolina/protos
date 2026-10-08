@@ -43,8 +43,10 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.bytecode.TagTree;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.source.Source;
 import java.lang.reflect.Field;
@@ -265,6 +267,185 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosFrameArguments.isUnmaterializedCompactScalarLocalCall(
                             new Object[] {ProtosFrameArguments.activation(direct)}),
                     "a rich entry array is never in the scalar lane");
+        });
+    }
+
+    /** A PERF034-E scalar body, its result, and its creation/read counts. */
+    private record ScalarBody(
+            String characters, long expected, List<String> created, int reads,
+            boolean literalOnly) {}
+
+    private static final List<ScalarBody> PERF034E_SCALAR_BODIES =
+            List.of(
+                    new ScalarBody(
+                            "() => { value: 1\nvalue }", 1, List.of("value"), 1, true),
+                    new ScalarBody(
+                            "() => { first: 7\nsecond: 9\nfirst }",
+                            7, List.of("first", "second"), 1, true),
+                    new ScalarBody(
+                            "() => { first: 7\nsecond: first\nsecond }",
+                            7, List.of("first", "second"), 2, false),
+                    new ScalarBody(
+                            "() => { first: 7\nsecond: first\nthird: second\nthird }",
+                            7, List.of("first", "second", "third"), 3, false));
+
+    @Test
+    void perf034eLiteralAndAliasChainsStayInScalarLane() throws Exception {
+        withCore(module -> {
+            for (ScalarBody body : PERF034E_SCALAR_BODIES) {
+                ProtosClosureValue scalar = closure(body.characters(), module);
+                List<String> instructions = instructionNames(scalar);
+                assertNone(instructions, "CurrentActivation");
+                assertNone(instructions, "InstallFrameLexicalAuthority");
+                // Every creation and every read (including the RHS of an
+                // alias and the final returned read) owns its own compact
+                // check and its own D179-aware authoritative fallback.
+                assertEquals(
+                        body.created().size() + body.reads(),
+                        countOf(instructions, "IsCompactLocalFrame"),
+                        () -> body.characters() + ": " + instructions);
+                assertEquals(
+                        body.created().size(),
+                        countOf(instructions, "CreateCurrentFrameLocal"),
+                        () -> body.characters() + ": " + instructions);
+                assertEquals(
+                        body.reads(),
+                        countOf(instructions, "ReadRootFrameLocal"),
+                        () -> body.characters() + ": " + instructions);
+                List<Object> locals = localNames(scalar);
+                if (body.literalOnly()) {
+                    assertFalse(
+                            locals.contains("createValue"),
+                            () -> "a literal creation needs no createValue: " + locals);
+                }
+
+                for (int iteration = 0; iteration < 3; iteration++) {
+                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                            fastDirect(scalar, module);
+                    assertEquals(
+                            BigInteger.valueOf(body.expected()),
+                            integerValue(enter(prepared)),
+                            body.characters());
+                    assertSame(
+                            scalar, prepared.targetArguments()[0],
+                            "scalar creation/read must not materialize");
+                }
+
+                Object[] method =
+                        ProtosFrameArguments.compactImmediateMethodCall(
+                                scalar, newObject(), newObject(), module,
+                                new Object[0]);
+                assertEquals(
+                        BigInteger.valueOf(body.expected()),
+                        integerValue(target(scalar).call(method)),
+                        body.characters());
+                assertSame(
+                        scalar, method[0],
+                        "compact method execution must remain compact");
+            }
+        });
+    }
+
+    @Test
+    void perf034eMaterializedEntryTakesAuthoritativeLanes() throws Exception {
+        withCore(module -> {
+            for (ScalarBody body : PERF034E_SCALAR_BODIES) {
+                ProtosClosureValue scalar = closure(body.characters(), module);
+                Object[] direct =
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                scalar, module, null, new Object[0]);
+                Object[] method =
+                        ProtosFrameArguments.compactImmediateMethodCall(
+                                scalar, newObject(), newObject(), module,
+                                new Object[0]);
+                for (Object[] arguments : List.of(direct, method)) {
+                    ProtosActivation published =
+                            ProtosFrameArguments.activation(arguments);
+                    ProtosObjectValue observed = published.context();
+                    assertEquals(
+                            BigInteger.valueOf(body.expected()),
+                            integerValue(target(scalar).call(arguments)),
+                            body.characters());
+                    assertSame(published, arguments[0]);
+                    assertSame(observed, published.context());
+                    for (String name : body.created()) {
+                        assertTrue(
+                                observed.readLocalSlot(name).isPresent(),
+                                () -> body.characters()
+                                        + ": the observed context holds " + name);
+                    }
+                }
+            }
+        });
+    }
+
+    @Test
+    void perf034eFinalReadKeepsStatementAndExpressionTags() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue scalar =
+                    closure("() => { first: 7\nsecond: first\nsecond }", module);
+            ProtosSemanticBytecodeRootNode root =
+                    scalar.executionPlan()
+                            .orElseThrow()
+                            .bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
+            TagTree tree = root.getBytecodeNode().getTagTree();
+            List<TagTree> statements =
+                    collectTags(tree, StandardTags.StatementTag.class);
+            List<TagTree> expressions =
+                    collectTags(tree, StandardTags.ExpressionTag.class);
+            assertEquals(
+                    List.of("first: 7", "second: first", "second"),
+                    statements.stream()
+                            .map(tag -> tag.getSourceSection().getCharacters().toString())
+                            .toList());
+            assertEquals(statements.size(), expressions.size());
+            for (int index = 0; index < statements.size(); index++) {
+                assertSame(statements.get(index), expressions.get(index));
+            }
+
+            // Same tagged root, compact and observed.
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(enter(fastDirect(scalar, module))));
+            Object[] observed =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            scalar, module, null, new Object[0]);
+            ProtosFrameArguments.activation(observed).context();
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(target(scalar).call(observed)));
+        });
+    }
+
+    @Test
+    void perf034eAliasAdmissionExcludesUnprovenForms() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue duplicate =
+                    closure(
+                            "() => { first: 7\nsecond: first\nsecond: first\nsecond }",
+                            module);
+            assertNone(instructionNames(duplicate), "IsCompactLocalFrame");
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(duplicate, module)));
+
+            evaluate("perf034eOuter: 5", module);
+            ProtosClosureValue outer =
+                    closure("() => { first: perf034eOuter\nfirst }", module);
+            assertNone(instructionNames(outer), "IsCompactLocalFrame");
+            assertEquals(
+                    BigInteger.valueOf(5),
+                    integerValue(enter(fastDirect(outer, module))));
+
+            ProtosClosureValue captured =
+                    closure(
+                            "() => { first: 7\nreader: () => first\nsecond: first\nsecond }",
+                            module);
+            assertNone(instructionNames(captured), "IsCompactLocalFrame");
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(enter(fastDirect(captured, module))));
         });
     }
 
@@ -776,6 +957,37 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("no constant " + argument + " operand"))
                 .asConstant();
+    }
+
+    private static int countOf(List<String> names, String operation) {
+        return (int) names.stream().filter(name -> name.contains(operation)).count();
+    }
+
+    private static List<Object> localNames(ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getLocals()
+                .stream()
+                .map(local -> local.getName())
+                .toList();
+    }
+
+    private static List<TagTree> collectTags(
+            TagTree tree,
+            Class<? extends com.oracle.truffle.api.instrumentation.Tag> tag) {
+        List<TagTree> result = new java.util.ArrayList<>();
+        if (tree == null) {
+            return result;
+        }
+        if (tree.hasTag(tag)) {
+            result.add(tree);
+        }
+        for (TagTree child : tree.getTreeChildren()) {
+            result.addAll(collectTags(child, tag));
+        }
+        return result;
     }
 
     private static void assertContains(List<String> names, String operation) {

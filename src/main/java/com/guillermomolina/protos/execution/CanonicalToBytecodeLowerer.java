@@ -817,11 +817,31 @@ final class CanonicalToBytecodeLowerer {
         } else {
             BytecodeLocal result =
                     builder.createLocal("sequenceResult", null);
-            emitStatementsToLocal(builder, sequence, result);
+            java.util.List<CanonicalExpression> expressions =
+                    sequence.expressions();
+            CanonicalExpression last =
+                    expressions.get(expressions.size() - 1);
+            if (last instanceof CanonicalLookup lookup
+                    && isScalarLocalRead(lookup)) {
+                /*
+                 * PERF034-E: an admitted scalar root returns its final read
+                 * directly, inside that statement's own source section and
+                 * tags, instead of through the sequence result local.
+                 */
+                emitStatementsToLocal(
+                        builder,
+                        expressions.subList(0, expressions.size() - 1),
+                        result);
+                beginStatement(builder, lookup);
+                emitScalarLocalRead(builder, lookup, null);
+                endStatement(builder);
+            } else {
+                emitStatementsToLocal(builder, sequence, result);
 
-            builder.beginReturn();
-            builder.emitLoadLocal(result);
-            builder.endReturn();
+                builder.beginReturn();
+                builder.emitLoadLocal(result);
+                builder.endReturn();
+            }
         }
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
@@ -957,7 +977,13 @@ final class CanonicalToBytecodeLowerer {
         for (CanonicalExpression expression : body.expressions()) {
             if (expression instanceof CanonicalCreate create) {
                 if (create.target().isPresent()
-                        || !(create.value() instanceof CanonicalLiteral)
+                        || !(create.value() instanceof CanonicalLiteral
+                                || (create.value() instanceof CanonicalLookup read
+                                        && readsEstablishedScalar(
+                                                read,
+                                                analysis,
+                                                scope,
+                                                established)))
                         || analysis.identityOf(create)
                                 .map(identity ->
                                         identity.owner() != scope
@@ -971,16 +997,8 @@ final class CanonicalToBytecodeLowerer {
             }
 
             if (expression instanceof CanonicalLookup lookup) {
-                boolean resolvedHere =
-                        analysis.resolutionOf(lookup)
-                                .map(resolution ->
-                                        resolution
-                                                instanceof CanonicalBindingResolution.Resolved resolved
-                                                && resolved.identity().owner() == scope
-                                                && established.contains(
-                                                        resolved.identity().name()))
-                                .orElse(false);
-                if (!resolvedHere) {
+                if (!readsEstablishedScalar(
+                        lookup, analysis, scope, established)) {
                     return java.util.Set.of();
                 }
                 continue;
@@ -992,6 +1010,29 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return java.util.Set.copyOf(established);
+    }
+
+    /**
+     * PERF034-C/E: {@code lookup} is a {@code Resolved} read of a binding
+     * owned by {@code scope} (its lexical identity, not its spelling) that an
+     * earlier creation of the same straight-line body already established.
+     * Such a read is effect-free and cannot reach a capture or a dynamic
+     * binding.
+     */
+    private static boolean readsEstablishedScalar(
+            CanonicalLookup lookup,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            java.util.Set<String> established) {
+        return analysis.resolutionOf(lookup)
+                .map(resolution ->
+                        resolution
+                                instanceof CanonicalBindingResolution.Resolved resolved
+                                && resolved.identity().owner() == scope
+                                && resolved.identity().name().equals(lookup.name())
+                                && established.contains(
+                                        resolved.identity().name()))
+                .orElse(false);
     }
 
     private static boolean requiresPersistentFrameAuthority(
@@ -1249,6 +1290,29 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             BytecodeLocal result) {
+        emitScalarLocalRead(builder, lookup, result);
+    }
+
+    /**
+     * PERF034-C/E: whether {@code lookup} reads an admitted scalar local of
+     * the root being lowered (outside any inline activation region).
+     */
+    private boolean isScalarLocalRead(CanonicalLookup lookup) {
+        return currentActivationLocal == null
+                && currentRootScalarLocals.contains(lookup.name());
+    }
+
+    /**
+     * PERF034-C/E: one admitted scalar read with its own compact check.
+     * Stores the value into {@code result}, or, when {@code result} is
+     * {@code null}, returns it directly from the root (PERF034-E final
+     * read). Each read re-checks {@code IsCompactLocalFrame}, so a D179
+     * materialization observed earlier is never bypassed.
+     */
+    private void emitScalarLocalRead(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalLookup lookup,
+            BytecodeLocal result) {
         BytecodeLocal local =
                 currentRootFrameLocals.get(lookup.name());
 
@@ -1261,26 +1325,79 @@ final class CanonicalToBytecodeLowerer {
         builder.emitIsCompactLocalFrame();
 
         builder.beginBlock();
-        builder.beginStoreLocal(result);
+        beginScalarReadSink(builder, result);
         builder.emitLoadLocal(local);
-        builder.endStoreLocal();
+        endScalarReadSink(builder, result);
         builder.endBlock();
 
         builder.beginBlock();
-        builder.beginStoreLocal(result);
+        beginScalarReadSink(builder, result);
         emitLookup(builder, lookup);
-        builder.endStoreLocal();
+        endScalarReadSink(builder, result);
         builder.endBlock();
 
         builder.endIfThenElse();
+    }
+
+    private static void beginScalarReadSink(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result) {
+        if (result == null) {
+            builder.beginReturn();
+        } else {
+            builder.beginStoreLocal(result);
+        }
+    }
+
+    private static void endScalarReadSink(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result) {
+        if (result == null) {
+            builder.endReturn();
+        } else {
+            builder.endStoreLocal();
+        }
+    }
+
+    /**
+     * Opens one source statement over {@code expression}'s exact span:
+     * StatementTag + ExpressionTag around a block.
+     */
+    private static void beginStatement(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression) {
+        SourceSpan span = expression.span();
+        builder.beginSourceSection(
+                span.startOffset(),
+                span.length());
+        builder.beginTag(
+                StandardTags.StatementTag.class,
+                StandardTags.ExpressionTag.class);
+        builder.beginBlock();
+    }
+
+    private static void endStatement(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+        builder.endBlock();
+        builder.endTag(
+                StandardTags.StatementTag.class,
+                StandardTags.ExpressionTag.class);
+        builder.endSourceSection();
     }
 
     private void emitStatementsToLocal(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             BytecodeLocal result) {
+        emitStatementsToLocal(builder, sequence.expressions(), result);
+    }
+
+    private void emitStatementsToLocal(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions,
+            BytecodeLocal result) {
         boolean hasComposedInvocation =
-                sequence.expressions().stream()
+                expressions.stream()
                         .anyMatch(
                                 CanonicalToBytecodeLowerer::requiresComposedInvocation);
         BytecodeLocal preparedCall =
@@ -1302,17 +1419,8 @@ final class CanonicalToBytecodeLowerer {
                                 null)
                         : null;
 
-        for (CanonicalExpression expression :
-                sequence.expressions()) {
-            SourceSpan span = expression.span();
-
-            builder.beginSourceSection(
-                    span.startOffset(),
-                    span.length());
-            builder.beginTag(
-                    StandardTags.StatementTag.class,
-                    StandardTags.ExpressionTag.class);
-            builder.beginBlock();
+        for (CanonicalExpression expression : expressions) {
+            beginStatement(builder, expression);
 
             if (requiresComposedInvocation(expression)) {
                 emitBodyExpressionToLocal(
@@ -1323,8 +1431,7 @@ final class CanonicalToBytecodeLowerer {
                         childResult,
                         resumeValue);
             } else if (expression instanceof CanonicalLookup lookup
-                    && currentActivationLocal == null
-                    && currentRootScalarLocals.contains(lookup.name())) {
+                    && isScalarLocalRead(lookup)) {
                 emitScalarLocalReadToResult(builder, lookup, result);
             } else {
                 builder.beginStoreLocal(result);
@@ -1332,11 +1439,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.endStoreLocal();
             }
 
-            builder.endBlock();
-            builder.endTag(
-                    StandardTags.StatementTag.class,
-                    StandardTags.ExpressionTag.class);
-            builder.endSourceSection();
+            endStatement(builder);
         }
     }
 
@@ -1960,6 +2063,50 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
+     * PERF034-C/E: one admitted scalar creation with its own compact check.
+     * The compact lane stores {@code emitValue}'s operand into the builtin
+     * local and yields that binding's value; an observed activation instead
+     * takes the authoritative {@code CreateCurrentFrameLocal} with the same
+     * operand. {@code emitValue} must be effect-free (a constant or an
+     * already-evaluated local).
+     */
+    private void emitScalarCreate(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalCreate create,
+            BytecodeLocal result,
+            Runnable emitValue) {
+        String name = create.name();
+        BytecodeLocal local = currentRootFrameLocals.get(name);
+        int ordinal = frameNativeOrdinal(name);
+        if (local == null || ordinal < 0) {
+            throw new AssertionError(
+                    "admitted scalar creation is missing: " + name);
+        }
+
+        builder.beginIfThenElse();
+        builder.emitIsCompactLocalFrame();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(local);
+        emitValue.run();
+        builder.endStoreLocal();
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(local);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        emitCreateCurrentFrameLocal(builder, ordinal, name);
+        emitValue.run();
+        builder.endCreateCurrentFrameLocal();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    /**
      * Opens a frame-native {@code CreateInlineCurrentFrameLocal} of {@code
      * name} at {@code ordinal}, a constant operand, leaving only its value
      * operand to emit.
@@ -2374,6 +2521,12 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalIndexedAssign indexedAssign) {
             emitBodyIndexedAssign(
                     builder, indexedAssign, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalLookup lookup
+                && isScalarLocalRead(lookup)) {
+            // PERF034-E: an admitted scalar RHS re-checks compactness itself.
+            emitScalarLocalReadToResult(builder, lookup, target);
             return;
         }
         builder.beginStoreLocal(target);
@@ -3075,40 +3228,32 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        boolean scalarCreate =
+                create.target().isEmpty()
+                        && currentActivationLocal == null
+                        && currentRootScalarLocals.contains(create.name());
+        if (scalarCreate
+                && create.value() instanceof CanonicalLiteral literal) {
+            // PERF034-E: a literal is its own operand; no createValue local.
+            Object constant = materialize(literal);
+            emitScalarCreate(
+                    builder,
+                    create,
+                    result,
+                    () -> builder.emitLoadConstant(constant));
+            return;
+        }
         BytecodeLocal value = builder.createLocal("createValue", null);
         if (create.target().isEmpty()) {
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
 
-            if (currentActivationLocal == null
-                    && currentRootScalarLocals.contains(create.name())) {
-                BytecodeLocal local =
-                        currentRootFrameLocals.get(create.name());
-                if (local == null) {
-                    throw new AssertionError(
-                            "admitted scalar creation is missing: "
-                                    + create.name());
-                }
-
-                builder.beginIfThenElse();
-                builder.emitIsCompactLocalFrame();
-
-                builder.beginBlock();
-                builder.beginStoreLocal(local);
-                builder.emitLoadLocal(value);
-                builder.endStoreLocal();
-                builder.beginStoreLocal(result);
-                builder.emitLoadLocal(value);
-                builder.endStoreLocal();
-                builder.endBlock();
-
-                builder.beginBlock();
-                builder.beginStoreLocal(result);
-                emitCreateCurrentBinding(builder, create, value);
-                builder.endStoreLocal();
-                builder.endBlock();
-
-                builder.endIfThenElse();
+            if (scalarCreate) {
+                emitScalarCreate(
+                        builder,
+                        create,
+                        result,
+                        () -> builder.emitLoadLocal(value));
                 return;
             }
 
