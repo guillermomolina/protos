@@ -127,6 +127,12 @@ public class ProtosObjectValue implements TruffleObject {
      */
     private Map<String, WeakHashMap<Assumption, Boolean>> lookupDependencies;
 
+    /*
+     * Selection-only PICs depend on the slot's home, not its current value.
+     * Allocated lazily and invalidated only by resolution-changing mutations.
+     */
+    private Map<String, WeakHashMap<Assumption, Boolean>> slotSelectionDependencies;
+
     private ProtosObjectValue() {
         this.parent = null;
         this.lexicalBindingAuthority = EMPTY_LEXICAL_BINDINGS;
@@ -235,16 +241,51 @@ public class ProtosObjectValue implements TruffleObject {
         return true;
     }
 
-    private void invalidateLookupDependencies(String name) {
+    /**
+     * Registers a dependency on the chosen slot owner, not on the slot value.
+     * The exact-class and frozen-object admission rules match value lookups.
+     */
+    @TruffleBoundary
+    final boolean trackSlotSelectionDependency(String name, Assumption dependency) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(dependency, "dependency");
+        if (getClass() != ProtosObjectValue.class) {
+            return false;
+        }
+        if (isFrozen()) {
+            return true;
+        }
+        if (slotSelectionDependencies == null) {
+            slotSelectionDependencies = new LinkedHashMap<>();
+        }
+        WeakHashMap<Assumption, Boolean> dependencies =
+                slotSelectionDependencies.get(name);
+        if (dependencies == null) {
+            dependencies = new WeakHashMap<>();
+            slotSelectionDependencies.put(name, dependencies);
+        }
+        dependencies.put(dependency, Boolean.TRUE);
+        return true;
+    }
+
+    private void invalidateValueLookupDependencies(String name) {
         if (lookupDependencies != null) {
-            invalidateTrackedLookupDependencies(name);
+            invalidateTrackedLookupDependencies(lookupDependencies, name);
+        }
+    }
+
+    private void invalidateLookupDependencies(String name) {
+        invalidateValueLookupDependencies(name);
+        if (slotSelectionDependencies != null) {
+            invalidateTrackedLookupDependencies(slotSelectionDependencies, name);
         }
     }
 
     @TruffleBoundary
-    private void invalidateTrackedLookupDependencies(String name) {
-        WeakHashMap<Assumption, Boolean> dependencies =
-                lookupDependencies.remove(name);
+    private static void invalidateTrackedLookupDependencies(
+            Map<String, WeakHashMap<Assumption, Boolean>> registry,
+            String name) {
+        WeakHashMap<Assumption, Boolean> dependencies = registry.remove(name);
         if (dependencies != null) {
             for (Assumption dependency : dependencies.keySet()) {
                 dependency.invalidate();
@@ -507,7 +548,7 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         ProtosLexicalBindingAuthorityCalls.put(lexicalBindingAuthority, name, value);
-        invalidateLookupDependencies(name);
+        invalidateValueLookupDependencies(name);
     }
 
     public Object removeLocalSlot(String name) {

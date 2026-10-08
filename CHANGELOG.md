@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.302-SNAPSHOT
+
+- `PERF035` (#846): separate guarded member-read slot-owner selection
+  from the mutable value stored in that slot.
+  - Preserve current-value reads and fresh receiver-bound Closure extraction.
+  - Keep value-sensitive send/call lookup invalidation, while structural
+    slot changes invalidate selection-sensitive assumptions.
+  - Add guarded-lookup and executable primitive slot-write regressions.
+  - Focal tests and the integrated `make test` suite passed on the
+    implementation candidate; compiled Tier 2 stabilization remains
+    pending verification in the independent benchmark environment.
+
 ## 0.3.301-SNAPSHOT
 
 - `PERF034-B` (#845): isolate cold frame-local creation and

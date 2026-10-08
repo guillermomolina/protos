@@ -64,6 +64,98 @@ public final class ProtosValueLookup {
         }
     }
 
+
+    /**
+     * A guarded choice of slot owner. Its value is deliberately not cached.
+     * The same owner remains usable across successful local-slot assignments.
+     */
+    public record GuardedSlotSelection(
+            ProtosObjectValue home,
+            Assumption stability) {
+        public GuardedSlotSelection {
+            Objects.requireNonNull(home, "home");
+            Objects.requireNonNull(stability, "stability");
+        }
+    }
+
+    /**
+     * An inherited selection shared by receivers with an identical parent.
+     * Each receiver still proves that it does not shadow the selected name.
+     */
+    public record SharedInheritedSlotSelection(
+            Object exactParent,
+            GuardedSlotSelection parentSelection) {
+        public SharedInheritedSlotSelection {
+            Objects.requireNonNull(exactParent, "exactParent");
+            Objects.requireNonNull(parentSelection, "parentSelection");
+        }
+
+        public Assumption stability() {
+            return parentSelection.stability();
+        }
+    }
+
+    public static GuardedSlotSelection lookupGuardedSlotSelection(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        Assumption stability =
+                Truffle.getRuntime().createAssumption("Protos slot selection");
+        Optional<ProtosSlotLookupResult> selected =
+                lookup(receiver, name, prelude, stability, false, true);
+        if (selected.isEmpty() || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedSlotSelection(selected.orElseThrow().home(), stability);
+    }
+
+    public static SharedInheritedSlotSelection lookupGuardedSharedInheritedSlotSelection(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        Objects.requireNonNull(name, "name");
+        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
+            return null;
+        }
+
+        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
+        if (ordinary.hasLocalSlot(name)) {
+            return null;
+        }
+
+        Object parent = ordinary.directParentForGuardedLookup();
+        if (parent == null) {
+            return null;
+        }
+
+        try {
+            GuardedSlotSelection selected =
+                    lookupGuardedSlotSelection(parent, name, prelude);
+            return selected == null
+                    ? null
+                    : new SharedInheritedSlotSelection(parent, selected);
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            return null;
+        }
+    }
+
+    public static boolean matchesGuardedSharedInheritedSlotSelection(
+            Object receiver,
+            String name,
+            SharedInheritedSlotSelection cached) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(cached, "cached");
+        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
+            return false;
+        }
+        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
+        return ordinary.directParentForGuardedLookup() == cached.exactParent()
+                && !ordinary.hasLocalSlot(name);
+    }
+
     /**
      * Establishes a cache entry using the same lookup implementation as the
      * generic path. This is specialization-time work, never valid-hit work.
@@ -284,6 +376,18 @@ public final class ProtosValueLookup {
             // Set only by a family-specific guarded entry point that has already
             // proven the receiver's own represented step is fixed.
             boolean admitRepresentedReceiverStep) {
+        return lookup(
+                receiver, name, prelude, stability,
+                admitRepresentedReceiverStep, false);
+    }
+
+    private static Optional<ProtosSlotLookupResult> lookup(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude,
+            Assumption stability,
+            boolean admitRepresentedReceiverStep,
+            boolean selectionOnly) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
@@ -296,7 +400,9 @@ public final class ProtosValueLookup {
             }
             return lookupForeign(foreign, name, prelude);
         }
-        return lookupOrdinaryChain(receiver, name, prelude, stability, admitRepresentedReceiverStep);
+        return lookupOrdinaryChain(
+                receiver, name, prelude, stability,
+                admitRepresentedReceiverStep, selectionOnly);
     }
 
     /**
@@ -310,7 +416,7 @@ public final class ProtosValueLookup {
             ProtosPrelude prelude) {
         Objects.requireNonNull(origin, "origin");
         Objects.requireNonNull(name, "name");
-        return lookupOrdinaryChain(origin, name, prelude, null, false);
+        return lookupOrdinaryChain(origin, name, prelude, null, false, false);
     }
 
     @TruffleBoundary
@@ -326,12 +432,15 @@ public final class ProtosValueLookup {
             String name,
             ProtosPrelude prelude,
             Assumption stability,
-            boolean admitRepresentedReceiverStep) {
+            boolean admitRepresentedReceiverStep,
+            boolean selectionOnly) {
         Object current = receiver;
         while (true) {
             if (current instanceof ProtosObjectValue ordinary) {
                 if (stability != null
-                        && !ordinary.trackLookupDependency(name, stability)) {
+                        && !(selectionOnly
+                                ? ordinary.trackSlotSelectionDependency(name, stability)
+                                : ordinary.trackLookupDependency(name, stability))) {
                     stability.invalidate();
                 }
                 Optional<Object> local = ordinary.readLocalSlot(name);
@@ -405,6 +514,32 @@ public final class ProtosValueLookup {
             return Optional.empty();
         }
         return Optional.of(materializeMemberRead(receiver, result.orElseThrow()));
+    }
+
+
+    /**
+     * Reads the current value at a selection-protected home. The Assumption
+     * guards the name resolution, so this does not traverse delegation again.
+     * Closure extraction remains fresh and binds the original receiver.
+     */
+    public static Object materializeGuardedMemberRead(
+            Object receiver,
+            String name,
+            GuardedSlotSelection selection) {
+        ProtosObjectValue home = selection.home();
+        Object value = home.readLocalSlot(name).orElseThrow();
+        if (value instanceof ProtosClosureValue closure) {
+            return closure.bindMethod(receiver, home);
+        }
+        return value;
+    }
+
+    public static Object materializeGuardedMemberRead(
+            Object receiver,
+            String name,
+            SharedInheritedSlotSelection selection) {
+        return materializeGuardedMemberRead(
+                receiver, name, selection.parentSelection());
     }
 
     public static Object materializeMemberRead(

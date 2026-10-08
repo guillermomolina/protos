@@ -380,6 +380,186 @@ final class ProtosGuardedLookupTest {
         assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.FALSE));
     }
 
+
+    @Test
+    void slotSelectionSurvivesRepeatedValueReplacement() {
+        var holder = object();
+        Object initial = new Object();
+        holder.createLocalSlot("pick", initial);
+
+        var selection =
+                ProtosValueLookup.lookupGuardedSlotSelection(holder, "pick", null);
+        var valueSensitive = selected(holder);
+        assertNotNull(selection);
+        assertSame(holder, selection.home());
+
+        for (int index = 0; index < 200; index++) {
+            Object replacement = new Object();
+            holder.assignLocalSlot("pick", replacement);
+            assertTrue(selection.stability().isValid());
+            assertSame(
+                    replacement,
+                    ProtosValueLookup.materializeGuardedMemberRead(
+                            holder, "pick", selection));
+        }
+
+        assertFalse(valueSensitive.stability().isValid());
+        assertSame(initial, valueSensitive.selected().value());
+    }
+
+    @Test
+    void inheritedSelectionKeepsItsHomeAndIsolatesSiblings() {
+        var ancestor = object();
+        var parent = new ProtosObjectValue(ancestor);
+        var first = new ProtosObjectValue(parent);
+        var second = new ProtosObjectValue(parent);
+        ancestor.createLocalSlot("pick", new Object());
+
+        var selection =
+                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
+                        first, "pick", null);
+        assertNotNull(selection);
+        assertSame(ancestor, selection.parentSelection().home());
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        second, "pick", selection));
+
+        Object updated = new Object();
+        ancestor.assignLocalSlot("pick", updated);
+        assertTrue(selection.stability().isValid());
+        assertSame(
+                updated,
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        second, "pick", selection));
+
+        second.createLocalSlot("pick", new Object());
+        assertTrue(selection.stability().isValid());
+        assertFalse(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        second, "pick", selection));
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        first, "pick", selection));
+
+        second.removeLocalSlot("pick");
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        second, "pick", selection));
+
+        Object nearer = new Object();
+        parent.createLocalSlot("pick", nearer);
+        assertFalse(selection.stability().isValid());
+
+        var refreshed =
+                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
+                        first, "pick", null);
+        assertNotNull(refreshed);
+        assertSame(parent, refreshed.parentSelection().home());
+        assertSame(
+                nearer,
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        first, "pick", refreshed));
+    }
+
+    @Test
+    void localRemovalAndCompositionInvalidateSelection() {
+        var parent = object();
+        var receiver = new ProtosObjectValue(parent);
+        parent.createLocalSlot("pick", new Object());
+        receiver.createLocalSlot("pick", new Object());
+
+        var local = ProtosValueLookup.lookupGuardedSlotSelection(
+                receiver, "pick", null);
+        assertNotNull(local);
+        receiver.removeLocalSlot("pick");
+        assertFalse(local.stability().isValid());
+
+        var inherited = ProtosValueLookup.lookupGuardedSlotSelection(
+                receiver, "pick", null);
+        assertNotNull(inherited);
+        assertSame(parent, inherited.home());
+
+        var source = object();
+        source.createLocalSlot("pick", new Object());
+        receiver.composeLocalSlotsFrom(source, Set.of());
+        assertFalse(inherited.stability().isValid());
+
+        var composed = ProtosValueLookup.lookupGuardedSlotSelection(
+                receiver, "pick", null);
+        assertNotNull(composed);
+        assertSame(receiver, composed.home());
+    }
+
+    @Test
+    void selectedClosureIsReadFreshAndBoundToOriginalReceiver() {
+        var parent = object();
+        var receiver = new ProtosObjectValue(parent);
+        var first = ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> ProtosNullValue.INSTANCE);
+        var replacement = ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> ProtosBooleanValue.TRUE);
+        parent.createLocalSlot("pick", first);
+
+        var selection = ProtosValueLookup.lookupGuardedSlotSelection(
+                receiver, "pick", null);
+        assertNotNull(selection);
+        assertSame(parent, selection.home());
+
+        var extractedA = (ProtosClosureValue)
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        receiver, "pick", selection);
+        var extractedB = (ProtosClosureValue)
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        receiver, "pick", selection);
+        assertFalse(extractedA == extractedB);
+        assertSame(receiver, extractedA.capturedReceiver());
+        assertSame(parent, extractedA.methodHome().orElseThrow());
+
+        parent.assignLocalSlot("pick", replacement);
+        assertTrue(selection.stability().isValid());
+
+        var extractedC = (ProtosClosureValue)
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        receiver, "pick", selection);
+        assertSame(receiver, extractedC.capturedReceiver());
+        assertSame(parent, extractedC.methodHome().orElseThrow());
+        assertSame(
+                replacement.nativeBody().orElseThrow(),
+                extractedC.nativeBody().orElseThrow());
+        assertFalse(
+                extractedA.nativeBody().orElseThrow()
+                        == extractedC.nativeBody().orElseThrow());
+    }
+
+    @Test
+    void closedAssignmentPreservesSelectionAndFrozenAssignmentFails() {
+        var receiver = object();
+        receiver.createLocalSlot("pick", new Object());
+        var selection =
+                ProtosValueLookup.lookupGuardedSlotSelection(receiver, "pick", null);
+        assertNotNull(selection);
+
+        receiver.close();
+        Object updated = new Object();
+        receiver.assignLocalSlot("pick", updated);
+        assertTrue(selection.stability().isValid());
+        assertSame(
+                updated,
+                ProtosValueLookup.materializeGuardedMemberRead(
+                        receiver, "pick", selection));
+
+        receiver.freeze();
+        assertThrows(IllegalStateException.class,
+                () -> receiver.assignLocalSlot("pick", new Object()));
+        assertTrue(selection.stability().isValid());
+
+        var context =
+                new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
+        context.createLocalSlot("pick", new Object());
+        assertNull(ProtosValueLookup.lookupGuardedSlotSelection(
+                context, "pick", null));
+    }
+
     private static ProtosPrelude corePrelude() throws IOException {
         return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }

@@ -1447,10 +1447,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookup(receiver, name, activation)")
-                        ProtosValueLookup.SharedInheritedLookup cachedLookup) {
-            return ProtosValueLookup.materializeMemberRead(
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
                     receiver,
-                    cachedLookup.selected());
+                    cachedName,
+                    cachedLookup);
         }
 
         /**
@@ -1475,10 +1476,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, activation)")
-                        ProtosValueLookup.GuardedLookup cachedLookup) {
-            return ProtosValueLookup.materializeMemberRead(
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
                     receiver,
-                    cachedLookup.selected());
+                    cachedName,
+                    cachedLookup);
         }
 
         @Specialization(
@@ -1515,7 +1517,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
         }
 
-        static ProtosValueLookup.SharedInheritedLookup createSharedInheritedLookup(
+        static ProtosValueLookup.SharedInheritedSlotSelection createSharedInheritedLookup(
                 Object receiver,
                 String name,
                 ProtosActivation activation) {
@@ -1525,24 +1527,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.preludeOrNullForRuntime());
         }
 
-        static ProtosValueLookup.SharedInheritedLookup createSharedInheritedLookupForPrelude(
+        static ProtosValueLookup.SharedInheritedSlotSelection createSharedInheritedLookupForPrelude(
                 Object receiver,
                 String name,
                 ProtosPrelude prelude) {
-            return ProtosValueLookup.lookupGuardedSharedInherited(receiver, name, prelude);
+            return ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(receiver, name, prelude);
         }
 
         static boolean matchesSharedInheritedLookup(
                 Object receiver,
                 String name,
-                ProtosValueLookup.SharedInheritedLookup cachedLookup) {
-            return ProtosValueLookup.matchesGuardedSharedInherited(
+                ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
                     receiver,
                     name,
                     cachedLookup);
         }
 
-        static ProtosValueLookup.GuardedLookup createGuardedLookup(
+        static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(
                 Object receiver,
                 String name,
                 ProtosActivation activation) {
@@ -1552,12 +1554,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.preludeOrNullForRuntime());
         }
 
-        static ProtosValueLookup.GuardedLookup createGuardedLookupForPrelude(
+        static ProtosValueLookup.GuardedSlotSelection createGuardedLookupForPrelude(
                 Object receiver,
                 String name,
                 ProtosPrelude prelude) {
             try {
-                return ProtosValueLookup.lookupGuarded(receiver, name, prelude);
+                return ProtosValueLookup.lookupGuardedSlotSelection(receiver, name, prelude);
             } catch (UnsupportedOperationException unsupportedRepresentation) {
                 return null;
             }
