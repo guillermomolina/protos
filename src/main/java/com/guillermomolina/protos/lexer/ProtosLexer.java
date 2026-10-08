@@ -800,7 +800,7 @@ public final class ProtosLexer {
     }
 
     private LexicalError error(String message, int offset) {
-        return new LexicalError(message + " at UTF-16 source offset " + offset);
+        return new LexicalError(message + " at UTF-16 source offset " + offset, offset);
     }
 
     private static String printableCodePoint(int codePoint) {
@@ -819,8 +819,28 @@ public final class ProtosLexer {
     public static final class LexicalError extends RuntimeException {
         private static final long serialVersionUID = 1L;
 
+        /** Source offset reported by the lexer, or -1 when unknown. */
+        private final int offset;
+
         public LexicalError(String message) {
+            this(message, -1);
+        }
+
+        /**
+         * @param offset the UTF-16 source offset the lexer reports for this
+         *               error; it is already part of the message text
+         */
+        public LexicalError(String message, int offset) {
             super(message);
+            this.offset = offset;
+        }
+
+        /**
+         * Returns the UTF-16 source offset reported by the lexer, so tooling
+         * never has to recover it from the message text.
+         */
+        public java.util.OptionalInt offset() {
+            return offset < 0 ? java.util.OptionalInt.empty() : java.util.OptionalInt.of(offset);
         }
     }
 }

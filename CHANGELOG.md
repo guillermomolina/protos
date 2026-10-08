@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.296-SNAPSHOT
+
+- `LM010-B` (#493) adds conservative static completion to the
+  static-analysis core and the Protos language server. The specification is
+  unchanged.
+  - New `ProtosStaticCompletion`/`ProtosStaticCompletionResult` and
+    `ProtosStaticAnalysisCore.completion(...)`. Candidates are offered only
+    at a parser-proven `SurfaceName` read site: Closure parameters whose
+    origin is proven by the D110 generation-1 facts at that site, then the
+    reserved words `this`, `context`, `true`, `false`, and `null` when the
+    real parser accepts that word there. Bare `super`, members, slots,
+    captures, prelude, module, and workspace names are never offered.
+  - The cursor context uses the real lexer and parser: nothing inside
+    comments, String literals, or any token; a typed identifier prefix is
+    the exact replacement range; an empty position is analyzed with one
+    synthetic identifier that must parse as a read at the cursor.
+    Unclassifiable positions are empty.
+  - The D110 generation-1 walk is shared through one proof walker;
+    Definition, References, and Hover results are unchanged.
+  - The language server advertises `completionProvider` without resolve or
+    trigger characters and always answers a complete list
+    (`isIncomplete=false`), under the same canonical-source authority and
+    snapshot-freshness checks as hover.
+  - Lexical errors in edited source are now ordinary parse failures:
+    `ProtosLexer.LexicalError` exposes its reported offset, and the
+    static-analysis parse projects it as an exact empty-span Error
+    diagnostic instead of propagating out of `didOpen`/`didChange`.
+
 ## 0.3.295-SNAPSHOT
 
 - `LM012-B1` (#671, D194) adds the initial canonical correctness lint

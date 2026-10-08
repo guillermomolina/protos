@@ -21,6 +21,7 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbol;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
+import com.guillermomolina.protos.analysis.ProtosStaticCompletionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticHoverResult;
 import com.guillermomolina.protos.analysis.ProtosStaticLint;
@@ -36,6 +37,10 @@ import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Predicate;
+import org.eclipse.lsp4j.CompletionItem;
+import org.eclipse.lsp4j.CompletionItemKind;
+import org.eclipse.lsp4j.CompletionList;
+import org.eclipse.lsp4j.CompletionParams;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
@@ -83,7 +88,11 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * parser-derived syntax facts, under the same canonical-source authority and
  * snapshot-freshness checks as definition. LM012-B1 adds the D194 warning
  * lint findings for a successfully parsed snapshot to the same single
- * publication; a stale snapshot publishes nothing.</p>
+ * publication; a stale snapshot publishes nothing. LM010-B completion
+ * publishes only D110-proven Closure parameters and parser-accepted
+ * reserved-word syntax at a proven read site, under the same authority and
+ * freshness checks; every response is a complete list
+ * ({@code isIncomplete=false}).</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -429,6 +438,58 @@ final class ProtosTextDocumentService implements TextDocumentService {
     }
 
     @Override
+    public CompletableFuture<Either<List<CompletionItem>, CompletionList>> completion(
+            CompletionParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        Predicate<String> authority = navigationSourceAuthority;
+        if (!authority.test(uri)) {
+            return noCompletion();
+        }
+
+        Optional<ProtosDocumentSnapshot> current =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (current.isEmpty()) {
+            return noCompletion();
+        }
+        OptionalInt sourceOffset =
+                ProtosLspSourcePositions.offset(
+                        current.get().characters(),
+                        Objects.requireNonNull(params.getPosition(), "position"));
+        if (sourceOffset.isEmpty()) {
+            return noCompletion();
+        }
+
+        Optional<ProtosStaticCompletionResult> completion =
+                session.completionCurrent(
+                        OPEN_DOCUMENTS_DOMAIN,
+                        uri,
+                        sourceOffset.getAsInt());
+        if (completion.isEmpty()) {
+            return noCompletion();
+        }
+
+        ProtosStaticCompletionResult projected = completion.get();
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
+                || !authority.test(uri)
+                || !projected.snapshot().documentId().equals(uri)) {
+            return noCompletion();
+        }
+
+        Range replacement = ProtosLspSourcePositions.range(
+                projected.snapshot().characters(),
+                projected.replacementSpan());
+        List<CompletionItem> items = projected.candidates().stream()
+                .map(candidate -> toLspCompletionItem(candidate, replacement))
+                .toList();
+        return CompletableFuture.completedFuture(
+                Either.forRight(new CompletionList(false, items)));
+    }
+
+    @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
         // Save notifications are not advertised by F3 and carry no additional
@@ -454,6 +515,34 @@ final class ProtosTextDocumentService implements TextDocumentService {
             noDefinition() {
         List<? extends Location> empty = List.of();
         return CompletableFuture.completedFuture(Either.forLeft(empty));
+    }
+
+    /**
+     * An absent or unprovable result is a definitive, complete empty list;
+     * {@code isIncomplete} never signals analysis failure.
+     */
+    private static CompletableFuture<Either<List<CompletionItem>, CompletionList>> noCompletion() {
+        return CompletableFuture.completedFuture(
+                Either.forRight(new CompletionList(false, List.of())));
+    }
+
+    private static CompletionItem toLspCompletionItem(
+            ProtosStaticCompletionResult.Candidate candidate,
+            Range replacement) {
+        CompletionItem item = new CompletionItem(candidate.label());
+        switch (candidate.kind()) {
+            case PROVEN_BINDING -> {
+                item.setKind(CompletionItemKind.Variable);
+                item.setDetail("Proven binding: Closure parameter");
+            }
+            case SYNTAX -> {
+                item.setKind(CompletionItemKind.Keyword);
+                item.setDetail("Syntax: reserved word");
+            }
+        }
+        item.setFilterText(candidate.label());
+        item.setTextEdit(Either.forLeft(new TextEdit(replacement, candidate.label())));
+        return item;
     }
 
     private static CompletableFuture<Hover> noHover() {

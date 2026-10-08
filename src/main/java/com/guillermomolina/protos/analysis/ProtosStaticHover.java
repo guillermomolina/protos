@@ -261,7 +261,8 @@ final class ProtosStaticHover {
         };
     }
 
-    private static List<SurfaceExpression> children(SurfaceExpression expression) {
+    /** Direct surface sub-expressions in source order; shared with LM010-B completion. */
+    static List<SurfaceExpression> children(SurfaceExpression expression) {
         List<SurfaceExpression> children = new ArrayList<>();
         switch (expression) {
             case SurfaceLiteral ignored -> {

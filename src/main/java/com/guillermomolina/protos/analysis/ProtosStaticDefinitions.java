@@ -51,11 +51,15 @@ import java.util.Optional;
  * D110 generation-1 exact definition proof over one parser-authoritative snapshot.
  *
  * <p>This resolver deliberately knows only source origins that can be proved from
- * the current activation: Closure parameters and singleton-proven match Binder/Alias
- * bindings. It never falls back to same-name, workspace-symbol, receiver, member,
- * module, or runtime lookup. Guest invocation invalidates current exact-origin facts
- * because an invoked Closure can mutate or remove slots of a captured execution
- * context.</p>
+ * the current activation: Closure parameters. It never falls back to same-name,
+ * workspace-symbol, receiver, member, module, or runtime lookup. Guest invocation
+ * invalidates current exact-origin facts because an invoked Closure can mutate or
+ * remove slots of a captured execution context.</p>
+ *
+ * <p>One {@link ProofWalker} owns the generation-1 fact propagation. Definition
+ * asks it for the proven origin of the read under an offset; LM010-B completion
+ * asks it for the complete proven fact set at one exact read site. Facts are
+ * query-local; no index outlives a call.</p>
  */
 final class ProtosStaticDefinitions {
     private ProtosStaticDefinitions() {
@@ -68,26 +72,87 @@ final class ProtosStaticDefinitions {
         if (sourceOffset < 0 || sourceOffset >= parsed.snapshot().characters().length()) {
             return Optional.empty();
         }
-        return new Resolver(parsed.snapshot(), sourceOffset).resolve(parsed.program());
+        ProtosDocumentSnapshot snapshot = parsed.snapshot();
+        ProofWalker<ProtosStaticDefinitionResult> walker = new ProofWalker<>() {
+            private ProtosStaticDefinitionResult result;
+
+            @Override
+            boolean visitRead(SurfaceName name, Facts facts) {
+                if (!contains(name.span(), sourceOffset)) {
+                    return false;
+                }
+                SourceSpan origin = facts.origin(name.name());
+                if (origin == null) {
+                    return false;
+                }
+                result = ProtosStaticDefinitionResult.singleton(snapshot, name.span(), origin);
+                return true;
+            }
+
+            @Override
+            Optional<ProtosStaticDefinitionResult> result() {
+                return Optional.ofNullable(result);
+            }
+        };
+        walker.walk(parsed.program());
+        return walker.result();
     }
 
-    private static final class Resolver {
-        private final ProtosDocumentSnapshot snapshot;
-        private final int sourceOffset;
-        private ProtosStaticDefinitionResult result;
+    /**
+     * Returns the names whose exact Closure-parameter origin is proven at one
+     * read site, in fact order.
+     *
+     * <p>The site must be a {@link SurfaceName} read whose span equals
+     * {@code readSpan} exactly; otherwise (a declaration, a mutation target, a
+     * member name, or no node at all) the result is empty. A present but empty
+     * list means the site is a proven read with no surviving facts.</p>
+     */
+    static Optional<List<String>> provenNamesAtRead(
+            SurfaceSequence program,
+            SourceSpan readSpan) {
+        Objects.requireNonNull(program, "program");
+        Objects.requireNonNull(readSpan, "readSpan");
+        ProofWalker<List<String>> walker = new ProofWalker<>() {
+            private List<String> names;
 
-        Resolver(ProtosDocumentSnapshot snapshot, int sourceOffset) {
-            this.snapshot = Objects.requireNonNull(snapshot, "snapshot");
-            this.sourceOffset = sourceOffset;
-        }
+            @Override
+            boolean visitRead(SurfaceName name, Facts facts) {
+                if (!name.span().equals(readSpan)) {
+                    return false;
+                }
+                names = facts.names();
+                return true;
+            }
 
-        Optional<ProtosStaticDefinitionResult> resolve(SurfaceSequence program) {
+            @Override
+            Optional<List<String>> result() {
+                return Optional.ofNullable(names);
+            }
+        };
+        walker.walk(program);
+        return walker.result();
+    }
+
+    /**
+     * D110 generation-1 fact propagation in evaluation order.
+     *
+     * <p>{@link #visitRead} observes every {@link SurfaceName} read with the
+     * facts proven at that point; it must not retain or mutate them. Returning
+     * {@code true} stops the walk.</p>
+     */
+    private abstract static class ProofWalker<R> {
+        private boolean done;
+
+        abstract boolean visitRead(SurfaceName name, Facts facts);
+
+        abstract Optional<R> result();
+
+        final void walk(SurfaceSequence program) {
             analyze(program, new Facts());
-            return Optional.ofNullable(result);
         }
 
         private void analyze(SurfaceExpression expression, Facts facts) {
-            if (result != null) {
+            if (done) {
                 return;
             }
 
@@ -165,19 +230,13 @@ final class ProtosStaticDefinitions {
         }
 
         private void analyzeName(SurfaceName name, Facts facts) {
-            if (!contains(name.span(), sourceOffset)) {
-                return;
-            }
-            SourceSpan origin = facts.origin(name.name());
-            if (origin != null) {
-                result = ProtosStaticDefinitionResult.singleton(snapshot, name.span(), origin);
-            }
+            done = visitRead(name, facts);
         }
 
         private void analyzeSequence(SurfaceSequence sequence, Facts facts) {
             for (SurfaceExpression expression : sequence.expressions()) {
                 analyze(expression, facts);
-                if (result != null) {
+                if (done) {
                     return;
                 }
             }
@@ -186,7 +245,7 @@ final class ProtosStaticDefinitions {
         private void analyzeArguments(List<SurfaceArgument> arguments, Facts facts) {
             for (SurfaceArgument argument : arguments) {
                 analyze(argument.expression(), facts);
-                if (result != null) {
+                if (done) {
                     return;
                 }
             }
@@ -214,7 +273,7 @@ final class ProtosStaticDefinitions {
 
         private void analyzeObject(SurfaceObject object, Facts facts) {
             object.parent().ifPresent(parent -> analyze(parent, facts));
-            if (result != null) {
+            if (done) {
                 return;
             }
 
@@ -224,7 +283,7 @@ final class ProtosStaticDefinitions {
             Facts constructionFacts = new Facts();
             for (SurfaceObjectItem item : object.items()) {
                 analyze(item.expression(), constructionFacts);
-                if (result != null) {
+                if (done) {
                     return;
                 }
             }
@@ -242,7 +301,7 @@ final class ProtosStaticDefinitions {
                     Facts suppliedPath = activation.copy();
                     Facts defaultPath = activation.copy();
                     analyze(parameter.defaultValue().orElseThrow(), defaultPath);
-                    if (result != null) {
+                    if (done) {
                         return;
                     }
                     activation.replaceWithIntersection(suppliedPath, defaultPath);
@@ -286,6 +345,10 @@ final class ProtosStaticDefinitions {
 
         SourceSpan origin(String name) {
             return origins.get(name);
+        }
+
+        List<String> names() {
+            return List.copyOf(origins.keySet());
         }
 
         void put(String name, SourceSpan origin) {

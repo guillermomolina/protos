@@ -17,11 +17,14 @@
 
 package com.guillermomolina.protos.analysis;
 
+import com.guillermomolina.protos.lexer.ProtosLexer;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.parser.ProtosParser;
+import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 
 /**
  * Editor-neutral static source-analysis entry point.
@@ -45,6 +48,20 @@ public final class ProtosStaticAnalysisCore {
                     error.getMessage(),
                     error.span(),
                     error.isUnexpectedEndOfSource());
+        } catch (ProtosLexer.LexicalError error) {
+            // An ordinary lexical error in edited source is a document failure,
+            // not a server fault. The lexer reports one exact offset and no
+            // extent, so the span is that empty point; an error without a
+            // reported offset is not projected onto an invented position.
+            OptionalInt offset = error.offset();
+            if (offset.isEmpty() || offset.getAsInt() > snapshot.characters().length()) {
+                throw error;
+            }
+            return new ProtosStaticParseResult.Failed(
+                    snapshot,
+                    error.getMessage(),
+                    new SourceSpan(offset.getAsInt(), offset.getAsInt()),
+                    false);
         }
     }
 
@@ -97,6 +114,22 @@ public final class ProtosStaticAnalysisCore {
             return Optional.empty();
         }
         return ProtosStaticHover.resolve(successful, sourceOffset);
+    }
+
+    /**
+     * Projects the LM010-B static completion for one cursor offset in the
+     * supplied immutable snapshot.
+     *
+     * <p>{@code sourceOffset} may equal the snapshot length. Proven candidates
+     * reuse the D110 generation-1 facts at the read site; reserved-word
+     * candidates are accepted only by the real parser at that site. A position
+     * that cannot be classified with certainty is an ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticCompletionResult> completion(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        return ProtosStaticCompletion.complete(snapshot, sourceOffset);
     }
 
     /**

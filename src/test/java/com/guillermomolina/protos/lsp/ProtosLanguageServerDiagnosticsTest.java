@@ -30,6 +30,7 @@ import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
@@ -72,6 +73,49 @@ class ProtosLanguageServerDiagnosticsTest {
         PublishDiagnosticsParams repaired = published.get(1);
         assertEquals(Integer.valueOf(8), repaired.getVersion());
         assertTrue(repaired.getDiagnostics().isEmpty());
+    }
+
+    @Test
+    void lexicalErrorsInEditedSourceAreDocumentDiagnosticsNotServerFaults() {
+        List<PublishDiagnosticsParams> published = new ArrayList<>();
+        ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+        server.connect(recordingClient(published));
+        ProtosTextDocumentService documents = server.textDocuments();
+        String uri = "file:///workspace/example.protos";
+
+        documents.didOpen(open(uri, 1, "message: \"done\"\n"));
+        documents.didChange(change(uri, 2, "message: \"unterminated"));
+
+        assertEquals(2, published.size());
+        PublishDiagnosticsParams failure = published.get(1);
+        assertEquals(Integer.valueOf(2), failure.getVersion());
+        assertEquals(1, failure.getDiagnostics().size());
+        Diagnostic diagnostic = failure.getDiagnostics().get(0);
+        assertEquals(DiagnosticSeverity.Error, diagnostic.getSeverity());
+        assertEquals("protos", diagnostic.getSource());
+        // The lexer reports the String start and no extent: an exact empty point.
+        assertEquals(new Range(new Position(0, 9), new Position(0, 9)), diagnostic.getRange());
+        assertTrue(diagnostic.getMessage().getLeft().contains("Unterminated String literal"));
+        assertEquals(2L, documents.currentSnapshot(uri).orElseThrow().version());
+
+        // The server keeps answering requests for the document.
+        HoverParams hover = new HoverParams(new TextDocumentIdentifier(uri), new Position(0, 2));
+        assertNull(server.getTextDocumentService().hover(hover).join());
+
+        documents.didChange(change(uri, 3, "message: \"done\"\n"));
+        assertEquals(3, published.size());
+        assertEquals(Integer.valueOf(3), published.get(2).getVersion());
+        assertTrue(published.get(2).getDiagnostics().isEmpty());
+
+        // A lexically invalid open is projected the same way, with UTF-16 columns.
+        String other = "file:///workspace/other.protos";
+        documents.didOpen(open(other, 1, "x: \"😀\"\r\ny: 'open"));
+        PublishDiagnosticsParams opened = published.get(3);
+        assertEquals(other, opened.getUri());
+        assertEquals(
+                new Range(new Position(1, 3), new Position(1, 3)),
+                opened.getDiagnostics().get(0).getRange());
+        assertTrue(documents.currentSnapshot(other).isPresent());
     }
 
     @Test

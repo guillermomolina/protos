@@ -20,10 +20,12 @@ package com.guillermomolina.protos.lsp;
 import com.guillermomolina.protos.analysis.ProtosProjectBindingProvider;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.execution.ProtosProjectFileBindingProvider;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.IntConsumer;
+import org.eclipse.lsp4j.CompletionOptions;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
 import org.eclipse.lsp4j.ServerCapabilities;
@@ -43,8 +45,10 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  * hierarchical document symbols, G3 adds D082/D106 workspace symbols, G4
  * adds D110 exact fail-closed go-to-definition, and H1 adds D124 exact
  * references. LM011-D1 adds whole-document formatting over TOOL010. LM010-A
- * adds static hover over D110 proofs and labeled syntax facts. Completion and
- * signature help remain deferred to LM010.</p>
+ * adds static hover over D110 proofs and labeled syntax facts. LM010-B adds
+ * static completion of D110-proven Closure parameters and parser-accepted
+ * reserved words, without resolve support or trigger characters. Signature
+ * help remains deferred to LM010.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -99,6 +103,7 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
         capabilities.setDefinitionProvider(Boolean.TRUE);
         capabilities.setReferencesProvider(Boolean.TRUE);
         capabilities.setHoverProvider(Boolean.TRUE);
+        capabilities.setCompletionProvider(new CompletionOptions(Boolean.FALSE, List.of()));
         capabilities.setDocumentFormattingProvider(Boolean.TRUE);
 
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
