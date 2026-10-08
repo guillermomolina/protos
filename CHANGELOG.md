@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.293-SNAPSHOT
+
+- `LM010-A` adds static hover to the Protos language server. The
+  specification is unchanged; completion and signature help remain deferred
+  to LM010.
+  - The server advertises `hoverProvider`. Hover answers plain text under the
+    same canonical-source authority and snapshot-freshness checks as
+    definition, and no hover for a closed, stale, or unparsable document.
+  - A reference proven by D110 generation 1 to a Closure parameter shows a
+    "Proven binding" section naming that parameter, plus its rest/default
+    modifier.
+  - Otherwise hover shows only labeled parser-derived "Syntax" facts:
+    literal kinds, Closure parameter declarations with the Closure's
+    parameter list, and the Closure head. Ranges are exact identifier or
+    literal spans, mapped to LSP UTF-16 positions, including non-BMP text and
+    CRLF line breaks.
+  - New `ProtosStaticHoverTest` and `ProtosLanguageServerHoverTest`;
+    `ProtosLanguageServerFoundationTest` now expects the hover capability.
+
 ## 0.3.292-SNAPSHOT
 
 - `PERF031-G` removes repeated Package-flavored Core bootstraps from the

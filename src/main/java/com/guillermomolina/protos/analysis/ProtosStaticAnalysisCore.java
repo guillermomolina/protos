@@ -79,6 +79,26 @@ public final class ProtosStaticAnalysisCore {
     }
 
     /**
+     * Projects the LM010-A static hover for one source offset in the supplied
+     * immutable snapshot.
+     *
+     * <p>Proven-binding facts reuse the D110 generation-1 definition proof;
+     * syntax facts come only from the parsed surface AST. Parse failure or an
+     * offset without verifiable information is an ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticHoverResult> hover(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+
+        ProtosStaticParseResult parsed = parse(snapshot);
+        if (!(parsed instanceof ProtosStaticParseResult.Parsed successful)) {
+            return Optional.empty();
+        }
+        return ProtosStaticHover.resolve(successful, sourceOffset);
+    }
+
+    /**
      * Resolves the D124 generation-1 references relation for one exact seed
      * position in the supplied immutable snapshot.
      *

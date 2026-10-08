@@ -22,6 +22,7 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSymbol;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
+import com.guillermomolina.protos.analysis.ProtosStaticHoverResult;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.analysis.ProtosStaticReferenceResult;
 import com.guillermomolina.protos.execution.ProtosWholeDocumentFormatter;
@@ -43,8 +44,12 @@ import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.Hover;
+import org.eclipse.lsp4j.HoverParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.MarkupContent;
+import org.eclipse.lsp4j.MarkupKind;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
@@ -71,7 +76,10 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * those D110-proven identities; the open-document domain itself never becomes
  * project/package/module authority. LM011-D1 formats the exact current open
  * snapshot through the TOOL010 whole-document authority and returns at most
- * one full-document edit; editor formatting options never select style.</p>
+ * one full-document edit; editor formatting options never select style.
+ * LM010-A hover publishes only D110-proven bindings and explicitly labeled
+ * parser-derived syntax facts, under the same canonical-source authority and
+ * snapshot-freshness checks as definition.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -361,6 +369,62 @@ final class ProtosTextDocumentService implements TextDocumentService {
     }
 
     @Override
+    public CompletableFuture<Hover> hover(HoverParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        Predicate<String> authority = navigationSourceAuthority;
+        if (!authority.test(uri)) {
+            return noHover();
+        }
+
+        Optional<ProtosDocumentSnapshot> current =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (current.isEmpty()) {
+            return noHover();
+        }
+        OptionalInt sourceOffset =
+                ProtosLspSourcePositions.offset(
+                        current.get().characters(),
+                        Objects.requireNonNull(params.getPosition(), "position"));
+        if (sourceOffset.isEmpty()) {
+            return noHover();
+        }
+
+        Optional<ProtosStaticHoverResult> hover =
+                session.hoverCurrent(
+                        OPEN_DOCUMENTS_DOMAIN,
+                        uri,
+                        sourceOffset.getAsInt());
+        if (hover.isEmpty()) {
+            return noHover();
+        }
+
+        ProtosStaticHoverResult projected = hover.get();
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
+                || !authority.test(uri)
+                || !projected.snapshot().documentId().equals(uri)) {
+            return noHover();
+        }
+
+        List<String> sections = new ArrayList<>();
+        for (ProtosStaticHoverResult.Section section : projected.sections()) {
+            String label = switch (section.kind()) {
+                case PROVEN_BINDING -> "Proven binding";
+                case SYNTAX -> "Syntax";
+            };
+            sections.add(label + "\n" + String.join("\n", section.facts()));
+        }
+        return CompletableFuture.completedFuture(new Hover(
+                new MarkupContent(MarkupKind.PLAINTEXT, String.join("\n\n", sections)),
+                ProtosLspSourcePositions.range(
+                        projected.snapshot().characters(),
+                        projected.span())));
+    }
+
+    @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
         // Save notifications are not advertised by F3 and carry no additional
@@ -386,6 +450,10 @@ final class ProtosTextDocumentService implements TextDocumentService {
             noDefinition() {
         List<? extends Location> empty = List.of();
         return CompletableFuture.completedFuture(Either.forLeft(empty));
+    }
+
+    private static CompletableFuture<Hover> noHover() {
+        return CompletableFuture.completedFuture(null);
     }
 
     private static CompletableFuture<List<? extends Location>> noReferences() {

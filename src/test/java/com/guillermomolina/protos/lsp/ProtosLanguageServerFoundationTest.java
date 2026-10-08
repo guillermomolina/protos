@@ -69,7 +69,9 @@ class ProtosLanguageServerFoundationTest {
         assertEquals(
                 Boolean.TRUE,
                 result.getCapabilities().getReferencesProvider().getLeft());
-        assertNull(result.getCapabilities().getHoverProvider());
+        assertEquals(
+                Boolean.TRUE,
+                result.getCapabilities().getHoverProvider().getLeft());
         assertNull(result.getCapabilities().getCompletionProvider());
         assertNull(result.getCapabilities().getDocumentSymbolProvider());
         assertEquals(
