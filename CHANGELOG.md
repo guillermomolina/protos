@@ -7,6 +7,60 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.281-SNAPSHOT
+
+- `LIB021-A` adds `std:interop`, the first public explicit
+  foreign-interoperability Standard Library module, implementing the D193
+  operation contract reconciled by I084. The specification is unchanged by
+  this slice.
+  - `std:interop` is an ordinary Protos Standard Library module
+    (`protos/lib/interop.protos`) whose public surface is exactly:
+    - `invoke(target, ...arguments)`;
+    - `instantiate(target, ...arguments)`;
+    - `readMember(target, name)`;
+    - `writeMember(target, name, value)`.
+    Its runtime-only `_interopFacility` is private and removed from the
+    published module surface.
+  - Operations:
+    - `invoke` performs explicit foreign execution without ordinary Protos
+      call lookup;
+    - `instantiate` performs explicit construction and stays distinct from
+      `invoke`, including for targets that support both;
+    - `readMember` performs an explicit underlying foreign-member read and can
+      reach names protected from ordinary projection;
+    - `writeMember` performs explicit foreign-member mutation and, after
+      success, returns the exact original Protos value with no readback.
+  - All four operations reuse the existing D188 admission, projection, and
+    failure substrate. Closure arguments reuse D189 synchronous
+    operation-scoped callback semantics. Exact provider/session/generation
+    lifetime is preserved: closed sessions and generations are rejected, and
+    entered foreign failures surface as fresh `ForeignError`s.
+  - Importing `std:interop` creates no provider, session, Context, discovery,
+    acquisition, or extra authority.
+  - Unchanged: ordinary member lookup/write/invocation, callability,
+    `at`/`atPut`, projected `each`, identity/equality/hash, Actor/P transfer,
+    and provider topology.
+  - The restricted host-Java provider only widens its classification so
+    explicit member reads can reach already-catalogued members; there is no
+    discovery and no public reflection.
+  - D193 continues to defer `invokeMember`, public capability predicates,
+    explicit indexed/hash operations, iterator/cursor APIs, explicit
+    conversion, metaobject/type/language/source/display metadata,
+    provider/language discovery, foreign acquisition, and retained or
+    asynchronous callbacks.
+  - Substrate: `ProtosForeignInteropFacility`,
+    `ProtosForeignAdmissionDescriptor`, `ProtosForeignHandle`,
+    `ProtosForeignProjectedOperations`, `ProtosForeignValueAdapter`,
+    `ProtosHostJavaProvider`, and `ProtosCoreBootstrap`.
+  - New `ProtosForeignInteropTest`, with bounded extensions of the existing
+    foreign fixtures/tests, covers the exact four-operation surface, the
+    hidden `_interopFacility`, zero-use import, `invoke`/`instantiate`
+    disambiguation, protected-name and fidelity-bypassing `readMember`,
+    `writeMember` exact-value result without readback, raw-reference and
+    facade targets, pre-entry ordinary failures, closed session/generation
+    rejection, entered fresh `ForeignError`, and D189 synchronous callbacks
+    and expiry.
+
 ## 0.3.280-SNAPSHOT
 
 - `I082-G` adds the first production foreign provider: a restricted host-Java
