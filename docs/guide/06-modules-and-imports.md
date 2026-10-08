@@ -696,6 +696,36 @@ filesystem semantics, or an `import self` language construct.
 Package acquisition, manifests, dependency identities, and the bundled
 toolchain belong to their own project/library layer and are covered separately.
 
+## Host-supplied domains: `app:` and foreign providers
+
+Two further resolver domains exist only when a host sets them up. Both reuse
+the same `import(...)` and the same module lifecycle described above.
+
+**`app:` application modules.** A Java host embedding Protos through a
+standard Polyglot Context can install a catalog of in-memory modules:
+
+```protos
+Worker: import("app:worker")
+```
+
+The exact `app:` String is the canonical ModuleKey; there is no relative
+lookup, alias, extension, or filesystem/classpath search, and supplying code
+grants no authority. See
+[Supplying application modules from Java](embedding/application-modules.md).
+
+**Foreign providers.** A host can register providers that own an import scheme
+and supply modules that are not Protos source:
+
+```protos
+Math: import("java:math")
+```
+
+The result is an Actor-local facade that follows the ordinary cache, cycle,
+failure, and retry rules; the foreign object never becomes the module
+identity. Which schemes exist depends entirely on the providers the host
+registered. See the [interoperability map](interop/README.md) for what is
+available today.
+
 ## Practical rules to remember
 
 1. Treat module top-level bindings as slots of one ordinary `moduleContext`.

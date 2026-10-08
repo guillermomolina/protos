@@ -84,6 +84,20 @@ language-teaching progression under DOC001.
   expectation model, isolated case execution, deterministic reporting and
   bounded `--jobs` parallelism.
 
+## Java integration guides
+
+- [Embedding Protos in a Java application](embedding/java.md) — standard
+  Polyglot `Context`, evaluation, bindings, Closure invocation, Core location,
+  authority, and lifecycle on the portable JVM runtime.
+- [Supplying application modules from Java](embedding/application-modules.md)
+  — the `app:` catalog installed with `ProtosEmbeddedModules.install`.
+- [Foreign interoperability](interop/README.md) — map of resolvers, foreign
+  providers, and what is available at the current revision.
+- [Writing and registering an external provider](interop/custom-provider.md)
+  — the public `spi.foreign` contract and `--foreign-provider-path`.
+- [The `java:` provider fixture](interop/java-provider.md) — `java:math` and
+  `java:date` through the I085-B test fixture.
+
 ## Current guide state
 
 The control-flow dependency that originally blocked chapter 04 is closed.
