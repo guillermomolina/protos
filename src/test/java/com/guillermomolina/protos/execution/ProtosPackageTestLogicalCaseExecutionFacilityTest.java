@@ -230,8 +230,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_USES_PACKAGE_RUNTIME_NAMES);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -301,8 +301,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                 Files.readString(fixturesRoot.resolve("fresh.protos"), StandardCharsets.UTF_8);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -368,8 +368,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_USES_MANIFEST_SCHEMA_V1);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -417,8 +417,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_USES_RETAINED_VERSION_SELECTION);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -466,8 +466,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_USES_LOCK_DOCUMENT);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -514,8 +514,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_USES_RESOLUTION_INPUT);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -565,8 +565,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_SELECTED_TEST_FAILS);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -625,8 +625,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_TWO_TESTS);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -681,8 +681,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, source);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -735,8 +735,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_TWO_TESTS);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -774,8 +774,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         writeSuite(root, SOURCE_TWO_TESTS);
 
         ManualSubmission submission = new ManualSubmission();
-        ProtosModuleResolver resolver = packageResolver();
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosModuleResolver resolver = SharedCore.RESOLVER;
+        ProtosPrelude prelude = SharedCore.PRELUDE;
         ProtosActivation activation = prelude.newModuleActivation();
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
@@ -875,6 +875,24 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));
+    }
+
+    // Class-local holder for the immutable Package-flavored resolver configuration and
+    // its bootstrapped caller Core Prelude, initialized exactly once. It holds no
+    // activation, runtime host, submission queue, facility, Process, source-root
+    // mapping, or Actor module state: every test still creates its own fresh
+    // activation via prelude.newModuleActivation() and its own host/facility/queue.
+    private static final class SharedCore {
+        private static final ProtosModuleResolver RESOLVER = packageResolver();
+        private static final ProtosPrelude PRELUDE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                return new ProtosCoreBootstrap().bootstrap(CORE, RESOLVER);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
+        }
     }
 
     private static ProtosModuleResolver packageResolver() {

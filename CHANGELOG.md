@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.288-SNAPSHOT
+
+- `PERF031-C` reduces caller-side Core bootstraps in
+  `ProtosPackageTestLogicalCaseExecutionFacilityTest` from eleven to one. The
+  specification and observable Protos behavior are unchanged.
+  - A class-local lazy holder prepares the immutable Package-flavored resolver
+    configuration and its caller Core Prelude exactly once.
+  - Every test still creates its own module activation, runtime host,
+    submission queue, and logical Case execution facility; the attempt
+    bridge's own Prelude, per-Case Processes, and physical Case authority are
+    unchanged.
+
 ## 0.3.287-SNAPSHOT
 
 - `PERF031-B` reduces redundant Core bootstraps in five Java test classes. The
