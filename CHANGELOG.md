@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.294-SNAPSHOT
+
+- `I086` / `PLAT054-3E4` provisions the default Network in the standard
+  Polyglot embedding (HOST-NET-1 and HOST-NET-2, specification `0.1.450`).
+  The specification is unchanged; Filesystem (B011) stays out of scope.
+  - The initial module receives the bootstrap-local `network` slot only when
+    the Context effectively allows socket access (`Env.isSocketIOAllowed()`);
+    otherwise the slot is absent. Guest thread-creation and file-access
+    permissions are not consulted, and later host evaluations receive no
+    implicit Network.
+  - New `ProtosEmbeddedNetworkCustody` is the capability's authority target.
+    It opens one NIO host (one host-only poller thread) on the first
+    `connectTcp`/`listenTcp`, so a granted but unused Network creates no
+    poller, selector, or socket. Process termination and Context
+    finalization or disposal close it idempotently, which releases every
+    connection, listener, and in-flight acquisition; no poller starts after
+    close.
+  - `ProtosNioNetworkHost` exposes its backend factory so the embedding can
+    create the capability before any poller exists; `provision` behaves as
+    before.
+  - New `ProtosEmbeddedNetworkTest` (permission matrix, TCP echo and
+    half-close, listen/accept through suspendible `Future.value()`, errors,
+    cancellation, concurrency, close/cancelling close/fatal termination,
+    Context isolation, pay-as-you-grow) and `ProtosEmbeddedNetworkCustodyTest`
+    (lazy activation, initialization failure, first use racing close).
+
 ## 0.3.293-SNAPSHOT
 
 - `LM010-A` adds static hover to the Protos language server. The

@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
@@ -52,9 +53,11 @@ import java.util.function.Supplier;
  * Polyglot embedding bootstrap and authority) and reuses the ordinary standalone bootstrap: Core
  * from the resolved Core root (see {@link #resolveCoreRoot}), {@link ProtosStandaloneProcessBootstrap} for the Process and its
  * RootActor, and arguments, environment, and standard streams taken from the embedding {@link
- * TruffleLanguage.Env}. It grants no default Filesystem and no default Network. It is its own
- * {@link ProtosProcessExecutionHost}: the Polyglot Context the host already owns is the only
- * execution placement, so entering never opens another Context.
+ * TruffleLanguage.Env}. It grants no default Filesystem. It grants the default Network only when
+ * the Context effectively allows socket access, through a lazily activated {@link
+ * ProtosEmbeddedNetworkCustody} retired with the Process and the Context. It is its own {@link
+ * ProtosProcessExecutionHost}: the Polyglot Context the host already owns is the only execution
+ * placement, so entering never opens another Context.
  *
  * <p>Host entries ({@link #evaluate}, binding reads, and host Closure execution) are RootActor
  * turns. An unsafe concurrent entry is rejected by {@link #enterRootActor} instead of waiting: no
@@ -80,6 +83,8 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     private final ProtosPrelude prelude;
     private final ProtosActor rootActor;
     private final Path coreRoot;
+    /* Present exactly when the initial module received the default Network. */
+    private final ProtosEmbeddedNetworkCustody networkCustody;
     private final AtomicReference<Thread> entryOwner = new AtomicReference<>();
     /* Written only by the thread that holds entryOwner. */
     private int entryDepth;
@@ -99,9 +104,11 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
             ProtosLanguageContext owner,
             ProtosStandaloneProcessBootstrap.Result bootstrap,
             ProtosPrelude prelude,
-            Path coreRoot) {
+            Path coreRoot,
+            ProtosEmbeddedNetworkCustody networkCustody) {
         this.owner = owner;
         this.coreRoot = coreRoot;
+        this.networkCustody = networkCustody;
         this.process = bootstrap.process();
         this.prelude = prelude;
         this.rootActor = process.rootActorForRuntime();
@@ -127,6 +134,17 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                     "Protos Core bootstrap failed from " + coreRoot + ": " + failure.getMessage());
         }
         ProtosEncodingValue utf8 = ProtosStandaloneHostedExecution.utf8(prelude);
+        /*
+         * HOST-NET-1: the effective socket authorization, after every Context restriction, is the
+         * grant. Truffle's socket permission is all-or-nothing, which the NIO backend represents
+         * exactly. Thread-creation and file permissions are deliberately not consulted (HOST-NET-2).
+         */
+        ProtosEmbeddedNetworkCustody networkCustody =
+                env.isSocketIOAllowed() ? new ProtosEmbeddedNetworkCustody(prelude) : null;
+        ProtosNetworkCapabilityValue network =
+                networkCustody == null
+                        ? null
+                        : new ProtosNetworkCapabilityValue(prelude, networkCustody);
         ProtosStandaloneProcessBootstrap.Result bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
                         prelude,
@@ -140,8 +158,9 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
                         utf8,
                         utf8,
                         null,
-                        null);
-        ProtosEmbeddedProcess embedded = new ProtosEmbeddedProcess(owner, bootstrap, prelude, coreRoot);
+                        network);
+        ProtosEmbeddedProcess embedded =
+                new ProtosEmbeddedProcess(owner, bootstrap, prelude, coreRoot, networkCustody);
         bootstrap.process().bindExecutionHostForRuntime(embedded);
         owner.bindModuleResolverForRuntime(resolver);
         return embedded;
@@ -456,6 +475,8 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     public void processTerminatedForRuntime() {
         // The Polyglot Context belongs to the host; Process termination does not close it.
         stop();
+        // Termination retires the host-only Network machinery (Embedding network grant).
+        closeNetwork();
     }
 
     /**
@@ -472,6 +493,7 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (!owner.env().getContext().isCancelling() && !owner.env().getContext().isExiting()) {
             process.awaitTerminationForRuntime();
         }
+        closeNetwork();
         joinCarriers();
     }
 
@@ -484,7 +506,19 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     void abandonForContextDisposal() {
         stop();
         process.requestTerminationForRuntime();
+        closeNetwork();
         joinCarriers();
+    }
+
+    /**
+     * Closes the Network custody, if granted: idempotent, never waits on guest work, and is also
+     * reached on a cancelled or exiting close whose Process termination was not awaited, so no
+     * Network resource outlives the Context.
+     */
+    private void closeNetwork() {
+        if (networkCustody != null) {
+            networkCustody.close();
+        }
     }
 
     /**
@@ -503,6 +537,10 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
         if (pool != null) {
             pool.closeAndJoin();
         }
+    }
+
+    ProtosEmbeddedNetworkCustody networkCustodyForTesting() {
+        return networkCustody;
     }
 
     Path coreRootForTesting() {

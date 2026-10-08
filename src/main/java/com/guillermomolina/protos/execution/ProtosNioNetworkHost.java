@@ -51,15 +51,27 @@ final class ProtosNioNetworkHost implements AutoCloseable {
         // Throws IllegalStateException when the Prelude does not retain the canonical families.
         ProtosObjectValue addressPrototype = owningPrelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue endpointPrototype = owningPrelude.ipEndpointPrototypeForRuntime();
+        return new ProtosNetworkCapabilityValue(
+                owningPrelude, backend(addressPrototype, endpointPrototype));
+    }
 
-        ProtosNioNetworkBackend backend =
-                new ProtosNioNetworkBackend(
-                        poller,
-                        ProtosNioNetworkHost::resolveIpv6,
-                        addressPrototype,
-                        endpointPrototype,
-                        ProtosNioNetworkHost::authorizedIpv6ListenAddresses);
-        return new ProtosNetworkCapabilityValue(owningPrelude, backend);
+    /**
+     * One acquisition backend on this host's poller for the canonical IP families of one Prelude.
+     * Callers that own their capability value (such as the standard Polyglot embedding) use this
+     * directly so the capability can exist before any poller does.
+     */
+    ProtosNioNetworkBackend backend(
+            ProtosObjectValue addressPrototype, ProtosObjectValue endpointPrototype) {
+        return new ProtosNioNetworkBackend(
+                poller,
+                ProtosNioNetworkHost::resolveIpv6,
+                Objects.requireNonNull(addressPrototype, "addressPrototype"),
+                Objects.requireNonNull(endpointPrototype, "endpointPrototype"),
+                ProtosNioNetworkHost::authorizedIpv6ListenAddresses);
+    }
+
+    ProtosNioHostIoPoller pollerForTesting() {
+        return poller;
     }
 
     @Override

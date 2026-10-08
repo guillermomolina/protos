@@ -115,6 +115,10 @@ final class ProtosNioHostIoPoller implements AutoCloseable {
         return Thread.currentThread() == thread;
     }
 
+    Thread threadForTesting() {
+        return thread;
+    }
+
     boolean isTerminatedForTesting() {
         synchronized (lifecycleLock) {
             return terminated;
