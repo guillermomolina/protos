@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.318-SNAPSHOT
+
+- `PERF038-D` (#852): primitive-method-call graph convergence, first unit.
+  - A root-level send takes a lazy caller reference instead of the root's
+    materialized activation. A guarded ordinary send from a still-compact
+    root whose activation would inherit all of its provenance from its own
+    caller (prelude, actor module state, module key, execution domain, Task
+    or dynamic-control state) passes that caller to the callee header, so
+    the root no longer materializes its activation merely to be a caller.
+    Every other send specialization still receives the exact activation.
+  - A root-level captured materialized read keeps a monomorphic cache of its
+    owner's frame authority and retained frame, guarded by owner identity
+    and a lazily created installation assumption that every authority
+    replacement invalidates. Nearer-scope absence, owner presence and the
+    value are still checked on every access (D179 C0, BUG018); a mismatch
+    retires the cache and resumes the exact generic selection.
+  - A guarded ordinary send decides at specialization whether its selected
+    Closure's invocations share one return home (captured, or the
+    unobservable marker of a return-home-unobservable plan), and builds its
+    compact call carrier from the header values it has just written instead
+    of re-validating the frame arguments.
+  - Observable semantics are unchanged. The PE guard baselines record the
+    new proven-safe accessor and dispatch sites.
+
 ## 0.3.317-SNAPSHOT
 
 - `BUG021-A` (#859): Native Test Tool progress and discovery failures.
