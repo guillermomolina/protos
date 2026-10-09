@@ -273,6 +273,120 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         System.out.println("PERF037C_PRESENT_NULL_VERSUS_ABSENT=PASS");
     }
 
+    /*
+     * PERF037-D: the root selection profiles the owner's representation and
+     * its no-selection outcome per site. Two activations of one owner root
+     * share the reader site, the owner Context materializes after warm-up,
+     * and the owner binding is removed and recreated; each newly taken
+     * branch must still select the current invocation's owner exactly.
+     */
+    @Test
+    void ownerRepresentationProfilesStayExactAfterWarmUp() throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "makeSlot: (initial) => {\n"
+                            + "  slot: initial\n"
+                            + "  () => { slot }\n"
+                            + "}\n"
+                            + "readerA: makeSlot(1)\n"
+                            + "readerB: makeSlot(2)\n",
+                    module);
+            ProtosClosureValue readerA = closure("readerA", module);
+            ProtosClosureValue readerB = closure("readerB", module);
+            assertSame(
+                    bytecodeNode(readerA),
+                    bytecodeNode(readerB),
+                    "both readers share one read site");
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
+                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+            }
+
+            ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
+            assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
+            assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+
+            ownerA.removeLocalSlot("slot");
+            ProtosSignalException absent =
+                    assertThrows(ProtosSignalException.class, () -> call(readerA, module));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                    absent.error().parent().orElse(null));
+            assertEquals(
+                    BigInteger.TWO,
+                    integerValue(call(readerB, module)),
+                    "the other activation's owner is unaffected");
+
+            ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
+                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+            }
+        });
+        System.out.println("PERF037D_OWNER_REPRESENTATION_PROFILES=PASS");
+    }
+
+    /*
+     * PERF037-D: alternating owner representations at one site sets each
+     * representation profile once. A flag is only ever set after
+     * transferToInterpreterAndInvalidate and never cleared, so once both
+     * representations are known no further alternation reaches an
+     * invalidation: the flags are the only invalidation trigger.
+     */
+    @Test
+    void alternatingOwnerRepresentationsInvalidateOncePerProfile() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue makeSlot =
+                    closure("() => {\n  slot: 1\n  () => { slot }\n}", module);
+            ProtosLexicalEnvironment deferred =
+                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module))
+                            .capturedLexicalEnvironmentForRuntime();
+            ProtosLexicalEnvironment materialized =
+                    assertInstanceOf(ProtosClosureValue.class, call(makeSlot, module))
+                            .capturedLexicalEnvironmentForRuntime();
+            materialized.context();
+            assertTrue(deferred.isDeferredForRuntime());
+            assertFalse(materialized.isDeferredForRuntime());
+
+            ProtosBytecodeRootNode.CapturedNearerScopeAbsence site =
+                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.create(
+                            deferred, "slot", 1);
+            assertFalse((Boolean) privateField(site, "seenDeferredOwner"));
+            assertFalse((Boolean) privateField(site, "seenMaterializedOwner"));
+
+            for (int round = 0; round < WARM_UP_CALLS; round++) {
+                assertSame(
+                        deferred.lexicalBindingAuthorityForRuntime(),
+                        site.ownerAuthorityOrNull(deferred),
+                        "the profiled deferred lookup is exact");
+                assertSame(
+                        materialized.lexicalBindingAuthorityForRuntime(),
+                        site.ownerAuthorityOrNull(materialized),
+                        "the profiled materialized lookup is exact");
+                assertTrue((Boolean) privateField(site, "seenDeferredOwner"));
+                assertTrue((Boolean) privateField(site, "seenMaterializedOwner"));
+            }
+            assertFalse(
+                    (Boolean) privateField(site, "seenNoSelection"),
+                    "profiles are independent; an unrelated outcome stays unseen");
+
+            ProtosBytecodeRootNode.CapturedNearerScopeAbsence uncached =
+                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.uncached(1);
+            for (String flag :
+                    List.of(
+                            "seenMaterializedOwner",
+                            "seenDeferredOwner",
+                            "seenPublishedDeferredOwner",
+                            "seenNoSelection")) {
+                assertTrue(
+                        (Boolean) privateField(uncached, flag),
+                        "the uncached instance never invalidates: " + flag);
+            }
+        });
+        System.out.println("PERF037D_PROFILE_ALTERNATION=PASS");
+    }
+
     @Test
     void noDynamicBindingTokenIsLazyOneWayAndNeverRenewed() throws Exception {
         ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(new String[] {"a"});

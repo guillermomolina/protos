@@ -135,6 +135,23 @@ public final class ProtosLexicalEnvironment {
         return materialized;
     }
 
+    /**
+     * PERF037-D: this scope's guest context when it already exists, else
+     * {@code null}; never materializes it.
+     */
+    public ProtosObjectValue materializedContextOrNullForRuntime() {
+        return context;
+    }
+
+    /**
+     * PERF037-D: the activation owning this still-deferred scope.
+     * Precondition: {@link #materializedContextOrNullForRuntime} returned
+     * {@code null}.
+     */
+    public ProtosActivation deferredOwnerForRuntime() {
+        return deferredOwner;
+    }
+
     /** True while the guest context object has not been created yet. */
     public boolean isDeferredForRuntime() {
         return context == null;

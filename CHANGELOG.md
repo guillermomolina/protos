@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.319-SNAPSHOT
+
+- `PERF037-D` (#851): profiled captured owner-frame selection.
+  - The root-level compact captured read profiles, per read site, the
+    owner scope's representation (materialized, deferred, deferred with a
+    published Context) and its no-selection outcome. A branch a site has
+    never taken compiles as a deoptimization instead of a merged path;
+    each profile invalidates at most once and is never cleared. The owner,
+    its authority, retained frame and PRESENT state are still read from
+    the current invocation, so captured-read semantics are unchanged.
+  - A miss or retired PERF038-D owner-frame cache takes this profiled
+    selection instead of the unprofiled generic one; the uncached
+    interpreter uses a pre-seen profile and never invalidates.
+
 ## 0.3.318-SNAPSHOT
 
 - `PERF038-D` (#852): primitive-method-call graph convergence, first unit.

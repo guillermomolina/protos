@@ -875,6 +875,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
         private boolean retired;
 
+        /*
+         * PERF037-D: per-site representation profiles of the owner-frame
+         * selection. Each records that its branch has been taken at least
+         * once; an unseen branch is compiled as a deoptimization instead of
+         * a merged path, so a site never pays for owner representations or
+         * no-selection outcomes it has not executed. They profile control
+         * flow only; the owner, its authority, frame and PRESENT state are
+         * always re-read from the current invocation.
+         */
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private boolean seenMaterializedOwner;
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private boolean seenDeferredOwner;
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private boolean seenPublishedDeferredOwner;
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private boolean seenNoSelection;
+
         private CapturedNearerScopeAbsence(
                 ProtosFrameLexicalLayout[] nearerLayouts,
                 Assumption[] noDynamicBinding,
@@ -890,6 +911,81 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static CapturedNearerScopeAbsence unproven(int lexicalDepth) {
             return new CapturedNearerScopeAbsence(
                     NO_LAYOUTS, NO_ASSUMPTIONS, Math.max(lexicalDepth - 1, 0), true);
+        }
+
+        /**
+         * PERF037-D: the uncached-interpreter instance; never proven and with
+         * every branch already seen, so it is never mutated by execution.
+         */
+        static CapturedNearerScopeAbsence uncached(int lexicalDepth) {
+            CapturedNearerScopeAbsence uncached = unproven(lexicalDepth);
+            uncached.seenMaterializedOwner = true;
+            uncached.seenDeferredOwner = true;
+            uncached.seenPublishedDeferredOwner = true;
+            uncached.seenNoSelection = true;
+            return uncached;
+        }
+
+        /**
+         * PERF037-D: exactly {@code ownerMaterializedFrameOrNull(accessor,
+         * owner, bytecodeNode)} for an owner already selected by {@link
+         * #ownerOrNull}, with every branch profiled at this site.
+         */
+        MaterializedFrame selectOwnerFrameOrNull(
+                MaterializedLocalAccessor accessor,
+                ProtosLexicalEnvironment owner,
+                BytecodeNode bytecodeNode) {
+            if (owner != null
+                    && ownerAuthorityOrNull(owner)
+                            instanceof ProtosFrameLexicalBindingAuthority authority) {
+                MaterializedFrame ownerFrame =
+                        authority.retainedMaterializedFrameForCapturedAccess();
+                if (ownerFrame != null && !accessor.isCleared(bytecodeNode, ownerFrame)) {
+                    return ownerFrame;
+                }
+            }
+            if (!seenNoSelection) {
+                com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
+                seenNoSelection = true;
+            }
+            return null;
+        }
+
+        /**
+         * Exactly {@code owner.lexicalBindingAuthorityForRuntime()}, with the
+         * owner's materialized/deferred representation profiled.
+         */
+        com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority
+                ownerAuthorityOrNull(ProtosLexicalEnvironment owner) {
+            ProtosObjectValue context = owner.materializedContextOrNullForRuntime();
+            if (context != null) {
+                if (!seenMaterializedOwner) {
+                    com.oracle.truffle.api.CompilerDirectives
+                            .transferToInterpreterAndInvalidate();
+                    seenMaterializedOwner = true;
+                }
+            } else {
+                if (!seenDeferredOwner) {
+                    com.oracle.truffle.api.CompilerDirectives
+                            .transferToInterpreterAndInvalidate();
+                    seenDeferredOwner = true;
+                }
+                ProtosActivation deferredOwner = owner.deferredOwnerForRuntime();
+                context = deferredOwner.materializedContextOrNullForRuntime();
+                if (context == null) {
+                    return deferredOwner.currentLexicalBindingAuthorityForRuntime();
+                }
+                if (!seenPublishedDeferredOwner) {
+                    com.oracle.truffle.api.CompilerDirectives
+                            .transferToInterpreterAndInvalidate();
+                    seenPublishedDeferredOwner = true;
+                }
+            }
+            return context
+                            instanceof com.guillermomolina.protos.runtime
+                                    .ProtosExecutionContextValue executionContext
+                    ? executionContext.lexicalBindingAuthorityForRuntime()
+                    : null;
         }
 
         /**
@@ -1008,11 +1104,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new CapturedOwnerFrameCache(RETIRED);
         }
 
-        /** Exactly {@code ownerMaterializedFrameOrNull(accessor, owner, bytecodeNode)}. */
+        /**
+         * Exactly {@code ownerMaterializedFrameOrNull(accessor, owner,
+         * bytecodeNode)}. PERF037-D: a miss or a retired cache takes the
+         * selection profiled by this read's {@code profile}.
+         */
         MaterializedFrame ownerFrameOrNull(
                 MaterializedLocalAccessor accessor,
                 ProtosLexicalEnvironment owner,
-                BytecodeNode bytecodeNode) {
+                BytecodeNode bytecodeNode,
+                CapturedNearerScopeAbsence profile) {
             Entry current = entry;
             if (current != RETIRED) {
                 if (current != null
@@ -1024,7 +1125,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
                 entry = current == null ? record(owner) : RETIRED;
             }
-            return ownerMaterializedFrameOrNull(accessor, owner, bytecodeNode);
+            return profile.selectOwnerFrameOrNull(accessor, owner, bytecodeNode);
         }
 
         @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary

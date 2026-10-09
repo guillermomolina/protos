@@ -582,6 +582,14 @@ public final class ProtosActivation {
     }
 
     /**
+     * PERF037-D: this activation's guest Context when it already exists,
+     * else {@code null}; never materializes it.
+     */
+    public ProtosObjectValue materializedContextOrNullForRuntime() {
+        return context;
+    }
+
+    /**
      * True when the current lexical scope is semantically a genuine execution
      * context even if its guest object has not been materialized yet.
      */

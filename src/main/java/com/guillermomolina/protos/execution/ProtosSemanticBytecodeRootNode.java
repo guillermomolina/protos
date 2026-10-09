@@ -1185,7 +1185,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                 ProtosFrameArguments.compactCapturedLexicalEnvironment(
                                         frame.getArguments()),
                                 name),
-                        bytecodeNode);
+                        bytecodeNode,
+                        nearerAbsence);
             }
             return null;
         }
@@ -1219,7 +1220,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
 
         static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
-            return CapturedNearerScopeAbsence.unproven(lexicalDepth);
+            return CapturedNearerScopeAbsence.uncached(lexicalDepth);
         }
 
         static CapturedOwnerFrameCache createOwnerFrameCache() {
