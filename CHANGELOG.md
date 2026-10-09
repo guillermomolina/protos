@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.321-SNAPSHOT
+
+- `PERF037-D` (#851): owner-absence specialization and presence continuity
+  in the captured owner-frame cache.
+  - A cleared owner binding on a valid cache hit records the site's
+    no-selection profile, shared with the profiled selection, so a never
+    observed absence compiles as a deoptimization instead of a merged
+    result.
+  - When the cache records an owner whose binding is physically PRESENT,
+    it admits the owner layout's existing present-continuity token for
+    that ordinal, checked valid before and after the presence check. A
+    hit then skips the physical presence check while the token is valid.
+    Removal invalidates the token before clearing and it is never
+    renewed, so any later hit checks presence physically; a binding
+    absent at recording admits no token. The value is still read by
+    `LoadLocalMaterialized`, and owner identity and the installed-authority
+    assumption are still checked on every hit.
+
 ## 0.3.320-SNAPSHOT
 
 - `PERF038-E` (#852): residual monomorphic call-graph infrastructure.

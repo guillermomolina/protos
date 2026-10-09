@@ -944,11 +944,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     return ownerFrame;
                 }
             }
+            profileNoSelection();
+            return null;
+        }
+
+        /**
+         * PERF037-D: records that this site selected no owner frame. Until
+         * then the no-selection outcome is compiled as a deoptimization;
+         * it changes no binding, owner or frame.
+         */
+        void profileNoSelection() {
             if (!seenNoSelection) {
                 com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
                 seenNoSelection = true;
             }
-            return null;
         }
 
         /**
@@ -1080,12 +1089,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * selection.
      */
     static final class CapturedOwnerFrameCache {
-        private static final Entry RETIRED = new Entry(null, null, null);
+        private static final Entry RETIRED = new Entry(null, null, null, null);
 
+        /*
+         * PERF037-D: presentContinuity is the owner layout's continuity token
+         * for the read binding's ordinal, admitted only when the binding was
+         * physically PRESENT in ownerFrame while the token was valid; null
+         * when not admitted, and every hit then checks presence physically.
+         */
         private record Entry(
                 ProtosLexicalEnvironment owner,
                 MaterializedFrame ownerFrame,
-                Assumption installed) {}
+                Assumption installed,
+                Assumption presentContinuity) {}
 
         /* One immutable entry, published in a single write; null until first use. */
         @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
@@ -1112,6 +1128,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         MaterializedFrame ownerFrameOrNull(
                 MaterializedLocalAccessor accessor,
                 ProtosLexicalEnvironment owner,
+                String name,
                 BytecodeNode bytecodeNode,
                 CapturedNearerScopeAbsence profile) {
             Entry current = entry;
@@ -1120,16 +1137,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         && owner == current.owner()
                         && current.installed().isValid()) {
                     MaterializedFrame ownerFrame = current.ownerFrame();
-                    return accessor.isCleared(bytecodeNode, ownerFrame) ? null : ownerFrame;
+                    Assumption presentContinuity = current.presentContinuity();
+                    if (presentContinuity != null && presentContinuity.isValid()) {
+                        return ownerFrame;
+                    }
+                    if (accessor.isCleared(bytecodeNode, ownerFrame)) {
+                        profile.profileNoSelection();
+                        return null;
+                    }
+                    return ownerFrame;
                 }
                 com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
-                entry = current == null ? record(owner) : RETIRED;
+                entry = current == null ? record(accessor, owner, name, bytecodeNode) : RETIRED;
             }
             return profile.selectOwnerFrameOrNull(accessor, owner, bytecodeNode);
         }
 
         @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-        private static Entry record(ProtosLexicalEnvironment owner) {
+        private static Entry record(
+                MaterializedLocalAccessor accessor,
+                ProtosLexicalEnvironment owner,
+                String name,
+                BytecodeNode bytecodeNode) {
             if (owner == null
                     || !(owner.lexicalBindingAuthorityForRuntime()
                             instanceof ProtosFrameLexicalBindingAuthority authority)) {
@@ -1147,7 +1176,54 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || owner.lexicalBindingAuthorityForRuntime() != authority) {
                 return RETIRED;
             }
-            return new Entry(owner, ownerFrame, installed);
+            return new Entry(
+                    owner,
+                    ownerFrame,
+                    installed,
+                    admittedPresentContinuityOrNull(
+                            accessor, authority, ownerFrame, name, bytecodeNode));
+        }
+
+        /**
+         * PERF037-D: the continuity token of {@code name}'s ordinal in the
+         * authority's frame-backed layout, admitted only when the binding is
+         * physically PRESENT in {@code ownerFrame} and the token, obtained
+         * before that check, is still valid after it. A valid token alone
+         * does not prove presence: an ordinal never established is ABSENT
+         * with its token intact. Removal invalidates the token before
+         * clearing the local (PERF025-D179-A) and it is never renewed, so an
+         * admitted valid token implies the binding is still PRESENT.
+         */
+        private static Assumption admittedPresentContinuityOrNull(
+                MaterializedLocalAccessor accessor,
+                ProtosFrameLexicalBindingAuthority authority,
+                MaterializedFrame ownerFrame,
+                String name,
+                BytecodeNode bytecodeNode) {
+            ProtosFrameLexicalLayout layout = authority.storedLayout();
+            Integer ordinal = layout.offsetOf(name);
+            if (ordinal == null) {
+                return null;
+            }
+            Assumption presentContinuity = layout.presentContinuityAt(ordinal);
+            if (!presentContinuity.isValid()
+                    || accessor.isCleared(bytecodeNode, ownerFrame)
+                    || !presentContinuity.isValid()) {
+                return null;
+            }
+            return presentContinuity;
+        }
+
+        /** PERF037-D test access: the admitted continuity token, or {@code null}. */
+        Assumption presentContinuityForTesting() {
+            Entry current = entry;
+            return current == null ? null : current.presentContinuity();
+        }
+
+        /** PERF037-D test access: true once the cache recorded an owner entry. */
+        boolean isRecordedForTesting() {
+            Entry current = entry;
+            return current != null && current != RETIRED;
         }
     }
 

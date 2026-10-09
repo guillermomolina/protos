@@ -48,6 +48,7 @@ import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.function.Executable;
 
 /**
  * PERF037-C root-level captured reads. The name and lexical depth are
@@ -323,6 +324,23 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
                 assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
             }
+
+            // Later removals, with the no-selection outcome already seen, stay exact.
+            for (int round = 0; round < 3; round++) {
+                ownerA.removeLocalSlot("slot");
+                for (int call = 0; call < 3; call++) {
+                    ProtosSignalException again =
+                            assertThrows(ProtosSignalException.class, () -> call(readerA, module));
+                    assertSame(
+                            ProtosCoreErrors.prototype(
+                                    module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                            again.error().parent().orElse(null));
+                    assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+                }
+                ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+                assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
+                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+            }
         });
         System.out.println("PERF037D_OWNER_REPRESENTATION_PROFILES=PASS");
     }
@@ -385,6 +403,150 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             }
         });
         System.out.println("PERF037D_PROFILE_ALTERNATION=PASS");
+    }
+
+    /*
+     * PERF037-D: the no-selection profile shared by the generic selection and
+     * the owner-frame cache's cleared-binding path is monotonic: set once,
+     * never cleared, and already set on the uncached instance.
+     */
+    @Test
+    void noSelectionProfileIsMonotonic() throws Exception {
+        withCore(module -> {
+            ProtosLexicalEnvironment captured =
+                    assertInstanceOf(
+                                    ProtosClosureValue.class,
+                                    call(
+                                            closure("() => {\n  slot: 1\n  () => { slot }\n}", module),
+                                            module))
+                            .capturedLexicalEnvironmentForRuntime();
+            ProtosBytecodeRootNode.CapturedNearerScopeAbsence site =
+                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.create(captured, "slot", 1);
+            assertFalse((Boolean) privateField(site, "seenNoSelection"));
+            for (int round = 0; round < 3; round++) {
+                site.profileNoSelection();
+                assertTrue((Boolean) privateField(site, "seenNoSelection"));
+            }
+
+            ProtosBytecodeRootNode.CapturedNearerScopeAbsence uncached =
+                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.uncached(1);
+            uncached.profileNoSelection();
+            assertTrue((Boolean) privateField(uncached, "seenNoSelection"));
+        });
+        System.out.println("PERF037D_NO_SELECTION_PROFILE=PASS");
+    }
+
+    /*
+     * PERF037-D: a cache hit skips the physical presence check only behind
+     * the owner layout's continuity token, admitted when the binding was
+     * PRESENT at recording. Removal invalidates the token shared by every
+     * activation of the layout before clearing; it is never renewed, so a
+     * recreated binding is read through the physical check again.
+     */
+    @Test
+    void ownerFrameCacheAdmitsPresentContinuityOnlyWhilePresent() throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "makeSlot: (initial) => {\n"
+                            + "  slot: initial\n"
+                            + "  () => { slot }\n"
+                            + "}\n"
+                            + "readerA: makeSlot(1)\n"
+                            + "readerB: makeSlot(2)\n",
+                    module);
+            ProtosClosureValue readerA = closure("readerA", module);
+            ProtosClosureValue readerB = closure("readerB", module);
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
+            }
+            ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(readerA);
+            assertTrue(cache.isRecordedForTesting(), "the PRESENT owner was recorded");
+            Assumption continuity = cache.presentContinuityForTesting();
+            assertTrue(
+                    continuity != null && continuity.isValid(),
+                    "a PRESENT binding admits its valid continuity token");
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.ONE, integerValue(call(readerA, module)));
+                assertEquals(BigInteger.TWO, integerValue(call(readerB, module)));
+            }
+            assertTrue(continuity.isValid(), "reads never invalidate the token");
+
+            // Removal in the other activation invalidates the shared token only.
+            ProtosObjectValue ownerB = readerB.capturedLexicalEnvironmentForRuntime().context();
+            ownerB.removeLocalSlot("slot");
+            assertFalse(continuity.isValid(), "the token is shared by the layout");
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(call(readerA, module)),
+                    "a still PRESENT owner is read through the physical check");
+            assertSlotNotFound(module, () -> call(readerB, module));
+
+            ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
+            ownerA.removeLocalSlot("slot");
+            assertSlotNotFound(module, () -> call(readerA, module));
+            assertSlotNotFound(module, () -> call(readerA, module));
+
+            ownerA.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
+            assertFalse(continuity.isValid(), "recreation never renews the token");
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertSame(ProtosNullValue.INSTANCE, call(readerA, module));
+            }
+            ownerB.createLocalSlot("slot", evaluate("10", module));
+            assertEquals(BigInteger.TEN, integerValue(call(readerB, module)));
+        });
+        System.out.println("PERF037D_PRESENT_CONTINUITY_CACHE=PASS");
+    }
+
+    /*
+     * PERF037-D: an owner binding already ABSENT when the cache records it
+     * admits no continuity token; every hit checks presence physically and
+     * a later recreation is observed.
+     */
+    @Test
+    void ownerFrameCacheAdmitsNoContinuityForAbsentBinding() throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "slot: 0\n"
+                            + "makeSlot: () => {\n"
+                            + "  slot: 1\n"
+                            + "  () => { slot }\n"
+                            + "}\n"
+                            + "reader: makeSlot()\n",
+                    module);
+            ProtosClosureValue reader = closure("reader", module);
+            ProtosObjectValue owner = reader.capturedLexicalEnvironmentForRuntime().context();
+            owner.removeLocalSlot("slot");
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(
+                        BigInteger.ZERO,
+                        integerValue(call(reader, module)),
+                        "D179 C0: an ABSENT owner reveals the farther binding");
+            }
+            ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(reader);
+            if (cache.isRecordedForTesting()) {
+                assertNull(
+                        cache.presentContinuityForTesting(),
+                        "an ABSENT binding admits no continuity token");
+            }
+            owner.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertSame(ProtosNullValue.INSTANCE, call(reader, module));
+            }
+            owner.removeLocalSlot("slot");
+            assertEquals(BigInteger.ZERO, integerValue(call(reader, module)));
+        });
+        System.out.println("PERF037D_ABSENT_ADMITS_NO_CONTINUITY=PASS");
+    }
+
+    /* PERF037-D: the uncached form never records, so it always checks presence. */
+    @Test
+    void retiredOwnerFrameCacheNeverAdmitsContinuity() {
+        ProtosBytecodeRootNode.CapturedOwnerFrameCache retired =
+                ProtosBytecodeRootNode.CapturedOwnerFrameCache.retired();
+        assertFalse(retired.isRecordedForTesting());
+        assertNull(retired.presentContinuityForTesting());
+        System.out.println("PERF037D_UNCACHED_NO_CONTINUITY=PASS");
     }
 
     @Test
@@ -516,6 +678,59 @@ final class ProtosPerf037CCapturedLexicalReadTest {
 
     private static BigInteger integerValue(Object value) {
         return assertInstanceOf(ProtosIntegerValue.class, value).value();
+    }
+
+    private static void assertSlotNotFound(ProtosActivation module, Executable read) {
+        ProtosSignalException absent = assertThrows(ProtosSignalException.class, read);
+        assertSame(
+                ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                absent.error().parent().orElse(null));
+    }
+
+    /** The owner-frame cache of {@code closure}'s single root-level selection site. */
+    private static ProtosBytecodeRootNode.CapturedOwnerFrameCache ownerFrameCache(
+            ProtosClosureValue closure) throws ReflectiveOperationException {
+        Instruction select =
+                single(instructionsOf(closure, "SelectCapturedMaterializedOwnerFrameAtRoot"));
+        for (Instruction.Argument argument : select.getArguments()) {
+            if (argument.getKind() == Instruction.Argument.Kind.NODE_PROFILE) {
+                Object found = findField(
+                        argument.asCachedNode(),
+                        ProtosBytecodeRootNode.CapturedOwnerFrameCache.class,
+                        3);
+                if (found != null) {
+                    return (ProtosBytecodeRootNode.CapturedOwnerFrameCache) found;
+                }
+            }
+        }
+        throw new AssertionError("no owner-frame cache in " + select);
+    }
+
+    private static Object findField(Object target, Class<?> type, int depth)
+            throws ReflectiveOperationException {
+        if (target == null || depth < 0) {
+            return null;
+        }
+        if (type.isInstance(target)) {
+            return target;
+        }
+        if (!target.getClass().getName().startsWith("com.guillermomolina.protos")) {
+            return null;
+        }
+        for (Class<?> c = target.getClass(); c != null && c != Object.class; c = c.getSuperclass()) {
+            for (Field field : c.getDeclaredFields()) {
+                if (field.getType().isPrimitive()
+                        || java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                    continue;
+                }
+                field.setAccessible(true);
+                Object found = findField(field.get(target), type, depth - 1);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
     }
 
     private static Object privateField(Object target, String name)

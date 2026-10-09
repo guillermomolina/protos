@@ -1187,6 +1187,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                                 ProtosFrameArguments.compactCapturedLexicalEnvironment(
                                         frame.getArguments()),
                                 name),
+                        name,
                         bytecodeNode,
                         nearerAbsence);
             }
