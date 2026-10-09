@@ -102,6 +102,14 @@ final class ProtosFrameArguments {
      * PERF038-D: {@link #compactImmediateMethodCall} with the invocation
      * return home already obtained from {@code closure} by the caller
      * (exactly {@link ProtosClosureValue#invocationReturnHomeForRuntime}).
+     *
+     * <p>PERF038-E: the only caller is a guarded ordinary send whose
+     * specialization already established every header value: the Closure and
+     * method home are its cached selection (non-null by construction), the
+     * receiver is its identity-guarded cached receiver, and the caller is an
+     * activation the DSL type check or provenance guard produced. The header is
+     * therefore written without repeating the null validation of the general
+     * form.
      */
     static Object[] compactImmediateMethodCall(
             ProtosClosureValue closure,
@@ -110,10 +118,6 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosReturnHome returnHome,
             Object[] supplied) {
-        Objects.requireNonNull(closure, "closure");
-        Objects.requireNonNull(receiver, "receiver");
-        Objects.requireNonNull(methodHome, "methodHome");
-        Objects.requireNonNull(caller, "caller");
         Object[] arguments = new Object[USER_ARGUMENT_OFFSET + supplied.length];
         arguments[CLOSURE_INDEX] = closure;
         arguments[RECEIVER_INDEX] = receiver;
@@ -411,8 +415,8 @@ final class ProtosFrameArguments {
                 && arguments[CLOSURE_INDEX] instanceof ProtosActivation activation) {
             return activation.preludeOrNullForRuntime();
         }
-        ProtosClosureValue closure = compactClosure(arguments);
-        return closure.prelude().orElse(compactCaller(arguments).preludeOrNullForRuntime());
+        ProtosPrelude own = compactClosure(arguments).preludeOrNullForRuntime();
+        return own != null ? own : compactCaller(arguments).preludeOrNullForRuntime();
     }
 
     /**
@@ -430,6 +434,16 @@ final class ProtosFrameArguments {
             return 0;
         }
         return arguments.length - USER_ARGUMENT_OFFSET;
+    }
+
+    /**
+     * PERF038-E: {@link #compactSuppliedArgument} for an {@code index} already
+     * proven below {@link #compactSuppliedArgumentCount} of the same array by
+     * the caller's guard; that proof implies a full header, so the layout test
+     * is not repeated.
+     */
+    static Object compactSuppliedArgumentWithinCount(Object[] arguments, int index) {
+        return arguments[USER_ARGUMENT_OFFSET + index];
     }
 
     /** Supplied positional argument {@code index} of a compact source call. */
@@ -471,12 +485,20 @@ final class ProtosFrameArguments {
         if (!inheritsAll) {
             return null;
         }
-        ProtosClosureValue closure = (ProtosClosureValue) arguments[CLOSURE_INDEX];
-        ProtosActivation caller = compactCaller(arguments);
-        Object ownPrelude = closure.prelude().orElse(null);
-        return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
-                ? caller
-                : null;
+        return callerIfPreludeInherited(
+                (ProtosClosureValue) arguments[CLOSURE_INDEX], compactCaller(arguments));
+    }
+
+    /**
+     * {@code caller} when the activation of {@code closure} invoked from it
+     * has the caller's prelude (the Closure has none of its own, or the same
+     * one), else {@code null}. PERF038-E: reads the nullable prelude directly,
+     * so no {@code Optional} is built.
+     */
+    private static ProtosActivation callerIfPreludeInherited(
+            ProtosClosureValue closure, ProtosActivation caller) {
+        ProtosPrelude own = closure.preludeOrNullForRuntime();
+        return own == null || own == caller.preludeOrNullForRuntime() ? caller : null;
     }
 
     /**
@@ -498,10 +520,7 @@ final class ProtosFrameArguments {
                     && arguments[TASK_INDEX] != null) {
                 return null;
             }
-            Object ownPrelude = closure.prelude().orElse(null);
-            return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
-                    ? caller
-                    : null;
+            return callerIfPreludeInherited(closure, caller);
         }
         return compactInheritedProvenanceCaller(arguments);
     }

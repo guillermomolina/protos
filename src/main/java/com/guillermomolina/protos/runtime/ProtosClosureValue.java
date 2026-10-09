@@ -272,6 +272,15 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(prelude);
     }
 
+    /**
+     * PERF038-E: exactly {@link #prelude()}'s value, or {@code null} when the
+     * Closure captured none, without allocating an {@code Optional} on
+     * compiled runtime paths. The prelude is final.
+     */
+    public ProtosPrelude preludeOrNullForRuntime() {
+        return prelude;
+    }
+
     public java.util.Optional<ProtosClosureExecutionPlan> executionPlan() {
         return java.util.Optional.ofNullable(executionPlan);
     }

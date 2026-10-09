@@ -305,8 +305,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * its frame-argument array itself. It never materializes; {@link
      * PrepareSendArguments} resolves it through {@link
      * PrepareSendArguments#exactCaller} wherever the exact activation is
-     * needed, and through {@link PrepareSendArguments#provenanceCaller} where
-     * a provenance-equivalent caller suffices.
+     * needed, and through {@link
+     * PrepareSendArguments#inheritedProvenanceCallerOrNull} where a
+     * provenance-equivalent caller suffices.
      */
     @Operation
     public static final class CurrentCallerReference {
@@ -386,7 +387,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class LoadFrameClosureArgument {
         @Specialization(guards = "isCompactSupplied(positionalIndex, frame)")
         public static Object compact(int positionalIndex, @Bind VirtualFrame frame) {
-            return ProtosFrameArguments.compactSuppliedArgument(
+            /* PERF038-E: the guard already proved the index within the supplied count. */
+            return ProtosFrameArguments.compactSuppliedArgumentWithinCount(
                     frame.getArguments(), positionalIndex);
         }
 
@@ -3127,6 +3129,28 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     cachedSelector, cachedContext, cachedPrelude, cachedInteger);
         }
 
+        /*
+         * PERF038-E: the guarded ordinary send is specialized on the state of
+         * its caller operand (see CurrentCallerReference), so each compiled
+         * form carries only the provenance path it has observed:
+         *
+         *   guardedOrdinarySend           a published caller activation;
+         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *                                 inherits all provenance from its own
+         *                                 caller, passed in its place without
+         *                                 materialization;
+         *   guardedOrdinarySendMaterializing  any other compact caller, which
+         *                                 is materialized and published
+         *                                 exactly as CurrentActivation would.
+         *
+         * The inheritance condition is a guard evaluated on every execution,
+         * so a compact caller that stops satisfying it (a different root
+         * Closure, prelude or explicit Task) leaves the inherited form and
+         * respecializes; no materialization path is compiled into a site
+         * that has never needed one. Every form shares the selection
+         * Assumption, receiver identity and entered-Context guards and runs
+         * the same preparation.
+         */
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -3140,7 +3164,63 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall guardedOrdinarySend(
                 Object receiver,
                 String selector,
-                Object caller,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
+                    receiver, selector, caller, supplied, enteredContext,
+                    cachedReceiver, cachedSelector, cachedContext, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "inherited != null",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInherited(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                @Variadic Object[] supplied,
+                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
+                    receiver, selector, inherited, supplied, enteredContext,
+                    cachedReceiver, cachedSelector, cachedContext, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendMaterializing(
+                Object receiver,
+                String selector,
+                Object[] caller,
                 @Variadic Object[] supplied,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
@@ -3150,7 +3230,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
-                    receiver, selector, provenanceCaller(caller), supplied, enteredContext,
+                    receiver, selector, exactCaller(caller), supplied, enteredContext,
                     cachedReceiver, cachedSelector, cachedContext, cachedSend);
         }
 
@@ -3222,6 +3302,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 replaces = {
                     "guardedIntegerSend",
                     "guardedOrdinarySend",
+                    "guardedOrdinarySendInherited",
+                    "guardedOrdinarySendMaterializing",
                     "fastOrdinarySend",
                     "guardedStructuredSend"
                 })
@@ -3281,28 +3363,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
 
         /**
-         * PERF038-D: a caller that is provenance-equivalent to the exact one
+         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
          * for the callee header of a guarded ordinary send, whose callee uses
          * its caller only for the prelude, actor module state, current module
          * key, execution domain and Task or dynamic-control state it would
-         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}).
-         * A compact root that inherits all of them from its own caller passes
-         * that caller instead of materializing itself; otherwise this is
-         * {@link #exactCaller}.
+         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
+         * the own caller of a still-compact root that inherits all of them,
+         * else {@code null}. It never materializes. The frame-argument array
+         * may be published between executions, so this is re-evaluated on
+         * every execution.
          */
-        static ProtosActivation provenanceCaller(Object caller) {
-            if (caller instanceof ProtosActivation activation) {
-                return activation;
+        @NonIdempotent
+        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
+            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
+                return null;
             }
-            Object[] arguments = (Object[]) caller;
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
-                ProtosActivation inherited =
-                        ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(arguments);
-                if (inherited != null) {
-                    return inherited;
-                }
-            }
-            return ProtosFrameArguments.activation(arguments);
+            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
         }
 
         static GuardedSendTarget createGuardedSend(
@@ -4073,7 +4149,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class FinishClosureCall {
-        @Specialization
+        /*
+         * PERF038-E: an ordinary source call that owns no materialized return
+         * home (an unobservable owned home, or a captured home owned by an
+         * outer invocation) has no completion effect, so a site that has only
+         * finished such calls compiles neither the lifecycle test nor the
+         * completion. The guard reads a final carrier field on every
+         * execution; the lifecycle form keeps the unchanged completion.
+         */
+        @Specialization(guards = "!prepared.hasReturnHomeLifecycle()")
+        public static Object ordinaryWithoutHomeLifecycle(
+                OrdinarySourceCall prepared, Object result) {
+            return result;
+        }
+
+        @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
         public static Object ordinary(OrdinarySourceCall prepared, Object result) {
             return ProtosBytecodeRootNode.FinishClosureCall.ordinary(prepared, result);
         }

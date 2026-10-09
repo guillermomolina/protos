@@ -58,7 +58,10 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
      * TEST009-H: the terminal lifecycle operations must preserve the concrete
      * prepared-call representation instead of erasing it to a single
      * {@link ProtosBytecodeRootNode.PreparedClosureCall} specialization, in both
-     * generated interpreters that declare them.
+     * generated interpreters that declare them. PERF038-E: the semantic
+     * {@code FinishClosureCall} specializes ordinary source calls twice, with and
+     * without a return-home lifecycle; every other operation has exactly one
+     * specialization per representation.
      */
     @Test
     void terminalLifecycleOperationsSpecializeOnConcreteRepresentations() {
@@ -93,8 +96,12 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                     receivers.contains(ProtosBytecodeRootNode.PreparedClosureCall.class),
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
+            int expectedCount =
+                    operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
+                            ? representations.size() + 1
+                            : representations.size();
             assertEquals(
-                    representations.size(),
+                    expectedCount,
                     receivers.size(),
                     operation.getName() + " specializations: " + receivers);
             assertEquals(representations, Set.copyOf(receivers), operation.getName());

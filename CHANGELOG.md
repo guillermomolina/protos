@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.320-SNAPSHOT
+
+- `PERF038-E` (#852): residual monomorphic call-graph infrastructure.
+  - The guarded ordinary send specializes on its caller operand: a
+    published activation, a compact caller whose callee inherits all of its
+    provenance (passed without materialization, under a guard re-evaluated
+    on every execution), or another compact caller, which is materialized
+    exactly as before. A stable inheriting site compiles no
+    materialization fallback.
+  - Closure preludes are read through a nullable runtime accessor on
+    provenance and frame-argument paths, so no `Optional` is built; the
+    public `prelude()` API is unchanged.
+  - The guarded send target records, at specialization, whether the
+    Closure owns its return home and whether each invocation needs a fresh
+    physical home, so preparation no longer re-reads the execution plan or
+    the captured home; the guarded compact header is written without
+    re-validating values the specialization already established.
+  - `FinishClosureCall` has a separate form for ordinary calls without a
+    materialized owned return home, which finishes without the lifecycle
+    test; non-local returns and completion are unchanged for other calls.
+  - The root-level compact argument read no longer repeats the layout test
+    its guard already proved.
+
 ## 0.3.319-SNAPSHOT
 
 - `PERF037-D` (#851): profiled captured owner-frame selection.

@@ -2508,6 +2508,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.ownsMaterializedReturnHome = ownsReturnHome && returnHome.isMaterialized();
         }
 
+        /**
+         * PERF038-E: false when this call owns no materialized home, so
+         * {@link #complete} and {@link #finish} have no effect beyond answering
+         * the result and {@link #handleControlTransfer} rethrows every transfer.
+         * Final for the carrier.
+         */
+        final boolean ownsMaterializedReturnHome() {
+            return ownsMaterializedReturnHome;
+        }
+
         @Override
         public Object handleControlTransfer(ControlFlowException transfer) {
             if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
@@ -2607,6 +2617,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             bodyTarget, suppliedArgumentCount);
             this.activation = null;
             this.targetArguments = compactTargetArguments;
+        }
+
+        /**
+         * PERF038-E: the {@code FinishClosureCall} guard; declared here because
+         * the DSL-generated node cannot see members of the private base class.
+         */
+        boolean hasReturnHomeLifecycle() {
+            return ownsMaterializedReturnHome();
         }
 
         @Override
@@ -8425,13 +8443,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * plan, once present, is never replaced, so a decision taken at
          * specialization stays exactly {@link
          * ProtosClosureValue#invocationReturnHomeForRuntime}'s for this Closure.
+         *
+         * <p>PERF038-E: {@code freshInvocationHome} is true when, with no
+         * shared home, the Closure's plan was already present (and, being
+         * never replaced, permanently not proven unobservable) at
+         * specialization: each invocation then owns a fresh physical home
+         * without re-reading the plan. {@code ownsReturnHome} is exactly
+         * {@code closure.returnHome().isEmpty()}, final for the Closure.
          */
         public record GuardedSendTarget(
                 ProtosClosureValue closure,
                 ProtosObjectValue methodHome,
                 RootCallTarget target,
                 Assumption stability,
-                ProtosReturnHome sharedInvocationHome) {}
+                ProtosReturnHome sharedInvocationHome,
+                boolean freshInvocationHome,
+                boolean ownsReturnHome) {
+
+            /** Exactly {@code closure().invocationReturnHomeForRuntime()}. */
+            ProtosReturnHome invocationHome() {
+                if (sharedInvocationHome != null) {
+                    return sharedInvocationHome;
+                }
+                if (freshInvocationHome) {
+                    return new ProtosReturnHome();
+                }
+                return closure.invocationReturnHomeForRuntime();
+            }
+        }
 
         /**
          * I072 Phase E structured kinds admitted by {@link #guardedStructuredSend}.
@@ -8642,14 +8681,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * arguments are built right here, so the carrier takes their
              * header values directly instead of re-validating the array.
              */
-            ProtosClosureValue closure = cachedSend.closure();
-            ProtosReturnHome returnHome = cachedSend.sharedInvocationHome();
-            if (returnHome == null) {
-                returnHome = closure.invocationReturnHomeForRuntime();
-            }
+            ProtosReturnHome returnHome = cachedSend.invocationHome();
             Object[] frameArguments =
                     ProtosFrameArguments.compactImmediateMethodCall(
-                            closure,
+                            cachedSend.closure(),
                             receiver,
                             cachedSend.methodHome(),
                             caller,
@@ -8659,7 +8694,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedSend.target(),
                     frameArguments,
                     returnHome,
-                    closure.returnHome().isEmpty(),
+                    cachedSend.ownsReturnHome(),
                     supplied.length);
         }
 
@@ -8716,12 +8751,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 lookup.stability().invalidate();
                 return null;
             }
+            ProtosReturnHome sharedHome = sharedInvocationHomeOrNull(closure);
             return new GuardedSendTarget(
                     closure,
                     lookup.selected().home(),
                     target,
                     lookup.stability(),
-                    sharedInvocationHomeOrNull(closure));
+                    sharedHome,
+                    sharedHome == null && closure.executionPlan().isPresent(),
+                    closure.returnHome().isEmpty());
         }
 
         @Specialization(
