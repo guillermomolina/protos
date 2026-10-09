@@ -1720,6 +1720,22 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
+     * PERF038-D: the caller operand of a send preparation opened by {@link
+     * #beginPrepareSend}. At root level it is the lazy caller reference,
+     * which materializes the root's activation only for the specializations
+     * that need its exact identity; elsewhere it is {@link
+     * #emitInvocationCallerOperand}.
+     */
+    private void emitSendCallerOperand(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+        if (!currentInlineCallbackFrameNative && currentActivationLocal == null) {
+            builder.emitCurrentCallerReference();
+        } else {
+            emitInvocationCallerOperand(builder);
+        }
+    }
+
+    /**
      * Opens a member read and emits its activation (or carrier) operand. A
      * root-level read (PERF037-B) takes no activation operand: it reaches
      * the root's frame arguments itself, only when it must.
@@ -3619,7 +3635,7 @@ final class CanonicalToBytecodeLowerer {
         beginPrepareSend(builder);
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
-        emitInvocationCallerOperand(builder);
+        emitSendCallerOperand(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
         endPrepareSend(builder);
@@ -3862,7 +3878,7 @@ final class CanonicalToBytecodeLowerer {
         beginPrepareSend(builder);
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
-        emitInvocationCallerOperand(builder);
+        emitSendCallerOperand(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
         endPrepareSend(builder);
@@ -4265,7 +4281,7 @@ final class CanonicalToBytecodeLowerer {
                 emitExpression(builder, receiver);
             }
             builder.emitLoadConstant(send.message());
-            emitInvocationCallerOperand(builder);
+            emitSendCallerOperand(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {
@@ -5854,7 +5870,7 @@ final class CanonicalToBytecodeLowerer {
                 emitExpression(builder, receiver);
             }
             builder.emitLoadConstant(send.message());
-            emitInvocationCallerOperand(builder);
+            emitSendCallerOperand(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {

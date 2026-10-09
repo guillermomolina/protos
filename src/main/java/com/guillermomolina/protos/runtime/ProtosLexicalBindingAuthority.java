@@ -71,6 +71,15 @@ public interface ProtosLexicalBindingAuthority {
     default void prepareForContextObservation() {}
 
     /**
+     * PERF038-D backend-private hook invoked exactly when this authority stops
+     * being the authority of the execution context or activation it was
+     * installed in, because another authority replaces it. Authorities whose
+     * installation may be assumed by compiled code invalidate that assumption
+     * here.
+     */
+    default void retireInstallation() {}
+
+    /**
      * Backend-private factory of a fresh, empty, durable authority with the
      * ordinary insertion-ordered map storage. Execution backends use it when
      * bindings held in ephemeral execution state must move to a store that

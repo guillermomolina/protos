@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -301,6 +302,37 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     MaterializedFrame retainedMaterializedFrameForCapturedAccess() {
         return frame;
+    }
+
+    /*
+     * PERF038-D: created only when a captured read first caches this
+     * authority, so ordinary installations allocate nothing. Guarded by this.
+     */
+    private Assumption installed;
+    private boolean retiredInstallation;
+
+    /**
+     * PERF038-D: valid while this authority remains installed where it was
+     * installed; invalidated by {@link #retireInstallation}. Never valid once
+     * retired.
+     */
+    @TruffleBoundary
+    synchronized Assumption installedAssumption() {
+        if (retiredInstallation) {
+            return Assumption.NEVER_VALID;
+        }
+        if (installed == null) {
+            installed = Assumption.create("ProtosFrameLexicalBindingAuthority installed");
+        }
+        return installed;
+    }
+
+    @Override
+    public synchronized void retireInstallation() {
+        retiredInstallation = true;
+        if (installed != null) {
+            installed.invalidate();
+        }
     }
 
     /**

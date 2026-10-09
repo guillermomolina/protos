@@ -99,6 +99,32 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * PERF038-D: {@link #compactImmediateMethodCall} with the invocation
+     * return home already obtained from {@code closure} by the caller
+     * (exactly {@link ProtosClosureValue#invocationReturnHomeForRuntime}).
+     */
+    static Object[] compactImmediateMethodCall(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosActivation caller,
+            ProtosReturnHome returnHome,
+            Object[] supplied) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(caller, "caller");
+        Object[] arguments = new Object[USER_ARGUMENT_OFFSET + supplied.length];
+        arguments[CLOSURE_INDEX] = closure;
+        arguments[RECEIVER_INDEX] = receiver;
+        arguments[METHOD_HOME_INDEX] = methodHome;
+        arguments[CALLER_INDEX] = caller;
+        arguments[RETURN_HOME_INDEX] = returnHome;
+        System.arraycopy(supplied, 0, arguments, USER_ARGUMENT_OFFSET, supplied.length);
+        return arguments;
+    }
+
+    /**
      * PERF025 compact direct source-backed Closure call. {@code task} is the
      * exact owning Task of a Task-owned entry, or {@code null} for a guest call
      * whose callee inherits the caller's Task/dynamic-control state.
@@ -423,16 +449,26 @@ final class ProtosFrameArguments {
 
     /**
      * PERF025 slice 3: the compact caller of a still-unmaterialized direct
-     * Closure call whose callee would inherit every provenance field from it,
-     * or {@code null}. {@link #activation(Object[])} materializes such a call
+     * Closure call (or, since PERF038-D, compact immediate method call) whose
+     * callee would inherit every provenance field from it, or {@code null}. {@link #activation(Object[])} materializes such a call
      * with exactly this caller's prelude (the Closure has none of its own, or
      * the same one), actor module state, current module key, execution domain
      * and Task or dynamic-control state (no explicit Task). A child invocation
      * prepared with this caller therefore materializes exactly as it would
      * with the not-yet-materialized callee activation as its caller.
+     *
+     * <p>A compact immediate method call never carries an explicit Task, and
+     * its materialization ({@link
+     * ProtosActivation#forImmediateMethodInvocationWithReturnHomeForRuntime})
+     * takes the same caller-derived provenance as a direct Closure call's;
+     * only its receiver and method home differ, and those are not provenance.
      */
     static ProtosActivation compactInheritedProvenanceCaller(Object[] arguments) {
-        if (!isDirectClosureCall(arguments) || explicitDirectTask(arguments) != null) {
+        boolean inheritsAll =
+                isDirectClosureCall(arguments)
+                        ? explicitDirectTask(arguments) == null
+                        : isCompactImmediateMethodCall(arguments);
+        if (!inheritsAll) {
             return null;
         }
         ProtosClosureValue closure = (ProtosClosureValue) arguments[CLOSURE_INDEX];
@@ -441,6 +477,33 @@ final class ProtosFrameArguments {
         return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
                 ? caller
                 : null;
+    }
+
+    /**
+     * PERF038-D: exactly {@link #compactInheritedProvenanceCaller} for the
+     * still-unmaterialized frame arguments of an admitted Closure root (the
+     * {@link #isUnmaterializedCompactCall} precondition), with the full
+     * header decided by its fixed slots instead of re-validating the ABI.
+     * Every full header is at least {@code USER_ARGUMENT_OFFSET} long and
+     * every minimal one shorter; in a full header the receiver slot is the
+     * direct-call marker exactly for a direct Closure call, whose task slot
+     * is then its explicit Task or {@code null}. Minimal headers take the
+     * general form.
+     */
+    static ProtosActivation unmaterializedInheritedProvenanceCaller(Object[] arguments) {
+        if (arguments.length >= USER_ARGUMENT_OFFSET
+                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue closure
+                && arguments[CALLER_INDEX] instanceof ProtosActivation caller) {
+            if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
+                    && arguments[TASK_INDEX] != null) {
+                return null;
+            }
+            Object ownPrelude = closure.prelude().orElse(null);
+            return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
+                    ? caller
+                    : null;
+        }
+        return compactInheritedProvenanceCaller(arguments);
     }
 
     static ProtosReturnHome compactReturnHome(Object[] arguments) {

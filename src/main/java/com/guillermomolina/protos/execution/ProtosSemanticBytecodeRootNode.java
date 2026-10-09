@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedNearerScopeAbsence;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedOwnerFrameCache;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.GuardedDirectClosureCallTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ImmediateResultCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ModuleInitializationCall;
@@ -289,6 +290,34 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization(guards = "!hasPublishedActivation(frame)")
         public static ProtosActivation materialize(@Bind VirtualFrame frame) {
             return ProtosFrameArguments.activation(frame);
+        }
+
+        @NonIdempotent
+        static boolean hasPublishedActivation(VirtualFrame frame) {
+            return ProtosFrameArguments.hasPublishedActivation(frame.getArguments());
+        }
+    }
+
+    /**
+     * PERF038-D root-level caller operand of a send preparation (see {@code
+     * CanonicalToBytecodeLowerer#emitSendCallerOperand}): the published
+     * activation, or, while the root is still in compact source-call form,
+     * its frame-argument array itself. It never materializes; {@link
+     * PrepareSendArguments} resolves it through {@link
+     * PrepareSendArguments#exactCaller} wherever the exact activation is
+     * needed, and through {@link PrepareSendArguments#provenanceCaller} where
+     * a provenance-equivalent caller suffices.
+     */
+    @Operation
+    public static final class CurrentCallerReference {
+        @Specialization(guards = "hasPublishedActivation(frame)")
+        public static Object published(@Bind VirtualFrame frame) {
+            return ProtosFrameArguments.publishedActivation(frame.getArguments());
+        }
+
+        @Specialization(guards = "!hasPublishedActivation(frame)")
+        public static Object compact(@Bind VirtualFrame frame) {
+            return frame.getArguments();
         }
 
         @NonIdempotent
@@ -1144,9 +1173,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached(
                                 value = "createNearerScopeAbsence(frame, name, lexicalDepth)",
                                 uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
-                        CapturedNearerScopeAbsence nearerAbsence) {
+                        CapturedNearerScopeAbsence nearerAbsence,
+                @Cached(
+                                value = "createOwnerFrameCache()",
+                                uncached = "retiredOwnerFrameCache()")
+                        CapturedOwnerFrameCache ownerFrameCache) {
             if (lexicalDepth > 0) {
-                return ProtosBytecodeRootNode.ownerMaterializedFrameOrNull(
+                return ownerFrameCache.ownerFrameOrNull(
                         accessor,
                         nearerAbsence.ownerOrNull(
                                 ProtosFrameArguments.compactCapturedLexicalEnvironment(
@@ -1187,6 +1220,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
             return CapturedNearerScopeAbsence.unproven(lexicalDepth);
+        }
+
+        static CapturedOwnerFrameCache createOwnerFrameCache() {
+            return CapturedOwnerFrameCache.create();
+        }
+
+        static CapturedOwnerFrameCache retiredOwnerFrameCache() {
+            return CapturedOwnerFrameCache.retired();
         }
     }
 
@@ -3070,7 +3111,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall guardedIntegerSend(
                 Object receiver,
                 String selector,
-                ProtosActivation caller,
+                Object caller,
                 @Variadic Object[] supplied,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
@@ -3081,7 +3122,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedIntegerSend(
-                    receiver, selector, caller, supplied, enteredContext, prelude,
+                    receiver, selector, exactCaller(caller), supplied, enteredContext, prelude,
                     cachedSelector, cachedContext, cachedPrelude, cachedInteger);
         }
 
@@ -3098,17 +3139,17 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall guardedOrdinarySend(
                 Object receiver,
                 String selector,
-                ProtosActivation caller,
+                Object caller,
                 @Variadic Object[] supplied,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("selector") String cachedSelector,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
+                @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
-                    receiver, selector, caller, supplied, enteredContext,
+                    receiver, selector, provenanceCaller(caller), supplied, enteredContext,
                     cachedReceiver, cachedSelector, cachedContext, cachedSend);
         }
 
@@ -3127,9 +3168,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall fastOrdinarySend(
                 Object receiver,
                 String selector,
-                ProtosActivation caller,
+                Object caller,
                 @Variadic Object[] supplied,
-                @Bind("performOrdinarySendLookup(receiver, selector, caller)")
+                @Bind("performOrdinarySendLookup(receiver, selector, exactCaller(caller))")
                         ProtosSlotLookupResult selected,
                 @Bind("ordinarySendClosureOrNull(selected)")
                         ProtosClosureValue closure,
@@ -3144,7 +3185,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
             return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySend(
-                    receiver, selector, caller, supplied, selected, closure, methodHome,
+                    receiver, selector, exactCaller(caller), supplied, selected, closure, methodHome,
                     closureDefinition, enteredContext, cachedSelector, cachedClosureDefinition,
                     cachedContext, cachedTarget);
         }
@@ -3162,17 +3203,17 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall guardedStructuredSend(
                 Object receiver,
                 String selector,
-                ProtosActivation caller,
+                Object caller,
                 @Variadic Object[] supplied,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("selector") String cachedSelector,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedStructuredSend(receiver, selector, caller)")
+                @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
                         GuardedStructuredSend cachedStructured) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedStructuredSend(
-                    receiver, selector, caller, supplied, enteredContext,
+                    receiver, selector, exactCaller(caller), supplied, enteredContext,
                     cachedReceiver, cachedSelector, cachedContext, cachedStructured);
         }
 
@@ -3186,10 +3227,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedClosureCall perform(
                 Object receiver,
                 String selector,
-                ProtosActivation caller,
+                Object caller,
                 @Variadic Object[] supplied) {
             return ProtosBytecodeRootNode.PrepareSendArguments.perform(
-                    receiver, selector, caller, supplied);
+                    receiver, selector, exactCaller(caller), supplied);
         }
 
         static GuardedIntegerSend createGuardedIntegerSend(
@@ -3211,8 +3252,56 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.PrepareSendArguments.isIntegerReceiver(receiver);
         }
 
-        static ProtosPrelude callerPrelude(ProtosActivation caller) {
-            return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(caller);
+        /**
+         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * denotes, without materializing it ({@link
+         * ProtosFrameArguments#preludeOrNull} answers exactly what the
+         * materialized activation would).
+         */
+        static ProtosPrelude callerPrelude(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(activation);
+            }
+            return ProtosFrameArguments.preludeOrNull((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D: the exact caller activation a caller operand denotes,
+         * materializing and publishing a compact root activation exactly as
+         * {@link CurrentActivation} would have when the operand was evaluated.
+         * Materialization is not guest-observable by itself: the activation
+         * identity is the one every later observer of the root also sees.
+         */
+        static ProtosActivation exactCaller(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation;
+            }
+            return ProtosFrameArguments.activation((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D: a caller that is provenance-equivalent to the exact one
+         * for the callee header of a guarded ordinary send, whose callee uses
+         * its caller only for the prelude, actor module state, current module
+         * key, execution domain and Task or dynamic-control state it would
+         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}).
+         * A compact root that inherits all of them from its own caller passes
+         * that caller instead of materializing itself; otherwise this is
+         * {@link #exactCaller}.
+         */
+        static ProtosActivation provenanceCaller(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation;
+            }
+            Object[] arguments = (Object[]) caller;
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                ProtosActivation inherited =
+                        ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(arguments);
+                if (inherited != null) {
+                    return inherited;
+                }
+            }
+            return ProtosFrameArguments.activation(arguments);
         }
 
         static GuardedSendTarget createGuardedSend(

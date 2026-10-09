@@ -607,10 +607,13 @@ public class ProtosObjectValue implements TruffleObject {
          * authority pointer switched. The old authority then becomes
          * unreachable from this object.
          */
-        ProtosLexicalBindingAuthorityCalls.transferAll(
-                lexicalBindingAuthority, replacement);
+        ProtosLexicalBindingAuthority replaced = lexicalBindingAuthority;
+        ProtosLexicalBindingAuthorityCalls.transferAll(replaced, replacement);
 
         this.lexicalBindingAuthority = replacement;
+        if (replaced != replacement) {
+            replaced.retireInstallation();
+        }
     }
     /*
      * I026-D1 / PLAT013: tooling observation is local reflection only.

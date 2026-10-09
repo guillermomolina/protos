@@ -548,13 +548,15 @@ public final class ProtosActivation {
             return;
         }
 
-        if (deferredContextAuthority != null
-                && deferredContextAuthority != authority) {
-            ProtosLexicalBindingAuthorityCalls.transferAll(
-                    deferredContextAuthority, authority);
+        ProtosLexicalBindingAuthority replaced = deferredContextAuthority;
+        if (replaced != null && replaced != authority) {
+            ProtosLexicalBindingAuthorityCalls.transferAll(replaced, authority);
         }
 
         deferredContextAuthority = authority;
+        if (replaced != null && replaced != authority) {
+            replaced.retireInstallation();
+        }
     }
 
     /**

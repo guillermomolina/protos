@@ -965,6 +965,92 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * PERF038-D: a monomorphic cache, retained by one specialized captured
+     * materialized read, of {@link #ownerMaterializedFrameOrNull}'s owner
+     * authority and retained frame.
+     *
+     * <p>The owner itself is never assumed: it is selected per invocation
+     * (through {@link CapturedNearerScopeAbsence}) and compared by identity
+     * with the recorded one. A scope's authority changes only when another
+     * authority replaces it, which {@link
+     * ProtosFrameLexicalBindingAuthority#retireInstallation} reports by
+     * invalidating the recorded installation assumption; the scope's own
+     * deferred-to-materialized transition keeps the same authority. While
+     * the owner matches and the assumption holds, the recorded authority is
+     * therefore the owner's current one, and its retained frame is final.
+     * Presence (D179 C0 removal) is still read from that frame on every
+     * execution. A different owner or a retired installation permanently
+     * retires the cache for this read, which then takes the exact generic
+     * selection.
+     */
+    static final class CapturedOwnerFrameCache {
+        private static final Entry RETIRED = new Entry(null, null, null);
+
+        private record Entry(
+                ProtosLexicalEnvironment owner,
+                MaterializedFrame ownerFrame,
+                Assumption installed) {}
+
+        /* One immutable entry, published in a single write; null until first use. */
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private Entry entry;
+
+        private CapturedOwnerFrameCache(Entry entry) {
+            this.entry = entry;
+        }
+
+        static CapturedOwnerFrameCache create() {
+            return new CapturedOwnerFrameCache(null);
+        }
+
+        /** A cache that never records; the read always takes the generic selection. */
+        static CapturedOwnerFrameCache retired() {
+            return new CapturedOwnerFrameCache(RETIRED);
+        }
+
+        /** Exactly {@code ownerMaterializedFrameOrNull(accessor, owner, bytecodeNode)}. */
+        MaterializedFrame ownerFrameOrNull(
+                MaterializedLocalAccessor accessor,
+                ProtosLexicalEnvironment owner,
+                BytecodeNode bytecodeNode) {
+            Entry current = entry;
+            if (current != RETIRED) {
+                if (current != null
+                        && owner == current.owner()
+                        && current.installed().isValid()) {
+                    MaterializedFrame ownerFrame = current.ownerFrame();
+                    return accessor.isCleared(bytecodeNode, ownerFrame) ? null : ownerFrame;
+                }
+                com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
+                entry = current == null ? record(owner) : RETIRED;
+            }
+            return ownerMaterializedFrameOrNull(accessor, owner, bytecodeNode);
+        }
+
+        @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+        private static Entry record(ProtosLexicalEnvironment owner) {
+            if (owner == null
+                    || !(owner.lexicalBindingAuthorityForRuntime()
+                            instanceof ProtosFrameLexicalBindingAuthority authority)) {
+                return RETIRED;
+            }
+            /*
+             * The assumption is obtained before the authority is re-read, so
+             * a replacement racing with recording either invalidates it or is
+             * observed by the re-read.
+             */
+            Assumption installed = authority.installedAssumption();
+            MaterializedFrame ownerFrame = authority.retainedMaterializedFrameForCapturedAccess();
+            if (ownerFrame == null
+                    || !installed.isValid()
+                    || owner.lexicalBindingAuthorityForRuntime() != authority) {
+                return RETIRED;
+            }
+            return new Entry(owner, ownerFrame, installed);
+        }
+    }
+
+    /**
      * The generic captured lookup, also taken when {@link
      * SelectCapturedMaterializedOwnerFrame} selected no owner frame.
      */
@@ -2228,6 +2314,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new OrdinarySourceCall(bodyTarget, compactTargetArguments);
         }
 
+        /**
+         * PERF038-D: {@link #ordinaryCompact} for frame arguments the caller
+         * has just built with {@link ProtosFrameArguments#compactImmediateMethodCall}
+         * from {@code returnHome} and {@code suppliedArgumentCount} supplied
+         * values; {@code ownsReturnHome} is exactly {@link
+         * ProtosFrameArguments#compactOwnsReturnHome} of that array.
+         */
+        static PreparedClosureCall ordinaryCompactPrepared(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments,
+                ProtosReturnHome returnHome,
+                boolean ownsReturnHome,
+                int suppliedArgumentCount) {
+            return new OrdinarySourceCall(
+                    bodyTarget,
+                    compactTargetArguments,
+                    returnHome,
+                    ownsReturnHome,
+                    suppliedArgumentCount);
+        }
+
         static PreparedClosureCall nativeCall(
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
@@ -2382,6 +2489,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
                             ProtosFrameArguments.compactSuppliedArgumentCount(
                                     compactTargetArguments));
+            this.activation = null;
+            this.targetArguments = compactTargetArguments;
+        }
+
+        /** PERF038-D: see {@link PreparedClosureCall#ordinaryCompactPrepared}. */
+        OrdinarySourceCall(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments,
+                ProtosReturnHome returnHome,
+                boolean ownsReturnHome,
+                int suppliedArgumentCount) {
+            super(returnHome, ownsReturnHome);
+            this.bodyTarget =
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            bodyTarget, suppliedArgumentCount);
             this.activation = null;
             this.targetArguments = compactTargetArguments;
         }
@@ -8193,11 +8315,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation
     public static final class PrepareSendArguments {
+        /**
+         * {@code sharedInvocationHome} (PERF038-D) is the return home every
+         * invocation of {@code closure} uses when it is shared, i.e. the
+         * Closure's captured home or the unobservable marker of a plan proven
+         * return-home-unobservable; {@code null} when each invocation owns a
+         * fresh home. The Closure's captured home is final and its execution
+         * plan, once present, is never replaced, so a decision taken at
+         * specialization stays exactly {@link
+         * ProtosClosureValue#invocationReturnHomeForRuntime}'s for this Closure.
+         */
         public record GuardedSendTarget(
                 ProtosClosureValue closure,
                 ProtosObjectValue methodHome,
                 RootCallTarget target,
-                Assumption stability) {}
+                Assumption stability,
+                ProtosReturnHome sharedInvocationHome) {}
 
         /**
          * I072 Phase E structured kinds admitted by {@link #guardedStructuredSend}.
@@ -8402,16 +8535,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
                         GuardedSendTarget cachedSend) {
+            /*
+             * PERF038-D: the selected Closure, method home, target and shared
+             * return home are the specialization's constants; the frame
+             * arguments are built right here, so the carrier takes their
+             * header values directly instead of re-validating the array.
+             */
+            ProtosClosureValue closure = cachedSend.closure();
+            ProtosReturnHome returnHome = cachedSend.sharedInvocationHome();
+            if (returnHome == null) {
+                returnHome = closure.invocationReturnHomeForRuntime();
+            }
             Object[] frameArguments =
                     ProtosFrameArguments.compactImmediateMethodCall(
-                            cachedSend.closure(),
+                            closure,
                             receiver,
                             cachedSend.methodHome(),
                             caller,
+                            returnHome,
                             supplied);
-            return PreparedClosureCall.ordinaryCompact(
+            return PreparedClosureCall.ordinaryCompactPrepared(
                     cachedSend.target(),
-                    frameArguments);
+                    frameArguments,
+                    returnHome,
+                    closure.returnHome().isEmpty(),
+                    supplied.length);
         }
 
         /**
@@ -8426,6 +8574,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosLanguageContext enteredContext) {
             return createGuardedSendForPrelude(
                     receiver, selector, caller.preludeOrNullForRuntime(), enteredContext);
+        }
+
+        /** PERF038-D: see {@link GuardedSendTarget#sharedInvocationHome}. */
+        private static ProtosReturnHome sharedInvocationHomeOrNull(ProtosClosureValue closure) {
+            if (closure.returnHome().isPresent()) {
+                return closure.returnHome().orElseThrow();
+            }
+            ProtosReturnHome home = closure.invocationReturnHomeForRuntime();
+            return home == ProtosReturnHome.unobservable() ? home : null;
         }
 
         static GuardedSendTarget createGuardedSendForPrelude(
@@ -8459,7 +8616,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return null;
             }
             return new GuardedSendTarget(
-                    closure, lookup.selected().home(), target, lookup.stability());
+                    closure,
+                    lookup.selected().home(),
+                    target,
+                    lookup.stability(),
+                    sharedInvocationHomeOrNull(closure));
         }
 
         @Specialization(
