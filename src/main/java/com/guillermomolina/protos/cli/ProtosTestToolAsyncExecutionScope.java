@@ -27,6 +27,7 @@ import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
 import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -217,6 +218,46 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             Path resolutionRootCases,
             Path executionPlanCases,
             Path projectProjectionCases) {
+        return installWithProjectTreeAuthorities(
+                activation,
+                runtimeHost,
+                core,
+                logicalCaseFallbackResolver,
+                actorLogicalCaseFallbackResolver,
+                groupLogicalCaseFallbackResolver,
+                packageLogicalCaseFallbackResolver,
+                logicalCaseSourceRoots,
+                actorPrelude,
+                groupPrelude,
+                packagePrelude,
+                contentIdentityCases,
+                resolutionInputLockCases,
+                resolutionRootCases,
+                executionPlanCases,
+                projectProjectionCases,
+                System.err);
+    }
+
+    /** BUG021: {@code discoveryDiagnostics} receives logical Case discovery failure reports. */
+    static ProtosTestToolAsyncExecutionScope installWithProjectTreeAuthorities(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            Path core,
+            ProtosModuleResolver logicalCaseFallbackResolver,
+            ProtosModuleResolver actorLogicalCaseFallbackResolver,
+            ProtosModuleResolver groupLogicalCaseFallbackResolver,
+            ProtosModuleResolver packageLogicalCaseFallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    logicalCaseSourceRoots,
+            ProtosPrelude actorPrelude,
+            ProtosPrelude groupPrelude,
+            ProtosPrelude packagePrelude,
+            Path contentIdentityCases,
+            Path resolutionInputLockCases,
+            Path resolutionRootCases,
+            Path executionPlanCases,
+            Path projectProjectionCases,
+            PrintStream discoveryDiagnostics) {
         ProtosTestToolAsyncExecutionScope scope =
                 install(
                         activation,
@@ -230,7 +271,8 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                     activation,
                     core,
                     logicalCaseFallbackResolver,
-                    logicalCaseSourceRoots);
+                    logicalCaseSourceRoots,
+                    discoveryDiagnostics);
 
             scope.logicalCaseExecutionFacility =
                     ProtosTestLogicalCaseExecutionFacility.install(

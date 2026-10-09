@@ -18,14 +18,19 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -179,5 +184,147 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
         assertSame(
                 ProtosBooleanValue.TRUE,
                 outcome.value());
+    }
+
+    @Test
+    void hostErrorDuringDiscoveryFailsCallerWithSourceDiagnostic(
+            @TempDir Path root)
+            throws Exception {
+        ProtosModuleResolver bundled = bundledResolver();
+        // BUG021: stands in for a Native Image host Error (for example
+        // MissingReflectionRegistrationError) raised while a suite declaration loads.
+        ProtosModuleResolver failing =
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String exactSpecifier,
+                            Optional<ProtosModuleKey> importingModule)
+                            throws Exception {
+                        if (exactSpecifier.equals("bug021:linkage")) {
+                            throw new LinkageError("BUG021 simulated discovery failure");
+                        }
+                        return bundled.resolve(exactSpecifier, importingModule);
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key)
+                            throws Exception {
+                        return bundled.loadSource(key);
+                    }
+                };
+
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        ProtosExecutionOutcome outcome =
+                discover(
+                        root,
+                        bundled,
+                        failing,
+                        diagnostics,
+                        """
+                        Broken: import("bug021:linkage")
+
+                        tests: Array()
+                        """);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                outcome.state());
+        String report = diagnostics.toString(StandardCharsets.UTF_8);
+        assertTrue(
+                report.contains(
+                        "Test tool discovery error: test-corpus:suite.protos: "
+                                + "java.lang.LinkageError: BUG021 simulated discovery failure"),
+                report);
+    }
+
+    @Test
+    void signalledDiscoveryFailureNamesSource(
+            @TempDir Path root)
+            throws Exception {
+        ProtosModuleResolver bundled = bundledResolver();
+        ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
+        ProtosExecutionOutcome outcome =
+                discover(
+                        root,
+                        bundled,
+                        bundled,
+                        diagnostics,
+                        """
+                        notTests: Array()
+                        """);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                outcome.state());
+        String report = diagnostics.toString(StandardCharsets.UTF_8);
+        assertTrue(
+                report.contains(
+                        "Test tool discovery error: test-corpus:suite.protos: "
+                                + "Error signalled while discovering Test declarations"),
+                report);
+    }
+
+    private static ProtosModuleResolver bundledResolver() {
+        return new ProtosBundledToolModuleResolver(
+                "test",
+                TOOL_ROOT,
+                SHARED_ROOT,
+                new ProtosStandardLibraryModuleResolver(
+                        STANDARD_LIBRARY));
+    }
+
+    private static ProtosExecutionOutcome discover(
+            Path root,
+            ProtosModuleResolver toolResolver,
+            ProtosModuleResolver discoveryFallback,
+            ByteArrayOutputStream diagnostics,
+            String suiteSource)
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                toolResolver);
+        var activation =
+                prelude.newModuleActivation();
+
+        Files.writeString(
+                root.resolve("suite.protos"),
+                suiteSource,
+                StandardCharsets.UTF_8);
+
+        ProtosTestLogicalCaseDiscoveryFacility.install(
+                activation,
+                CORE,
+                discoveryFallback,
+                List.of(
+                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                "test-corpus",
+                                root)),
+                new PrintStream(diagnostics, true, StandardCharsets.UTF_8));
+
+        activation.context()
+                .createLocalSlot(
+                        "sourceAssociation",
+                        prelude.newFrozenArray(
+                                List.of(
+                                        new ProtosStringValue(
+                                                "test-corpus"),
+                                        new ProtosStringValue(
+                                                "suite.protos"))));
+        activation.context()
+                .createLocalSlot(
+                        "suiteSource",
+                        new ProtosStringValue(
+                                suiteSource));
+
+        return ProtosTestExecutionSupport.execute(
+                """
+                logicalCaseDiscovery(
+                    sourceAssociation,
+                    suiteSource
+                )
+                """,
+                activation);
     }
 }

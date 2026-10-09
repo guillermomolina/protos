@@ -29,6 +29,7 @@ import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PrintStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,10 +55,30 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                     sourceRoots) {
         install(
                 activation,
+                core,
+                fallbackResolver,
+                sourceRoots,
+                System.err);
+    }
+
+    /**
+     * Production installation. BUG021: every discovery failure is reported on {@code diagnostics}
+     * with the failing source and its cause before it fails the calling Test Tool execution.
+     */
+    public static void install(
+            ProtosActivation activation,
+            Path core,
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
+            PrintStream diagnostics) {
+        install(
+                activation,
                 BOOTSTRAP_SLOT,
                 core,
                 fallbackResolver,
-                sourceRoots);
+                sourceRoots,
+                diagnostics);
     }
 
     static void install(
@@ -66,9 +87,11 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
             Path core,
             ProtosModuleResolver fallbackResolver,
             List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
-                    sourceRoots) {
+                    sourceRoots,
+            PrintStream diagnostics) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
+        Objects.requireNonNull(diagnostics, "diagnostics");
         Objects.requireNonNull(core, "core");
         Objects.requireNonNull(fallbackResolver, "fallbackResolver");
         List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
@@ -99,7 +122,8 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                                                 arguments,
                                                 core,
                                                 fallbackResolver,
-                                                immutableSourceRoots)));
+                                                immutableSourceRoots,
+                                                diagnostics)));
     }
 
     private static Object execute(
@@ -108,7 +132,8 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
             Path core,
             ProtosModuleResolver fallbackResolver,
             List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
-                    sourceRoots) {
+                    sourceRoots,
+            PrintStream diagnostics) {
         if (arguments.size() != 2
                 || !(arguments.get(0)
                         instanceof ProtosArrayValue sourceAssociation)
@@ -145,6 +170,68 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
             projectTreeDescriptor = descriptor;
         }
 
+        /*
+         * BUG021: a host exception or Error (for example a Native Image reflection or resource
+         * failure) must not escape this boundary. Escaping would leave the calling Test Tool root
+         * task non-terminal, so Process termination would wait for it indefinitely. Every
+         * discovery failure is reported with its source and fails the caller as an ordinary Error.
+         */
+        try {
+            return discover(
+                    caller,
+                    corpusId,
+                    sourcePath,
+                    source,
+                    projectTreeDescriptor,
+                    core,
+                    fallbackResolver,
+                    sourceRoots);
+        } catch (ProtosTaskCancellationException cancelled) {
+            throw cancelled;
+        } catch (ProtosSignalException signalled) {
+            reportDiscoveryFailure(
+                    diagnostics,
+                    corpusId,
+                    sourcePath,
+                    "Error signalled while discovering Test declarations");
+            throw signalled;
+        } catch (RuntimeException | Error hostFailure) {
+            String message = hostFailure.getMessage();
+            reportDiscoveryFailure(
+                    diagnostics,
+                    corpusId,
+                    sourcePath,
+                    hostFailure.getClass().getName()
+                            + (message == null ? "" : ": " + message));
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+    }
+
+    private static void reportDiscoveryFailure(
+            PrintStream diagnostics,
+            ProtosStringValue corpusId,
+            ProtosStringValue sourcePath,
+            String cause) {
+        diagnostics.println(
+                "Test tool discovery error: "
+                        + corpusId.value()
+                        + ":"
+                        + sourcePath.value()
+                        + ": "
+                        + cause);
+        diagnostics.flush();
+    }
+
+    private static Object discover(
+            ProtosActivation caller,
+            ProtosStringValue corpusId,
+            ProtosStringValue sourcePath,
+            ProtosStringValue source,
+            ProtosArrayValue projectTreeDescriptor,
+            Path core,
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots) {
         final Path physicalPath;
         try {
             physicalPath =

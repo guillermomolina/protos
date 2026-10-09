@@ -27,10 +27,13 @@ from pathlib import Path
 import pty
 import re
 import select
+import selectors
 import shutil
+import signal
 import socket
 import struct
 import subprocess
+import sys
 import tempfile
 import termios
 import time
@@ -491,6 +494,131 @@ def terminate_process(process: subprocess.Popen) -> None:
     except subprocess.TimeoutExpired:
         process.kill()
         process.wait()
+
+
+# BUG021: supervised execution of a long-running child. Both output streams are
+# forwarded to the echo sink as soon as the child writes them, so progress is
+# visible while the child is still running, and are retained in full for
+# admission checks and failure diagnostics. The retained transcript is bounded.
+SUPERVISED_TRANSCRIPT_LIMIT_BYTES = 64 * 1024 * 1024
+
+
+class SupervisedResult:
+    def __init__(
+        self,
+        *,
+        pid: int,
+        returncode: int,
+        stdout: str,
+        stderr: str,
+        timed_out: bool,
+        truncated: bool,
+    ) -> None:
+        self.pid = pid
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.timed_out = timed_out
+        self.truncated = truncated
+
+    def termination(self) -> str:
+        if self.timed_out:
+            return "timeout"
+
+        if self.truncated:
+            return "transcript-limit"
+
+        if self.returncode < 0:
+            try:
+                return "signal:" + signal.Signals(-self.returncode).name
+            except ValueError:
+                return "signal:" + str(-self.returncode)
+
+        return "exit"
+
+
+def run_supervised(
+    command: list[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    echo=None,
+    timeout: float | None = None,
+    transcript_limit: int = SUPERVISED_TRANSCRIPT_LIMIT_BYTES,
+) -> SupervisedResult:
+    if echo is None:
+        echo = sys.stderr.buffer
+
+    process = subprocess.Popen(
+        command,
+        cwd=cwd,
+        env=env,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    captured = {
+        process.stdout: bytearray(),
+        process.stderr: bytearray(),
+    }
+    retained = 0
+    timed_out = False
+    truncated = False
+    deadline = None if timeout is None else time.monotonic() + timeout
+
+    selector = selectors.DefaultSelector()
+
+    try:
+        for stream in captured:
+            selector.register(stream, selectors.EVENT_READ)
+
+        while selector.get_map():
+            wait = None
+            if deadline is not None:
+                wait = deadline - time.monotonic()
+                if wait <= 0:
+                    timed_out = True
+                    break
+
+            for key, _ in selector.select(wait):
+                chunk = os.read(key.fd, 65536)
+
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    continue
+
+                echo.write(chunk)
+                echo.flush()
+
+                retained += len(chunk)
+                if retained > transcript_limit:
+                    truncated = True
+                    break
+
+                captured[key.fileobj].extend(chunk)
+
+            if truncated:
+                break
+
+        if timed_out or truncated:
+            terminate_process(process)
+        else:
+            process.wait()
+    finally:
+        selector.close()
+        terminate_process(process)
+        process.stdout.close()
+        process.stderr.close()
+
+    return SupervisedResult(
+        pid=process.pid,
+        returncode=process.returncode,
+        stdout=captured[process.stdout].decode("utf-8", errors="replace"),
+        stderr=captured[process.stderr].decode("utf-8", errors="replace"),
+        timed_out=timed_out,
+        truncated=truncated,
+    )
 
 
 def write_framed_json(stream, payload: dict) -> None:
@@ -1472,6 +1600,7 @@ def validate_full_test_tool(
     *,
     cwd: Path,
     env: dict[str, str],
+    echo=None,
 ) -> None:
     test_env = env.copy()
     test_env["PROTOS_HOME"] = str(dist)
@@ -1484,7 +1613,9 @@ def validate_full_test_tool(
     jobs = max(1, jobs)
     started = time.monotonic()
 
-    result = subprocess.run(
+    # BUG021: progress streams while the complete suite runs. No timeout is
+    # imposed: a slow but progressing suite is a valid admission.
+    result = run_supervised(
         [
             str(native),
             "test",
@@ -1493,9 +1624,7 @@ def validate_full_test_tool(
         ],
         cwd=cwd,
         env=test_env,
-        text=True,
-        capture_output=True,
-        check=False,
+        echo=echo,
     )
 
     elapsed = time.monotonic() - started
@@ -1516,6 +1645,7 @@ def validate_full_test_tool(
 
     print("NATIVE_DIST_FULL_TEST_TOOL_JOBS=" + str(jobs))
     print("NATIVE_DIST_FULL_TEST_TOOL_STATUS=" + str(result.returncode))
+    print("NATIVE_DIST_FULL_TEST_TOOL_TERMINATION=" + result.termination())
     print(
         "NATIVE_DIST_FULL_TEST_TOOL_SECONDS="
         + f"{elapsed:.2f}"
@@ -1545,6 +1675,7 @@ def validate_full_test_tool(
 
     if not (
         result.returncode == 0
+        and result.termination() == "exit"
         and passed is not None
         and failed_count is not None
         and int(passed) > 0
@@ -1555,6 +1686,9 @@ def validate_full_test_tool(
     ):
         fail(
             "complete extracted Native Test Tool admission failed"
+            + " (termination "
+            + result.termination()
+            + ")"
             + "\nstdout:\n"
             + result.stdout
             + "\nstderr:\n"

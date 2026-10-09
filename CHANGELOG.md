@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.317-SNAPSHOT
+
+- `BUG021-A` (#859): Native Test Tool progress and discovery failures.
+  - Logical Case discovery no longer lets a host exception or Error (for
+    example a Native Image reflection or resource failure) escape into the
+    Test Tool root task, which previously left that task non-terminal and
+    made Process termination wait indefinitely. Every discovery failure is
+    reported on Test Tool stderr as
+    `Test tool discovery error: <corpus>:<source>: <cause>` and the Tool
+    exits non-zero. Successful discovery is unchanged.
+  - `dist/validate_native.py` runs the complete Native Test Tool under a
+    supervised runner that streams its output live while retaining the
+    bounded transcript, distinguishes exit, signal, timeout and transcript
+    limit (`NATIVE_DIST_FULL_TEST_TOOL_TERMINATION`), and imposes no
+    timeout on the admission run.
+
 ## 0.3.316-SNAPSHOT
 
 - `PERF037-C` (#851): residual captured-lexical graph overhead.

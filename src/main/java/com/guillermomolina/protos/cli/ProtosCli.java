@@ -889,7 +889,8 @@ public final class ProtosCli {
                                         packageToolResolutionInputLockRoot.resolve("cases"),
                                         packageToolResolutionRootRoot.resolve("cases"),
                                         packageToolExecutionPlanRoot.resolve("cases"),
-                                        packageToolProjectProjectionRoot.resolve("cases"));
+                                        packageToolProjectProjectionRoot.resolve("cases"),
+                                        err);
                         boolean provisioned = false;
                         try {
                             installBundledToolFilesystem(
