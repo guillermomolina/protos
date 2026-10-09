@@ -446,6 +446,26 @@ final class ProtosFrameArguments {
         return arguments[USER_ARGUMENT_OFFSET + index];
     }
 
+    /**
+     * PERF038-F: exactly {@code index < compactSuppliedArgumentCount(arguments)}
+     * for a non-negative {@code index}, without the layout branch: a minimal
+     * header is shorter than {@code USER_ARGUMENT_OFFSET}, so it never
+     * satisfies the length test, exactly as its zero supplied count would not.
+     */
+    static boolean compactHasSuppliedArgument(Object[] arguments, int index) {
+        return arguments.length > USER_ARGUMENT_OFFSET + index;
+    }
+
+    /**
+     * PERF038-F: exactly {@code compactSuppliedArgumentCount(arguments) <=
+     * maximum} for a non-negative {@code maximum}, without the layout branch:
+     * every minimal header is shorter than {@code USER_ARGUMENT_OFFSET} and
+     * therefore satisfies the length bound, as its zero supplied count does.
+     */
+    static boolean compactSuppliedArgumentCountAtMost(Object[] arguments, int maximum) {
+        return arguments.length <= USER_ARGUMENT_OFFSET + maximum;
+    }
+
     /** Supplied positional argument {@code index} of a compact source call. */
     static Object compactSuppliedArgument(Object[] arguments, int index) {
         if (arguments.length < USER_ARGUMENT_OFFSET) {
@@ -523,6 +543,43 @@ final class ProtosFrameArguments {
             return callerIfPreludeInherited(closure, caller);
         }
         return compactInheritedProvenanceCaller(arguments);
+    }
+
+    /**
+     * PERF038-F: true when the still-unmaterialized frame arguments of an
+     * admitted Closure root (the {@link #isUnmaterializedCompactCall}
+     * precondition) carry a full compact header whose callee inherits its
+     * Task or dynamic-control state from the caller: an immediate method call,
+     * or a direct Closure call without an explicit Task. Minimal headers are
+     * excluded; they take {@link #unmaterializedInheritedProvenanceCaller}.
+     * Together with {@link #unmaterializedFullHeaderOwnPrelude} {@code ==}
+     * the caller's prelude, this is exactly the non-null case of {@link
+     * #unmaterializedInheritedProvenanceCaller} for a full header, decided
+     * without re-deriving the ABI.
+     */
+    static boolean isUnmaterializedInheritingFullHeader(Object[] arguments) {
+        return arguments.length >= USER_ARGUMENT_OFFSET
+                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
+                && (arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
+                        || arguments[TASK_INDEX] == null);
+    }
+
+    /**
+     * PERF038-F: the caller slot of a full compact header. Precondition:
+     * {@link #isUnmaterializedInheritingFullHeader}; every such header was
+     * built by {@link #compactCall} or the guarded immediate-method form with
+     * a non-null caller activation, and that slot is never rewritten.
+     */
+    static ProtosActivation unmaterializedFullHeaderCaller(Object[] arguments) {
+        return (ProtosActivation) arguments[CALLER_INDEX];
+    }
+
+    /**
+     * PERF038-F: the invoked Closure's own (final) prelude, or {@code null}.
+     * Precondition: {@link #isUnmaterializedInheritingFullHeader}.
+     */
+    static ProtosPrelude unmaterializedFullHeaderOwnPrelude(Object[] arguments) {
+        return ((ProtosClosureValue) arguments[CLOSURE_INDEX]).preludeOrNullForRuntime();
     }
 
     static ProtosReturnHome compactReturnHome(Object[] arguments) {

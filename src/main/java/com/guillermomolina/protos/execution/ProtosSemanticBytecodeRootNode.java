@@ -367,8 +367,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class HasFrameClosureArgument {
         @Specialization(guards = "isCompact(frame)")
         public static boolean compact(int positionalIndex, @Bind VirtualFrame frame) {
-            return ProtosFrameArguments.compactSuppliedArgumentCount(frame.getArguments())
-                    > positionalIndex;
+            /* PERF038-F: the supplied-count comparison without the layout branch. */
+            return ProtosFrameArguments.compactHasSuppliedArgument(
+                    frame.getArguments(), positionalIndex);
         }
 
         @Specialization(guards = "!isCompact(frame)")
@@ -402,8 +403,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         static boolean isCompactSupplied(int positionalIndex, VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && positionalIndex
-                            < ProtosFrameArguments.compactSuppliedArgumentCount(arguments);
+                    && ProtosFrameArguments.compactHasSuppliedArgument(
+                            arguments, positionalIndex);
         }
     }
 
@@ -429,8 +430,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         static boolean isCompactWithin(int maximumPositionalArguments, VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
-                            <= maximumPositionalArguments;
+                    && ProtosFrameArguments.compactSuppliedArgumentCountAtMost(
+                            arguments, maximumPositionalArguments);
         }
     }
 
@@ -3179,9 +3180,86 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     cachedReceiver, cachedSelector, cachedContext, cachedSend);
         }
 
+        /*
+         * PERF038-F: the inherited form is split by the provenance relation
+         * the site has observed, each decided by fixed full-header slots
+         * instead of re-deriving the ABI and merging the alternatives:
+         *
+         *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
+         *                                 no prelude of its own;
+         *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
+         *                                 is its caller's;
+         *   guardedOrdinarySendInherited  a minimal direct header, decided by
+         *                                 the general provenance query.
+         *
+         * A Closure with a different prelude or an explicit Task satisfies
+         * none of the inherited guards and takes the materializing form, as
+         * before. The guards are re-evaluated on every execution.
+         */
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeAbsent(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedOwnPreludeAbsent(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
+                    receiver, selector, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller),
+                    supplied, enteredContext, cachedReceiver, cachedSelector, cachedContext,
+                    cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeIsCallers(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedSamePrelude(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
+                    receiver, selector, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller),
+                    supplied, enteredContext, cachedReceiver, cachedSelector, cachedContext,
+                    cachedSend);
+        }
+
         @Specialization(
                 guards = {
                     "inherited != null",
+                    "!isInheritingFullHeader(caller)",
                     "receiver == cachedReceiver",
                     "selector.equals(cachedSelector)",
                     "enteredContext != null",
@@ -3303,6 +3381,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 replaces = {
                     "guardedIntegerSend",
                     "guardedOrdinarySend",
+                    "guardedOrdinarySendInheritedOwnPreludeAbsent",
+                    "guardedOrdinarySendInheritedSamePrelude",
                     "guardedOrdinarySendInherited",
                     "guardedOrdinarySendMaterializing",
                     "fastOrdinarySend",
@@ -3380,6 +3460,33 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return null;
             }
             return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
+        }
+
+        /**
+         * PERF038-F: {@link ProtosFrameArguments#isUnmaterializedInheritingFullHeader}
+         * of a compact caller operand, re-evaluated on every execution because
+         * the root may be published between executions.
+         */
+        @NonIdempotent
+        static boolean isInheritingFullHeader(Object[] caller) {
+            return ProtosFrameArguments.isUnmaterializedInheritingFullHeader(caller);
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeAbsent(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller) == null;
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeIsCallers(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller)
+                    == ProtosFrameArguments.unmaterializedFullHeaderCaller(caller)
+                            .preludeOrNullForRuntime();
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static ProtosActivation fullHeaderCaller(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderCaller(caller);
         }
 
         static GuardedSendTarget createGuardedSend(
@@ -4096,9 +4203,37 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class IsContinuation {
-        @Specialization
+        /*
+         * PERF038-F: an ordinary call site observes a small, stable set of
+         * result classes, none of them a continuation. Profiling the exact
+         * result class replaces the four suspension type tests of every
+         * ordinary result with one class comparison; the answer is decided
+         * once per class from the same type tests, so continuation results
+         * keep their resumption path unchanged. A site seeing more classes
+         * than the limit (and the uncached interpreter) takes the generic
+         * form.
+         */
+        @Specialization(
+                guards = {"value != null", "value.getClass() == cachedClass"},
+                limit = "3")
+        public static boolean classProfiled(
+                Object value,
+                @Cached("value.getClass()") Class<?> cachedClass,
+                @Cached("isContinuationClass(cachedClass)") boolean continuation) {
+            return continuation;
+        }
+
+        @Specialization(replaces = "classProfiled")
         public static boolean perform(Object value) {
             return ProtosBytecodeRootNode.IsContinuation.perform(value);
+        }
+
+        /** Exactly {@link ProtosBytecodeRootNode.IsContinuation#perform} for every instance of {@code type}. */
+        static boolean isContinuationClass(Class<?> type) {
+            return ContinuationResult.class.isAssignableFrom(type)
+                    || ProtosNativeSuspension.class.isAssignableFrom(type)
+                    || ProtosIoOperationSuspension.class.isAssignableFrom(type)
+                    || ProtosIoReleaseSuspension.class.isAssignableFrom(type);
         }
     }
 

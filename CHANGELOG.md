@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.322-SNAPSHOT
+
+- `PERF038-F` (#852): residual primitive-method-call path.
+  - The inherited-provenance guarded send is split by the observed prelude
+    relation (the root Closure has no prelude of its own, or has its
+    caller's), decided by fixed full-header slots and passing the caller
+    slot directly; minimal headers keep the general provenance query, and
+    a different prelude or an explicit Task still materializes.
+  - Root-level argument presence, argument reads and the upper arity bound
+    of a compact frame are decided by the frame-argument length alone,
+    without the minimal-layout branch; arity Errors keep the unchanged
+    activation path.
+  - `IsContinuation` profiles the exact result class (limit 3), replacing
+    the suspension type tests of an ordinary result with one class
+    comparison; the generic form and every resumption path are unchanged.
+    The generated-bytecode BCI baseline records the new instruction length.
+
 ## 0.3.321-SNAPSHOT
 
 - `PERF037-D` (#851): owner-absence specialization and presence continuity
