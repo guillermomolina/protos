@@ -45,6 +45,7 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
@@ -165,6 +166,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      */
     @CompilationFinal private RootCallTarget arityRejectionTarget;
 
+    /* PERF038-C: set once, when the first guest exception crosses this root. */
+    @CompilationFinal private boolean guestExceptionCrossed;
+
     final void attachArityRejectionTarget(RootCallTarget target) {
         if (arityRejectionTarget != null) {
             throw new IllegalStateException("arity-rejection target already attached");
@@ -239,6 +243,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
         /*
+         * PERF038-C: a root no guest exception has crossed yet compiles this
+         * interception as a deoptimization; the first crossing invalidates
+         * that code once and every crossing then runs the unchanged work.
+         */
+        if (!guestExceptionCrossed) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            guestExceptionCrossed = true;
+        }
+        /*
          * CLI008-C1: Protos exceptions carry no location node, so the guest stack trace has no
          * bytecode index for the frame they are raised in. Record the first semantic crossing on
          * the occurrence itself; this runs only while an exception is already unwinding.
@@ -260,9 +273,26 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      */
     @Operation
     public static final class CurrentActivation {
-        @Specialization
-        public static ProtosActivation perform(@Bind VirtualFrame frame) {
+        /*
+         * PERF038-C: the already-published activation and the first
+         * materialization are separate specializations, so a site that has
+         * only ever seen one state compiles no path for the other. The guard
+         * is re-evaluated on every execution; both specializations return
+         * exactly what ProtosFrameArguments.activation returns.
+         */
+        @Specialization(guards = "hasPublishedActivation(frame)")
+        public static ProtosActivation published(@Bind VirtualFrame frame) {
+            return ProtosFrameArguments.publishedActivation(frame.getArguments());
+        }
+
+        @Specialization(guards = "!hasPublishedActivation(frame)")
+        public static ProtosActivation materialize(@Bind VirtualFrame frame) {
             return ProtosFrameArguments.activation(frame);
+        }
+
+        @NonIdempotent
+        static boolean hasPublishedActivation(VirtualFrame frame) {
+            return ProtosFrameArguments.hasPublishedActivation(frame.getArguments());
         }
     }
 
@@ -292,51 +322,83 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * supplied positional values are read directly from the frame arguments;
      * an arity Error, like every other path, materializes the exact activation
      * first and takes the unchanged activation implementation.
+     *
+     * PERF038-C: each operation's compact path and its activation path are
+     * separate specializations (the PERF038-B BindClosureFrameParameter
+     * shape). A site that has only ever run in compact frames within its
+     * arity compiles the frame-argument read alone; the materialization, the
+     * activation implementation and the arity Error are reached only through
+     * the respecializing fallback. The guards are re-evaluated on every
+     * execution and are exact complements of the former in-line conditions.
      */
 
     @Operation
     public static final class HasFrameClosureArgument {
-        @Specialization
-        public static boolean perform(int positionalIndex, @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
-                return ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
-                        > positionalIndex;
-            }
+        @Specialization(guards = "isCompact(frame)")
+        public static boolean compact(int positionalIndex, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.compactSuppliedArgumentCount(frame.getArguments())
+                    > positionalIndex;
+        }
+
+        @Specialization(guards = "!isCompact(frame)")
+        public static boolean materialized(int positionalIndex, @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.HasClosureArgument.perform(
-                    ProtosFrameArguments.activation(arguments), positionalIndex);
+                    ProtosFrameArguments.activation(frame.getArguments()), positionalIndex);
+        }
+
+        @NonIdempotent
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
     }
 
     @Operation
     public static final class LoadFrameClosureArgument {
-        @Specialization
-        public static Object perform(int positionalIndex, @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && positionalIndex
-                            < ProtosFrameArguments.compactSuppliedArgumentCount(arguments)) {
-                return ProtosFrameArguments.compactSuppliedArgument(arguments, positionalIndex);
-            }
+        @Specialization(guards = "isCompactSupplied(positionalIndex, frame)")
+        public static Object compact(int positionalIndex, @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.compactSuppliedArgument(
+                    frame.getArguments(), positionalIndex);
+        }
+
+        @Specialization(guards = "!isCompactSupplied(positionalIndex, frame)")
+        public static Object materialized(int positionalIndex, @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.LoadClosureArgument.perform(
-                    ProtosFrameArguments.activation(arguments), positionalIndex);
+                    ProtosFrameArguments.activation(frame.getArguments()), positionalIndex);
+        }
+
+        @NonIdempotent
+        static boolean isCompactSupplied(int positionalIndex, VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && positionalIndex
+                            < ProtosFrameArguments.compactSuppliedArgumentCount(arguments);
         }
     }
 
     @Operation
     public static final class CheckFrameClosureArgumentUpperBound {
-        @Specialization
-        public static void perform(
+        @Specialization(guards = "isCompactWithin(maximumPositionalArguments, frame)")
+        public static void compact(
                 int maximumPositionalArguments,
                 @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
-                            <= maximumPositionalArguments) {
-                return;
-            }
+            // The compact supplied count is already within the bound.
+        }
+
+        @Specialization(guards = "!isCompactWithin(maximumPositionalArguments, frame)")
+        public static void materialized(
+                int maximumPositionalArguments,
+                @Bind VirtualFrame frame) {
             ProtosBytecodeRootNode.CheckClosureArgumentUpperBound.perform(
-                    ProtosFrameArguments.activation(arguments), maximumPositionalArguments);
+                    ProtosFrameArguments.activation(frame.getArguments()),
+                    maximumPositionalArguments);
+        }
+
+        @NonIdempotent
+        static boolean isCompactWithin(int maximumPositionalArguments, VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
+                            <= maximumPositionalArguments;
         }
     }
 
@@ -879,26 +941,42 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
     @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
     public static final class ReadRootFrameLocal {
-        @Specialization
-        public static Object perform(
+        /*
+         * The lowerer emitted this operation only for a current Resolved
+         * binding. While the call is still compact its guest Context has
+         * never become observable, so no D179 structural removal could have
+         * made that established binding ABSENT.
+         *
+         * PERF038-C: the compact read and the presence-aware fallback are
+         * separate specializations, so a site that has only read compact
+         * frames compiles no fallback call; the guard is re-evaluated on
+         * every execution.
+         */
+        @Specialization(guards = "isCompact(frame)")
+        public static Object compact(
                 LocalAccessor accessor,
                 Assumption presenceContinuity,
                 String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
-                /*
-                 * The lowerer emitted this operation only for a current
-                 * Resolved binding. While the call is still compact its guest
-                 * Context has never become observable, so no D179 structural
-                 * removal could have made that established binding ABSENT.
-                 */
-                return accessor.getObject(bytecodeNode, frame);
-            }
+            return accessor.getObject(bytecodeNode, frame);
+        }
+
+        @Specialization(guards = "!isCompact(frame)")
+        public static Object materialized(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return slowRead(
-                    accessor, presenceContinuity, arguments,
+                    accessor, presenceContinuity, frame.getArguments(),
                     name, bytecodeNode, frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
 
         /**
@@ -973,62 +1051,94 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ReadCapturedFrameLocalAtRoot {
-        @Specialization
-        public static Object perform(
+        /*
+         * PERF038-C: compact and materialized frames are separate
+         * specializations (guard re-evaluated on every execution), and the
+         * compact miss materializes and looks up behind one boundary instead
+         * of two, so a compact-only site compiles no activation path.
+         */
+        @Specialization(guards = "isCompact(frame)")
+        public static Object compact(
                 int frameOrdinal,
                 String name,
                 int lexicalDepth,
                 @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
-                if (lexicalDepth > 0) {
-                    Object value =
-                            ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
-                                    ProtosFrameArguments.compactCapturedLexicalEnvironment(
-                                            arguments),
-                                    name,
-                                    lexicalDepth,
-                                    frameOrdinal);
-                    if (value != null) {
-                        return value;
-                    }
+            if (lexicalDepth > 0) {
+                Object value =
+                        ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
+                                ProtosFrameArguments.compactCapturedLexicalEnvironment(
+                                        arguments),
+                                name,
+                                lexicalDepth,
+                                frameOrdinal);
+                if (value != null) {
+                    return value;
                 }
-                return ProtosBytecodeRootNode.lookupCapturedFallback(
-                        ProtosFrameArguments.activation(arguments), name);
             }
+            return lookupCapturedFallbackAtRoot(arguments, name);
+        }
+
+        @Specialization(guards = "!isCompact(frame)")
+        public static Object materialized(
+                int frameOrdinal,
+                String name,
+                int lexicalDepth,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
-                    frameOrdinal, ProtosFrameArguments.activation(arguments), name, lexicalDepth);
+                    frameOrdinal,
+                    ProtosFrameArguments.activation(frame.getArguments()),
+                    name,
+                    lexicalDepth);
+        }
+
+        @NonIdempotent
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
     }
 
     @Operation
     @ConstantOperand(type = MaterializedLocalAccessor.class)
     public static final class SelectCapturedMaterializedOwnerFrameAtRoot {
-        @Specialization
-        public static MaterializedFrame perform(
+        /* PERF038-C: compact and materialized frames specialize separately. */
+        @Specialization(guards = "isCompact(frame)")
+        public static MaterializedFrame compact(
                 MaterializedLocalAccessor accessor,
                 String name,
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
-                if (lexicalDepth > 0) {
-                    return ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
-                            accessor,
-                            ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments),
-                            name,
-                            lexicalDepth,
-                            bytecodeNode);
-                }
-                return null;
+            if (lexicalDepth > 0) {
+                return ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
+                        accessor,
+                        ProtosFrameArguments.compactCapturedLexicalEnvironment(
+                                frame.getArguments()),
+                        name,
+                        lexicalDepth,
+                        bytecodeNode);
             }
+            return null;
+        }
+
+        @Specialization(guards = "!isCompact(frame)")
+        public static MaterializedFrame materialized(
+                MaterializedLocalAccessor accessor,
+                String name,
+                int lexicalDepth,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
                     accessor,
-                    ProtosFrameArguments.activation(arguments),
+                    ProtosFrameArguments.activation(frame.getArguments()),
                     name,
                     lexicalDepth,
                     bytecodeNode);
+        }
+
+        @NonIdempotent
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
     }
 
@@ -1036,9 +1146,20 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class ReadCapturedFallbackAtRoot {
         @Specialization
         public static Object perform(String name, @Bind VirtualFrame frame) {
-            return ProtosBytecodeRootNode.lookupCapturedFallback(
-                    ProtosFrameArguments.activation(frame), name);
+            return lookupCapturedFallbackAtRoot(frame.getArguments(), name);
         }
+    }
+
+    /**
+     * PERF038-C: the generic captured lookup of a root-level read, including
+     * the exact activation materialization and publication it may require,
+     * as one host call instead of a materialization call followed by a
+     * lookup call. Receives the frame-argument array, never the frame.
+     */
+    @TruffleBoundary
+    static Object lookupCapturedFallbackAtRoot(Object[] arguments, String name) {
+        return ProtosBytecodeRootNode.lookupCapturedFallback(
+                ProtosFrameArguments.activation(arguments), name);
     }
 
     @Operation

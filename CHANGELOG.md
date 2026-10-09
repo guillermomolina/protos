@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.315-SNAPSHOT
+
+- `PERF038-C` (#852): residual compact method-call graph overhead.
+  - Root-level current-activation, parameter, root-local and captured-read
+    operations split their compact path and their published-activation path
+    into separate re-evaluated specializations, so a site that only sees one
+    frame state compiles no materialization, arity-Error or lexical-authority
+    path for the other.
+  - The compact captured-read miss materializes and looks up behind one
+    boundary instead of two.
+  - Both Bytecode roots compile guest-exception interception only after a
+    guest exception has first crossed them; the first crossing deoptimizes
+    once. Observable semantics are unchanged.
+
 ## 0.3.314-SNAPSHOT
 
 - `PERF037-B` (#851): object-slot-read graph overhead.

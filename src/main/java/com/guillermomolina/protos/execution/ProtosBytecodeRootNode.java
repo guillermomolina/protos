@@ -118,12 +118,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         throw ProtosBytecodeControlTransferException.bridge(transfer);
     }
 
+    /* PERF038-C: set once, when the first guest exception crosses this root. */
+    @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+    private boolean guestExceptionCrossed;
+
     @Override
     public AbstractTruffleException interceptTruffleException(
             AbstractTruffleException exception,
             VirtualFrame frame,
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
+        /*
+         * PERF038-C: a root no guest exception has crossed yet compiles this
+         * interception as a deoptimization; the first crossing invalidates
+         * that code once and every crossing then runs the unchanged work.
+         */
+        if (!guestExceptionCrossed) {
+            com.oracle.truffle.api.CompilerDirectives.transferToInterpreterAndInvalidate();
+            guestExceptionCrossed = true;
+        }
         return interceptGuestException(exception, frame);
     }
 

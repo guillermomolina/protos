@@ -175,6 +175,23 @@ final class ProtosFrameArguments {
     }
 
     /**
+     * PERF038-C: true when argument 0 already holds the exact activation of
+     * this invocation (a rich call, or a compact call whose activation was
+     * published by {@link #materializeCompactActivation}). Exactly the first
+     * branch of {@link #activation(Object[])}, so a caller that guards on it
+     * may read {@link #publishedActivation} without the materialization path.
+     */
+    static boolean hasPublishedActivation(Object[] arguments) {
+        return arguments.length > CLOSURE_INDEX
+                && arguments[CLOSURE_INDEX] instanceof ProtosActivation;
+    }
+
+    /** The activation already published in argument 0; see {@link #hasPublishedActivation}. */
+    static ProtosActivation publishedActivation(Object[] arguments) {
+        return (ProtosActivation) arguments[CLOSURE_INDEX];
+    }
+
+    /**
      * Returns the exact activation of a target-argument array, materializing
      * and publishing it into argument 0 when it is still in compact form.
      */
