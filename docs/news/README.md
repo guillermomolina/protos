@@ -19,6 +19,12 @@ permanent news entry.
 
 ## 2026
 
+- **2026-10-09 — [Protos v0.3.312 Released — Expanded Standard Library, Java Interoperability and Native Linux](2026-10-09-protos-0-3-312.md)**
+  Protos 0.3.312 adds regular expressions, date and time, structured logging,
+  styled text, semantic versioning and `std:interop`, portable-JVM Java
+  embedding and foreign providers, expanded tooling, and a Native Linux x86_64
+  archive.
+
 - **2026-09-29 — [Protos 0.3.116: download, extract, run](2026-09-29-protos-0-3-116-download-extract-run.md)**
   Protos publishes a self-contained Native prerelease for the declared Linux
   x86_64 / glibc 2.39+ target, with the portable JVM artifact retained as the
