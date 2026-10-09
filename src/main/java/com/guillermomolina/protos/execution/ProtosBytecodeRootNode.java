@@ -1870,6 +1870,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = {
                     "name.equals(cachedName)",
                     "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedSharedInheritedPlain(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("name") String cachedName,
+                @Cached("createSharedInheritedLookup(receiver, name, activation)")
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(
+                    cachedLookup.parentSelection());
+        }
+
+        /**
+         * PERF025 ordinary exact-receiver member-read PIC. Selection is cached,
+         * never the semantically observable extracted value. In particular a
+         * selected Closure is rebound through materializeMemberRead on every
+         * hit, so CALLABLES fresh receiver-bound extraction identity remains
+         * exact.
+         */
+        @Specialization(
+                guards = {
+                    "name.equals(cachedName)",
+                    "cachedLookup != null",
                     "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
                 },
                 assumptions = "cachedLookup.stability()",
@@ -1898,6 +1928,29 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = {
                     "receiver == cachedReceiver",
                     "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedExactReceiverPlain(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("name") String cachedName,
+                @Cached("createGuardedLookup(receiver, name, activation)")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(cachedLookup);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "name.equals(cachedName)",
                     "cachedLookup != null"
                 },
                 assumptions = "cachedLookup.stability()",
@@ -1918,8 +1971,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(
                 replaces = {
-                    "guardedSharedInherited",
-                    "guardedExactReceiver"
+                    "guardedSharedInheritedPlain", "guardedSharedInherited",
+                    "guardedExactReceiverPlain", "guardedExactReceiver"
                 })
         public static Object perform(
                 ProtosActivation activation,

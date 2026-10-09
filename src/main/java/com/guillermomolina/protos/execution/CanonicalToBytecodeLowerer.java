@@ -815,28 +815,104 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(ProtosNullValue.INSTANCE);
             builder.endReturn();
         } else {
-            BytecodeLocal result =
-                    builder.createLocal("sequenceResult", null);
             java.util.List<CanonicalExpression> expressions =
                     sequence.expressions();
             CanonicalExpression last =
                     expressions.get(expressions.size() - 1);
-            if (last instanceof CanonicalLookup lookup
-                    && isScalarLocalRead(lookup)) {
+
+            boolean scalarTerminal =
+                    last instanceof CanonicalLookup lookup
+                            && isScalarLocalRead(lookup);
+            boolean directTerminal =
+                    !requiresComposedInvocation(last)
+                            && isDirectTerminalValue(last);
+
+            boolean closureTerminal =
+                    last instanceof CanonicalClosure;
+
+            if (scalarTerminal || directTerminal || closureTerminal) {
                 /*
-                 * PERF034-E: an admitted scalar root returns its final read
-                 * directly, inside that statement's own source section and
-                 * tags, instead of through the sequence result local.
+                 * PERF037-E: previous statements retain their established
+                 * lowering. Only the terminal value bypasses sequenceResult.
+                 * A single direct expression requires no result local.
                  */
-                emitStatementsToLocal(
-                        builder,
-                        expressions.subList(0, expressions.size() - 1),
-                        result);
-                beginStatement(builder, lookup);
-                emitScalarLocalRead(builder, lookup, null);
+                if (expressions.size() > 1) {
+                    java.util.List<CanonicalExpression> prefix =
+                            expressions.subList(0, expressions.size() - 1);
+
+                    emitDiscardedPrefix(builder, prefix);
+                }
+
+                /*
+                 * A nested Closure root must be registered in the shared
+                 * BytecodeRootNodes group before the Return operation opens.
+                 * The Closure value itself is still created at runtime.
+                 */
+                beginStatement(builder, last);
+                ProtosClosureExecutionPlanCell terminalClosurePlan =
+                        closureTerminal
+                                ? bytecodeClosurePlan(
+                                        builder, (CanonicalClosure) last)
+                                : null;
+                if (scalarTerminal) {
+                    // Preserve the PERF034-E compact/D179-aware selection.
+                    emitScalarLocalRead(
+                            builder, (CanonicalLookup) last, null);
+                } else if (closureTerminal) {
+                    builder.beginReturn();
+                    builder.beginMaterializeClosure();
+                    emitCurrentActivation(builder);
+                    builder.emitLoadConstant((CanonicalClosure) last);
+                    builder.emitLoadConstant(terminalClosurePlan);
+                    builder.endMaterializeClosure();
+                    builder.endReturn();
+                } else {
+                    builder.beginReturn();
+                    emitExpression(builder, last);
+                    builder.endReturn();
+                }
                 endStatement(builder);
             } else {
-                emitStatementsToLocal(builder, sequence, result);
+                /*
+                 * PERF037-E: even when the final expression requires
+                 * composed lowering, earlier Sequence values are not
+                 * observable. Evaluate them in order and discard their
+                 * results; only the final value needs result storage.
+                 */
+                ComposedSequenceScratch sharedScratch =
+                        createComposedSequenceScratch(builder, expressions);
+
+                emitDiscardedPrefix(
+                        builder,
+                        expressions.subList(0, expressions.size() - 1),
+                        sharedScratch);
+
+                BytecodeLocal result =
+                        builder.createLocal("sequenceResult", null);
+
+                beginStatement(builder, last);
+
+                if (requiresComposedInvocation(last)) {
+                    emitBodyExpressionToLocal(
+                            builder,
+                            last,
+                            result,
+                            sharedScratch == null
+                                    ? null : sharedScratch.preparedCall(),
+                            sharedScratch == null
+                                    ? null : sharedScratch.childResult(),
+                            sharedScratch == null
+                                    ? null : sharedScratch.resumeValue());
+                } else if (last instanceof CanonicalLookup lookup
+                        && isScalarLocalRead(lookup)) {
+                    emitScalarLocalReadToResult(builder, lookup, result);
+                } else {
+                    builder.beginStoreLocal(result);
+                    emitExpression(builder, last);
+                    builder.endStoreLocal();
+                }
+
+                endStatement(builder);
 
                 builder.beginReturn();
                 builder.emitLoadLocal(result);
@@ -1740,16 +1816,19 @@ final class CanonicalToBytecodeLowerer {
      * root-level read (PERF037-B) takes no activation operand: it reaches
      * the root's frame arguments itself, only when it must.
      */
-    private void beginMemberRead(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private void beginMemberRead(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            String name) {
         if (currentInlineCallbackFrameNative) {
             builder.beginReadInlineMember(
                     currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
+                    currentRootFrameNativeLayout,
+                    name);
             emitCurrentInlineCallbackCall(builder);
         } else if (currentActivationLocal == null) {
-            builder.beginReadMemberAtRoot();
+            builder.beginReadMemberAtRoot(name);
         } else {
-            builder.beginReadMember();
+            builder.beginReadMember(name);
             emitCurrentActivation(builder);
         }
     }
@@ -2291,6 +2370,171 @@ final class CanonicalToBytecodeLowerer {
                 .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
     }
 
+    /**
+     * PERF037-E: value expressions that can be emitted inside Return without
+     * invoking the composed-expression machinery. Keep Closure materialization
+     * on its established path because it may lower nested roots first.
+     */
+    private static boolean isDirectTerminalValue(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral
+                || expression instanceof CanonicalLookup
+                || expression instanceof CanonicalIntrinsic) {
+            return true;
+        }
+        if (expression instanceof CanonicalMember member) {
+            return isDirectTerminalValue(member.receiver());
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            return isDirectTerminalValue(identity.left())
+                    && isDirectTerminalValue(identity.right());
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            return isDirectTerminalValue(identity.left())
+                    && isDirectTerminalValue(identity.right());
+        }
+        return false;
+    }
+
+    /**
+     * A simple prefix can consume each evaluated result directly. Preserve
+     * the established scalar lane and composed-control lowering otherwise.
+     */
+    private record ComposedSequenceScratch(
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {}
+
+    private ComposedSequenceScratch createComposedSequenceScratch(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions) {
+        boolean needed =
+                expressions.stream()
+                        .anyMatch(expression ->
+                                requiresComposedInvocation(expression)
+                                        && !(expression instanceof CanonicalAssign assign
+                                                && isScalarLocalAssign(assign)));
+        if (!needed) {
+            return null;
+        }
+        return new ComposedSequenceScratch(
+                builder.createLocal("preparedClosureCall", null),
+                builder.createLocal("childResult", null),
+                builder.createLocal("resumeValue", null));
+    }
+
+    private void emitDiscardedPrefix(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions) {
+        emitDiscardedPrefix(
+                builder,
+                expressions,
+                createComposedSequenceScratch(builder, expressions));
+    }
+
+    private void emitDiscardedPrefix(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            java.util.List<CanonicalExpression> expressions,
+            ComposedSequenceScratch scratch) {
+        BytecodeLocal preparedCall =
+                scratch == null ? null : scratch.preparedCall();
+        BytecodeLocal childResult =
+                scratch == null ? null : scratch.childResult();
+        BytecodeLocal resumeValue =
+                scratch == null ? null : scratch.resumeValue();
+        BytecodeLocal stagedResult = null;
+
+        for (CanonicalExpression expression : expressions) {
+            boolean directDiscard =
+                    isDirectTerminalValue(expression)
+                            && !requiresComposedInvocation(expression)
+                            && !(expression instanceof CanonicalLookup lookup
+                                    && isScalarLocalRead(lookup));
+
+            if (directDiscard) {
+                beginStatement(builder, expression);
+                builder.beginDiscardValue();
+                emitExpression(builder, expression);
+                builder.endDiscardValue();
+                endStatement(builder);
+            } else if (expression instanceof CanonicalLookup lookup
+                    && isScalarLocalRead(lookup)) {
+                beginStatement(builder, expression);
+                emitDiscardedScalarLocalRead(builder, lookup);
+                endStatement(builder);
+            } else if (expression instanceof CanonicalClosure closure) {
+                /*
+                 * Register the nested root before opening DiscardValue.
+                 * Materialization still executes at the original statement.
+                 */
+                beginStatement(builder, expression);
+                ProtosClosureExecutionPlanCell plan =
+                        bytecodeClosurePlan(builder, closure);
+                builder.beginDiscardValue();
+                builder.beginMaterializeClosure();
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(closure);
+                builder.emitLoadConstant(plan);
+                builder.endMaterializeClosure();
+                builder.endDiscardValue();
+                endStatement(builder);
+            } else {
+                /*
+                 * A composed/control expression keeps its existing lowering.
+                 * Allocate scratch storage only if one actually occurs.
+                 * Direct expressions on either side still avoid result stores.
+                 */
+                if (stagedResult == null) {
+                    stagedResult =
+                            builder.createLocal("sequenceResult", null);
+                }
+                beginStatement(builder, expression);
+                if (requiresComposedInvocation(expression)) {
+                    emitBodyExpressionToLocal(
+                            builder,
+                            expression,
+                            stagedResult,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                } else {
+                    builder.beginStoreLocal(stagedResult);
+                    emitExpression(builder, expression);
+                    builder.endStoreLocal();
+                }
+                endStatement(builder);
+            }
+        }
+    }
+
+    private void emitDiscardedScalarLocalRead(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalLookup lookup) {
+        BytecodeLocal local =
+                currentRootFrameLocals.get(lookup.name());
+        if (local == null) {
+            throw new AssertionError(
+                    "admitted scalar local is missing: " + lookup.name());
+        }
+
+        builder.beginIfThenElse();
+        builder.emitIsCompactLocalFrame();
+
+        builder.beginBlock();
+        builder.beginDiscardValue();
+        builder.emitLoadLocal(local);
+        builder.endDiscardValue();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginDiscardValue();
+        emitLookup(builder, lookup);
+        builder.endDiscardValue();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
     private static boolean requiresComposedInvocation(
             CanonicalExpression expression) {
         if (expression instanceof CanonicalCall
@@ -2537,9 +2781,8 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            beginMemberRead(builder);
+            beginMemberRead(builder, member.name());
             builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(member.name());
             endMemberRead(builder);
             builder.endStoreLocal();
             return;
@@ -2693,9 +2936,8 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            beginMemberRead(builder);
+            beginMemberRead(builder, member.name());
             builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(member.name());
             endMemberRead(builder);
             builder.endStoreLocal();
             return;
@@ -5439,9 +5681,8 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalMember member) {
-            beginMemberRead(builder);
+            beginMemberRead(builder, member.name());
             emitExpression(builder, member.receiver());
-            builder.emitLoadConstant(member.name());
             endMemberRead(builder);
             return;
         }

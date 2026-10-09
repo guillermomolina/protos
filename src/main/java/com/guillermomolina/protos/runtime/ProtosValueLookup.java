@@ -80,7 +80,8 @@ public final class ProtosValueLookup {
     public record GuardedSlotSelection(
             ProtosObjectValue home,
             ProtosMapBackedLexicalBindingAuthority.SlotCell location,
-            Assumption stability) {
+            Assumption stability,
+            Assumption nonClosureContinuity) {
         public GuardedSlotSelection {
             Objects.requireNonNull(home, "home");
             Objects.requireNonNull(location, "location");
@@ -102,6 +103,10 @@ public final class ProtosValueLookup {
 
         public Assumption stability() {
             return parentSelection.stability();
+        }
+
+        public Assumption nonClosureContinuity() {
+            return parentSelection.nonClosureContinuity();
         }
     }
 
@@ -125,7 +130,11 @@ public final class ProtosValueLookup {
             stability.invalidate();
             return null;
         }
-        return new GuardedSlotSelection(home, location, stability);
+        return new GuardedSlotSelection(
+                home,
+                location,
+                stability,
+                location.nonClosureContinuityForGuardedRead());
     }
 
     public static SharedInheritedSlotSelection lookupGuardedSharedInheritedSlotSelection(
@@ -542,11 +551,38 @@ public final class ProtosValueLookup {
      * original receiver; {@code closureExtraction} keeps that branch out of
      * compiled code until a selected slot actually holds a Closure.
      */
+    /**
+     * PERF037: fast path for a selected ordinary data slot.
+     *
+     * Callers must hold both the selection stability assumption and
+     * its non-Closure continuity assumption as Truffle specialization
+     * assumptions. The stored value is never cached; assignments
+     * remain visible through the selected physical location.
+     *
+     * A data-to-Closure assignment invalidates the latter assumption
+     * before publishing the new value, forcing specialization
+     * transfer to the general fresh-extraction path.
+     */
+    public static Object guardedPlainSlotValue(
+            GuardedSlotSelection selection) {
+        return selection.location().value();
+    }
+
     public static Object materializeGuardedMemberRead(
             Object receiver,
             GuardedSlotSelection selection,
             Node node,
             InlinedBranchProfile closureExtraction) {
+        Assumption nonClosure = selection.nonClosureContinuity();
+        if (nonClosure != null && nonClosure.isValid()) {
+            /*
+             * The selected cell is still the authoritative value source.
+             * Only the value's non-Closure representation is protected;
+             * writes of other data values remain observable immediately.
+             */
+            return selection.location().value();
+        }
+
         Object value = selection.location().value();
         if (value instanceof ProtosClosureValue closure) {
             closureExtraction.enter(node);

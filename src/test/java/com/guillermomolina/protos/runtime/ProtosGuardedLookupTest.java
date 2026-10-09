@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -477,9 +478,12 @@ final class ProtosGuardedLookupTest {
         var selection =
                 ProtosValueLookup.lookupGuardedSlotSelection(receiver, "pick", null);
         assertNotNull(selection);
+        assertNotNull(selection.nonClosureContinuity());
+        assertTrue(selection.nonClosureContinuity().isValid());
         assertSame(ProtosNullValue.INSTANCE, read(receiver, selection));
 
         receiver.assignLocalSlot("pick", closure);
+        assertFalse(selection.nonClosureContinuity().isValid());
         var first = (ProtosClosureValue) read(receiver, selection);
         var second = (ProtosClosureValue) read(receiver, selection);
         assertFalse(first == second);
@@ -489,7 +493,63 @@ final class ProtosGuardedLookupTest {
         Object data = new Object();
         receiver.assignLocalSlot("pick", data);
         assertTrue(selection.stability().isValid());
+        assertFalse(selection.nonClosureContinuity().isValid());
         assertSame(data, read(receiver, selection));
+    }
+
+    @Test
+    void nonClosureContinuityInvalidatesOnlyItsOwnCell() {
+        var first = object();
+        var second = object();
+
+        Object originalFirst = new Object();
+        Object originalSecond = new Object();
+
+        first.createLocalSlot("pick", originalFirst);
+        second.createLocalSlot("pick", originalSecond);
+
+        var firstSelection =
+                ProtosValueLookup.lookupGuardedSlotSelection(
+                        first, "pick", null);
+        var secondSelection =
+                ProtosValueLookup.lookupGuardedSlotSelection(
+                        second, "pick", null);
+
+        assertNotNull(firstSelection);
+        assertNotNull(secondSelection);
+        assertNotNull(firstSelection.nonClosureContinuity());
+        assertNotNull(secondSelection.nonClosureContinuity());
+
+        for (int index = 0; index < 20; index++) {
+            Object replacement = new Object();
+            first.assignLocalSlot("pick", replacement);
+            assertSame(replacement, read(first, firstSelection));
+            assertTrue(firstSelection.nonClosureContinuity().isValid());
+            assertTrue(secondSelection.nonClosureContinuity().isValid());
+        }
+
+        ProtosClosureValue closure =
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> ProtosNullValue.INSTANCE);
+
+        first.assignLocalSlot("pick", closure);
+
+        assertFalse(firstSelection.nonClosureContinuity().isValid());
+        assertTrue(secondSelection.nonClosureContinuity().isValid());
+        assertTrue(firstSelection.stability().isValid());
+
+        ProtosClosureValue bound =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        read(first, firstSelection));
+        assertSame(first, bound.capturedReceiver());
+
+        Object restored = new Object();
+        first.assignLocalSlot("pick", restored);
+
+        assertSame(restored, read(first, firstSelection));
+        assertFalse(firstSelection.nonClosureContinuity().isValid());
+        assertSame(originalSecond, read(second, secondSelection));
     }
 
     @Test
@@ -582,6 +642,71 @@ final class ProtosGuardedLookupTest {
     }
 
     @Test
+    void sharedInheritedPlainContinuityHandlesClosureAndShadowing() {
+        var parent = object();
+        var first = new ProtosObjectValue(parent);
+        var second = new ProtosObjectValue(parent);
+
+        Object originalValue = new Object();
+        parent.createLocalSlot("pick", originalValue);
+
+        var selection =
+                ProtosValueLookup.lookupGuardedSharedInheritedSlotSelection(
+                        first, "pick", null);
+        assertNotNull(selection);
+
+        var continuity = selection.nonClosureContinuity();
+        assertNotNull(continuity);
+        assertTrue(continuity.isValid());
+
+        Object replacement = new Object();
+        parent.assignLocalSlot("pick", replacement);
+
+        assertTrue(selection.stability().isValid());
+        assertTrue(continuity.isValid());
+        assertSame(replacement, read(first, selection));
+        assertSame(replacement, read(second, selection));
+
+        ProtosClosureValue closure =
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> ProtosNullValue.INSTANCE);
+
+        parent.assignLocalSlot("pick", closure);
+
+        assertFalse(continuity.isValid());
+        assertTrue(selection.stability().isValid());
+
+        ProtosClosureValue extractedA =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        read(first, selection));
+        ProtosClosureValue extractedB =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        read(first, selection));
+
+        assertFalse(extractedA == extractedB);
+        assertSame(first, extractedA.capturedReceiver());
+        assertSame(parent, extractedA.methodHome().orElseThrow());
+
+        second.createLocalSlot("pick", new Object());
+
+        assertFalse(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        second, "pick", selection));
+
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInheritedSlotSelection(
+                        first, "pick", selection));
+
+        Object restored = new Object();
+        parent.assignLocalSlot("pick", restored);
+
+        assertSame(restored, read(first, selection));
+        assertFalse(continuity.isValid());
+    }
+
+    @Test
     void selectedClosureIsReadFreshAndBoundToOriginalReceiver() {
         var parent = object();
         var receiver = new ProtosObjectValue(parent);
@@ -595,6 +720,9 @@ final class ProtosGuardedLookupTest {
                 receiver, "pick", null);
         assertNotNull(selection);
         assertSame(parent, selection.home());
+        assertNull(
+                selection.nonClosureContinuity(),
+                "an initially Closure-valued slot cannot admit the plain lane");
 
         var extractedA = (ProtosClosureValue)
                 read(receiver, selection);

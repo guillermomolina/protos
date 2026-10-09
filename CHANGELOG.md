@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.323-SNAPSHOT
+
+- `PERF037-E` (#851): reduce ordinary member-read and terminal Sequence overhead
+  while preserving object lookup, Closure binding, and control-transfer semantics.
+  - Return eligible terminal literals, lookups, intrinsics, member reads,
+    identity expressions, and Closure values directly, without a redundant
+    `sequenceResult` store/load; register nested Closure roots before opening
+    the return operation and preserve source sections and statement tags.
+  - Discard unused Sequence-prefix results without intermediate result stores
+    for direct expressions, and share composed-call scratch locals across the
+    complete Sequence while retaining ordered evaluation and error propagation.
+  - Encode member names as Bytecode DSL constant operands in ordinary,
+    root-level, and inline-callback reads instead of loading the name as a
+    runtime expression operand.
+  - Admit a lazy, one-way non-Closure continuity assumption for selected
+    physical `SlotCell` locations. An assignment of a Closure invalidates the
+    assumption before publishing the value; subsequent data assignments do
+    not renew it. The current value is always loaded from the authoritative
+    slot location.
+  - Specialize own and shared-inherited data-member reads in all four
+    execution lanes. Keep generic reads for fresh receiver-bound Closure
+    extraction, parent-chain changes, local shadowing, and unsupported cases.
+  - Add regressions for direct returns, Sequence evaluation and source tags,
+    constant member operands, independent slot cells, data-to-Closure
+    transitions, fresh extracted Closures, and inherited shadowing.
+
 ## 0.3.322-SNAPSHOT
 
 - `PERF038-F` (#852): residual primitive-method-call path.

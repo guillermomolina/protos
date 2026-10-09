@@ -91,8 +91,13 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertSame(unread, bindings.get("unread"));
         assertSame(selected, bindings.get("selected"));
 
+        var guarded =
+                ProtosValueLookup.lookupGuardedSlotSelection(
+                        object, "selected", null);
+        assertTrue(guarded != null);
         assertTrue(
-                ProtosValueLookup.lookupGuardedSlotSelection(object, "selected", null) != null);
+                guarded.nonClosureContinuity() != null
+                        && guarded.nonClosureContinuity().isValid());
         assertSame(bindings, privateField(lexicalAuthority(object), "bindings"));
         assertSame(unread, bindings.get("unread"));
         assertInstanceOf(

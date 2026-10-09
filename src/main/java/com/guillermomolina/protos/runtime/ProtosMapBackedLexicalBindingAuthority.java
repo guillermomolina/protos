@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Truffle;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -48,12 +50,42 @@ final class ProtosMapBackedLexicalBindingAuthority
     static final class SlotCell {
         private Object value;
 
+        /*
+         * Allocated only if a guarded read selects a non-Closure value.
+         * It is one-way: once a Closure is stored, the token is invalidated
+         * before publication and never renewed for this cell.
+         */
+        private Assumption nonClosureContinuity;
+
         private SlotCell(Object value) {
             this.value = value;
         }
 
         Object value() {
             return value;
+        }
+
+        Assumption nonClosureContinuityForGuardedRead() {
+            if (value instanceof ProtosClosureValue) {
+                return null;
+            }
+            Assumption token = nonClosureContinuity;
+            if (token == null) {
+                token = Truffle.getRuntime()
+                        .createAssumption("Protos selected slot stays non-Closure");
+                nonClosureContinuity = token;
+            }
+            return token.isValid() ? token : null;
+        }
+
+        void replace(Object replacement) {
+            Assumption token = nonClosureContinuity;
+            if (token != null
+                    && replacement instanceof ProtosClosureValue) {
+                // Deoptimize compiled plain reads before publishing Closure.
+                token.invalidate();
+            }
+            value = replacement;
         }
     }
 
@@ -143,7 +175,7 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (bindings == null) {
             bindings = new LinkedHashMap<>();
         } else if (bindings.get(name) instanceof SlotCell cell) {
-            cell.value = value;
+            cell.replace(value);
             return;
         }
         bindings.put(name, value);

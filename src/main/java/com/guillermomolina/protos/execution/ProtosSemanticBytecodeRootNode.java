@@ -1587,23 +1587,46 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = String.class, name = "name")
     public static final class ReadInlineMember {
         @Specialization(
                 guards = {
-                    "name.equals(cachedName)",
                     "cachedLookup != null",
-                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedSharedInheritedPlain(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                String name,
+                PreparedInlineLiteralCall child,
+                Object receiver,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("createSharedInheritedLookupForPrelude(receiver, name, prelude)")
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(
+                    cachedLookup.parentSelection());
+        }
+
+        @Specialization(
+                guards = {
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
         public static Object guardedSharedInherited(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                String name,
                 PreparedInlineLiteralCall child,
                 Object receiver,
-                String name,
                 @Bind("child.prelude()") ProtosPrelude prelude,
-                @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookupForPrelude(receiver, name, prelude)")
                         ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -1615,7 +1638,30 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
-                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedExactReceiverPlain(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                String name,
+                PreparedInlineLiteralCall child,
+                Object receiver,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookupForPrelude(receiver, name, prelude)")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(cachedLookup);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
                     "cachedLookup != null"
                 },
                 assumptions = "cachedLookup.stability()",
@@ -1623,12 +1669,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static Object guardedExactReceiver(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                String name,
                 PreparedInlineLiteralCall child,
                 Object receiver,
-                String name,
                 @Bind("child.prelude()") ProtosPrelude prelude,
                 @Cached("receiver") Object cachedReceiver,
-                @Cached("name") String cachedName,
                 @Cached("createGuardedLookupForPrelude(receiver, name, prelude)")
                         ProtosValueLookup.GuardedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -1637,13 +1682,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, cachedLookup, node, closureExtraction);
         }
 
-        @Specialization(replaces = {"guardedSharedInherited", "guardedExactReceiver"})
+        @Specialization(replaces = {"guardedSharedInheritedPlain", "guardedSharedInherited", "guardedExactReceiverPlain", "guardedExactReceiver"})
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                String name,
                 PreparedInlineLiteralCall child,
                 Object receiver,
-                String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
             Object value =
@@ -1920,6 +1965,17 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     /**
+     * Consumes an evaluated expression whose value is not the Sequence
+     * result. The child still executes, including errors and effects.
+     */
+    @Operation
+    public static final class DiscardValue {
+        @Specialization
+        public static void perform(Object ignored) {
+        }
+    }
+
+    /**
      * PERF037-B root-level {@link ReadMember}: the lowerer emits it whenever
      * the current activation is the root's own (frame argument 0). The PIC
      * tiers are those of {@link ReadMember}, but neither selection nor a
@@ -1930,20 +1986,45 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * which its Error is raised.
      */
     @Operation
+    @ConstantOperand(type = String.class, name = "name")
     public static final class ReadMemberAtRoot {
         @Specialization(
                 guards = {
-                    "name.equals(cachedName)",
                     "cachedLookup != null",
-                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedSharedInheritedPlain(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Cached("createSharedInheritedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(
+                    cachedLookup.parentSelection());
+        }
+
+        /**
+         * PERF037: no method-binding branch in the common data-member
+         * path. Truffle invalidates this specialization before a selected
+         * slot can transition from data to Closure.
+         */
+        @Specialization(
+                guards = {
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
         public static Object guardedSharedInherited(
-                Object receiver,
                 String name,
+                Object receiver,
                 @Bind VirtualFrame frame,
-                @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookup(receiver, name, frame.getArguments())")
                         ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -1952,20 +2033,44 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, cachedLookup, node, closureExtraction);
         }
 
+        /**
+         * PERF037: no method-binding branch in the common data-member
+         * path. Truffle invalidates this specialization before a selected
+         * slot can transition from data to Closure.
+         */
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
-                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedExactReceiverPlain(
+                String name,
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(cachedLookup);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
                     "cachedLookup != null"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
         public static Object guardedExactReceiver(
-                Object receiver,
                 String name,
+                Object receiver,
                 @Bind VirtualFrame frame,
                 @Cached("receiver") Object cachedReceiver,
-                @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
                         ProtosValueLookup.GuardedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -1974,10 +2079,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, cachedLookup, node, closureExtraction);
         }
 
-        @Specialization(replaces = {"guardedSharedInherited", "guardedExactReceiver"})
+        @Specialization(replaces = {"guardedSharedInheritedPlain", "guardedSharedInherited", "guardedExactReceiverPlain", "guardedExactReceiver"})
         public static Object perform(
-                Object receiver,
                 String name,
+                Object receiver,
                 @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             Object value =
@@ -2012,20 +2117,40 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    @ConstantOperand(type = String.class, name = "name")
     public static final class ReadMember {
         @Specialization(
                 guards = {
-                    "name.equals(cachedName)",
                     "cachedLookup != null",
-                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedSharedInheritedPlain(
+                String name,
+                ProtosActivation activation,
+                Object receiver,
+                @Cached("createSharedInheritedLookup(receiver, name, activation)")
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(
+                    cachedLookup.parentSelection());
+        }
+
+        @Specialization(
+                guards = {
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, name, cachedLookup)"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
         public static Object guardedSharedInherited(
+                String name,
                 ProtosActivation activation,
                 Object receiver,
-                String name,
-                @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookup(receiver, name, activation)")
                         ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -2037,17 +2162,36 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
-                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "cachedLookup.nonClosureContinuity() != null"
+                },
+                assumptions = {
+                    "cachedLookup.stability()",
+                    "cachedLookup.nonClosureContinuity()"
+                },
+                limit = "3")
+        public static Object guardedExactReceiverPlain(
+                String name,
+                ProtosActivation activation,
+                Object receiver,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("createGuardedLookup(receiver, name, activation)")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+            return ProtosValueLookup.guardedPlainSlotValue(cachedLookup);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
                     "cachedLookup != null"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
         public static Object guardedExactReceiver(
+                String name,
                 ProtosActivation activation,
                 Object receiver,
-                String name,
                 @Cached("receiver") Object cachedReceiver,
-                @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, activation)")
                         ProtosValueLookup.GuardedSlotSelection cachedLookup,
                 @Bind Node node,
@@ -2058,13 +2202,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         @Specialization(
                 replaces = {
-                    "guardedSharedInherited",
-                    "guardedExactReceiver"
+                    "guardedSharedInheritedPlain", "guardedSharedInherited",
+                    "guardedExactReceiverPlain", "guardedExactReceiver"
                 })
         public static Object perform(
+                String name,
                 ProtosActivation activation,
-                Object receiver,
-                String name) {
+                Object receiver) {
             return ProtosBytecodeRootNode.ReadMember.perform(
                     activation,
                     receiver,
