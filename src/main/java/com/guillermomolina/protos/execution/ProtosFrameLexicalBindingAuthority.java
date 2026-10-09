@@ -312,6 +312,11 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return declaringRoot == bytecodeNode.getBytecodeRootNode() && frame == candidate;
     }
 
+    /** PERF037-C: the layout this authority stores, shared by its root's invocations. */
+    ProtosFrameLexicalLayout storedLayout() {
+        return frameBackedLayout;
+    }
+
     /** PERF025-H1: true when {@code layout} is the very layout this authority stores. */
     boolean storesLayout(ProtosFrameLexicalLayout layout) {
         return frameBackedLayout == layout;
@@ -557,6 +562,10 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         boolean present =
                 dynamicOverflow != null
                         && dynamicOverflow.containsKey(name);
+        if (!present) {
+            // PERF037-C: invalidate nearer-scope absence proofs first.
+            frameBackedLayout.recordDynamicBindingCreation();
+        }
         if (dynamicOverflow == null) {
             dynamicOverflow = new LinkedHashMap<>();
         }

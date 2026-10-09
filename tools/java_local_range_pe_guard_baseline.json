@@ -101,6 +101,16 @@
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "ordinary int parameter 'ordinal'; constancy not provable"
     }
   ]
 }

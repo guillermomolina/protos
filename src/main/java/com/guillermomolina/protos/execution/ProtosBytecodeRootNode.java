@@ -25,6 +25,7 @@ import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
@@ -700,8 +701,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String name,
             int lexicalDepth,
             int frameOrdinal) {
-        ProtosLexicalEnvironment owner =
-                capturedOwnerWithoutNearerBinding(captured, name, lexicalDepth - 1);
+        return readOwnerFrameBindingOrNull(
+                capturedOwnerWithoutNearerBinding(captured, name, lexicalDepth - 1),
+                name,
+                frameOrdinal);
+    }
+
+    /**
+     * The owner half of {@link #readCapturedFrameBindingOrNull}: the binding
+     * of an already selected {@code owner} (or {@code null} for none), or
+     * {@code null} when its authority or layout does not match.
+     */
+    static Object readOwnerFrameBindingOrNull(
+            ProtosLexicalEnvironment owner,
+            String name,
+            int frameOrdinal) {
         if (owner != null
                 && owner.lexicalBindingAuthorityForRuntime()
                         instanceof ProtosFrameLexicalBindingAuthority authority
@@ -772,8 +786,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String name,
             int lexicalDepth,
             BytecodeNode bytecodeNode) {
-        ProtosLexicalEnvironment owner =
-                capturedOwnerWithoutNearerBinding(captured, name, lexicalDepth - 1);
+        return ownerMaterializedFrameOrNull(
+                accessor,
+                capturedOwnerWithoutNearerBinding(captured, name, lexicalDepth - 1),
+                bytecodeNode);
+    }
+
+    /**
+     * The owner half of {@link #capturedMaterializedOwnerFrameOrNull}, for an
+     * already selected {@code owner} (or {@code null} for none).
+     */
+    static MaterializedFrame ownerMaterializedFrameOrNull(
+            MaterializedLocalAccessor accessor,
+            ProtosLexicalEnvironment owner,
+            BytecodeNode bytecodeNode) {
         if (owner == null
                 || !(owner.lexicalBindingAuthorityForRuntime()
                         instanceof ProtosFrameLexicalBindingAuthority authority)) {
@@ -806,6 +832,136 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             scope = scope.outer();
         }
         return scope;
+    }
+
+    /**
+     * PERF037-C: a structural proof, retained by one specialized captured
+     * read, that {@link #capturedOwnerWithoutNearerBinding} need not ask the
+     * semantically nearer scopes for membership.
+     *
+     * <p>For every nearer scope position the proof records the frame layout
+     * its authority stored when the read specialized. A scope whose current
+     * authority stores that same layout cannot hold the read's name PRESENT:
+     * the name is outside the layout (static resolution selected an outer
+     * owner, and specialization re-checks it), and the layout's {@link
+     * ProtosFrameLexicalLayout#noDynamicBindingOrNull} token, invalidated
+     * before any dynamic-overflow binding is created through any authority
+     * of that layout, rules out late creation (D179 C0). Removal can only
+     * make a nearer scope ABSENT, which the proof already assumes.
+     *
+     * <p>The chain itself is never cached: it is the current invocation's
+     * captured chain, each position's authority is re-read and checked
+     * against the recorded layout, and the owner is the scope reached after
+     * the nearer ones, so every invocation selects its own owner, deferred
+     * or materialized (both answer through the same single authority).
+     * The owner's PRESENT state and value are always read afterwards from
+     * that owner, never from the proof. The first scope that does not match
+     * permanently retires the proof for this read and resumes the exact
+     * generic walk at that scope.
+     */
+    static final class CapturedNearerScopeAbsence {
+        private static final ProtosFrameLexicalLayout[] NO_LAYOUTS =
+                new ProtosFrameLexicalLayout[0];
+        private static final Assumption[] NO_ASSUMPTIONS = new Assumption[0];
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal(dimensions = 1)
+        private final ProtosFrameLexicalLayout[] nearerLayouts;
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal(dimensions = 1)
+        private final Assumption[] noDynamicBinding;
+
+        private final int ownerIndex;
+
+        @com.oracle.truffle.api.CompilerDirectives.CompilationFinal
+        private boolean retired;
+
+        private CapturedNearerScopeAbsence(
+                ProtosFrameLexicalLayout[] nearerLayouts,
+                Assumption[] noDynamicBinding,
+                int ownerIndex,
+                boolean retired) {
+            this.nearerLayouts = nearerLayouts;
+            this.noDynamicBinding = noDynamicBinding;
+            this.ownerIndex = ownerIndex;
+            this.retired = retired;
+        }
+
+        /** A proof that never holds; the read always takes the generic walk. */
+        static CapturedNearerScopeAbsence unproven(int lexicalDepth) {
+            return new CapturedNearerScopeAbsence(
+                    NO_LAYOUTS, NO_ASSUMPTIONS, Math.max(lexicalDepth - 1, 0), true);
+        }
+
+        /**
+         * Specialization-time construction from the current captured chain.
+         * Each token is obtained before the scope's membership is re-checked,
+         * so a creation racing with construction either invalidates the
+         * token or is observed by the check.
+         */
+        @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+        static CapturedNearerScopeAbsence create(
+                ProtosLexicalEnvironment captured,
+                String name,
+                int lexicalDepth) {
+            int ownerIndex = Math.max(lexicalDepth - 1, 0);
+            if (ownerIndex == 0) {
+                return new CapturedNearerScopeAbsence(NO_LAYOUTS, NO_ASSUMPTIONS, 0, false);
+            }
+            ProtosFrameLexicalLayout[] layouts = new ProtosFrameLexicalLayout[ownerIndex];
+            Assumption[] tokens = new Assumption[ownerIndex];
+            ProtosLexicalEnvironment scope = captured;
+            for (int index = 0; index < ownerIndex; index++) {
+                if (scope == null
+                        || !(scope.lexicalBindingAuthorityForRuntime()
+                                instanceof ProtosFrameLexicalBindingAuthority authority)) {
+                    return unproven(lexicalDepth);
+                }
+                ProtosFrameLexicalLayout layout = authority.storedLayout();
+                if (layout.offsetOf(name) != null) {
+                    return unproven(lexicalDepth);
+                }
+                Assumption token = layout.noDynamicBindingOrNull();
+                if (token == null || scope.hasLocalSlotForRuntime(name)) {
+                    return unproven(lexicalDepth);
+                }
+                layouts[index] = layout;
+                tokens[index] = token;
+                scope = scope.outer();
+            }
+            return new CapturedNearerScopeAbsence(layouts, tokens, ownerIndex, false);
+        }
+
+        /**
+         * Exactly {@code capturedOwnerWithoutNearerBinding(captured, name,
+         * lexicalDepth - 1)}.
+         */
+        @ExplodeLoop
+        ProtosLexicalEnvironment ownerOrNull(
+                ProtosLexicalEnvironment captured,
+                String name) {
+            if (!retired) {
+                ProtosLexicalEnvironment scope = captured;
+                for (int index = 0; index < nearerLayouts.length; index++) {
+                    if (scope == null) {
+                        return null;
+                    }
+                    if (!(scope.lexicalBindingAuthorityForRuntime()
+                                    instanceof ProtosFrameLexicalBindingAuthority authority)
+                            || !authority.storesLayout(nearerLayouts[index])
+                            || !noDynamicBinding[index].isValid()) {
+                        com.oracle.truffle.api.CompilerDirectives
+                                .transferToInterpreterAndInvalidate();
+                        retired = true;
+                        break;
+                    }
+                    scope = scope.outer();
+                }
+                if (!retired) {
+                    return scope;
+                }
+            }
+            return capturedOwnerWithoutNearerBinding(captured, name, ownerIndex);
+        }
     }
 
     /**

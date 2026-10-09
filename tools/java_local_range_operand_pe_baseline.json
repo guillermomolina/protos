@@ -305,8 +305,8 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
-      "operation": "isCleared",
+      "method": "compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,
@@ -317,14 +317,14 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
-      "operation": "setObject",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,
-      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
-      "bytecode_node_class": "BOUND_BYTECODE_NODE",
-      "pe_reachability": "PE_REACHABLE"
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
+      "pe_reachability": "NOT_PE_REACHABLE"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",

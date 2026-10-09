@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.316-SNAPSHOT
+
+- `PERF037-C` (#851): residual captured-lexical graph overhead.
+  - Root-level captured reads take the binding name and lexical depth as
+    constant operands, so the nearer-scope walk has a constant length.
+  - A compact captured read retains a structural proof that its semantically
+    nearer scopes do not hold the name: each nearer scope must still store
+    the frame layout recorded at specialization, the name must be outside
+    that layout, and the layout's lazily created one-way token must show
+    that no dynamic binding was ever created through it. The stable path
+    no longer asks each nearer scope for membership. Dynamic creation
+    invalidates the token before the binding exists; a mismatch retires the
+    proof and resumes the exact generic walk. Owner presence and the value
+    are still read on every access (BUG018). Observable semantics are
+    unchanged.
+  - The LocalRange, operand, accessor and generated-bytecode BCI guard
+    baselines are refreshed to the current PERF038-B/C and PERF037-C
+    topology; every adopted site is classified proven or not PE-reachable.
+
 ## 0.3.315-SNAPSHOT
 
 - `PERF038-C` (#852): residual compact method-call graph overhead.

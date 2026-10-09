@@ -31,7 +31,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "capturedMaterializedOwnerFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,int,BytecodeNode)",
+      "method": "ownerMaterializedFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
       "operation": "isCleared",
       "receiver": "accessor",
@@ -187,7 +187,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.ReadRootFrameLocal",
-      "method": "perform(LocalAccessor,Assumption,String,BytecodeNode,VirtualFrame)",
+      "method": "compact(LocalAccessor,Assumption,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
       "operation": "getObject",
       "receiver": "accessor",

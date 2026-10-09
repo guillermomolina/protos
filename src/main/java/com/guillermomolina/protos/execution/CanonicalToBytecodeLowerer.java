@@ -5545,11 +5545,10 @@ final class CanonicalToBytecodeLowerer {
                 }
 
                 if (currentActivationLocal == null) {
-                    builder.beginReadCapturedFrameLocalAtRoot(
-                            frameBackedOrdinal(captured.identity()));
-                    builder.emitLoadConstant(captured.identity().name());
-                    builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.endReadCapturedFrameLocalAtRoot();
+                    builder.emitReadCapturedFrameLocalAtRoot(
+                            frameBackedOrdinal(captured.identity()),
+                            captured.identity().name(),
+                            captured.lexicalDepth());
                     return;
                 }
                 builder.beginReadCapturedFrameLocal(
@@ -5601,10 +5600,8 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(captured.lexicalDepth());
             builder.endSelectInlineCapturedMaterializedOwnerFrame();
         } else if (currentActivationLocal == null) {
-            builder.beginSelectCapturedMaterializedOwnerFrameAtRoot(ownerLocal);
-            builder.emitLoadConstant(name);
-            builder.emitLoadConstant(captured.lexicalDepth());
-            builder.endSelectCapturedMaterializedOwnerFrameAtRoot();
+            builder.emitSelectCapturedMaterializedOwnerFrameAtRoot(
+                    ownerLocal, name, captured.lexicalDepth());
         } else {
             builder.beginSelectCapturedMaterializedOwnerFrame(ownerLocal);
             emitCurrentActivation(builder);
@@ -5631,9 +5628,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(name);
             builder.endReadInlineCapturedFallback();
         } else if (currentActivationLocal == null) {
-            builder.beginReadCapturedFallbackAtRoot();
-            builder.emitLoadConstant(name);
-            builder.endReadCapturedFallbackAtRoot();
+            builder.emitReadCapturedFallbackAtRoot(name);
         } else {
             builder.beginReadCapturedFallback();
             emitCurrentActivation(builder);

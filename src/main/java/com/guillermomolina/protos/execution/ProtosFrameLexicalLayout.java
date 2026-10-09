@@ -72,6 +72,13 @@ final class ProtosFrameLexicalLayout {
      */
     private final Assumption[] presentContinuity;
 
+    /*
+     * PERF037-C: both guarded by this layout's monitor. The flag is one-way;
+     * the token is created lazily and never renewed once invalidated.
+     */
+    private boolean dynamicBindingObserved;
+    private Assumption noDynamicBinding;
+
     private ProtosFrameLexicalLayout(
             String[] names,
             Map<String, Integer> offsets,
@@ -252,5 +259,50 @@ final class ProtosFrameLexicalLayout {
 
     void invalidatePresentContinuityAt(int ordinal) {
         presentContinuity[ordinal].invalidate();
+    }
+
+    /**
+     * PERF037-C: the one-way, root-scoped speculation that no authority
+     * storing this layout has ever created a dynamic-overflow binding. With
+     * it, a name outside {@link #offsetOf} is ABSENT from every such
+     * authority, so a captured read whose nearer scope stores this layout
+     * need not ask that scope for membership. Compiler stability metadata
+     * only: the authority stays the semantic presence store. Returns {@code
+     * null} once a dynamic binding was ever created. The token is created
+     * only when a specialized captured read first requests it, so layouts no
+     * such read depends on never carry one.
+     */
+    synchronized Assumption noDynamicBindingOrNull() {
+        if (dynamicBindingObserved) {
+            return null;
+        }
+        Assumption existing = noDynamicBinding;
+        if (existing == null) {
+            existing =
+                    Truffle.getRuntime()
+                            .createAssumption("Protos lexical layout has no dynamic binding");
+            noDynamicBinding = existing;
+        }
+        return existing;
+    }
+
+    /**
+     * PERF037-C: records that an authority storing this layout is about to
+     * create a dynamic-overflow binding, invalidating {@link
+     * #noDynamicBindingOrNull} before the binding can be observed. Every
+     * later creation is a single plain field read.
+     */
+    void recordDynamicBindingCreation() {
+        if (!dynamicBindingObserved) {
+            recordFirstDynamicBindingCreation();
+        }
+    }
+
+    private synchronized void recordFirstDynamicBindingCreation() {
+        dynamicBindingObserved = true;
+        Assumption existing = noDynamicBinding;
+        if (existing != null) {
+            existing.invalidate();
+        }
     }
 }

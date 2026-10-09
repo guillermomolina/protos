@@ -1,0 +1,413 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
+import com.oracle.truffle.api.bytecode.BytecodeTier;
+import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.source.Source;
+import java.lang.reflect.Field;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import java.util.List;
+import org.graalvm.polyglot.Context;
+import org.junit.jupiter.api.Test;
+
+/**
+ * PERF037-C root-level captured reads. The name and lexical depth are
+ * constant operands, compact and materialized invocations are separate
+ * specializations, and a compact read retains a nearer-scope absence proof
+ * guarded by the nearer scopes' frame layouts and their lazily created
+ * no-dynamic-binding tokens. These programs drive one captured read site
+ * through the uncached and cached interpreters, from two activations of the
+ * same defining root, and check that D179 C0 late creation, removal and
+ * recreation, PRESENT(null) versus ABSENT, the deferred-to-materialized
+ * Context transition, value changes and the generic fallback are unchanged.
+ */
+final class ProtosPerf037CCapturedLexicalReadTest {
+    private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final int WARM_UP_CALLS = 40;
+
+    @Test
+    void slotReadWorkloadUsesConstantOperandRootSelection() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run =
+                    closure("holder: { value: 1 }\nrun: () => { holder.value }\nrun", module);
+            List<Instruction> selections =
+                    instructionsOf(run, "SelectCapturedMaterializedOwnerFrameAtRoot");
+            assertEquals(1, selections.size(), () -> "expected one root selection in " + names(run));
+            assertEquals("holder", constantArgument(selections.get(0), "name"));
+            assertTrue(
+                    (Integer) constantArgument(selections.get(0), "lexicalDepth") >= 1,
+                    "the proven lexical depth is an immediate constant operand");
+            assertEquals(
+                    "holder",
+                    constantArgument(
+                            single(instructionsOf(run, "ReadCapturedFallbackAtRoot")), "name"));
+
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.ONE, integerValue(call(run, module)));
+            }
+            evaluate("holder.value = 5", module);
+            assertEquals(BigInteger.valueOf(5), integerValue(call(run, module)));
+            evaluate("holder = { value: 6 }", module);
+            assertEquals(BigInteger.valueOf(6), integerValue(call(run, module)));
+        });
+        System.out.println("PERF037C_SLOT_READ_WORKLOAD=PASS");
+    }
+
+    /*
+     * The reader's chain is [maker context, wrap context, module context]:
+     * the proven owner is wrap's local holder (lexical depth 2), so the read
+     * has one nearer scope for the absence proof, and the module's holder is
+     * a farther lexical binding D179 C0 retargets to once the owner's is
+     * removed.
+     */
+    private static final String NESTED_PROGRAM =
+            "holder: { value: 1 }\n"
+                    + "other: { value: 2 }\n"
+                    + "observed: null\n"
+                    + "noop: () => null\n"
+                    + "probe: () => { observed = first() }\n"
+                    + "wrap: (g) => {\n"
+                    + "  g()\n"
+                    + "  holder: { value: 10 }\n"
+                    + "  () => { () => { holder.value } }\n"
+                    + "}\n";
+
+    @Test
+    void nearerLateCreationOwnerRemovalAndRetargetingAcrossTiersAndActivations()
+            throws Exception {
+        withCore(module -> {
+            evaluate(NESTED_PROGRAM, module);
+            ProtosClosureValue wrap = closure("wrap", module);
+            ProtosClosureExecutionPlan ownerPlan = wrap.executionPlan().orElseThrow();
+            ProtosSemanticBytecodeRootNode ownerRoot = ownerPlan.bytecodeActivationRootForTesting();
+            ownerRoot.getBytecodeNode().setUncachedThreshold(1);
+            assertEquals(BytecodeTier.UNCACHED, ownerRoot.getBytecodeNode().getTier());
+
+            // A1: the owner root runs uncached; its retained frame escapes.
+            ProtosClosureValue firstMaker =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            ownerPlan.executeBytecodeActivationForTesting(
+                                    invocationOf(module, wrap, closure("noop", module))));
+            assertEquals(
+                    BytecodeTier.UNCACHED,
+                    ownerRoot.getBytecodeNode().getTier(),
+                    "A1 and its retained frame belong to the uncached owner tier");
+            ProtosClosureValue first =
+                    assertInstanceOf(ProtosClosureValue.class, call(firstMaker, module));
+            module.context().createLocalSlot("first", first);
+
+            BytecodeNode readerNode = bytecodeNode(first);
+            readerNode.setUncachedThreshold(4);
+            assertEquals(BytecodeTier.UNCACHED, readerNode.getTier());
+
+            /*
+             * A2: the same owner root enters the cached tier and reads A1's
+             * retained frame before A2's own holder exists (BUG018).
+             */
+            ProtosClosureValue secondMaker =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            ownerPlan.executeBytecodeActivationForTesting(
+                                    invocationOf(module, wrap, closure("probe", module))));
+            assertEquals(
+                    BytecodeTier.CACHED,
+                    ownerRoot.getBytecodeNode().getTier(),
+                    "A2 must have moved the owner root to the cached tier");
+            assertEquals(BigInteger.valueOf(10), integerValue(evaluate("observed", module)));
+            ProtosClosureValue second =
+                    assertInstanceOf(ProtosClosureValue.class, call(secondMaker, module));
+            assertSame(
+                    bytecodeNode(first).getBytecodeRootNode(),
+                    bytecodeNode(second).getBytecodeRootNode(),
+                    "both readers are activations of one lowered root");
+            assertTrue(
+                    names(first).stream()
+                            .anyMatch(name -> name.contains("SelectCapturedMaterializedOwnerFrameAtRoot")),
+                    () -> "the read must take the root-level materialized selection: " + names(first));
+
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.valueOf(10), integerValue(call(first, module)));
+                assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+            }
+            assertEquals(
+                    BytecodeTier.CACHED,
+                    bytecodeNode(first).getTier(),
+                    "the read site must also run in the cached interpreter");
+
+            ProtosObjectValue firstOwner =
+                    ProtosLexicalEnvironment.at(first.capturedLexicalEnvironmentForRuntime(), 1)
+                            .context();
+            evaluate("other.value = 3", module);
+            firstOwner.assignLocalSlot("holder", evaluate("other", module));
+            assertEquals(
+                    BigInteger.valueOf(3),
+                    integerValue(call(first, module)),
+                    "the current owner value is read, not a specialized copy");
+            assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+
+            /*
+             * The nearer maker Context is materialized only now, through the
+             * chain the reader shares by reference with its own activation.
+             */
+            ProtosObjectValue firstNearer =
+                    first.capturedLexicalEnvironmentForRuntime().context();
+            assertSame(
+                    firstNearer,
+                    first.capturedLexicalEnvironmentForRuntime().context(),
+                    "materialization yields one Context identity");
+            ProtosObjectValue nearerHolder = assertInstanceOf(
+                    ProtosObjectValue.class, evaluate("{ value: 7 }", module));
+            firstNearer.createLocalSlot("holder", nearerHolder);
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(call(first, module)),
+                    "a later nearer binding shadows the owner");
+            assertEquals(
+                    BigInteger.valueOf(10),
+                    integerValue(call(second, module)),
+                    "another activation of the same root keeps its own scopes");
+
+            assertSame(nearerHolder, firstNearer.removeLocalSlot("holder"));
+            assertEquals(BigInteger.valueOf(3), integerValue(call(first, module)));
+
+            // Removing the owner's binding retargets to the farther module binding.
+            firstOwner.removeLocalSlot("holder");
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(call(first, module)),
+                    "D179 C0: an ABSENT owner reveals the farther lexical binding");
+            assertEquals(BigInteger.valueOf(10), integerValue(call(second, module)));
+
+            // With the lexical chain exhausted and no receiver slot: SlotNotFound.
+            Object moduleHolder = module.context().removeLocalSlot("holder");
+            ProtosSignalException absent =
+                    assertThrows(ProtosSignalException.class, () -> call(first, module));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                    absent.error().parent().orElse(null),
+                    "an exhausted bare lookup signals SlotNotFound");
+
+            // Recreating the original owner binding makes it the selection again.
+            firstOwner.createLocalSlot("holder", nearerHolder);
+            assertEquals(BigInteger.valueOf(7), integerValue(call(first, module)));
+            module.context().createLocalSlot("holder", moduleHolder);
+            assertEquals(BigInteger.valueOf(7), integerValue(call(first, module)));
+        });
+        System.out.println("PERF037C_NEARER_LATE_CREATION=PASS");
+        System.out.println("PERF037C_OWNER_REMOVAL_RETARGETING_AND_RECREATION=PASS");
+        System.out.println("PERF037C_OWNER_TIER_TRANSITION=PASS");
+        System.out.println("PERF037C_CACHED_AND_UNCACHED=PASS");
+    }
+
+    @Test
+    void nearerPresentNullShadowsAndAbsenceSignals() throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "slot: 1\n"
+                            + "makeSlot: () => { () => { slot } }\n"
+                            + "reader: makeSlot()\n",
+                    module);
+            ProtosClosureValue reader = closure("reader", module);
+            for (int call = 0; call < WARM_UP_CALLS; call++) {
+                assertEquals(BigInteger.ONE, integerValue(call(reader, module)));
+            }
+
+            ProtosObjectValue nearer = reader.capturedLexicalEnvironmentForRuntime().context();
+            nearer.createLocalSlot("slot", ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, call(reader, module));
+
+            module.context().removeLocalSlot("slot");
+            assertSame(
+                    ProtosNullValue.INSTANCE,
+                    call(reader, module),
+                    "a nearer PRESENT(null) binding is not ABSENT");
+
+            nearer.removeLocalSlot("slot");
+            ProtosSignalException absent =
+                    assertThrows(ProtosSignalException.class, () -> call(reader, module));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
+                    absent.error().parent().orElse(null),
+                    "ABSENT along the whole chain, with no receiver slot, is SlotNotFound");
+        });
+        System.out.println("PERF037C_PRESENT_NULL_VERSUS_ABSENT=PASS");
+    }
+
+    @Test
+    void noDynamicBindingTokenIsLazyOneWayAndNeverRenewed() throws Exception {
+        ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(new String[] {"a"});
+        assertNull(
+                privateField(layout, "noDynamicBinding"),
+                "a layout no specialized read depends on carries no token");
+
+        Assumption token = layout.noDynamicBindingOrNull();
+        assertTrue(token.isValid());
+        assertSame(token, layout.noDynamicBindingOrNull());
+
+        layout.recordDynamicBindingCreation();
+        assertFalse(token.isValid(), "dynamic creation invalidates the token first");
+        assertNull(layout.noDynamicBindingOrNull(), "an invalidated token is never renewed");
+
+        ProtosFrameLexicalLayout observed = ProtosFrameLexicalLayout.of(new String[] {"a"});
+        observed.recordDynamicBindingCreation();
+        assertNull(
+                observed.noDynamicBindingOrNull(),
+                "no token is issued once a dynamic binding was ever created");
+        System.out.println("PERF037C_ABSENCE_TOKEN=PASS");
+    }
+
+    @FunctionalInterface
+    private interface CoreTest {
+        void run(ProtosActivation module) throws Exception;
+    }
+
+    private static void withCore(CoreTest test) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                test.run(prelude.newModuleActivation());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static Object evaluate(String characters, ProtosActivation activation) {
+        Source source =
+                Source.newBuilder(ProtosLanguage.ID, characters, "perf037c-captured-read.protos")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+        return target.call(activation);
+    }
+
+    private static ProtosClosureValue closure(String characters, ProtosActivation activation) {
+        return assertInstanceOf(ProtosClosureValue.class, evaluate(characters, activation));
+    }
+
+    /** One compact direct source call of {@code closure}, as a guest call site makes it. */
+    private static Object call(ProtosClosureValue closure, ProtosActivation caller) {
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        ProtosClosureValue selected =
+                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+        assertSame(closure, selected, "canonical direct Closure-call selection");
+        RootCallTarget target =
+                ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(closure, entered);
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                        closure,
+                        caller,
+                        new Object[0],
+                        selected,
+                        selected.definition(),
+                        entered,
+                        selected.definition(),
+                        entered,
+                        target);
+        Object result =
+                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        IndirectCallNode.create());
+        return prepared.finish(result);
+    }
+
+    private static ProtosActivation invocationOf(
+            ProtosActivation module, ProtosClosureValue closure, Object argument) {
+        return ProtosActivation.forClosureInvocation(
+                closure,
+                List.of(argument),
+                module.prelude().orElseThrow(),
+                module.actorModuleState(),
+                module.currentModuleKey().orElse(null),
+                module.executionDomain());
+    }
+
+    private static BytecodeNode bytecodeNode(ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode();
+    }
+
+    private static List<Instruction> instructionsOf(ProtosClosureValue closure, String operation) {
+        return bytecodeNode(closure).getInstructionsAsList().stream()
+                .filter(instruction -> instruction.getName().contains(operation))
+                .toList();
+    }
+
+    private static List<String> names(ProtosClosureValue closure) {
+        return bytecodeNode(closure).getInstructionsAsList().stream()
+                .map(Instruction::getName)
+                .toList();
+    }
+
+    private static Instruction single(List<Instruction> instructions) {
+        assertEquals(1, instructions.size(), () -> "expected one instruction: " + instructions);
+        return instructions.get(0);
+    }
+
+    private static Object constantArgument(Instruction instruction, String name) {
+        Instruction.Argument argument =
+                instruction.getArguments().stream()
+                        .filter(candidate -> candidate.getName().equals(name))
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("no constant " + name + " operand"));
+        return switch (argument.getKind()) {
+            case INTEGER -> argument.asInteger();
+            default -> argument.asConstant();
+        };
+    }
+
+    private static BigInteger integerValue(Object value) {
+        return assertInstanceOf(ProtosIntegerValue.class, value).value();
+    }
+
+    private static Object privateField(Object target, String name)
+            throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+}

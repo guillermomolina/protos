@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedNearerScopeAbsence;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.GuardedDirectClosureCallTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ImmediateResultCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ModuleInitializationCall;
@@ -1048,8 +1049,20 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * activation path.
      */
 
+    /*
+     * PERF037-C: the name and lexical depth are constant operands, so the
+     * nearer-scope walk has a partial-evaluation-constant length. The compact
+     * and materialized-activation forms are separate specializations, so a
+     * root whose invocations stay compact never compiles the activation path.
+     * The compact form retains a CapturedNearerScopeAbsence proof instead of
+     * asking each nearer scope for membership; the uncached interpreter uses
+     * an unproven one and walks exactly as before.
+     */
+
     @Operation
     @ConstantOperand(type = int.class, name = "frameOrdinal")
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = int.class, name = "lexicalDepth")
     public static final class ReadCapturedFrameLocalAtRoot {
         /*
          * PERF038-C: compact and materialized frames are separate
@@ -1062,15 +1075,20 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 int frameOrdinal,
                 String name,
                 int lexicalDepth,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Cached(
+                                value = "createNearerScopeAbsence(frame, name, lexicalDepth)",
+                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
+                        CapturedNearerScopeAbsence nearerAbsence) {
             Object[] arguments = frame.getArguments();
             if (lexicalDepth > 0) {
                 Object value =
-                        ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
-                                ProtosFrameArguments.compactCapturedLexicalEnvironment(
-                                        arguments),
+                        ProtosBytecodeRootNode.readOwnerFrameBindingOrNull(
+                                nearerAbsence.ownerOrNull(
+                                        ProtosFrameArguments.compactCapturedLexicalEnvironment(
+                                                arguments),
+                                        name),
                                 name,
-                                lexicalDepth,
                                 frameOrdinal);
                 if (value != null) {
                     return value;
@@ -1096,10 +1114,24 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         static boolean isCompact(VirtualFrame frame) {
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
+
+        static CapturedNearerScopeAbsence createNearerScopeAbsence(
+                VirtualFrame frame, String name, int lexicalDepth) {
+            return CapturedNearerScopeAbsence.create(
+                    ProtosFrameArguments.compactCapturedLexicalEnvironment(frame.getArguments()),
+                    name,
+                    lexicalDepth);
+        }
+
+        static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
+            return CapturedNearerScopeAbsence.unproven(lexicalDepth);
+        }
     }
 
     @Operation
     @ConstantOperand(type = MaterializedLocalAccessor.class)
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = int.class, name = "lexicalDepth")
     public static final class SelectCapturedMaterializedOwnerFrameAtRoot {
         /* PERF038-C: compact and materialized frames specialize separately. */
         @Specialization(guards = "isCompact(frame)")
@@ -1108,14 +1140,18 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Cached(
+                                value = "createNearerScopeAbsence(frame, name, lexicalDepth)",
+                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
+                        CapturedNearerScopeAbsence nearerAbsence) {
             if (lexicalDepth > 0) {
-                return ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
+                return ProtosBytecodeRootNode.ownerMaterializedFrameOrNull(
                         accessor,
-                        ProtosFrameArguments.compactCapturedLexicalEnvironment(
-                                frame.getArguments()),
-                        name,
-                        lexicalDepth,
+                        nearerAbsence.ownerOrNull(
+                                ProtosFrameArguments.compactCapturedLexicalEnvironment(
+                                        frame.getArguments()),
+                                name),
                         bytecodeNode);
             }
             return null;
@@ -1140,9 +1176,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         static boolean isCompact(VirtualFrame frame) {
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
+
+        static CapturedNearerScopeAbsence createNearerScopeAbsence(
+                VirtualFrame frame, String name, int lexicalDepth) {
+            return CapturedNearerScopeAbsence.create(
+                    ProtosFrameArguments.compactCapturedLexicalEnvironment(frame.getArguments()),
+                    name,
+                    lexicalDepth);
+        }
+
+        static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
+            return CapturedNearerScopeAbsence.unproven(lexicalDepth);
+        }
     }
 
     @Operation
+    @ConstantOperand(type = String.class, name = "name")
     public static final class ReadCapturedFallbackAtRoot {
         @Specialization
         public static Object perform(String name, @Bind VirtualFrame frame) {
