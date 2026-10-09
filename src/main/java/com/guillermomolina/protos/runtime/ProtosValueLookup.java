@@ -22,6 +22,8 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -68,12 +70,20 @@ public final class ProtosValueLookup {
     /**
      * A guarded choice of slot owner. Its value is deliberately not cached.
      * The same owner remains usable across successful local-slot assignments.
+     *
+     * <p>PERF037-B: {@code location} is the selected binding's stable
+     * physical location in {@code home}'s single authority, so a valid hit
+     * loads the current value without a nominal lookup. Assignments write
+     * through it; every mutation that could detach it (removal, recreation)
+     * invalidates {@code stability} first.
      */
     public record GuardedSlotSelection(
             ProtosObjectValue home,
+            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
             Assumption stability) {
         public GuardedSlotSelection {
             Objects.requireNonNull(home, "home");
+            Objects.requireNonNull(location, "location");
             Objects.requireNonNull(stability, "stability");
         }
     }
@@ -108,7 +118,14 @@ public final class ProtosValueLookup {
             stability.invalidate();
             return null;
         }
-        return new GuardedSlotSelection(selected.orElseThrow().home(), stability);
+        ProtosObjectValue home = selected.orElseThrow().home();
+        ProtosMapBackedLexicalBindingAuthority.SlotCell location =
+                home.slotCellForGuardedRead(name);
+        if (location == null) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedSlotSelection(home, location, stability);
     }
 
     public static SharedInheritedSlotSelection lookupGuardedSharedInheritedSlotSelection(
@@ -519,27 +536,32 @@ public final class ProtosValueLookup {
 
     /**
      * Reads the current value at a selection-protected home. The Assumption
-     * guards the name resolution, so this does not traverse delegation again.
-     * Closure extraction remains fresh and binds the original receiver.
+     * guards the name resolution, so this neither traverses delegation nor
+     * looks the name up again: the value is loaded from the selection's
+     * stable location. Closure extraction remains fresh and binds the
+     * original receiver; {@code closureExtraction} keeps that branch out of
+     * compiled code until a selected slot actually holds a Closure.
      */
     public static Object materializeGuardedMemberRead(
             Object receiver,
-            String name,
-            GuardedSlotSelection selection) {
-        ProtosObjectValue home = selection.home();
-        Object value = home.readLocalSlot(name).orElseThrow();
+            GuardedSlotSelection selection,
+            Node node,
+            InlinedBranchProfile closureExtraction) {
+        Object value = selection.location().value();
         if (value instanceof ProtosClosureValue closure) {
-            return closure.bindMethod(receiver, home);
+            closureExtraction.enter(node);
+            return closure.bindMethod(receiver, selection.home());
         }
         return value;
     }
 
     public static Object materializeGuardedMemberRead(
             Object receiver,
-            String name,
-            SharedInheritedSlotSelection selection) {
+            SharedInheritedSlotSelection selection,
+            Node node,
+            InlinedBranchProfile closureExtraction) {
         return materializeGuardedMemberRead(
-                receiver, name, selection.parentSelection());
+                receiver, selection.parentSelection(), node, closureExtraction);
     }
 
     public static Object materializeMemberRead(

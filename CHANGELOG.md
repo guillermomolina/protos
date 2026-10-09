@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.314-SNAPSHOT
+
+- `PERF037-B` (#851): object-slot-read graph overhead.
+  - Member reads and statically proven captured reads at Closure-root level
+    no longer take the current activation as an operand: while the call is
+    still compact they use the invoked Closure's captured chain and prelude
+    directly, and only fallbacks and Errors materialize the exact activation.
+  - The guarded member-read PIC caches the selected binding's stable
+    location: a binding is promoted in place, inside the same single
+    map-backed authority, to a cell the first time a PIC selects it, and a
+    hit loads the current value without a String-keyed lookup or
+    `Optional`. Assignment writes through the cell; removal and recreation
+    invalidate the selection. Bindings no PIC selects never get a cell.
+  - Fresh receiver-bound Closure extraction on a PIC hit stays behind a
+    branch profile, so a data-only read site does not compile it.
+    Observable semantics are unchanged.
+
 ## 0.3.313-SNAPSHOT
 
 - `PERF038-B` (#852): compact method-call graph specialization.

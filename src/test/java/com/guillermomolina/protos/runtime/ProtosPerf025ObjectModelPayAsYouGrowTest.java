@@ -73,6 +73,36 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 "empty map-backed authority releases its optional backing map");
     }
 
+    /*
+     * PERF037-B: only a binding a guarded member-read PIC selects is promoted
+     * to a stable location, in place, inside the same single map.
+     */
+    @Test
+    void bindingsStayUncelledUntilAGuardedReadSelectsThem() throws Exception {
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object unread = new Object();
+        Object selected = new Object();
+        object.createLocalSlot("unread", unread);
+        object.createLocalSlot("selected", selected);
+
+        java.util.Map<?, ?> bindings =
+                (java.util.Map<?, ?>) privateField(lexicalAuthority(object), "bindings");
+        assertSame(unread, bindings.get("unread"));
+        assertSame(selected, bindings.get("selected"));
+
+        assertTrue(
+                ProtosValueLookup.lookupGuardedSlotSelection(object, "selected", null) != null);
+        assertSame(bindings, privateField(lexicalAuthority(object), "bindings"));
+        assertSame(unread, bindings.get("unread"));
+        assertInstanceOf(
+                ProtosMapBackedLexicalBindingAuthority.SlotCell.class,
+                bindings.get("selected"));
+        assertEquals(List.of("unread", "selected"), List.copyOf(bindings.keySet()));
+        assertSame(selected, object.readLocalSlot("selected").orElseThrow());
+        assertSame(selected, object.localSlotsSnapshot().get("selected"));
+    }
+
     @Test
     void singleOrderedMapPreservesCreateAssignRemoveRecreateHistory() {
         ProtosObjectValue object =

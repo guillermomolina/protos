@@ -30,16 +30,64 @@ import java.util.Optional;
  * authority seam existed; it is installed both for ordinary objects and, for
  * now, for execution contexts, so no observable behavior changes in this
  * slice.
+ *
+ * <p>PERF037-B stable locations: a binding a guarded member-read PIC has
+ * selected may be promoted in place to a {@link SlotCell}, the binding's
+ * physical value location. The cell is still the single authoritative store
+ * of that binding (the map entry holds the cell instead of the value); it
+ * is never exposed outside this authority's read surface, which always
+ * unwraps it. Assignment writes through the cell, so the PIC observes the
+ * current value without a nominal lookup; removal drops the cell together
+ * with its map entry, and a recreated binding starts uncelled, so a stale
+ * cell can be reached only through a selection that the owning object has
+ * already invalidated. Bindings no PIC selects never pay for a cell.
  */
 final class ProtosMapBackedLexicalBindingAuthority
         implements ProtosLexicalBindingAuthority {
+    /** Stable physical location of one promoted binding. */
+    static final class SlotCell {
+        private Object value;
+
+        private SlotCell(Object value) {
+            this.value = value;
+        }
+
+        Object value() {
+            return value;
+        }
+    }
+
     /*
      * Null is the physical representation of no bindings. LinkedHashMap
      * insertion order already carries the exact create/remove/recreate order
      * required by this backend-private authority, so no parallel order list is
-     * needed.
+     * needed. A value is either the binding's value or its SlotCell.
      */
     private LinkedHashMap<String, Object> bindings;
+
+    private static Object unwrap(Object stored) {
+        return stored instanceof SlotCell cell ? cell.value : stored;
+    }
+
+    /**
+     * Returns the stable location of the existing binding {@code name},
+     * promoting it in place on first request, or {@code null} when absent.
+     * Promotion replaces the value of an existing key, so insertion order is
+     * unchanged. Specialization-time only.
+     */
+    SlotCell slotCellFor(String name) {
+        Objects.requireNonNull(name, "name");
+        if (bindings == null || !bindings.containsKey(name)) {
+            return null;
+        }
+        Object stored = bindings.get(name);
+        if (stored instanceof SlotCell cell) {
+            return cell;
+        }
+        SlotCell cell = new SlotCell(stored);
+        bindings.put(name, cell);
+        return cell;
+    }
 
     @Override
     public boolean containsBinding(String name) {
@@ -53,7 +101,7 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (bindings == null || !bindings.containsKey(name)) {
             return Optional.empty();
         }
-        return Optional.of(bindings.get(name));
+        return Optional.of(unwrap(bindings.get(name)));
     }
 
     @Override
@@ -66,7 +114,11 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (bindings == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
+        LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> binding : bindings.entrySet()) {
+            snapshot.put(binding.getKey(), unwrap(binding.getValue()));
+        }
+        return Collections.unmodifiableMap(snapshot);
     }
 
     @Override
@@ -80,7 +132,7 @@ final class ProtosMapBackedLexicalBindingAuthority
         }
         for (Map.Entry<String, Object> binding : bindings.entrySet()) {
             names.add(binding.getKey());
-            values.add(binding.getValue());
+            values.add(unwrap(binding.getValue()));
         }
     }
 
@@ -90,6 +142,9 @@ final class ProtosMapBackedLexicalBindingAuthority
         Objects.requireNonNull(value, "value");
         if (bindings == null) {
             bindings = new LinkedHashMap<>();
+        } else if (bindings.get(name) instanceof SlotCell cell) {
+            cell.value = value;
+            return;
         }
         bindings.put(name, value);
     }
@@ -104,6 +159,6 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (bindings.isEmpty()) {
             bindings = null;
         }
-        return previous;
+        return unwrap(previous);
     }
 }

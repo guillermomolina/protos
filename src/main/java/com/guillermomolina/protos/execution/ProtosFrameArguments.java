@@ -19,7 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -342,6 +344,32 @@ final class ProtosFrameArguments {
      */
     static boolean isUnmaterializedCompactScalarLocalCall(Object[] arguments) {
         return isUnmaterializedCompactCall(arguments);
+    }
+
+    /**
+     * PERF037-B: the captured lexical chain the activation of a
+     * still-unmaterialized compact call has (or would have once
+     * materialized): the invoked Closure's own, for both invocation kinds.
+     * Precondition: {@link #isUnmaterializedCompactCall}.
+     */
+    static ProtosLexicalEnvironment compactCapturedLexicalEnvironment(Object[] arguments) {
+        return ((ProtosClosureValue) arguments[CLOSURE_INDEX])
+                .capturedLexicalEnvironmentForRuntime();
+    }
+
+    /**
+     * PERF037-B: the prelude of the invocation's activation, without
+     * materializing it: the published activation's, or for a compact call
+     * the Closure's own prelude, else the caller's, exactly as
+     * materialization chooses it.
+     */
+    static ProtosPrelude preludeOrNull(Object[] arguments) {
+        if (arguments.length > CLOSURE_INDEX
+                && arguments[CLOSURE_INDEX] instanceof ProtosActivation activation) {
+            return activation.preludeOrNullForRuntime();
+        }
+        ProtosClosureValue closure = compactClosure(arguments);
+        return closure.prelude().orElse(compactCaller(arguments).preludeOrNullForRuntime());
     }
 
     /**

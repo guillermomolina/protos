@@ -205,6 +205,86 @@ tests: [
             reader()
         }
         Assertions.require(tool009LegacyCase() == 9)
+    }),
+    Test("one member read site follows own slot mutation and value kind", () => {
+        holder: { value: 1 }
+        read: () => holder.value
+
+        Assertions.require(read() == 1)
+        Assertions.require(read() == 1)
+        holder.value = 2
+        Assertions.require(read() == 2)
+        holder.value = null
+        Assertions.require(read() === null)
+
+        holder.value = () => 40
+        first: read()
+        second: read()
+        Assertions.require(first() == 40)
+        Assertions.require(first !== second)
+        holder.value = 3
+        Assertions.require(read() == 3)
+    }),
+    Test("one member read site follows shadowing removal and recreation", () => {
+        parent: { value: 1 }
+        holder: parent {}
+        read: () => holder.value
+
+        Assertions.require(read() == 1)
+        parent.value = 2
+        Assertions.require(read() == 2)
+        holder.value: 3
+        Assertions.require(read() == 3)
+        holder.removeSlot("value")
+        Assertions.require(read() == 2)
+
+        own: { value: 4 }
+        readOwn: () => own.value
+        Assertions.require(readOwn() == 4)
+        own.removeSlot("value")
+        Assertions.signals(SlotNotFound, () => { readOwn() })
+        own.value: 5
+        Assertions.require(readOwn() == 5)
+    }),
+    Test("one member read site follows its captured receiver binding", () => {
+        holder: { value: 1 }
+        read: () => holder.value
+
+        Assertions.require(read() == 1)
+        holder = { value: 2 }
+        Assertions.require(read() == 2)
+        holder = 7
+        Assertions.signals(SlotNotFound, () => { read() })
+
+        outer: () => {
+            reader: () => holder.value
+            before: reader()
+            holder: { value: "nearer" }
+            [before, reader()]
+        }
+        holder = { value: "outer" }
+        result: outer()
+        Assertions.require(result[0] == "outer")
+        Assertions.require(result[1] == "nearer")
+    }),
+    Test("one member read site serves distinct activations and frozen receivers", () => {
+        make: (initial) => {
+            box: { value: initial }
+            [box, () => box.value]
+        }
+        readers: [make(1), make(2), make(3), make(4), make(5)]
+
+        Assertions.require(readers[0][1]() == 1)
+        Assertions.require(readers[1][1]() == 2)
+        Assertions.require(readers[4][1]() == 5)
+        readers[1][0].value = 20
+        Assertions.require(readers[1][1]() == 20)
+        Assertions.require(readers[0][1]() == 1)
+
+        readers[2][0].freeze()
+        Assertions.require(readers[2][1]() == 3)
+        Assertions.signals(Error, () => { readers[2][0].value = 30 })
+        Assertions.require(readers[2][1]() == 3)
     })
 ]
 tests.freeze()

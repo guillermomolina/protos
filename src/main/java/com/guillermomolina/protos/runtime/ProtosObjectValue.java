@@ -345,6 +345,24 @@ public class ProtosObjectValue implements TruffleObject {
     }
 
     /**
+     * PERF037-B: the stable physical location of the existing local binding
+     * {@code name}, for a guarded member-read PIC, or {@code null} when this
+     * object is not the exact ordinary representation or does not hold
+     * {@code name}. Requested only at specialization time, so ordinary
+     * objects that no PIC reads never promote a binding to a cell.
+     */
+    @TruffleBoundary
+    final ProtosMapBackedLexicalBindingAuthority.SlotCell slotCellForGuardedRead(String name) {
+        Objects.requireNonNull(name, "name");
+        if (getClass() != ProtosObjectValue.class
+                || !(lexicalBindingAuthority
+                        instanceof ProtosMapBackedLexicalBindingAuthority mapBacked)) {
+            return null;
+        }
+        return mapBacked.slotCellFor(name);
+    }
+
+    /**
      * Backend-private subclass hook for execution machinery that must operate
      * on this object's single lexical-binding authority without introducing a
      * second semantic store.

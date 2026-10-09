@@ -72,6 +72,7 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -1447,11 +1448,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookup(receiver, name, activation)")
-                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
             return ProtosValueLookup.materializeGuardedMemberRead(
-                    receiver,
-                    cachedName,
-                    cachedLookup);
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         /**
@@ -1476,11 +1477,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, activation)")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
             return ProtosValueLookup.materializeGuardedMemberRead(
-                    receiver,
-                    cachedName,
-                    cachedLookup);
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         @Specialization(

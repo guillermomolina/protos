@@ -74,6 +74,7 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 
 /**
  * PLAT042 Candidate B′ tagged semantic source interpreter.
@@ -956,6 +957,90 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /*
+     * PERF037-B root-level captured reads. The lowerer emits these instead of
+     * the activation-operand forms whenever the current activation is the
+     * root's own. While the frame is still in compact source-call form the
+     * invocation's guest Context has never become observable, so it cannot
+     * hold a binding the static analysis did not declare (D179 C0 late
+     * creation needs that Context), and the captured lexical chain is the
+     * invoked Closure's own: the nearer-scope presence checks and the owner
+     * selection then run without materializing the activation. A
+     * materialized frame, and every fallback, take the unchanged
+     * activation path.
+     */
+
+    @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
+    public static final class ReadCapturedFrameLocalAtRoot {
+        @Specialization
+        public static Object perform(
+                int frameOrdinal,
+                String name,
+                int lexicalDepth,
+                @Bind VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                if (lexicalDepth > 0) {
+                    Object value =
+                            ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
+                                    ProtosFrameArguments.compactCapturedLexicalEnvironment(
+                                            arguments),
+                                    name,
+                                    lexicalDepth,
+                                    frameOrdinal);
+                    if (value != null) {
+                        return value;
+                    }
+                }
+                return ProtosBytecodeRootNode.lookupCapturedFallback(
+                        ProtosFrameArguments.activation(arguments), name);
+            }
+            return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
+                    frameOrdinal, ProtosFrameArguments.activation(arguments), name, lexicalDepth);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(type = MaterializedLocalAccessor.class)
+    public static final class SelectCapturedMaterializedOwnerFrameAtRoot {
+        @Specialization
+        public static MaterializedFrame perform(
+                MaterializedLocalAccessor accessor,
+                String name,
+                int lexicalDepth,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                if (lexicalDepth > 0) {
+                    return ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
+                            accessor,
+                            ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments),
+                            name,
+                            lexicalDepth,
+                            bytecodeNode);
+                }
+                return null;
+            }
+            return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
+                    accessor,
+                    ProtosFrameArguments.activation(arguments),
+                    name,
+                    lexicalDepth,
+                    bytecodeNode);
+        }
+    }
+
+    @Operation
+    public static final class ReadCapturedFallbackAtRoot {
+        @Specialization
+        public static Object perform(String name, @Bind VirtualFrame frame) {
+            return ProtosBytecodeRootNode.lookupCapturedFallback(
+                    ProtosFrameArguments.activation(frame), name);
+        }
+    }
+
     @Operation
     @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ReadCapturedFrameLocal {
@@ -1304,8 +1389,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind("child.prelude()") ProtosPrelude prelude,
                 @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookupForPrelude(receiver, name, prelude)")
-                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
-            return ProtosValueLookup.materializeGuardedMemberRead(receiver, cachedName, cachedLookup);
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         @Specialization(
@@ -1326,8 +1414,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("name") String cachedName,
                 @Cached("createGuardedLookupForPrelude(receiver, name, prelude)")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
-            return ProtosValueLookup.materializeGuardedMemberRead(receiver, cachedName, cachedLookup);
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         @Specialization(replaces = {"guardedSharedInherited", "guardedExactReceiver"})
@@ -1612,6 +1703,98 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF037-B root-level {@link ReadMember}: the lowerer emits it whenever
+     * the current activation is the root's own (frame argument 0). The PIC
+     * tiers are those of {@link ReadMember}, but neither selection nor a
+     * successful read observes the activation: selection takes the prelude
+     * the invocation's activation has or would have, and a valid hit loads
+     * the selected binding's stable location. Only an absent member or an
+     * unsupported representation materializes the exact activation, from
+     * which its Error is raised.
+     */
+    @Operation
+    public static final class ReadMemberAtRoot {
+        @Specialization(
+                guards = {
+                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guardedSharedInherited(
+                Object receiver,
+                String name,
+                @Bind VirtualFrame frame,
+                @Cached("name") String cachedName,
+                @Cached("createSharedInheritedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "name.equals(cachedName)",
+                    "cachedLookup != null"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guardedExactReceiver(
+                Object receiver,
+                String name,
+                @Bind VirtualFrame frame,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("name") String cachedName,
+                @Cached("createGuardedLookup(receiver, name, frame.getArguments())")
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
+        }
+
+        @Specialization(replaces = {"guardedSharedInherited", "guardedExactReceiver"})
+        public static Object perform(
+                Object receiver,
+                String name,
+                @Bind VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            Object value =
+                    ProtosBytecodeRootNode.ReadMember.readMemberOrNull(
+                            receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
+            if (value != null) {
+                return value;
+            }
+            return ProtosBytecodeRootNode.ReadMember.perform(
+                    ProtosFrameArguments.activation(arguments), receiver, name);
+        }
+
+        static ProtosValueLookup.SharedInheritedSlotSelection createSharedInheritedLookup(
+                Object receiver, String name, Object[] arguments) {
+            return ProtosBytecodeRootNode.ReadMember.createSharedInheritedLookupForPrelude(
+                    receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
+        }
+
+        static boolean matchesSharedInheritedLookup(
+                Object receiver,
+                String name,
+                ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
+            return ProtosBytecodeRootNode.ReadMember.matchesSharedInheritedLookup(
+                    receiver, name, cachedLookup);
+        }
+
+        static ProtosValueLookup.GuardedSlotSelection createGuardedLookup(
+                Object receiver, String name, Object[] arguments) {
+            return ProtosBytecodeRootNode.ReadMember.createGuardedLookupForPrelude(
+                    receiver, name, ProtosFrameArguments.preludeOrNull(arguments));
+        }
+    }
+
     @Operation
     public static final class ReadMember {
         @Specialization(
@@ -1628,13 +1811,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 @Cached("name") String cachedName,
                 @Cached("createSharedInheritedLookup(receiver, name, activation)")
-                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup) {
-            return ProtosBytecodeRootNode.ReadMember.guardedSharedInherited(
-                    activation,
-                    receiver,
-                    name,
-                    cachedName,
-                    cachedLookup);
+                        ProtosValueLookup.SharedInheritedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         @Specialization(
@@ -1652,14 +1833,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, activation)")
-                        ProtosValueLookup.GuardedSlotSelection cachedLookup) {
-            return ProtosBytecodeRootNode.ReadMember.guardedExactReceiver(
-                    activation,
-                    receiver,
-                    name,
-                    cachedReceiver,
-                    cachedName,
-                    cachedLookup);
+                        ProtosValueLookup.GuardedSlotSelection cachedLookup,
+                @Bind Node node,
+                @Cached InlinedBranchProfile closureExtraction) {
+            return ProtosValueLookup.materializeGuardedMemberRead(
+                    receiver, cachedLookup, node, closureExtraction);
         }
 
         @Specialization(

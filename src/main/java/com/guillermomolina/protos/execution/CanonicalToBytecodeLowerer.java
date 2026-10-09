@@ -1719,13 +1719,19 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    /** Opens a member read and emits its activation (or carrier) operand. */
+    /**
+     * Opens a member read and emits its activation (or carrier) operand. A
+     * root-level read (PERF037-B) takes no activation operand: it reaches
+     * the root's frame arguments itself, only when it must.
+     */
     private void beginMemberRead(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
         if (currentInlineCallbackFrameNative) {
             builder.beginReadInlineMember(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             emitCurrentInlineCallbackCall(builder);
+        } else if (currentActivationLocal == null) {
+            builder.beginReadMemberAtRoot();
         } else {
             builder.beginReadMember();
             emitCurrentActivation(builder);
@@ -1735,6 +1741,8 @@ final class CanonicalToBytecodeLowerer {
     private void endMemberRead(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
         if (currentInlineCallbackFrameNative) {
             builder.endReadInlineMember();
+        } else if (currentActivationLocal == null) {
+            builder.endReadMemberAtRoot();
         } else {
             builder.endReadMember();
         }
@@ -5536,6 +5544,14 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
 
+                if (currentActivationLocal == null) {
+                    builder.beginReadCapturedFrameLocalAtRoot(
+                            frameBackedOrdinal(captured.identity()));
+                    builder.emitLoadConstant(captured.identity().name());
+                    builder.emitLoadConstant(captured.lexicalDepth());
+                    builder.endReadCapturedFrameLocalAtRoot();
+                    return;
+                }
                 builder.beginReadCapturedFrameLocal(
                         frameBackedOrdinal(captured.identity()));
                 emitCurrentActivation(builder);
@@ -5584,6 +5600,11 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(name);
             builder.emitLoadConstant(captured.lexicalDepth());
             builder.endSelectInlineCapturedMaterializedOwnerFrame();
+        } else if (currentActivationLocal == null) {
+            builder.beginSelectCapturedMaterializedOwnerFrameAtRoot(ownerLocal);
+            builder.emitLoadConstant(name);
+            builder.emitLoadConstant(captured.lexicalDepth());
+            builder.endSelectCapturedMaterializedOwnerFrameAtRoot();
         } else {
             builder.beginSelectCapturedMaterializedOwnerFrame(ownerLocal);
             emitCurrentActivation(builder);
@@ -5609,6 +5630,10 @@ final class CanonicalToBytecodeLowerer {
             emitCurrentInlineCallbackCall(builder);
             builder.emitLoadConstant(name);
             builder.endReadInlineCapturedFallback();
+        } else if (currentActivationLocal == null) {
+            builder.beginReadCapturedFallbackAtRoot();
+            builder.emitLoadConstant(name);
+            builder.endReadCapturedFallbackAtRoot();
         } else {
             builder.beginReadCapturedFallback();
             emitCurrentActivation(builder);
