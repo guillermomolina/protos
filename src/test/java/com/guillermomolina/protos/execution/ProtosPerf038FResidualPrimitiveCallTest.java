@@ -101,6 +101,111 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
         System.out.println("PERF038F_PROVENANCE_SPLIT=PASS");
     }
 
+    /**
+     * PERF038-H: zero, one and multiple supplied arguments retain the
+     * original compact method-call ABI and exact argument references.
+     */
+    @Test
+    void compactMethodArgumentArityPathsPreserveIdentity() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue closure = parsedClosure(
+                    "(a, b, c) => { a }",
+                    "perf038h-arguments.protos",
+                    module);
+            ProtosObjectValue receiver = new ProtosObjectValue(closure);
+            ProtosObjectValue home = new ProtosObjectValue(closure);
+            Object first = integer(11);
+            Object second = integer(22);
+            Object third = integer(33);
+
+            Object[][] suppliedCases = {
+                {},
+                {first},
+                {first, second, third}
+            };
+
+            for (Object[] supplied : suppliedCases) {
+                Object[] method = ProtosFrameArguments.compactImmediateMethodCall(
+                        closure, receiver, home, module, supplied);
+                boolean minimalMethod =
+                        supplied.length == 0
+                                && ProtosFrameArguments.compactReturnHome(method)
+                                        == com.guillermomolina.protos.runtime.ProtosReturnHome
+                                                .unobservable();
+
+                assertEquals(
+                        minimalMethod ? 4 : 5 + supplied.length,
+                        method.length);
+                assertSame(closure, method[0]);
+                assertSame(receiver, method[1]);
+                assertSame(home, method[2]);
+                assertSame(module, method[3]);
+
+                if (!minimalMethod) {
+                    assertInstanceOf(
+                            com.guillermomolina.protos.runtime.ProtosReturnHome.class,
+                            method[4]);
+                }
+                assertEquals(supplied.length,
+                        ProtosFrameArguments.compactSuppliedArgumentCount(method));
+                for (int index = 0; index < supplied.length; index++) {
+                    assertSame(supplied[index],
+                            ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+                                    method, index));
+                }
+
+                Object[] direct = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, module, null, supplied);
+                assertEquals(supplied.length,
+                        ProtosFrameArguments.compactSuppliedArgumentCount(direct));
+                for (int index = 0; index < supplied.length; index++) {
+                    assertSame(supplied[index],
+                            ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+                                    direct, index));
+                }
+            }
+        });
+    }
+
+    /** PERF038-H: an unobservable zero-argument method needs no home slot. */
+    @Test
+    void minimalImmediateMethodHeaderPublishesExactActivation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue closure = parsedClosure(
+                    "() => { 1 }",
+                    "perf038h-minimal-method.protos",
+                    module);
+            ProtosObjectValue receiver = new ProtosObjectValue(closure);
+            ProtosObjectValue home = new ProtosObjectValue(closure);
+
+            Object[] arguments = ProtosFrameArguments.compactImmediateMethodCall(
+                    closure,
+                    receiver,
+                    home,
+                    module,
+                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    new Object[0]);
+
+            assertEquals(4, arguments.length);
+            assertSame(closure, arguments[0]);
+            assertSame(receiver, arguments[1]);
+            assertSame(home, arguments[2]);
+            assertSame(module, arguments[3]);
+            assertEquals(0,
+                    ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
+            assertSame(module, ProtosFrameArguments.compactCaller(arguments));
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(arguments));
+            assertTrue(
+                    ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));
+
+            ProtosActivation activation = ProtosFrameArguments.activation(arguments);
+            assertSame(activation, arguments[0]);
+            assertSame(activation, ProtosFrameArguments.activation(arguments));
+        });
+    }
+
     /** The length-only argument and arity predicates equal the count-based ones for every layout. */
     @Test
     void lengthOnlyArgumentPredicatesMatchSuppliedCount() throws Exception {

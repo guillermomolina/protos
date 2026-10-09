@@ -2551,6 +2551,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * values; {@code ownsReturnHome} is exactly {@link
          * ProtosFrameArguments#compactOwnsReturnHome} of that array.
          */
+        static PreparedClosureCall ordinaryCompactSelected(
+                RootCallTarget selectedEntryTarget,
+                Object[] compactTargetArguments,
+                ProtosReturnHome returnHome,
+                boolean ownsReturnHome) {
+            return new OrdinarySourceCall(
+                    selectedEntryTarget,
+                    compactTargetArguments,
+                    returnHome,
+                    ownsReturnHome);
+        }
+
         static PreparedClosureCall ordinaryCompactPrepared(
                 RootCallTarget bodyTarget,
                 Object[] compactTargetArguments,
@@ -2633,8 +2645,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean ownsMaterializedReturnHome;
 
         ReturnHomeOwningCall(ProtosReturnHome returnHome, boolean ownsReturnHome) {
-            this.returnHome = returnHome;
-            this.ownsMaterializedReturnHome = ownsReturnHome && returnHome.isMaterialized();
+            /*
+             * PERF038-H: ordinary calls that cannot own a physical return
+             * home have no return-home lifecycle or target to retain.
+             * Captured homes still travel in the callee frame arguments,
+             * where their provenance remains observable when required.
+             */
+            boolean hasLifecycle = ownsReturnHome && returnHome.isMaterialized();
+            this.returnHome = hasLifecycle ? returnHome : null;
+            this.ownsMaterializedReturnHome = hasLifecycle;
         }
 
         /**
@@ -2733,6 +2752,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.targetArguments = compactTargetArguments;
         }
 
+        /**
+         * PERF038-H: the guarded PIC has already selected the exact
+         * source entry target. No arity-based target selection remains
+         * necessary inside this carrier constructor.
+         */
+        OrdinarySourceCall(
+                RootCallTarget selectedEntryTarget,
+                Object[] compactTargetArguments,
+                ProtosReturnHome returnHome,
+                boolean ownsReturnHome) {
+            super(returnHome, ownsReturnHome);
+            this.bodyTarget = selectedEntryTarget;
+            this.activation = null;
+            this.targetArguments = compactTargetArguments;
+        }
+
         /** PERF038-D: see {@link PreparedClosureCall#ordinaryCompactPrepared}. */
         OrdinarySourceCall(
                 RootCallTarget bodyTarget,
@@ -2741,9 +2776,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean ownsReturnHome,
                 int suppliedArgumentCount) {
             super(returnHome, ownsReturnHome);
+            /*
+             * PERF038-H: a zero-argument call cannot require the
+             * excess-argument rejection entry. Preserve the general
+             * selection for calls carrying supplied arguments.
+             */
             this.bodyTarget =
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            bodyTarget, suppliedArgumentCount);
+                    suppliedArgumentCount == 0
+                            ? bodyTarget
+                            : ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                                    bodyTarget, suppliedArgumentCount);
             this.activation = null;
             this.targetArguments = compactTargetArguments;
         }
@@ -2754,6 +2796,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         boolean hasReturnHomeLifecycle() {
             return ownsMaterializedReturnHome();
+        }
+
+        /**
+         * PERF038-H: read the capability of the actual selected
+         * source entry. Arity rejection and unknown targets
+         * retain the general continuation protocol.
+         */
+        boolean provablyNonSuspending() {
+            return bodyTarget.getRootNode()
+                    instanceof ProtosSemanticBytecodeRootNode root
+                    && root.provablyNonSuspendingBody();
         }
 
         @Override
@@ -8054,6 +8107,46 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * home and Task/dynamic-control inheritance), with its guest Context and
      * supplied guest Array deferred.
      */
+    /**
+     * PERF038-H: fixed Call1 path. The final frame is constructed
+     * directly; zero and N arguments retain their existing paths.
+     */
+    static PreparedClosureCall finishDirectClosureCallOne(
+            ProtosClosureValue closure,
+            RootCallTarget target,
+            Object supplied0,
+            ProtosActivation caller) {
+        ProtosReturnHome returnHome =
+                closure.invocationReturnHomeForRuntime();
+        RootCallTarget selectedEntry =
+                ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                        target, 1);
+        return PreparedClosureCall.ordinaryCompactSelected(
+                selectedEntry,
+                ProtosFrameArguments.compactDirectClosureCallOnePrepared(
+                        closure, caller, returnHome, supplied0),
+                returnHome,
+                closure.returnHome().isEmpty());
+    }
+
+    /**
+     * PERF038-H: admitted direct Call0 needs no arity-rejection
+     * selection and no compact-header revalidation.
+     */
+    static PreparedClosureCall finishDirectClosureCallZero(
+            ProtosClosureValue closure,
+            RootCallTarget target,
+            ProtosActivation caller) {
+        ProtosReturnHome returnHome =
+                closure.invocationReturnHomeForRuntime();
+        return PreparedClosureCall.ordinaryCompactSelected(
+                target,
+                ProtosFrameArguments.compactDirectClosureCallZeroPrepared(
+                        closure, caller, returnHome),
+                returnHome,
+                closure.returnHome().isEmpty());
+    }
+
     static PreparedClosureCall finishDirectClosureCall(
             ProtosClosureValue closure,
             RootCallTarget target,
@@ -8134,8 +8227,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
                         GuardedDirectClosureCallTarget cachedGuarded) {
-            return finishDirectClosureCall(
-                    cachedGuarded.closure(), cachedGuarded.target(), NO_SUPPLIED_ARGUMENTS, caller);
+            return finishDirectClosureCallZero(
+                    cachedGuarded.closure(), cachedGuarded.target(), caller);
         }
 
         @Specialization(
@@ -8161,7 +8254,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return finishDirectClosureCall(closure, cachedTarget, NO_SUPPLIED_ARGUMENTS, caller);
+            return finishDirectClosureCallZero(
+                    closure, cachedTarget, caller);
         }
 
         @Specialization(replaces = {"guardedDirect", "fastDirect"})
@@ -8282,6 +8376,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
             return PrepareSendArguments.fastOrdinarySendTarget(closure, enteredContext);
         }
+    }
+
+    /**
+     * PERF038-H: generic direct Call1, including noncanonical call
+     * selection, native bodies and user overrides.
+     */
+    static PreparedClosureCall prepareClosureCallOneFallback(
+            Object receiver,
+            ProtosActivation caller,
+            Object supplied0) {
+        return prepareClosureCall(
+                receiver, List.of(supplied0), caller);
     }
 
     private static PreparedClosureCall prepareClosureCall(
@@ -8564,6 +8670,53 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareSendArguments {
         /**
+         * PERF038-H: guarded source Send0.
+         * PIC guards and selection stability were checked by the DSL.
+         */
+        static PreparedClosureCall guardedOrdinarySendZero(
+                Object receiver,
+                ProtosActivation caller,
+                GuardedSendTarget cachedSend) {
+            ProtosReturnHome returnHome = cachedSend.invocationHome();
+            Object[] arguments =
+                    ProtosFrameArguments.compactImmediateMethodCallZero(
+                            cachedSend.closure(),
+                            receiver,
+                            cachedSend.methodHome(),
+                            caller,
+                            returnHome);
+            return PreparedClosureCall.ordinaryCompactSelected(
+                    cachedSend.entryTarget(0),
+                    arguments,
+                    returnHome,
+                    cachedSend.ownsReturnHome());
+        }
+
+        /**
+         * PERF038-H: guarded source Send1.
+         */
+        static PreparedClosureCall guardedOrdinarySendOne(
+                Object receiver,
+                ProtosActivation caller,
+                Object supplied0,
+                GuardedSendTarget cachedSend) {
+            ProtosReturnHome returnHome = cachedSend.invocationHome();
+            Object[] arguments =
+                    ProtosFrameArguments.compactImmediateMethodCallOne(
+                            cachedSend.closure(),
+                            receiver,
+                            cachedSend.methodHome(),
+                            caller,
+                            returnHome,
+                            supplied0);
+            return PreparedClosureCall.ordinaryCompactSelected(
+                    cachedSend.entryTarget(1),
+                    arguments,
+                    returnHome,
+                    cachedSend.ownsReturnHome());
+        }
+
+        /**
          * {@code sharedInvocationHome} (PERF038-D) is the return home every
          * invocation of {@code closure} uses when it is shared, i.e. the
          * Closure's captured home or the unobservable marker of a plan proven
@@ -8587,7 +8740,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Assumption stability,
                 ProtosReturnHome sharedInvocationHome,
                 boolean freshInvocationHome,
-                boolean ownsReturnHome) {
+                boolean ownsReturnHome,
+                RootCallTarget suppliedEntryTarget) {
+
+            /**
+             * PERF038-H: source entry selection depends only on the
+             * immutable target and whether arguments were supplied.
+             * Resolve both possibilities when the PIC is established.
+             */
+            RootCallTarget entryTarget(int suppliedCount) {
+                return suppliedCount == 0 ? target : suppliedEntryTarget;
+            }
 
             /** Exactly {@code closure().invocationReturnHomeForRuntime()}. */
             ProtosReturnHome invocationHome() {
@@ -8703,6 +8866,62 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * invocation (non-canonical selection, wrong-domain operand, Error).
          * Observes neither the caller activation nor its Context.
          */
+        /**
+         * PERF038-H: Send0 has no successful binary canonical Integer
+         * operation. Preserve its native fallback and Error semantics.
+         */
+        static PreparedClosureCall guardedIntegerSendZero(
+                Object receiver,
+                Object caller,
+                GuardedIntegerSend cachedInteger) {
+            ProtosActivation exactCaller =
+                    caller instanceof ProtosActivation activation
+                            ? activation
+                            : ProtosFrameArguments.activation((Object[]) caller);
+
+            return prepareDeferredImmediateNativeMethodCall(
+                    cachedInteger.closure(),
+                    receiver,
+                    cachedInteger.methodHome(),
+                    List.of(),
+                    exactCaller);
+        }
+
+        /**
+         * PERF038-H: canonical Send1 needs neither an argument vector
+         * nor the caller's activation. Materialize the caller only
+         * when the native/Error fallback is actually required.
+         */
+        static PreparedClosureCall guardedIntegerSendOne(
+                Object receiver,
+                Object caller,
+                Object supplied0,
+                GuardedIntegerSend cachedInteger) {
+            if (cachedInteger.operation() != null) {
+                Object directResult =
+                        ProtosStandardIntegerProtocol
+                                .tryExecuteCanonicalOperationOne(
+                                        cachedInteger.operation(),
+                                        receiver,
+                                        supplied0);
+                if (directResult != null) {
+                    return PreparedClosureCall.immediateResult(directResult);
+                }
+            }
+
+            ProtosActivation exactCaller =
+                    caller instanceof ProtosActivation activation
+                            ? activation
+                            : ProtosFrameArguments.activation((Object[]) caller);
+
+            return prepareDeferredImmediateNativeMethodCall(
+                    cachedInteger.closure(),
+                    receiver,
+                    cachedInteger.methodHome(),
+                    List.of(supplied0),
+                    exactCaller);
+        }
+
         static PreparedClosureCall canonicalIntegerResultOrNull(
                 GuardedIntegerSend cachedInteger,
                 Object receiver,
@@ -8819,12 +9038,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             caller,
                             returnHome,
                             supplied);
-            return PreparedClosureCall.ordinaryCompactPrepared(
-                    cachedSend.target(),
+            return PreparedClosureCall.ordinaryCompactSelected(
+                    cachedSend.entryTarget(supplied.length),
                     frameArguments,
                     returnHome,
-                    cachedSend.ownsReturnHome(),
-                    supplied.length);
+                    cachedSend.ownsReturnHome());
         }
 
         /**
@@ -8888,6 +9106,57 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     lookup.stability(),
                     sharedHome,
                     sharedHome == null && closure.executionPlan().isPresent(),
+                    closure.returnHome().isEmpty(),
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            target, 1));
+        }
+
+        /**
+         * PERF038-H: Send0 with dynamically selected source Closure.
+         * Preserve the current selected Closure/home, but avoid the
+         * supplied-argument vector and compact-header validation.
+         */
+        static PreparedClosureCall fastOrdinarySendZero(
+                ProtosClosureValue closure,
+                Object receiver,
+                ProtosObjectValue methodHome,
+                ProtosActivation caller,
+                RootCallTarget target) {
+            ProtosReturnHome returnHome =
+                    closure.invocationReturnHomeForRuntime();
+
+            return PreparedClosureCall.ordinaryCompactSelected(
+                    target,
+                    ProtosFrameArguments.compactImmediateMethodCallZero(
+                            closure, receiver, methodHome, caller, returnHome),
+                    returnHome,
+                    closure.returnHome().isEmpty());
+        }
+
+        /**
+         * PERF038-H: Send1 with dynamically selected source Closure.
+         * The exact supplied value enters the final frame directly.
+         */
+        static PreparedClosureCall fastOrdinarySendOne(
+                ProtosClosureValue closure,
+                Object receiver,
+                ProtosObjectValue methodHome,
+                ProtosActivation caller,
+                RootCallTarget target,
+                Object supplied0) {
+            ProtosReturnHome returnHome =
+                    closure.invocationReturnHomeForRuntime();
+
+            RootCallTarget selectedEntry =
+                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                            target, 1);
+
+            return PreparedClosureCall.ordinaryCompactSelected(
+                    selectedEntry,
+                    ProtosFrameArguments.compactImmediateMethodCallOne(
+                            closure, receiver, methodHome, caller,
+                            returnHome, supplied0),
+                    returnHome,
                     closure.returnHome().isEmpty());
         }
 
@@ -8974,7 +9243,42 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, caller)")
                         GuardedStructuredSend cachedStructured) {
-            List<?> suppliedList = List.of(supplied);
+            return guardedStructuredSendPrepared(
+                    receiver, caller, List.of(supplied), cachedStructured);
+        }
+
+        /**
+         * PERF038-H: Send0, preserving the selected structured kind.
+         */
+        static PreparedClosureCall guardedStructuredSendZero(
+                Object receiver,
+                ProtosActivation caller,
+                GuardedStructuredSend cachedStructured) {
+            return guardedStructuredSendPrepared(
+                    receiver, caller, List.of(), cachedStructured);
+        }
+
+        /**
+         * PERF038-H: Send1 without an intermediate Object[].
+         */
+        static PreparedClosureCall guardedStructuredSendOne(
+                Object receiver,
+                ProtosActivation caller,
+                Object supplied0,
+                GuardedStructuredSend cachedStructured) {
+            return guardedStructuredSendPrepared(
+                    receiver, caller, List.of(supplied0), cachedStructured);
+        }
+
+        /**
+         * Exact existing structured invocation body, shared by the
+         * variadic and fixed-arity entry points.
+         */
+        private static PreparedClosureCall guardedStructuredSendPrepared(
+                Object receiver,
+                ProtosActivation caller,
+                List<?> suppliedList,
+                GuardedStructuredSend cachedStructured) {
             rejectComposedInvocationProjection(cachedStructured.closure());
             ProtosActivation activation =
                     ProtosActivation.forImmediateMethodInvocation(
@@ -9007,6 +9311,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     null);
         }
+
 
         /**
          * Resolves and classifies only while establishing a specialization.
@@ -9250,6 +9555,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     caller,
                     supplied.snapshot());
         }
+    }
+
+    /**
+     * PERF038-H: generic Send0 without a supplied-argument array.
+     */
+    static PreparedClosureCall prepareSendZeroFallback(
+            Object receiver,
+            String selector,
+            ProtosActivation caller) {
+        return prepareSend(receiver, selector, caller, List.of());
+    }
+
+    /**
+     * PERF038-H: generic Send1 without a supplied-argument array.
+     */
+    static PreparedClosureCall prepareSendOneFallback(
+            Object receiver,
+            String selector,
+            ProtosActivation caller,
+            Object supplied0) {
+        return prepareSend(
+                receiver, selector, caller, List.of(supplied0));
     }
 
     private static PreparedClosureCall prepareSend(
@@ -10176,7 +10503,37 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepared.enterNative();
         }
 
-        @Specialization(guards = "prepared.bodyTarget() == cachedTarget", limit = "3")
+        /*
+         * PERF038-H: no-home ordinary calls do not own a lifecycle, cannot
+         * consume a non-local return and never remap runtime failures.
+         * Their only required exception adaptation is unwrapping the
+         * bytecode control-flow bridge.
+         */
+        @Specialization(
+                guards = {
+                    "!prepared.hasReturnHomeLifecycle()",
+                    "prepared.bodyTarget() == cachedTarget"
+                },
+                limit = "3")
+        public static Object ordinaryDirectNoHome(
+                OrdinarySourceCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            try {
+                return node.call(prepared.targetArguments());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(
+                guards = {
+                    "prepared.hasReturnHomeLifecycle()",
+                    "prepared.bodyTarget() == cachedTarget"
+                },
+                limit = "3")
         public static Object ordinaryDirect(
                 OrdinarySourceCall prepared,
                 @Cached("prepared.bodyTarget()")
@@ -10195,7 +10552,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
         }
 
-        @Specialization(replaces = "ordinaryDirect")
+        @Specialization(replaces = {"ordinaryDirectNoHome", "ordinaryDirect"})
         public static Object ordinaryIndirect(
                 OrdinarySourceCall prepared,
                 @Shared("indirectCall") @Cached IndirectCallNode node) {

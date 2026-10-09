@@ -98,6 +98,8 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                             + " must not specialize on the PreparedClosureCall interface");
             int expectedCount =
                     operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
+                                    || operation
+                                            == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class
                             ? representations.size() + 1
                             : representations.size();
             assertEquals(
@@ -148,7 +150,12 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                     receivers.containsKey(ProtosBytecodeRootNode.PreparedClosureCall.class),
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
-            assertEquals(expected, receivers, operation.getName());
+            java.util.Map<Class<?>, Long> expectedForOperation =
+                    new java.util.HashMap<>(expected);
+            expectedForOperation.put(
+                    ProtosBytecodeRootNode.OrdinarySourceCall.class, 3L);
+
+            assertEquals(expectedForOperation, receivers, operation.getName());
 
             assertEquals(
                     List.of(
@@ -174,10 +181,18 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                 .filter(parameters -> parameters.length > 1)
                                 .map(parameters -> parameters[parameters.length - 1])
                                 .collect(java.util.stream.Collectors.toList());
+                List<Class<?>> expectedSourceCallNodes =
+                        source == ProtosBytecodeRootNode.OrdinarySourceCall.class
+                                ? List.of(
+                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
+                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
+                                        com.oracle.truffle.api.nodes.IndirectCallNode.class)
+                                : List.of(
+                                        com.oracle.truffle.api.nodes.DirectCallNode.class,
+                                        com.oracle.truffle.api.nodes.IndirectCallNode.class);
+
                 assertEquals(
-                        List.of(
-                                com.oracle.truffle.api.nodes.DirectCallNode.class,
-                                com.oracle.truffle.api.nodes.IndirectCallNode.class),
+                        expectedSourceCallNodes,
                         sourceCallNodes.stream()
                                 .sorted(java.util.Comparator.comparing(Class::getName))
                                 .collect(java.util.stream.Collectors.toList()),

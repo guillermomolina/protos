@@ -42,6 +42,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -197,6 +198,20 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return root.arityRejectionTarget;
         }
         return bodyTarget;
+    }
+
+    /*
+     * PERF038-H: conservative source-root execution capability.
+     * Unknown and dynamically selected operations remain general.
+     */
+    private boolean provablyNonSuspendingBody;
+
+    final void recordProvablyNonSuspendingBody(boolean proven) {
+        this.provablyNonSuspendingBody = proven;
+    }
+
+    final boolean provablyNonSuspendingBody() {
+        return provablyNonSuspendingBody;
     }
 
     final void recordFrameNativeBindings(
@@ -2629,6 +2644,106 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+
+    /* PERF038-H: dedicated single-argument Closure call. */
+    @Operation
+    public static final class PrepareClosureCallOne {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedGuarded != null"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedDirect(
+                Object receiver,
+                ProtosActivation caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded) {
+
+            return ProtosBytecodeRootNode.finishDirectClosureCallOne(
+                    cachedGuarded.closure(),
+                    cachedGuarded.target(),
+                    supplied0,
+                    caller);
+        }
+
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastDirect(
+                Object receiver,
+                ProtosActivation caller,
+                Object supplied0,
+                @Bind("directClosureCallSelectionOrNull(receiver, caller)")
+                        ProtosClosureValue closure,
+                @Bind("directClosureCallDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+
+            return ProtosBytecodeRootNode.finishDirectClosureCallOne(
+                    closure,
+                    cachedTarget,
+                    supplied0,
+                    caller);
+        }
+
+        @Specialization(replaces = {"guardedDirect", "fastDirect"})
+        public static PreparedClosureCall perform(
+                Object receiver,
+                ProtosActivation caller,
+                Object supplied0) {
+            return ProtosBytecodeRootNode.prepareClosureCallOneFallback(
+                    receiver, caller, supplied0);
+
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+
+        static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
+                Object receiver, ProtosActivation caller, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.createGuardedDirectClosureCall(
+                    receiver, caller, enteredContext);
+        }
+
+        static ProtosClosureValue directClosureCallSelectionOrNull(
+                Object receiver, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.directClosureCallSelectionOrNull(receiver, caller);
+        }
+
+        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.directClosureCallDefinitionOrNull(closure);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
     @Operation
     public static final class PrepareDefaultClosureCallArguments {
         @Specialization(
@@ -2999,6 +3114,561 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * with a provenance-equivalent caller; every other selection runs the
      * unchanged activation path.
      */
+
+    /* PERF038-H: fixed-arity inline sends. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class PrepareInlineSendZero {
+        @Specialization(
+                guards = {
+                    "isIntegerReceiver(receiver)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedIntegerSend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedIntegerSendZero(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame),
+                            cachedInteger);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedOrdinarySendZero(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame),
+                            cachedSend);
+        }
+
+        /*
+         * Unlike PrepareSendArguments.fastOrdinarySend, a failing selection
+         * binds null and misses here: its exact Error is raised by the
+         * generic path from the materialized activation.
+         */
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "closure != null",
+                    "enteredContext != null",
+                    "selector.equals(cachedSelector)",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastOrdinarySend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("ordinarySendSelectionOrNull(receiver, selector, child)")
+                        ProtosSlotLookupResult selected,
+                @Bind("ordinarySendClosureOrNull(selected)")
+                        ProtosClosureValue closure,
+                @Bind("ordinarySendClosureDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("selector") String cachedSelector,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .fastOrdinarySendZero(
+                            closure,
+                            receiver,
+                            selected.home(),
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame),
+                            cachedTarget);
+        }
+
+        /*
+         * Structured sends keep the materialized activation as their caller;
+         * only their D013 classification, which reads the caller's prelude,
+         * uses a provenance-equivalent caller.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "lookupCaller != null",
+                    "cachedStructured != null"
+                },
+                assumptions = "cachedStructured.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedStructuredSend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.provenanceCallerOrNull()") ProtosActivation lookupCaller,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedStructuredSend(receiver, selector, lookupCaller)")
+                        GuardedStructuredSend cachedStructured) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedStructuredSendZero(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.durableActivation(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame),
+                            cachedStructured);
+        }
+
+        @Specialization(
+                replaces = {
+                    "guardedIntegerSend",
+                    "guardedOrdinarySend",
+                    "fastOrdinarySend",
+                    "guardedStructuredSend"
+                })
+        public static PreparedClosureCall perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            return ProtosBytecodeRootNode.prepareSendZeroFallback(
+                    receiver,
+                    selector,
+                    ProtosInlineCallbackFrameBindings.durableActivation(
+                            child, frameBackedLocals, frameBackedLayout,
+                            bytecodeNode, frame));
+
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static boolean isIntegerReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isIntegerReceiver(receiver);
+        }
+
+        static GuardedSendTarget createGuardedSendForPrelude(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedSendForPrelude(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static GuardedStructuredSend createGuardedStructuredSend(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedStructuredSend(
+                    receiver, selector, caller);
+        }
+
+        static ProtosSlotLookupResult ordinarySendSelectionOrNull(
+                Object receiver, String selector, PreparedInlineLiteralCall child) {
+            try {
+                return ProtosValueLookup.lookup(receiver, selector, child.prelude())
+                        .orElse(null);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
+            }
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
+        }
+
+        static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
+            return selected == null
+                    ? null
+                    : ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureOrNull(
+                            selected);
+        }
+
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+                    closure);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
+    /**
+     * PERF025 slice 3 inline-callback {@link PrepareClosureCall} and {@link
+     * PrepareClosureCallArguments}: the canonical direct source-Closure tiers
+     * select through the invocation's prelude and prepare the compact child
+     * with a provenance-equivalent caller; every other selection runs the
+     * unchanged activation path.
+     */
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class PrepareInlineSendOne {
+        @Specialization(
+                guards = {
+                    "isIntegerReceiver(receiver)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedIntegerSend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            if (cachedInteger.operation() != null) {
+                Object direct =
+                        ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
+                                cachedInteger.operation(), receiver, supplied0);
+                if (direct != null) {
+                    return PreparedClosureCall.immediateResult(direct);
+                }
+            }
+
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedIntegerSendOne(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame), supplied0,
+                            cachedInteger);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedOrdinarySendOne(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame), supplied0,
+                            cachedSend);
+        }
+
+        /*
+         * Unlike PrepareSendArguments.fastOrdinarySend, a failing selection
+         * binds null and misses here: its exact Error is raised by the
+         * generic path from the materialized activation.
+         */
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "closure != null",
+                    "enteredContext != null",
+                    "selector.equals(cachedSelector)",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastOrdinarySend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("ordinarySendSelectionOrNull(receiver, selector, child)")
+                        ProtosSlotLookupResult selected,
+                @Bind("ordinarySendClosureOrNull(selected)")
+                        ProtosClosureValue closure,
+                @Bind("ordinarySendClosureDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("selector") String cachedSelector,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .fastOrdinarySendOne(
+                            closure,
+                            receiver,
+                            selected.home(),
+                            ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame),
+                            cachedTarget, supplied0);
+        }
+
+        /*
+         * Structured sends keep the materialized activation as their caller;
+         * only their D013 classification, which reads the caller's prelude,
+         * uses a provenance-equivalent caller.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "lookupCaller != null",
+                    "cachedStructured != null"
+                },
+                assumptions = "cachedStructured.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedStructuredSend(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.provenanceCallerOrNull()") ProtosActivation lookupCaller,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedStructuredSend(receiver, selector, lookupCaller)")
+                        GuardedStructuredSend cachedStructured) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .guardedStructuredSendOne(
+                            receiver,
+                            ProtosInlineCallbackFrameBindings.durableActivation(
+                    child, frameBackedLocals, frameBackedLayout,
+                    bytecodeNode, frame), supplied0,
+                            cachedStructured);
+        }
+
+        @Specialization(
+                replaces = {
+                    "guardedIntegerSend",
+                    "guardedOrdinarySend",
+                    "fastOrdinarySend",
+                    "guardedStructuredSend"
+                })
+        public static PreparedClosureCall perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                String selector,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            return ProtosBytecodeRootNode.prepareSendOneFallback(
+                    receiver,
+                    selector,
+                    ProtosInlineCallbackFrameBindings.durableActivation(
+                            child, frameBackedLocals, frameBackedLayout,
+                            bytecodeNode, frame),
+                    supplied0);
+
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static boolean isIntegerReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isIntegerReceiver(receiver);
+        }
+
+        static GuardedSendTarget createGuardedSendForPrelude(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedSendForPrelude(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static GuardedStructuredSend createGuardedStructuredSend(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedStructuredSend(
+                    receiver, selector, caller);
+        }
+
+        static ProtosSlotLookupResult ordinarySendSelectionOrNull(
+                Object receiver, String selector, PreparedInlineLiteralCall child) {
+            try {
+                return ProtosValueLookup.lookup(receiver, selector, child.prelude())
+                        .orElse(null);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
+            }
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
+        }
+
+        static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
+            return selected == null
+                    ? null
+                    : ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureOrNull(
+                            selected);
+        }
+
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+                    closure);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
+    /**
+     * PERF025 slice 3 inline-callback {@link PrepareClosureCall} and {@link
+     * PrepareClosureCallArguments}: the canonical direct source-Closure tiers
+     * select through the invocation's prelude and prepare the compact child
+     * with a provenance-equivalent caller; every other selection runs the
+     * unchanged activation path.
+     */
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -3203,6 +3873,134 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     ProtosInlineCallbackFrameBindings.durableActivation(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                     supplied);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+
+        static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
+                Object receiver, ProtosPrelude prelude, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.createGuardedDirectClosureCallForPrelude(
+                    receiver, prelude, enteredContext);
+        }
+
+        static ProtosClosureValue directClosureCallSelectionOrNull(
+                Object receiver, PreparedInlineLiteralCall child) {
+            return ProtosBytecodeRootNode.directClosureCallSelectionForPreludeOrNull(
+                    receiver, child.prelude());
+        }
+
+        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.directClosureCallDefinitionOrNull(closure);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
+
+    /* PERF038-H: dedicated single-argument Closure call. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class PrepareInlineClosureCallOne {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedGuarded != null"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedDirect(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("child.prelude()") ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedDirectClosureCall(receiver, prelude, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded) {
+
+            return ProtosBytecodeRootNode.finishDirectClosureCallOne(
+                    cachedGuarded.closure(),
+                    cachedGuarded.target(),
+                    supplied0,
+                    ProtosInlineCallbackFrameBindings.invocationCaller(
+                            child, frameBackedLocals,
+                            frameBackedLayout, bytecodeNode, frame));
+        }
+
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastDirect(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("directClosureCallSelectionOrNull(receiver, child)")
+                        ProtosClosureValue closure,
+                @Bind("directClosureCallDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+
+            return ProtosBytecodeRootNode.finishDirectClosureCallOne(
+                    closure,
+                    cachedTarget,
+                    supplied0,
+                    ProtosInlineCallbackFrameBindings.invocationCaller(
+                            child, frameBackedLocals,
+                            frameBackedLayout, bytecodeNode, frame));
+        }
+
+        @Specialization(replaces = {"guardedDirect", "fastDirect"})
+        public static PreparedClosureCall perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver,
+                PreparedInlineLiteralCall child,
+                Object supplied0,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            return ProtosBytecodeRootNode.prepareClosureCallOneFallback(
+                    receiver,
+                    ProtosInlineCallbackFrameBindings.durableActivation(
+                            child, frameBackedLocals, frameBackedLayout,
+                            bytecodeNode, frame),
+                    supplied0);
+
         }
 
         @NonIdempotent
@@ -3539,6 +4337,867 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Variadic Object[] supplied) {
             return ProtosBytecodeRootNode.PrepareSendArguments.perform(
                     receiver, selector, exactCaller(caller), supplied);
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver, String selector, ProtosPrelude prelude) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude);
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static boolean isIntegerReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isIntegerReceiver(receiver);
+        }
+
+        /**
+         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * denotes, without materializing it ({@link
+         * ProtosFrameArguments#preludeOrNull} answers exactly what the
+         * materialized activation would).
+         */
+        static ProtosPrelude callerPrelude(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(activation);
+            }
+            return ProtosFrameArguments.preludeOrNull((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D: the exact caller activation a caller operand denotes,
+         * materializing and publishing a compact root activation exactly as
+         * {@link CurrentActivation} would have when the operand was evaluated.
+         * Materialization is not guest-observable by itself: the activation
+         * identity is the one every later observer of the root also sees.
+         */
+        static ProtosActivation exactCaller(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation;
+            }
+            return ProtosFrameArguments.activation((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
+         * for the callee header of a guarded ordinary send, whose callee uses
+         * its caller only for the prelude, actor module state, current module
+         * key, execution domain and Task or dynamic-control state it would
+         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
+         * the own caller of a still-compact root that inherits all of them,
+         * else {@code null}. It never materializes. The frame-argument array
+         * may be published between executions, so this is re-evaluated on
+         * every execution.
+         */
+        @NonIdempotent
+        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
+            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
+                return null;
+            }
+            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
+        }
+
+        /**
+         * PERF038-F: {@link ProtosFrameArguments#isUnmaterializedInheritingFullHeader}
+         * of a compact caller operand, re-evaluated on every execution because
+         * the root may be published between executions.
+         */
+        @NonIdempotent
+        static boolean isInheritingFullHeader(Object[] caller) {
+            return ProtosFrameArguments.isUnmaterializedInheritingFullHeader(caller);
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeAbsent(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller) == null;
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeIsCallers(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller)
+                    == ProtosFrameArguments.unmaterializedFullHeaderCaller(caller)
+                            .preludeOrNullForRuntime();
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static ProtosActivation fullHeaderCaller(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderCaller(caller);
+        }
+
+        static GuardedSendTarget createGuardedSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedSend(
+                    receiver, selector, caller, enteredContext);
+        }
+
+        static GuardedStructuredSend createGuardedStructuredSend(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedStructuredSend(
+                    receiver, selector, caller);
+        }
+
+        static ProtosSlotLookupResult performOrdinarySendLookup(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.performOrdinarySendLookup(
+                    receiver, selector, caller);
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
+        }
+
+        static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureOrNull(selected);
+        }
+
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+                    closure);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.currentEnteredContext(node);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
+
+    /* PERF038-H: fixed operand count, with the complete existing PIC policy. */
+    @Operation
+    public static final class PrepareSendZero {
+        @Specialization(
+                guards = {
+                    "isIntegerReceiver(receiver)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedIntegerSend(
+                Object receiver,
+                String selector,
+                Object caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedIntegerSendZero(
+                    receiver, caller, cachedInteger);
+        }
+
+        /*
+         * PERF038-E: the guarded ordinary send is specialized on the state of
+         * its caller operand (see CurrentCallerReference), so each compiled
+         * form carries only the provenance path it has observed:
+         *
+         *   guardedOrdinarySend           a published caller activation;
+         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *                                 inherits all provenance from its own
+         *                                 caller, passed in its place without
+         *                                 materialization;
+         *   guardedOrdinarySendMaterializing  any other compact caller, which
+         *                                 is materialized and published
+         *                                 exactly as CurrentActivation would.
+         *
+         * The inheritance condition is a guard evaluated on every execution,
+         * so a compact caller that stops satisfying it (a different root
+         * Closure, prelude or explicit Task) leaves the inherited form and
+         * respecializes; no materialization path is compiled into a site
+         * that has never needed one. Every form shares the selection
+         * Assumption, receiver identity and entered-Context guards and runs
+         * the same preparation.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
+                    receiver, caller, cachedSend);
+        }
+
+        /*
+         * PERF038-F: the inherited form is split by the provenance relation
+         * the site has observed, each decided by fixed full-header slots
+         * instead of re-deriving the ABI and merging the alternatives:
+         *
+         *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
+         *                                 no prelude of its own;
+         *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
+         *                                 is its caller's;
+         *   guardedOrdinarySendInherited  a minimal direct header, decided by
+         *                                 the general provenance query.
+         *
+         * A Closure with a different prelude or an explicit Task satisfies
+         * none of the inherited guards and takes the materializing form, as
+         * before. The guards are re-evaluated on every execution.
+         */
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeAbsent(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedOwnPreludeAbsent(
+                Object receiver,
+                String selector,
+                Object[] caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
+                    receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeIsCallers(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedSamePrelude(
+                Object receiver,
+                String selector,
+                Object[] caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
+                    receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "inherited != null",
+                    "!isInheritingFullHeader(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInherited(
+                Object receiver,
+                String selector,
+                Object[] caller,
+
+                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
+                    receiver, inherited, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendMaterializing(
+                Object receiver,
+                String selector,
+                Object[] caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
+                    receiver, exactCaller(caller), cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "closure != null",
+                    "enteredContext != null",
+                    "selector.equals(cachedSelector)",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastOrdinarySend(
+                Object receiver,
+                String selector,
+                Object caller,
+
+                @Bind("performOrdinarySendLookup(receiver, selector, exactCaller(caller))")
+                        ProtosSlotLookupResult selected,
+                @Bind("ordinarySendClosureOrNull(selected)")
+                        ProtosClosureValue closure,
+                @Bind("selected.home()") ProtosObjectValue methodHome,
+                @Bind("ordinarySendClosureDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("selector") String cachedSelector,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendZero(
+                    closure,
+                    receiver,
+                    methodHome,
+                    exactCaller(caller),
+                    cachedTarget);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedStructured != null"
+                },
+                assumptions = "cachedStructured.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedStructuredSend(
+                Object receiver,
+                String selector,
+                Object caller,
+
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
+                        GuardedStructuredSend cachedStructured) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedStructuredSendZero(
+                    receiver, exactCaller(caller), cachedStructured);
+        }
+
+        @Specialization(
+                replaces = {
+                    "guardedIntegerSend",
+                    "guardedOrdinarySend",
+                    "guardedOrdinarySendInheritedOwnPreludeAbsent",
+                    "guardedOrdinarySendInheritedSamePrelude",
+                    "guardedOrdinarySendInherited",
+                    "guardedOrdinarySendMaterializing",
+                    "fastOrdinarySend",
+                    "guardedStructuredSend"
+                })
+        public static PreparedClosureCall perform(
+                Object receiver,
+                String selector,
+                Object caller) {
+            return ProtosBytecodeRootNode.prepareSendZeroFallback(
+                    receiver, selector, exactCaller(caller));
+
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver, String selector, ProtosPrelude prelude) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude);
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static boolean isIntegerReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isIntegerReceiver(receiver);
+        }
+
+        /**
+         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * denotes, without materializing it ({@link
+         * ProtosFrameArguments#preludeOrNull} answers exactly what the
+         * materialized activation would).
+         */
+        static ProtosPrelude callerPrelude(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(activation);
+            }
+            return ProtosFrameArguments.preludeOrNull((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D: the exact caller activation a caller operand denotes,
+         * materializing and publishing a compact root activation exactly as
+         * {@link CurrentActivation} would have when the operand was evaluated.
+         * Materialization is not guest-observable by itself: the activation
+         * identity is the one every later observer of the root also sees.
+         */
+        static ProtosActivation exactCaller(Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation;
+            }
+            return ProtosFrameArguments.activation((Object[]) caller);
+        }
+
+        /**
+         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
+         * for the callee header of a guarded ordinary send, whose callee uses
+         * its caller only for the prelude, actor module state, current module
+         * key, execution domain and Task or dynamic-control state it would
+         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
+         * the own caller of a still-compact root that inherits all of them,
+         * else {@code null}. It never materializes. The frame-argument array
+         * may be published between executions, so this is re-evaluated on
+         * every execution.
+         */
+        @NonIdempotent
+        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
+            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
+                return null;
+            }
+            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
+        }
+
+        /**
+         * PERF038-F: {@link ProtosFrameArguments#isUnmaterializedInheritingFullHeader}
+         * of a compact caller operand, re-evaluated on every execution because
+         * the root may be published between executions.
+         */
+        @NonIdempotent
+        static boolean isInheritingFullHeader(Object[] caller) {
+            return ProtosFrameArguments.isUnmaterializedInheritingFullHeader(caller);
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeAbsent(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller) == null;
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static boolean ownPreludeIsCallers(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderOwnPrelude(caller)
+                    == ProtosFrameArguments.unmaterializedFullHeaderCaller(caller)
+                            .preludeOrNullForRuntime();
+        }
+
+        /** Precondition: {@link #isInheritingFullHeader}. */
+        static ProtosActivation fullHeaderCaller(Object[] caller) {
+            return ProtosFrameArguments.unmaterializedFullHeaderCaller(caller);
+        }
+
+        static GuardedSendTarget createGuardedSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedSend(
+                    receiver, selector, caller, enteredContext);
+        }
+
+        static GuardedStructuredSend createGuardedStructuredSend(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedStructuredSend(
+                    receiver, selector, caller);
+        }
+
+        static ProtosSlotLookupResult performOrdinarySendLookup(
+                Object receiver, String selector, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.performOrdinarySendLookup(
+                    receiver, selector, caller);
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.isForeignReceiver(receiver);
+        }
+
+        static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureOrNull(selected);
+        }
+
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+                    closure);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.currentEnteredContext(node);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                    closure, enteredContext);
+        }
+    }
+
+
+    @Operation
+    public static final class PrepareSendOne {
+        @Specialization(
+                guards = {
+                    "isIntegerReceiver(receiver)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedIntegerSend(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedIntegerSendOne(
+                    receiver, caller, supplied0, cachedInteger);
+        }
+
+        /*
+         * PERF038-E: the guarded ordinary send is specialized on the state of
+         * its caller operand (see CurrentCallerReference), so each compiled
+         * form carries only the provenance path it has observed:
+         *
+         *   guardedOrdinarySend           a published caller activation;
+         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *                                 inherits all provenance from its own
+         *                                 caller, passed in its place without
+         *                                 materialization;
+         *   guardedOrdinarySendMaterializing  any other compact caller, which
+         *                                 is materialized and published
+         *                                 exactly as CurrentActivation would.
+         *
+         * The inheritance condition is a guard evaluated on every execution,
+         * so a compact caller that stops satisfying it (a different root
+         * Closure, prelude or explicit Task) leaves the inherited form and
+         * respecializes; no materialization path is compiled into a site
+         * that has never needed one. Every form shares the selection
+         * Assumption, receiver identity and entered-Context guards and runs
+         * the same preparation.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
+                    receiver, caller, supplied0, cachedSend);
+        }
+
+        /*
+         * PERF038-F: the inherited form is split by the provenance relation
+         * the site has observed, each decided by fixed full-header slots
+         * instead of re-deriving the ABI and merging the alternatives:
+         *
+         *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
+         *                                 no prelude of its own;
+         *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
+         *                                 is its caller's;
+         *   guardedOrdinarySendInherited  a minimal direct header, decided by
+         *                                 the general provenance query.
+         *
+         * A Closure with a different prelude or an explicit Task satisfies
+         * none of the inherited guards and takes the materializing form, as
+         * before. The guards are re-evaluated on every execution.
+         */
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeAbsent(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedOwnPreludeAbsent(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
+                    receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), supplied0, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "isInheritingFullHeader(caller)",
+                    "ownPreludeIsCallers(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInheritedSamePrelude(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
+                    receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), supplied0, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "inherited != null",
+                    "!isInheritingFullHeader(caller)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendInherited(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                Object supplied0,
+                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
+                    receiver, inherited, supplied0, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySendMaterializing(
+                Object receiver,
+                String selector,
+                Object[] caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
+                    receiver, exactCaller(caller), supplied0, cachedSend);
+        }
+
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "closure != null",
+                    "enteredContext != null",
+                    "selector.equals(cachedSelector)",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastOrdinarySend(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0,
+                @Bind("performOrdinarySendLookup(receiver, selector, exactCaller(caller))")
+                        ProtosSlotLookupResult selected,
+                @Bind("ordinarySendClosureOrNull(selected)")
+                        ProtosClosureValue closure,
+                @Bind("selected.home()") ProtosObjectValue methodHome,
+                @Bind("ordinarySendClosureDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("selector") String cachedSelector,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendOne(
+                    closure,
+                    receiver,
+                    methodHome,
+                    exactCaller(caller),
+                    cachedTarget,
+                    supplied0);
+        }
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedStructured != null"
+                },
+                assumptions = "cachedStructured.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedStructuredSend(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
+                        GuardedStructuredSend cachedStructured) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.guardedStructuredSendOne(
+                    receiver, exactCaller(caller), supplied0, cachedStructured);
+        }
+
+        @Specialization(
+                replaces = {
+                    "guardedIntegerSend",
+                    "guardedOrdinarySend",
+                    "guardedOrdinarySendInheritedOwnPreludeAbsent",
+                    "guardedOrdinarySendInheritedSamePrelude",
+                    "guardedOrdinarySendInherited",
+                    "guardedOrdinarySendMaterializing",
+                    "fastOrdinarySend",
+                    "guardedStructuredSend"
+                })
+        public static PreparedClosureCall perform(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0) {
+            return ProtosBytecodeRootNode.prepareSendOneFallback(
+                    receiver, selector, exactCaller(caller), supplied0);
+
         }
 
         static GuardedIntegerSend createGuardedIntegerSend(
@@ -4223,7 +5882,18 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class CompleteClosureCall {
-        @Specialization
+        /*
+         * PERF038-H: completion has no observable effect when this call
+         * owns no materialized ReturnHome. Avoid entering the general
+         * completion machinery on the pay-as-you-grow path.
+         */
+        @Specialization(guards = "!prepared.hasReturnHomeLifecycle()")
+        public static void ordinaryWithoutHomeLifecycle(
+                OrdinarySourceCall prepared) {
+            // No owned materialized ReturnHome to complete.
+        }
+
+        @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
         public static void ordinary(OrdinarySourceCall prepared) {
             ProtosBytecodeRootNode.CompleteClosureCall.ordinary(prepared);
         }
@@ -4286,6 +5956,493 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF038-H: straight-line execution is permitted only for the
+     * selected source entry, not by selector spelling or receiver type.
+     *
+     * The proof excludes suspension and an owned materialized
+     * ReturnHome. Unknown and native calls preserve the full path.
+     */
+    @Operation
+    public static final class AdmitsStraightLineSourceCall {
+        @Specialization
+        public static boolean perform(OrdinarySourceCall prepared) {
+            return prepared.provablyNonSuspending()
+                    && !prepared.hasReturnHomeLifecycle();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return false;
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return false;
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(
+                ModuleInitializationCall prepared) {
+            return false;
+        }
+    }
+
+    /**
+     * PERF038-H: direct execution of an admitted straight-line source
+     * call. The enclosing invocation's existing TryFinally remains
+     * authoritative for Error, cancellation and cleanup paths.
+     *
+     * These entry points reuse the original EnterClosureCall exception
+     * bridge. No second invocation or semantic dispatch is introduced.
+     */
+    @Operation
+    public static final class EnterStraightLineSourceCall {
+        @Specialization(
+                guards = "prepared.bodyTarget() == cachedTarget",
+                limit = "3")
+        public static Object ordinaryDirect(
+                OrdinarySourceCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
+                    prepared, cachedTarget, node);
+        }
+
+        @Specialization(replaces = "ordinaryDirect")
+        public static Object ordinaryIndirect(
+                OrdinarySourceCall prepared,
+                @Cached IndirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                    prepared, node);
+        }
+    }
+
+    /**
+     * PERF038-H: source-backed Send1 fast entry.
+     *
+     * Both argument evaluation and the D013 member-selection guards
+     * remain authoritative. The selected Closure must have a
+     * statically proven non-suspending source body, an entry matching
+     * the supplied arity, and no physical ReturnHome lifecycle.
+     *
+     * Every other selection returns MISS without invoking the guest.
+     * The lowerer then runs the original prepared-call path using
+     * the already evaluated operands.
+     */
+    /**
+     * PERF038-H: fused zero-argument ordinary source-method send.
+     *
+     * Lookup identity, selected method home, entered Context,
+     * prelude and invalidation are guarded exactly as in Send1.
+     * The selected source root must be proven non-suspending and
+     * must require no physical ReturnHome completion.
+     */
+    @Operation
+    public static final class TryDirectSendZero {
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedSend != null",
+                    "admitted(cachedSend)"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                String selector,
+                Object caller,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
+                        GuardedSendTarget cachedSend,
+                @Cached("create(cachedSend.target())")
+                        DirectCallNode node) {
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments
+                            .compactImmediateMethodCallZeroNoHome(
+                                    cachedSend.closure(),
+                                    receiver,
+                                    cachedSend.methodHome(),
+                                    exactCaller);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                /*
+                 * The admission excludes ownership of a materialized
+                 * ReturnHome, so no transfer can be consumed here.
+                 */
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "guardedSource")
+        public static Object generic(
+                Object receiver,
+                String selector,
+                Object caller) {
+            return TryDirectSendOne.MISS;
+        }
+
+        static boolean admitted(GuardedSendTarget send) {
+            return TryDirectSendOne.admittedForArity(send, 0);
+        }
+
+        static GuardedSendTarget createGuardedSendForPrelude(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return TryDirectSendOne.createGuardedSendForPrelude(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return TryDirectSendOne.callerPrelude(caller);
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return TryDirectSendOne.isForeignReceiver(receiver);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    @Operation
+    public static final class TryDirectSendOne {
+        private static final Object MISS = new Object();
+
+        @Specialization(
+                guards = {
+                    "!isForeignReceiver(receiver)",
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedSend != null",
+                    "admitted(cachedSend)"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
+                        GuardedSendTarget cachedSend,
+                @Cached("create(cachedSend.target())")
+                        DirectCallNode node) {
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments.compactImmediateMethodCallOne(
+                            cachedSend.closure(),
+                            receiver,
+                            cachedSend.methodHome(),
+                            exactCaller,
+                            ProtosReturnHome.unobservable(),
+                            supplied0);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                /*
+                 * Exactly the no-home OrdinarySourceCall bridge:
+                 * there is no owned materialized home able to
+                 * consume this control transfer.
+                 */
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "guardedSource")
+        public static Object generic(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied0) {
+            return MISS;
+        }
+
+        static boolean admitted(GuardedSendTarget send) {
+            return admittedForArity(send, 1);
+        }
+
+        static boolean admittedForArity(
+                GuardedSendTarget send, int suppliedArgumentCount) {
+            if (send == null
+                    || send.freshInvocationHome()
+                    || send.sharedInvocationHome()
+                            != ProtosReturnHome.unobservable()) {
+                return false;
+            }
+
+            RootCallTarget target = send.target();
+            if (target == null
+                    || !(target.getRootNode()
+                            instanceof ProtosSemanticBytecodeRootNode root)
+                    || !root.provablyNonSuspendingBody()) {
+                return false;
+            }
+
+            /*
+             * Admission must agree with the exact entry selected for
+             * this supplied arity, including the rejection root.
+             */
+            return ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
+                    target, suppliedArgumentCount) == target;
+        }
+
+        static GuardedSendTarget createGuardedSendForPrelude(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .createGuardedSendForPrelude(
+                            receiver, selector, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return PrepareSendArguments.callerPrelude(caller);
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .isForeignReceiver(receiver);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * A failed fused attempt delegates to the original prepared
+     * invocation. The marker cannot collide with a Protos result.
+     */
+    /**
+     * PERF038-H: direct Call0 of a proven straight-line source
+     * Closure, without constructing an OrdinarySourceCall carrier.
+     */
+    @Operation
+    public static final class TryDirectCallZero {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedGuarded != null",
+                    "admitted(cachedGuarded, 0)"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                Object caller,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded,
+                @Cached("create(cachedGuarded.target())")
+                        DirectCallNode node) {
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments
+                            .compactDirectClosureCallZeroNoHome(
+                                    cachedGuarded.closure(),
+                                    exactCaller);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "guardedSource")
+        public static Object generic(Object receiver, Object caller) {
+            return TryDirectSendOne.MISS;
+        }
+
+        static boolean admitted(
+                GuardedDirectClosureCallTarget guarded,
+                int suppliedArgumentCount) {
+            if (guarded == null
+                    || !(guarded.target().getRootNode()
+                            instanceof ProtosSemanticBytecodeRootNode root)
+                    || !root.provablyNonSuspendingBody()
+                    || ProtosSemanticBytecodeRootNode
+                                    .selectSourceEntryTarget(
+                                            guarded.target(),
+                                            suppliedArgumentCount)
+                            != guarded.target()) {
+                return false;
+            }
+
+            /*
+             * No physical ReturnHome is discarded. The exact Closure
+             * must independently prove the unobservable marker.
+             */
+            return guarded.closure()
+                            .invocationReturnHomeForRuntime()
+                    == ProtosReturnHome.unobservable();
+        }
+
+        static GuardedDirectClosureCallTarget
+                createGuardedDirectClosureCallForPrelude(
+                        Object receiver,
+                        ProtosPrelude prelude,
+                        ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode
+                    .createGuardedDirectClosureCallForPrelude(
+                            receiver, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return PrepareSendArguments.callerPrelude(caller);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * PERF038-H: scalar direct Call1 with the same canonical
+     * selection and execution-capability proof as Call0.
+     */
+    @Operation
+    public static final class TryDirectCallOne {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedGuarded != null",
+                    "admitted(cachedGuarded)"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                Object caller,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded,
+                @Cached("create(cachedGuarded.target())")
+                        DirectCallNode node) {
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments
+                            .compactDirectClosureCallOneNoHome(
+                                    cachedGuarded.closure(),
+                                    exactCaller,
+                                    supplied0);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "guardedSource")
+        public static Object generic(
+                Object receiver,
+                Object caller,
+                Object supplied0) {
+            return TryDirectSendOne.MISS;
+        }
+
+        static boolean admitted(
+                GuardedDirectClosureCallTarget guarded) {
+            return TryDirectCallZero.admitted(guarded, 1);
+        }
+
+        static GuardedDirectClosureCallTarget
+                createGuardedDirectClosureCallForPrelude(
+                        Object receiver,
+                        ProtosPrelude prelude,
+                        ProtosLanguageContext enteredContext) {
+            return TryDirectCallZero
+                    .createGuardedDirectClosureCallForPrelude(
+                            receiver, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return TryDirectCallZero.callerPrelude(caller);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    @Operation
+    public static final class IsDirectSendMiss {
+        @Specialization
+        public static boolean perform(Object result) {
+            return result == TryDirectSendOne.MISS;
+        }
+    }
+
     @Operation
     public static final class EnterClosureCall {
         @Specialization
@@ -4298,7 +6455,28 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.EnterClosureCall.nativeCall(prepared);
         }
 
-        @Specialization(guards = "prepared.bodyTarget() == cachedTarget", limit = "3")
+        @Specialization(
+                guards = {
+                    "!prepared.hasReturnHomeLifecycle()",
+                    "prepared.bodyTarget() == cachedTarget"
+                },
+                limit = "3")
+        public static Object ordinaryDirectNoHome(
+                OrdinarySourceCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirectNoHome(
+                    prepared, cachedTarget, node);
+        }
+
+        @Specialization(
+                guards = {
+                    "prepared.hasReturnHomeLifecycle()",
+                    "prepared.bodyTarget() == cachedTarget"
+                },
+                limit = "3")
         public static Object ordinaryDirect(
                 OrdinarySourceCall prepared,
                 @Cached("prepared.bodyTarget()")
@@ -4309,7 +6487,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     prepared, cachedTarget, node);
         }
 
-        @Specialization(replaces = "ordinaryDirect")
+        @Specialization(replaces = {"ordinaryDirectNoHome", "ordinaryDirect"})
         public static Object ordinaryIndirect(
                 OrdinarySourceCall prepared,
                 @Shared("indirectCall") @Cached IndirectCallNode node) {
@@ -4378,6 +6556,84 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     || ProtosNativeSuspension.class.isAssignableFrom(type)
                     || ProtosIoOperationSuspension.class.isAssignableFrom(type)
                     || ProtosIoReleaseSuspension.class.isAssignableFrom(type);
+        }
+    }
+
+    /**
+     * PERF038-H: suppress continuation classification only for a
+     * source entry statically proven incapable of suspending.
+     *
+     * Every native, structured, dynamically uncertain or
+     * polymorphic call retains the generic classification.
+     */
+    /**
+     * PERF038-H: continuation composition specialized by the
+     * concrete prepared-call representation (TEST009-J).
+     *
+     * A source entry proven incapable of suspension answers
+     * false directly. Other ordinary source entries retain the
+     * result-class PIC of PERF038-F.
+     *
+     * Native, immediate and module entries preserve the
+     * complete continuation predicate.
+     */
+    @Operation
+    public static final class IsContinuationForCall {
+        @Specialization(guards = "prepared.provablyNonSuspending()")
+        public static boolean provenNonSuspending(
+                OrdinarySourceCall prepared,
+                Object value) {
+            return false;
+        }
+
+        @Specialization(
+                guards = {
+                    "!prepared.provablyNonSuspending()",
+                    "value != null",
+                    "value.getClass() == cachedClass"
+                },
+                limit = "3")
+        public static boolean ordinaryClassProfiled(
+                OrdinarySourceCall prepared,
+                Object value,
+                @Cached("value.getClass()")
+                        Class<?> cachedClass,
+                @Cached("isContinuationClass(cachedClass)")
+                        boolean continuation) {
+            return continuation;
+        }
+
+        @Specialization(
+                replaces = {"provenNonSuspending", "ordinaryClassProfiled"})
+        public static boolean ordinaryGeneric(
+                OrdinarySourceCall prepared,
+                Object value) {
+            return IsContinuation.perform(value);
+        }
+
+        @Specialization
+        public static boolean nativeCall(
+                NativeCall prepared,
+                Object value) {
+            return IsContinuation.perform(value);
+        }
+
+        @Specialization
+        public static boolean immediate(
+                ImmediateResultCall prepared,
+                Object value) {
+            return IsContinuation.perform(value);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(
+                ModuleInitializationCall prepared,
+                Object value) {
+            return IsContinuation.perform(value);
+        }
+
+        static boolean isContinuationClass(Class<?> type) {
+            return IsContinuation.isContinuationClass(type);
         }
     }
 

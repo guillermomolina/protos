@@ -95,7 +95,16 @@ final class ProtosFrameArguments {
             Object[] supplied) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(methodHome, "methodHome");
-        return compactCall(closure, receiver, methodHome, caller, supplied);
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(caller, "caller");
+        Objects.requireNonNull(supplied, "supplied");
+        return compactImmediateMethodCall(
+                closure,
+                receiver,
+                methodHome,
+                caller,
+                closure.invocationReturnHomeForRuntime(),
+                supplied);
     }
 
     /**
@@ -118,6 +127,21 @@ final class ProtosFrameArguments {
             ProtosActivation caller,
             ProtosReturnHome returnHome,
             Object[] supplied) {
+        if (supplied.length == 0) {
+            if (returnHome == ProtosReturnHome.unobservable()) {
+                return new Object[] {
+                    closure, receiver, methodHome, caller
+                };
+            }
+            return new Object[] {
+                closure, receiver, methodHome, caller, returnHome
+            };
+        }
+        if (supplied.length == 1) {
+            return new Object[] {
+                closure, receiver, methodHome, caller, returnHome, supplied[0]
+            };
+        }
         Object[] arguments = new Object[USER_ARGUMENT_OFFSET + supplied.length];
         arguments[CLOSURE_INDEX] = closure;
         arguments[RECEIVER_INDEX] = receiver;
@@ -126,6 +150,36 @@ final class ProtosFrameArguments {
         arguments[RETURN_HOME_INDEX] = returnHome;
         System.arraycopy(supplied, 0, arguments, USER_ARGUMENT_OFFSET, supplied.length);
         return arguments;
+    }
+
+    /**
+     * PERF038-H: guarded Send0, without supplied argument vector.
+     */
+    static Object[] compactImmediateMethodCallZero(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosActivation caller,
+            ProtosReturnHome returnHome) {
+        return returnHome == ProtosReturnHome.unobservable()
+                ? new Object[] {closure, receiver, methodHome, caller}
+                : new Object[] {closure, receiver, methodHome, caller, returnHome};
+    }
+
+    /**
+     * PERF038-H: guarded Send1, with the supplied value placed
+     * directly into the final frame array.
+     */
+    static Object[] compactImmediateMethodCallOne(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosActivation caller,
+            ProtosReturnHome returnHome,
+            Object supplied0) {
+        return new Object[] {
+            closure, receiver, methodHome, caller, returnHome, supplied0
+        };
     }
 
     /**
@@ -156,6 +210,113 @@ final class ProtosFrameArguments {
                 : new Object[] {closure, task, caller, returnHome};
     }
 
+    /**
+     * PERF038-H: one-argument direct Closure invocation.
+     * No intermediate supplied-argument array is constructed.
+     */
+    /**
+     * PERF038-H: admitted direct Call0 with an already-selected return home.
+     * There is no explicit Task on an ordinary guest call.
+     */
+    static Object[] compactDirectClosureCallZeroPrepared(
+            ProtosClosureValue closure,
+            ProtosActivation caller,
+            ProtosReturnHome returnHome) {
+        return returnHome == ProtosReturnHome.unobservable()
+                ? new Object[] {closure, caller}
+                : new Object[] {closure, caller, returnHome};
+    }
+
+    /**
+     * PERF038-H: admitted direct Call1 with an already-selected home.
+     * The supplied value is placed directly in the final frame.
+     */
+    static Object[] compactDirectClosureCallOnePrepared(
+            ProtosClosureValue closure,
+            ProtosActivation caller,
+            ProtosReturnHome returnHome,
+            Object supplied0) {
+        return new Object[] {
+            closure,
+            DIRECT_CLOSURE_CALL,
+            null,
+            caller,
+            returnHome,
+            supplied0
+        };
+    }
+
+    static Object[] compactDirectClosureCallOne(
+            ProtosClosureValue closure,
+            ProtosActivation caller,
+            ProtosTask task,
+            Object supplied0) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(caller, "caller");
+
+        ProtosReturnHome returnHome =
+                closure.invocationReturnHomeForRuntime();
+
+        return new Object[] {
+            closure,
+            DIRECT_CLOSURE_CALL,
+            task,
+            caller,
+            returnHome,
+            supplied0
+        };
+    }
+
+    /**
+     * PERF038-H: minimal direct Call0 frame after a guarded proof
+     * that this invocation has no observable ReturnHome.
+     */
+    static Object[] compactDirectClosureCallZeroNoHome(
+            ProtosClosureValue closure,
+            ProtosActivation caller) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(caller, "caller");
+        return new Object[] {closure, caller};
+    }
+
+    /**
+     * PERF038-H: complete direct Call1 ABI without allocating an
+     * intermediate supplied-argument array.
+     */
+    static Object[] compactDirectClosureCallOneNoHome(
+            ProtosClosureValue closure,
+            ProtosActivation caller,
+            Object supplied0) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(caller, "caller");
+        return new Object[] {
+            closure,
+            DIRECT_CLOSURE_CALL,
+            null,
+            caller,
+            ProtosReturnHome.unobservable(),
+            supplied0
+        };
+    }
+
+    /**
+     * PERF038-H: final zero-argument method frame for a guarded
+     * source call with a proven unobservable ReturnHome.
+     */
+    static Object[] compactImmediateMethodCallZeroNoHome(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosActivation caller) {
+        return new Object[] {
+            closure,
+            receiver,
+            methodHome,
+            caller,
+            ProtosReturnHome.unobservable()
+        };
+    }
+
     private static Object[] compactCall(
             ProtosClosureValue closure,
             Object kindOrReceiver,
@@ -167,6 +328,19 @@ final class ProtosFrameArguments {
         Objects.requireNonNull(supplied, "supplied");
 
         ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
+
+        if (supplied.length == 0) {
+            return new Object[] {
+                closure, kindOrReceiver, methodHomeOrTask, caller, returnHome
+            };
+        }
+        if (supplied.length == 1) {
+            return new Object[] {
+                closure, kindOrReceiver, methodHomeOrTask, caller, returnHome,
+                supplied[0]
+            };
+        }
+
         Object[] arguments =
                 new Object[USER_ARGUMENT_OFFSET + supplied.length];
         arguments[CLOSURE_INDEX] = closure;
@@ -254,8 +428,11 @@ final class ProtosFrameArguments {
         }
         ProtosActivation caller =
                 (ProtosActivation) arguments[CALLER_INDEX];
+        boolean minimalMethod = isMinimalImmediateMethodCall(arguments);
         ProtosReturnHome returnHome =
-                (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
+                minimalMethod
+                        ? ProtosReturnHome.unobservable()
+                        : (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
         /*
          * The supplied values stay backed by this frame-argument array: the
          * user-argument range is written once by compactCall and never
@@ -264,7 +441,8 @@ final class ProtosFrameArguments {
          */
         List<?> supplied =
                 ProtosActivation.frameBackedSuppliedArgumentsForRuntime(
-                        arguments, USER_ARGUMENT_OFFSET);
+                        arguments,
+                        minimalMethod ? arguments.length : USER_ARGUMENT_OFFSET);
 
         ProtosActivation materialized;
         ProtosTask explicitTask = null;
@@ -558,10 +736,12 @@ final class ProtosFrameArguments {
      * without re-deriving the ABI.
      */
     static boolean isUnmaterializedInheritingFullHeader(Object[] arguments) {
-        return arguments.length >= USER_ARGUMENT_OFFSET
-                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                && (arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
-                        || arguments[TASK_INDEX] == null);
+        return (isMinimalImmediateMethodCall(arguments)
+                        && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue)
+                || (arguments.length >= USER_ARGUMENT_OFFSET
+                        && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
+                        && (arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
+                                || arguments[TASK_INDEX] == null));
     }
 
     /**
@@ -583,6 +763,14 @@ final class ProtosFrameArguments {
     }
 
     static ProtosReturnHome compactReturnHome(Object[] arguments) {
+        /*
+         * PERF038-H: a minimal Send0 retains its four-slot layout
+         * after argument zero is replaced by the published activation.
+         * Its omitted return home is always the unobservable marker.
+         */
+        if (isMinimalImmediateMethodCall(arguments)) {
+            return ProtosReturnHome.unobservable();
+        }
         requireCompactCall(arguments);
         int minimal = minimalLayout(arguments);
         if (minimal != MINIMAL_NONE) {
@@ -599,6 +787,9 @@ final class ProtosFrameArguments {
     }
 
     static ProtosActivation compactCaller(Object[] arguments) {
+        if (isMinimalImmediateMethodCall(arguments)) {
+            return (ProtosActivation) arguments[CALLER_INDEX];
+        }
         int minimal = minimalLayout(arguments);
         if (minimal != MINIMAL_NONE) {
             return minimalCaller(arguments, minimal);
@@ -702,11 +893,23 @@ final class ProtosFrameArguments {
                 || isDirectClosureCall(arguments);
     }
 
-    private static boolean isCompactImmediateMethodCall(Object[] arguments) {
-        return hasCompactHeader(arguments)
+    private static boolean isMinimalImmediateMethodCall(Object[] arguments) {
+        return arguments != null
+                && arguments.length == RETURN_HOME_INDEX
+                && (arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
+                        || arguments[CLOSURE_INDEX] instanceof ProtosActivation)
                 && arguments[RECEIVER_INDEX] != null
                 && arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
-                && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue;
+                && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue
+                && arguments[CALLER_INDEX] instanceof ProtosActivation;
+    }
+
+    private static boolean isCompactImmediateMethodCall(Object[] arguments) {
+        return isMinimalImmediateMethodCall(arguments)
+                || (hasCompactHeader(arguments)
+                        && arguments[RECEIVER_INDEX] != null
+                        && arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
+                        && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue);
     }
 
     private static boolean isDirectClosureCall(Object[] arguments) {

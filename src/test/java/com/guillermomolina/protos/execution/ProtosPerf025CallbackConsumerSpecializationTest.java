@@ -88,7 +88,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         stop.assertLazy();
         assertInteger(4, stop.binding("result"));
         stop.assertInstruction("ReadInlineCaptured");
-        stop.assertInstruction("PrepareInlineSendArguments");
+        stop.assertInstruction("PrepareInlineSendOne");
         System.out.println("PERF025_S3_CAPTURED_READ_WITHOUT_ACTIVATION=YES");
         System.out.println("PERF025_S3_CANONICAL_INTEGER_SEND_WITHOUT_ACTIVATION=YES");
     }

@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -54,7 +55,8 @@ import org.junit.jupiter.api.Test;
  * the slots it needs: {@code [closure, caller]} (A), {@code [closure, caller,
  * returnHome]} (B), {@code [closure, task, caller]} (C) or {@code [closure,
  * task, caller, returnHome]} (D). Calls with supplied arguments and immediate
- * method calls keep the full five-slot header.
+ * method calls retain their required metadata; unobservable zero-argument
+ * immediate methods use a four-slot header.
  */
 final class ProtosPerf032G7MinimalDirectHeaderTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -308,14 +310,98 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertEquals(BigInteger.valueOf(7), integerValue(enter(prepared)));
 
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-method.protos", module);
+            ProtosObjectValue methodHome = new ProtosObjectValue(literal);
             Object[] method =
                     ProtosFrameArguments.compactImmediateMethodCall(
-                            literal, literal, new ProtosObjectValue(literal), module,
-                            new Object[0]);
-            assertEquals(5, method.length);
+                            literal, literal, methodHome, module, new Object[0]);
+
+            assertEquals(4, method.length);
+            assertSame(literal, method[0]);
+            assertSame(literal, method[1]);
+            assertSame(methodHome, method[2]);
+            assertSame(module, method[3]);
             assertSame(module, ProtosFrameArguments.compactCaller(method));
+            assertSame(
+                    ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(method));
             assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(method));
-            assertSame(literal, ProtosFrameArguments.activation(method).receiver());
+
+            ProtosActivation published = ProtosFrameArguments.activation(method);
+            assertSame(literal, published.receiver());
+            assertSame(published, method[0]);
+            assertSame(published, ProtosFrameArguments.activation(method));
+            assertEquals(4, method.length);
+            assertSame(module, ProtosFrameArguments.compactCaller(method));
+            assertSame(
+                    ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(method));
+            assertFalse(
+                    ProtosFrameArguments.isUnmaterializedInheritingFullHeader(method));
+        });
+    }
+
+    @Test
+    void perf038HDirectCallZeroOnePreparedEntries() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue literal =
+                    parsedClosure("() => { 1 }", "perf038h-call01.protos", module);
+            RootCallTarget target = fastDirect(literal, module).bodyTarget();
+
+            ProtosBytecodeRootNode.PreparedClosureCall zero =
+                    ProtosBytecodeRootNode.finishDirectClosureCallZero(
+                            literal, target, module);
+
+            assertSame(target, zero.bodyTarget());
+            assertEquals(2, zero.targetArguments().length);
+            assertSame(literal, zero.targetArguments()[0]);
+            assertSame(module, zero.targetArguments()[1]);
+            assertSame(
+                    ProtosReturnHome.unobservable(),
+                    ProtosFrameArguments.compactReturnHome(
+                            zero.targetArguments()));
+
+            ProtosIntegerValue value = integer(9);
+            ProtosBytecodeRootNode.PreparedClosureCall one =
+                    ProtosBytecodeRootNode.finishDirectClosureCallOne(
+                            literal, target, value, module);
+
+            RootCallTarget rejection =
+                    assertInstanceOf(
+                            ProtosSemanticBytecodeRootNode.class,
+                            target.getRootNode())
+                            .arityRejectionTarget();
+
+            assertSame(rejection, one.bodyTarget());
+            assertEquals(6, one.targetArguments().length);
+            assertSame(literal, one.targetArguments()[0]);
+            assertSame(module, one.targetArguments()[3]);
+            assertSame(value, one.targetArguments()[5]);
+            assertEquals(
+                    1,
+                    ProtosFrameArguments.compactSuppliedArgumentCount(
+                            one.targetArguments()));
+
+            ProtosClosureValue returning =
+                    parsedClosure(
+                            "() => { ^ 42 }",
+                            "perf038h-call0-home.protos",
+                            module);
+            RootCallTarget returningTarget =
+                    fastDirect(returning, module).bodyTarget();
+            ProtosBytecodeRootNode.PreparedClosureCall owned =
+                    ProtosBytecodeRootNode.finishDirectClosureCallZero(
+                            returning, returningTarget, module);
+
+            assertEquals(3, owned.targetArguments().length);
+            ProtosReturnHome physicalHome =
+                    assertInstanceOf(
+                            ProtosReturnHome.class,
+                            owned.targetArguments()[2]);
+            assertNotSame(ProtosReturnHome.unobservable(), physicalHome);
+            assertTrue(
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            owned).hasReturnHomeLifecycle());
         });
     }
 
@@ -343,6 +429,348 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertSame(module, ProtosFrameArguments.activation(rich));
             assertThrows(IllegalStateException.class,
                     () -> ProtosFrameArguments.compactReturnHome(rich));
+        });
+    }
+
+    @Test
+    void perf038HLiteralOnlyCallHasProvenNonSuspendingEntry()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue constant =
+                    parsedClosure(
+                            "() => { 1 }",
+                            "perf038h-literal-proof.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(constant, module));
+
+            assertTrue(prepared.provablyNonSuspending());
+            assertFalse(
+                    ProtosSemanticBytecodeRootNode.IsContinuationForCall
+                            .provenNonSuspending(prepared, integer(1)));
+
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(enter(prepared)));
+        });
+    }
+
+    @Test
+    void perf038HDynamicCallsKeepGeneralAndSimpleParametersUseProof()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue withSend =
+                    parsedClosure(
+                            "() => { 1 + 2 }",
+                            "perf038h-dynamic-body.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall dynamic =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(withSend, module));
+
+            assertFalse(dynamic.provablyNonSuspending());
+            assertEquals(
+                    BigInteger.valueOf(3),
+                    integerValue(enter(dynamic)));
+
+            ProtosClosureValue withParameter =
+                    parsedClosure(
+                            "(x) => { 1 }",
+                            "perf038h-parameter-body.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall parameterCall =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(withParameter, module, integer(9)));
+
+            assertTrue(parameterCall.provablyNonSuspending());
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(enter(parameterCall)));
+
+            ProtosClosureValue identity =
+                    parsedClosure(
+                            "(x) => { x }",
+                            "perf038h-parameter-read.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall identityCall =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(identity, module, integer(7)));
+
+            assertTrue(identityCall.provablyNonSuspending());
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(enter(identityCall)));
+
+            ProtosClosureValue twoParameters =
+                    parsedClosure(
+                            "(x, y) => { x }",
+                            "perf038h-two-parameters.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall twoArgumentCall =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(
+                                    twoParameters, module,
+                                    integer(8), integer(9)));
+
+            assertTrue(twoArgumentCall.provablyNonSuspending());
+            assertEquals(
+                    BigInteger.valueOf(8),
+                    integerValue(enter(twoArgumentCall)));
+
+            ProtosClosureValue dynamicParameter =
+                    parsedClosure(
+                            "(x) => { x + 1 }",
+                            "perf038h-dynamic-parameter.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall dynamicParameterCall =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(dynamicParameter, module, integer(2)));
+
+            assertFalse(dynamicParameterCall.provablyNonSuspending());
+            assertEquals(
+                    BigInteger.valueOf(3),
+                    integerValue(enter(dynamicParameterCall)));
+        });
+    }
+
+    @Test
+    void perf038HStraightLineInvocationPreservesDirectResults()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue literal =
+                    parsedClosure(
+                            "() => { 1 }",
+                            "perf038h-straight-line-zero.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall zero =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(literal, module));
+
+            assertTrue(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(zero));
+            assertEquals(
+                    BigInteger.ONE,
+                    integerValue(
+                            ProtosSemanticBytecodeRootNode
+                                    .EnterStraightLineSourceCall
+                                    .ordinaryIndirect(
+                                            zero, IndirectCallNode.create())));
+
+            ProtosClosureValue identity =
+                    parsedClosure(
+                            "(x) => { x }",
+                            "perf038h-straight-line-one.protos",
+                            module);
+
+            ProtosBytecodeRootNode.OrdinarySourceCall one =
+                    assertInstanceOf(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            fastDirect(identity, module, integer(7)));
+
+            assertTrue(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(one));
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(
+                            ProtosSemanticBytecodeRootNode
+                                    .EnterStraightLineSourceCall
+                                    .ordinaryIndirect(
+                                            one, IndirectCallNode.create())));
+        });
+    }
+
+    @Test
+    void perf038HStraightLineRejectsDynamicReturnAndArityEntries()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue dynamic =
+                    parsedClosure(
+                            "() => { 1 + 2 }",
+                            "perf038h-straight-line-dynamic.protos",
+                            module);
+
+            assertFalse(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(
+                                    assertInstanceOf(
+        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+        fastDirect(dynamic, module))));
+
+            ProtosClosureValue returning =
+                    parsedClosure(
+                            "() => { ^ 42 }",
+                            "perf038h-straight-line-return.protos",
+                            module);
+
+            assertFalse(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(
+                                    assertInstanceOf(
+        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+        fastDirect(returning, module))));
+
+            ProtosClosureValue literal =
+                    parsedClosure(
+                            "() => { 1 }",
+                            "perf038h-straight-line-arity.protos",
+                            module);
+
+            assertFalse(
+                    ProtosSemanticBytecodeRootNode
+                            .AdmitsStraightLineSourceCall.perform(
+                                    assertInstanceOf(
+        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+        fastDirect(
+                                            literal, module, integer(3)))));
+        });
+    }
+
+    @Test
+    void perf038HFusedSendOnePreservesRebindingAndFallback()
+            throws Exception {
+        withCore(module -> {
+            Object result = evaluate(
+                    "receiver: { identity: (value) => { value } }\n"
+                            + "run: (value) => { receiver.identity(value) }\n"
+                            + "first: run(1)\n"
+                            + "second: run(2)\n"
+                            + "receiver.identity = (value) => { value + 10 }\n"
+                            + "third: run(3)\n"
+                            + "first * 100 + second * 10 + third\n",
+                    "perf038h-fused-send-one.protos",
+                    module);
+
+            assertEquals(
+                    BigInteger.valueOf(133),
+                    integerValue(result));
+        });
+    }
+
+    @Test
+    void perf038HFusedCallZeroAndOnePreserveResults()
+            throws Exception {
+        withCore(module -> {
+            Object result = evaluate(
+                    "constant: () => { 1 }\n"
+                            + "identity: (x) => { x }\n"
+                            + "constant() * 100"
+                            + " + identity(2) * 10"
+                            + " + identity(3)\n",
+                    "perf038h-fused-call-arity.protos",
+                    module);
+
+            assertEquals(
+                    BigInteger.valueOf(123),
+                    integerValue(result));
+        });
+    }
+
+    @Test
+    void perf038HFusedCallsRespectArityAndDynamicBodies()
+            throws Exception {
+        withCore(module -> {
+            Object result = evaluate(
+                    "zero: () => { 4 }\n"
+                            + "dynamic: (x) => { x + 1 }\n"
+                            + "zero() * 10 + dynamic(2)\n",
+                    "perf038h-fused-call-fallback.protos",
+                    module);
+
+            assertEquals(
+                    BigInteger.valueOf(43),
+                    integerValue(result));
+        });
+    }
+
+    @Test
+    void perf038HFusedSendZeroPreservesSelectionAndRebinding()
+            throws Exception {
+        withCore(module -> {
+            Object result = evaluate(
+                    "receiver: { value: () => { 7 } }\n"
+                            + "run: () => { receiver.value() }\n"
+                            + "first: run()\n"
+                            + "second: run()\n"
+                            + "receiver.value = () => { 2 + 3 }\n"
+                            + "third: run()\n"
+                            + "receiver.value = () => { 9 }\n"
+                            + "fourth: run()\n"
+                            + "[first, second, third, fourth]\n",
+                    "perf038h-fused-send-zero.protos",
+                    module);
+
+            java.util.List<Object> values =
+                    assertInstanceOf(
+                            ProtosArrayValue.class, result).indexedSnapshot();
+
+            assertEquals(4, values.size());
+            assertEquals(BigInteger.valueOf(7), integerValue(values.get(0)));
+            assertEquals(BigInteger.valueOf(7), integerValue(values.get(1)));
+            assertEquals(BigInteger.valueOf(5), integerValue(values.get(2)));
+            assertEquals(BigInteger.valueOf(9), integerValue(values.get(3)));
+        });
+    }
+
+    @Test
+    void perf038HSendAdmissionIsAritySpecific() throws Exception {
+        withCore(module -> {
+            Object receiver = evaluate(
+                    "receiver: {\n"
+                            + "    zero: () => { 7 }\n"
+                            + "    one: (x) => { x }\n"
+                            + "}\n"
+                            + "receiver\n",
+                    "perf038h-send-admission.protos",
+                    module);
+
+            ProtosPrelude prelude = module.preludeOrNullForRuntime();
+            ProtosLanguageContext entered =
+                    ProtosLanguageContext.currentIfEnteredForRuntime();
+
+            var zero =
+                    ProtosBytecodeRootNode.PrepareSendArguments
+                            .createGuardedSendForPrelude(
+                                    receiver, "zero", prelude, entered);
+
+            var one =
+                    ProtosBytecodeRootNode.PrepareSendArguments
+                            .createGuardedSendForPrelude(
+                                    receiver, "one", prelude, entered);
+
+            assertTrue(zero != null, "Send0 guarded selection");
+            assertTrue(one != null, "Send1 guarded selection");
+
+            assertTrue(
+                    ProtosSemanticBytecodeRootNode
+                            .TryDirectSendZero.admitted(zero),
+                    "zero-argument source method must be admitted");
+
+            assertFalse(
+                    ProtosSemanticBytecodeRootNode
+                            .TryDirectSendOne.admitted(zero),
+                    "zero-argument source method rejects Send1");
+
+            assertTrue(
+                    ProtosSemanticBytecodeRootNode
+                            .TryDirectSendOne.admitted(one),
+                    "one-argument source method must be admitted");
         });
     }
 

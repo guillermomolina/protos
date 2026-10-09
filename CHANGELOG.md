@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.324-SNAPSHOT
+
+- `PERF038-H` (#852): specialize fixed-arity source calls and sends.
+  - Introduce zero- and one-argument direct call/send operations and
+    straight-line source-call paths to reduce generic call preparation.
+  - Preserve generic invocation, control-transfer, return-home and
+    continuation handling for cases requiring those capabilities.
+  - Extend call, argument, and primitive-protocol regression coverage.
+  - Update the generated-bytecode BCI partial-evaluation baseline.
+
 ## 0.3.323-SNAPSHOT
 
 - `PERF037-E` (#851): reduce ordinary member-read and terminal Sequence overhead

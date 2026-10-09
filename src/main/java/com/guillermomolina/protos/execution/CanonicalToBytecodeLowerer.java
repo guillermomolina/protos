@@ -922,6 +922,9 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
+        result.recordProvablyNonSuspendingBody(
+                provesNonSuspendingBody(
+                        activationDefinition, currentRootAnalysis));
         /*
          * A reparse replays the group onto the same root identities, whose
          * rejection targets are attached by the create() that first built
@@ -962,6 +965,73 @@ final class CanonicalToBytecodeLowerer {
      * the root's own body. Closures with any parameter keep the in-body
      * algorithm unchanged.
      */
+    /**
+     * PERF038-H: proof of non-suspending source execution for the
+     * simplest Closure bodies.
+     *
+     * Admitted operations:
+     * - binding supplied positional arguments without defaults/rest;
+     * - loading a parameter resolved by this exact lexical analysis;
+     * - evaluating literals.
+     *
+     * Calls, sends, dynamic or captured lookups, mutations, returns,
+     * nested Closures and all unknown forms fail closed.
+     *
+     * A canonical binding identity is compared by Java identity:
+     * coincidentally equal names never establish this proof.
+     */
+    private static boolean provesNonSuspendingBody(
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis) {
+        if (definition == null || analysis == null) {
+            return false;
+        }
+
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest()
+                    || parameter.defaultValue().isPresent()
+                    || analysis.identityOf(parameter).isEmpty()) {
+                return false;
+            }
+        }
+
+        for (CanonicalExpression expression :
+                definition.body().expressions()) {
+            if (expression instanceof CanonicalLiteral) {
+                continue;
+            }
+
+            if (expression instanceof CanonicalLookup lookup) {
+                CanonicalBindingResolution resolution =
+                        analysis.resolutionOf(lookup).orElse(null);
+
+                if (!(resolution
+                        instanceof CanonicalBindingResolution.Resolved resolved)) {
+                    return false;
+                }
+
+                boolean localParameter = false;
+
+                for (CanonicalParameter parameter :
+                        definition.parameters()) {
+                    if (analysis.identityOf(parameter).orElse(null)
+                            == resolved.identity()) {
+                        localParameter = true;
+                        break;
+                    }
+                }
+
+                if (localParameter) {
+                    continue;
+                }
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     private static boolean hasArityRejectionRoot(CanonicalClosure activationDefinition) {
         return activationDefinition != null
                 && activationDefinition.parameters().isEmpty();
@@ -1767,19 +1837,45 @@ final class CanonicalToBytecodeLowerer {
      * emitted within one region, so the selection is the same for both.
      */
 
-    private void beginPrepareSend(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private void beginPrepareSend(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder, int arity) {
         if (currentInlineCallbackFrameNative) {
-            builder.beginPrepareInlineSendArguments(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
+            if (arity == 0) {
+                builder.beginPrepareInlineSendZero(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+            } else if (arity == 1) {
+                builder.beginPrepareInlineSendOne(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+            } else {
+                builder.beginPrepareInlineSendArguments(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+            }
+        } else if (arity == 0) {
+            builder.beginPrepareSendZero();
+        } else if (arity == 1) {
+            builder.beginPrepareSendOne();
         } else {
             builder.beginPrepareSendArguments();
         }
     }
 
-    private void endPrepareSend(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private void endPrepareSend(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder, int arity) {
         if (currentInlineCallbackFrameNative) {
-            builder.endPrepareInlineSendArguments();
+            if (arity == 0) {
+                builder.endPrepareInlineSendZero();
+            } else if (arity == 1) {
+                builder.endPrepareInlineSendOne();
+            } else {
+                builder.endPrepareInlineSendArguments();
+            }
+        } else if (arity == 0) {
+            builder.endPrepareSendZero();
+        } else if (arity == 1) {
+            builder.endPrepareSendOne();
         } else {
             builder.endPrepareSendArguments();
         }
@@ -3874,13 +3970,13 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder);
+        beginPrepareSend(builder, 2);
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
         emitSendCallerOperand(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
-        endPrepareSend(builder);
+        endPrepareSend(builder, 2);
         builder.endStoreLocal();
         emitPreparedInvocation(
                 builder,
@@ -4117,13 +4213,13 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(preparedCall);
-        beginPrepareSend(builder);
+        beginPrepareSend(builder, 2);
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
         emitSendCallerOperand(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
-        endPrepareSend(builder);
+        endPrepareSend(builder, 2);
         builder.endStoreLocal();
         emitPreparedInvocation(
                 builder,
@@ -4516,7 +4612,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSendVector();
         } else {
-            beginPrepareSend(builder);
+            beginPrepareSend(builder, send.arguments().size());
             if (stageInputs) {
                 builder.emitLoadLocal(receiverValue);
             } else {
@@ -4535,7 +4631,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpression(builder, argument);
                 }
             }
-            endPrepareSend(builder);
+            endPrepareSend(builder, send.arguments().size());
         }
         builder.endStoreLocal();
         emitComposedPreparedDefaultInvocation(
@@ -5104,6 +5200,21 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        builder.beginIfThenElse();
+
+        builder.beginAdmitsStraightLineSourceCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endAdmitsStraightLineSourceCall();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.beginEnterStraightLineSourceCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endEnterStraightLineSourceCall();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
         builder.beginStoreLocal(childResult);
         builder.beginEnterClosureCall();
         builder.emitLoadLocal(preparedCall);
@@ -5120,6 +5231,9 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(childResult);
         builder.endFinishClosureCall();
         builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
     }
 
     /**
@@ -5426,9 +5540,10 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         builder.beginWhile();
-        builder.beginIsContinuation();
+        builder.beginIsContinuationForCall();
+        builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
+        builder.endIsContinuationForCall();
 
         builder.beginBlock();
         builder.beginStoreLocal(resumeValue);
@@ -6027,13 +6142,36 @@ final class CanonicalToBytecodeLowerer {
          * locals (still evaluated exactly once, in order) so the prepared
          * Boolean call can compare its selected callback with them.
          */
+        /*
+         * PERF038-H: attempt a fused Send1 only when the call site
+         * can retain its operands for the unchanged fallback.
+         * Admission of the actual selected method is runtime-guarded.
+         */
+        boolean tryDirectSendZero =
+                !spreadArguments
+                        && send.arguments().isEmpty()
+                        && !currentInlineCallbackFrameNative
+                        && inlineCallbackPositions.isEmpty()
+                        && !inlineIndexedEachCandidate
+                        && !inlineTwoParameterEachCandidate;
+
+        boolean tryDirectSendOne =
+                !spreadArguments
+                        && send.arguments().size() == 1
+                        && !currentInlineCallbackFrameNative
+                        && inlineCallbackPositions.isEmpty()
+                        && !inlineIndexedEachCandidate
+                        && !inlineTwoParameterEachCandidate;
+
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
                         || spreadArguments
                         || !inlineCallbackPositions.isEmpty()
                         || inlineIndexedEachCandidate
-                        || inlineTwoParameterEachCandidate;
+                        || inlineTwoParameterEachCandidate
+                        || tryDirectSendZero
+                        || tryDirectSendOne;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -6095,6 +6233,42 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
+        BytecodeLocal directSendResult = null;
+        if (tryDirectSendZero || tryDirectSendOne) {
+            directSendResult =
+                    builder.createLocal("directSendOneResult", null);
+
+            builder.beginStoreLocal(directSendResult);
+            if (tryDirectSendZero) {
+                builder.beginTryDirectSendZero();
+            } else {
+                builder.beginTryDirectSendOne();
+            }
+
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(send.message());
+            emitSendCallerOperand(builder);
+
+            if (tryDirectSendZero) {
+                builder.endTryDirectSendZero();
+            } else {
+                builder.emitLoadLocal(argumentValues.get(0));
+                builder.endTryDirectSendOne();
+            }
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginIsDirectSendMiss();
+            builder.emitLoadLocal(directSendResult);
+            builder.endIsDirectSendMiss();
+
+            /*
+             * Miss: the original prepared-call protocol, including
+             * native/structured calls, suspension and Error paths.
+             */
+            builder.beginBlock();
+        }
+
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
             builder.beginPrepareSendVector();
@@ -6104,7 +6278,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSendVector();
         } else {
-            beginPrepareSend(builder);
+            beginPrepareSend(builder, send.arguments().size());
             if (stageInputs) {
                 builder.emitLoadLocal(receiverValue);
             } else {
@@ -6123,7 +6297,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpression(builder, argument);
                 }
             }
-            endPrepareSend(builder);
+            endPrepareSend(builder, send.arguments().size());
         }
         builder.endStoreLocal();
 
@@ -6193,6 +6367,23 @@ final class CanonicalToBytecodeLowerer {
                 inlineCallbacks,
                 inlineWhile,
                 inlineEach);
+
+        if (tryDirectSendZero || tryDirectSendOne) {
+            builder.endBlock();
+
+            /*
+             * Fused hit: no PreparedClosureCall, continuation scratch
+             * or ReturnHome completion was required.
+             */
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(directSendResult);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+        }
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -6372,10 +6563,16 @@ final class CanonicalToBytecodeLowerer {
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments = hasComposedArgument(call.arguments());
         boolean spreadArguments = hasSpreadArgument(call.arguments());
+        boolean tryDirectCall =
+                !spreadArguments
+                        && call.arguments().size() <= 1
+                        && !currentInlineCallbackFrameNative;
+
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
-                        || spreadArguments;
+                        || spreadArguments
+                        || tryDirectCall;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -6437,6 +6634,41 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
+        BytecodeLocal directCallResult = null;
+
+        if (tryDirectCall) {
+            directCallResult =
+                    builder.createLocal("directCallResult", null);
+
+            builder.beginStoreLocal(directCallResult);
+            if (call.arguments().isEmpty()) {
+                builder.beginTryDirectCallZero();
+            } else {
+                builder.beginTryDirectCallOne();
+            }
+
+            builder.emitLoadLocal(receiverValue);
+            emitInvocationCallerOperand(builder);
+
+            if (!call.arguments().isEmpty()) {
+                builder.emitLoadLocal(argumentValues.get(0));
+            }
+
+            if (call.arguments().isEmpty()) {
+                builder.endTryDirectCallZero();
+            } else {
+                builder.endTryDirectCallOne();
+            }
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginIsDirectSendMiss();
+            builder.emitLoadLocal(directCallResult);
+            builder.endIsDirectSendMiss();
+
+            builder.beginBlock();
+        }
+
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
             builder.beginPrepareClosureCallVector();
@@ -6466,9 +6698,17 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareClosureCall();
         } else {
             if (currentInlineCallbackFrameNative) {
-                builder.beginPrepareInlineClosureCallArguments(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
+                if (call.arguments().size() == 1) {
+                    builder.beginPrepareInlineClosureCallOne(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                } else {
+                    builder.beginPrepareInlineClosureCallArguments(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                }
+            } else if (call.arguments().size() == 1) {
+                builder.beginPrepareClosureCallOne();
             } else {
                 builder.beginPrepareClosureCallArguments();
             }
@@ -6490,7 +6730,13 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
             if (currentInlineCallbackFrameNative) {
-                builder.endPrepareInlineClosureCallArguments();
+                if (call.arguments().size() == 1) {
+                    builder.endPrepareInlineClosureCallOne();
+                } else {
+                    builder.endPrepareInlineClosureCallArguments();
+                }
+            } else if (call.arguments().size() == 1) {
+                builder.endPrepareClosureCallOne();
             } else {
                 builder.endPrepareClosureCallArguments();
             }
@@ -6504,6 +6750,19 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+
+        if (tryDirectCall) {
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(directCallResult);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+        }
+
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }

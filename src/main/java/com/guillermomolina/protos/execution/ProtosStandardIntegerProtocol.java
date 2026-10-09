@@ -194,6 +194,28 @@ public final class ProtosStandardIntegerProtocol {
                 argument);
     }
 
+    /**
+     * PERF038-H: fixed-arity canonical Integer Send1.
+     * No supplied argument vector or caller activation is needed
+     * when the canonical operation accepts these exact operands.
+     */
+    static Object tryExecuteCanonicalOperationOne(
+            CanonicalIntegerOperation operation,
+            Object receiver,
+            Object supplied0) {
+        Objects.requireNonNull(operation, "operation");
+
+        if (!(receiver instanceof ProtosIntegerValue integer)
+                || !(supplied0 instanceof ProtosIntegerValue argument)
+                || (operation.requiresNonZeroDivisor()
+                        && argument.signumForRuntime() == 0)) {
+            return null;
+        }
+
+        return executeValidCanonicalOperation(
+                operation, integer, argument);
+    }
+
     private static Object executeCanonicalWithActivation(
             CanonicalIntegerOperation operation,
             ProtosActivation activation,
