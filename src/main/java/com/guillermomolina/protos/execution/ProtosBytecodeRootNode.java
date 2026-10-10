@@ -26,6 +26,7 @@ import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
@@ -477,7 +478,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     bytecodeNode.getBytecodeLocation(bytecodeIndex),
                     frame.materialize());
         }
-        activation.createCurrentLocalSlotForRuntime(name, value);
+        // I091: only unobserved frame-native storage retains a primitive carrier.
+        activation.createCurrentLocalSlotForRuntime(
+                name, ProtosNumericValueSupport.guestValue(value));
     }
 
     /**
@@ -632,6 +635,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
+            return ProtosNumericValueSupport.guestValue(
+                    readRetainingCarrier(
+                            accessor, presenceContinuity, activation, name, bytecodeNode, frame));
+        }
+
+        /**
+         * I091: {@link #perform} without materializing a frame-retained
+         * primitive carrier, for a lowered read whose consumer materializes
+         * it (or is an operand of the guarded numeric chain).
+         */
+        static Object readRetainingCarrier(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                ProtosActivation activation,
+                String name,
+                BytecodeNode bytecodeNode,
+                VirtualFrame frame) {
             if (activation.hasGenuineExecutionContextForRuntime()
                     && (presenceContinuity.isValid()
                             || !accessor.isCleared(bytecodeNode, frame))) {
@@ -1410,7 +1430,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     frameOrdinal,
                     value);
         } else {
-            destination.target.assignLocalSlot(name, value);
+            // I091: object slots are guest-observable and never retain a carrier.
+            destination.target.assignLocalSlot(
+                    name, ProtosNumericValueSupport.guestValue(value));
         }
     }
 
@@ -1548,7 +1570,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             accessor.setObject(bytecodeNode, destination.materializedOwnerFrame, value);
         } else {
-            destination.target.assignLocalSlot(name, value);
+            destination.target.assignLocalSlot(
+                    name, ProtosNumericValueSupport.guestValue(value));
         }
     }
 
@@ -1715,8 +1738,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
             if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
+                // I091: only direct frame storage may retain a primitive carrier.
                 return AssignResolvedLexicalTarget.perform(
-                        activation, destination, name, value);
+                        activation, destination, name,
+                        ProtosNumericValueSupport.guestValue(value));
             }
             if (activation.currentContextIsFrozenForRuntime()
                     || accessor.isCleared(bytecodeNode, frame)) {

@@ -361,7 +361,7 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position,
+                long position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
             if (closed) {
@@ -369,7 +369,7 @@ activation);
                 return () -> {};
             }
             try {
-                int start = position.intValueExactForRuntime();
+                int start = Math.toIntExact(position);
                 synchronized (shared) {
                     if (start >= shared.data.length) {
                         completion.eof();
@@ -389,7 +389,7 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position,
+                long position,
                 byte[] bytes,
                 ProtosFileFlow.WriteCompletion completion) {
             if (closed) {
@@ -401,7 +401,7 @@ activation);
                 return () -> {};
             }
             try {
-                int start = position.intValueExactForRuntime();
+                int start = Math.toIntExact(position);
                 int end = Math.addExact(start, bytes.length);
                 if (!completion.commitFirstContribution()) {
                     return () -> {};
@@ -426,7 +426,7 @@ activation);
                 completion.failed();
             } else {
                 synchronized (shared) {
-                    completion.succeeded(new ProtosIntegerValue(shared.data.length));
+                    completion.succeeded(shared.data.length);
                 }
             }
             return () -> {};
@@ -440,14 +440,14 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation truncate(
-                ProtosIntegerValue requestedSize,
+                long requestedSize,
                 ProtosFileFlow.ChangeCompletion completion) {
             if (closed) {
                 completion.failed();
                 return () -> {};
             }
             try {
-                int size = requestedSize.intValueExactForRuntime();
+                int size = Math.toIntExact(requestedSize);
                 synchronized (shared) {
                     if (size >= shared.data.length) {
                         completion.succeeded();

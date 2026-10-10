@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
 import java.util.List;
 import java.util.Objects;
@@ -72,7 +73,7 @@ public final class ProtosStandardEncodingProtocol {
                             ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
                             for (byte value : converted) {
                                 result.indexedAdd(
-                                        new ProtosIntegerValue(value & 0xff));
+                                        ProtosNumericValueSupport.octet(value & 0xff));
                             }
                             return result;
                         }));
@@ -110,11 +111,10 @@ public final class ProtosStandardEncodingProtocol {
         byte[] result = new byte[values.size()];
         for (int i = 0; i < values.size(); i++) {
             Object candidate = values.get(i);
-            if (!(candidate instanceof ProtosIntegerValue integer)
-                    || !integer.fitsInIntForRuntime()) {
+            if (!ProtosNumericValueSupport.isIntegerInIntRange(candidate)) {
                 throw invalid(activation);
             }
-            int value = integer.intValueExactForRuntime();
+            int value = ProtosNumericValueSupport.exactInt(candidate);
             if (value < 0 || value > 255) {
                 throw invalid(activation);
             }

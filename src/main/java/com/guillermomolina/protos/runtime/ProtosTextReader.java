@@ -641,7 +641,7 @@ public final class ProtosTextReader {
 
     /** PLAT029 leaf arguments for one source.read callback. */
     public List<?> sourceReadArgumentsForCPrimeRuntime() {
-        return List.of(new ProtosIntegerValue(SOURCE_READ_AHEAD));
+        return List.of(ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD));
     }
 
     /**
@@ -895,7 +895,7 @@ public final class ProtosTextReader {
                     ProtosInvocation.invokeMessage(
                             source,
                             "read",
-                            List.of(new ProtosIntegerValue(SOURCE_READ_AHEAD)),
+                            List.of(ProtosNumericValueSupport.integer(SOURCE_READ_AHEAD)),
                             request.activation);
         } catch (ProtosSignalException signaled) {
             synchronized (this) { request.lowerFailure = signaled.error(); }
@@ -1139,9 +1139,9 @@ public final class ProtosTextReader {
         List<Object> values = bytes.indexedSnapshot();
         byte[] result = new byte[values.size()];
         for (int index = 0; index < values.size(); index++) {
-            if (!(values.get(index) instanceof ProtosIntegerValue octet)
-                    || !octet.fitsUnsignedBitsForRuntime(Byte.SIZE)) return null;
-            result[index] = (byte) octet.smallValueForRuntime();
+            Object octet = values.get(index);
+            if (!ProtosNumericValueSupport.isUnsignedIntegerWithin(octet, Byte.SIZE)) return null;
+            result[index] = (byte) ProtosNumericValueSupport.exactInt(octet);
         }
         return result;
     }

@@ -16,7 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -309,9 +309,11 @@ final class ProtosNioNetworkBackend
             throw new IOException("listen address is not a recognized IpAddress");
         }
         Map<String, Object> slots = address.localSlotsSnapshot();
-        if (!(slots.get("version") instanceof ProtosIntegerValue versionValue)
-                || !(slots.get("bits") instanceof ProtosIntegerValue bitsValue)
-                || versionValue.intValueExactForRuntime() != expectedVersion) {
+        Object versionValue = slots.get("version");
+        Object bitsValue = slots.get("bits");
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(versionValue)
+                || !ProtosNumericValueSupport.isCurrentInteger(bitsValue)
+                || ProtosNumericValueSupport.exactInt(versionValue) != expectedVersion) {
             throw new IOException("listen address changed request IP version");
         }
         if (expectedVersion == 4) {
@@ -544,7 +546,8 @@ final class ProtosNioNetworkBackend
             if (!endpoint.isFrozen()
                     || !endpointSlots.keySet().equals(ENDPOINT_SLOTS)
                     || !(endpointSlots.get("address") instanceof ProtosObjectValue address)
-                    || !(endpointSlots.get("port") instanceof ProtosIntegerValue port)) {
+                    || !ProtosNumericValueSupport.isIntegerInIntRange(
+                            endpointSlots.get("port"))) {
                 throw new IOException("endpoint is not canonical");
             }
 
@@ -557,13 +560,14 @@ final class ProtosNioNetworkBackend
 
             Map<String, Object> addressSlots = address.localSlotsSnapshot();
             if (!addressSlots.keySet().equals(ADDRESS_SLOTS)
-                    || !(addressSlots.get("version") instanceof ProtosIntegerValue versionValue)
-                    || !(addressSlots.get("bits") instanceof ProtosIntegerValue bitsValue)) {
+                    || !ProtosNumericValueSupport.isIntegerInIntRange(addressSlots.get("version"))
+                    || !ProtosNumericValueSupport.isCurrentInteger(addressSlots.get("bits"))) {
                 throw new IOException("address is not canonical");
             }
 
-            int version = versionValue.intValueExactForRuntime();
-            int portNumber = port.intValueExactForRuntime();
+            Object bitsValue = addressSlots.get("bits");
+            int version = ProtosNumericValueSupport.exactInt(addressSlots.get("version"));
+            int portNumber = ProtosNumericValueSupport.exactInt(endpointSlots.get("port"));
             InetAddress hostAddress;
             if (version == 4) {
                 byte[] bytes = unsignedBytes(bitsValue, 4);
@@ -625,24 +629,25 @@ final class ProtosNioNetworkBackend
 
             ProtosObjectValue address = new ProtosObjectValue(addressPrototype);
             address.createLocalSlot(
-                    "version", new ProtosIntegerValue(version));
+                    "version", ProtosNumericValueSupport.integer(version));
             address.createLocalSlot(
-                    "bits", ProtosIntegerValue.fromUnsignedBigEndianForRuntime(bytes));
+                    "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes));
             address.freeze();
 
             ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);
             endpoint.createLocalSlot("address", address);
             endpoint.createLocalSlot(
-                    "port", new ProtosIntegerValue(local.getPort()));
+                    "port", ProtosNumericValueSupport.integer(local.getPort()));
             return endpoint.freeze();
         }
 
-        private static byte[] unsignedBytes(ProtosIntegerValue value, int width)
+        private static byte[] unsignedBytes(Object value, int width)
                 throws IOException {
-            if (!value.fitsUnsignedBitsForRuntime(width * Byte.SIZE)) {
+            byte[] bytes = ProtosNumericValueSupport.unsignedBigEndianOrNull(value, width);
+            if (bytes == null) {
                 throw new IOException("IP address bits exceed canonical width");
             }
-            return value.toUnsignedBigEndianForRuntime(width);
+            return bytes;
         }
     }
 

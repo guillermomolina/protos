@@ -824,7 +824,7 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position,
+                long position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
             int invocation = readStarts.incrementAndGet();
@@ -1069,8 +1069,8 @@ activation);
             content.clear();
         }
 
-        private synchronized void contribute(ProtosIntegerValue position, byte[] bytes, int length) {
-            int start = position.intValueExactForRuntime();
+        private synchronized void contribute(long position, byte[] bytes, int length) {
+            int start = Math.toIntExact(position);
             while (content.size() < start) {
                 content.add((byte) 0);
             }
@@ -1134,7 +1134,7 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position,
+                long position,
                 byte[] bytes,
                 ProtosFileFlow.WriteCompletion completion) {
             writeStarts.incrementAndGet();
@@ -1202,10 +1202,10 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position,
+                long position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
-            int start = position.intValueExactForRuntime();
+            int start = Math.toIntExact(position);
             if (start >= content.length) {
                 completion.eof();
                 return () -> {};
@@ -1327,7 +1327,7 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position,
+                long position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
             readStarts.incrementAndGet();

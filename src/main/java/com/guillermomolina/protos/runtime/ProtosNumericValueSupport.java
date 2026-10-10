@@ -46,6 +46,113 @@ public final class ProtosNumericValueSupport {
         return isCurrentInteger(value) || isCurrentFloat(value);
     }
 
+    /**
+     * I091 internal primitive carriers: a raw {@code Long} (signed-64 Integer) or
+     * {@code Double} (binary64 Float) produced by guarded lowered numeric execution and
+     * retained in operand and compact frame storage.
+     *
+     * <p>Such a carrier is never a guest value. It is unambiguous inside guest frames because
+     * no host scalar reaches them unconverted: host executable arguments are admitted as
+     * Protos values, and every other foreign value is wrapped. Every frame observer that can
+     * expose a binding outside the lowered carrier chain materializes through {@link
+     * #guestValue}.
+     */
+    public static boolean isPrimitiveCarrier(Object value) {
+        return value instanceof Long || value instanceof Double;
+    }
+
+    /** The guest value denoted by {@code value}; identity for every non-carrier. */
+    public static Object guestValue(Object value) {
+        if (value instanceof Long small) {
+            return new ProtosIntegerValue(small.longValue());
+        }
+        if (value instanceof Double floating) {
+            return new ProtosFloatValue(floating.doubleValue());
+        }
+        return value;
+    }
+
+    /*
+     * I091 semantic Integer capabilities for generic clients (I/O, network,
+     * collections), so they need not depend on the physical Integer class.
+     */
+
+    /*
+     * Integer identity, equality and hashing are by value, so the octet
+     * Integers that byte-oriented I/O produces per byte can be shared.
+     */
+    private static final ProtosIntegerValue[] OCTETS = new ProtosIntegerValue[256];
+
+    static {
+        for (int octet = 0; octet < OCTETS.length; octet++) {
+            OCTETS[octet] = new ProtosIntegerValue(octet);
+        }
+    }
+
+    /** The guest Integer denoting {@code value}. */
+    public static Object integer(long value) {
+        return value >= 0 && value < OCTETS.length
+                ? OCTETS[(int) value]
+                : new ProtosIntegerValue(value);
+    }
+
+    /** The guest Integer of an unsigned octet {@code 0..255}. */
+    public static Object octet(int value) {
+        if (value < 0 || value >= OCTETS.length) {
+            throw new IllegalArgumentException("octet out of range: " + value);
+        }
+        return OCTETS[value];
+    }
+
+    /** Whether {@code value} is a current Integer within the Java {@code int} range. */
+    public static boolean isIntegerInIntRange(Object value) {
+        return value instanceof ProtosIntegerValue integer && integer.fitsInIntForRuntime();
+    }
+
+    /** The exact {@code int} of a value admitted by {@link #isIntegerInIntRange}. */
+    public static int exactInt(Object value) {
+        if (!isIntegerInIntRange(value)) {
+            throw new IllegalArgumentException("value is not an Integer in the int range");
+        }
+        return ((ProtosIntegerValue) value).intValueExactForRuntime();
+    }
+
+    /** Whether {@code value} is a current Integer within the signed-64 range. */
+    public static boolean isIntegerInLongRange(Object value) {
+        return value instanceof ProtosIntegerValue integer && integer.isSmallForRuntime();
+    }
+
+    /** The exact {@code long} of a value admitted by {@link #isIntegerInLongRange}. */
+    public static long exactLong(Object value) {
+        if (!isIntegerInLongRange(value)) {
+            throw new IllegalArgumentException("value is not an Integer in the long range");
+        }
+        return ((ProtosIntegerValue) value).smallValueForRuntime();
+    }
+
+    /** Whether {@code value} is a non-negative current Integer of at most {@code bits} bits. */
+    public static boolean isUnsignedIntegerWithin(Object value, int bits) {
+        return value instanceof ProtosIntegerValue integer
+                && integer.fitsUnsignedBitsForRuntime(bits);
+    }
+
+    /**
+     * The unsigned big-endian encoding of a non-negative current Integer in exactly
+     * {@code width} octets, or {@code null} when {@code value} is not such an Integer.
+     */
+    public static byte[] unsignedBigEndianOrNull(Object value, int width) {
+        if (!(value instanceof ProtosIntegerValue integer)
+                || !integer.fitsUnsignedBitsForRuntime(width * Byte.SIZE)) {
+            return null;
+        }
+        return integer.toUnsignedBigEndianForRuntime(width);
+    }
+
+    /** The guest Integer whose unsigned big-endian encoding is {@code octets}. */
+    public static Object integerFromUnsignedBigEndian(byte[] octets) {
+        return ProtosIntegerValue.fromUnsignedBigEndianForRuntime(octets);
+    }
+
     public static ProtosIntegerValue requireCurrentInteger(Object value) {
         if (value instanceof ProtosIntegerValue integer) {
             return integer;
@@ -60,6 +167,42 @@ public final class ProtosNumericValueSupport {
         }
         throw new IllegalArgumentException(
                 "value is not a current Float family");
+    }
+
+    /**
+     * I091 / PLAT056 Candidate C: whether {@code value} is a FROZEN ordinary object minted by a
+     * rich numeric family. Membership comes only from the minting family, never from slots,
+     * delegation or shape, so guest code cannot forge it.
+     */
+    public static boolean isRichNumericValue(Object value) {
+        return value instanceof ProtosSemanticTransferValue minted
+                && minted.family() instanceof ProtosRichNumericFamily
+                && minted.isFrozen();
+    }
+
+    /**
+     * Non-overridable value identity of two rich numeric values: the same minting family and the
+     * same value of that family. Any other pair answers false.
+     */
+    public static boolean sameRichNumericIdentity(Object left, Object right) {
+        if (!isRichNumericValue(left) || !isRichNumericValue(right)) {
+            return false;
+        }
+        ProtosSemanticTransferValue a = (ProtosSemanticTransferValue) left;
+        ProtosSemanticTransferValue b = (ProtosSemanticTransferValue) right;
+        return a.family() == b.family()
+                && ((ProtosRichNumericFamily) a.family())
+                        .sameValue(a.familyState(), b.familyState());
+    }
+
+    /** Identity hash of a value admitted by {@link #isRichNumericValue}. */
+    public static long richNumericIdentityHash(Object value) {
+        if (!isRichNumericValue(value)) {
+            throw new IllegalArgumentException("value is not a rich numeric value");
+        }
+        ProtosSemanticTransferValue minted = (ProtosSemanticTransferValue) value;
+        ProtosRichNumericFamily family = (ProtosRichNumericFamily) minted.family();
+        return tagged(family.identityTag(), family.valueHash(minted.familyState()));
     }
 
     /**

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
 import java.util.List;
 import java.util.Objects;
@@ -30,7 +31,7 @@ public final class ProtosStandardTcpListenerProtocol {
         prototype.createLocalSlot("accept",ProtosClosureValue.nativeClosure((activation,supplied)->requireAcceptingListener(activation,supplied,prototype).acceptForRuntime(activation)));
         prototype.createLocalSlot("localPort",ProtosClosureValue.nativeClosure((activation,supplied)->{
             ProtosTcpListenerValue listener=requireListener(activation,supplied,prototype);
-            return new ProtosIntegerValue(listener.localPortForRuntime());
+            return ProtosNumericValueSupport.integer(listener.localPortForRuntime());
         }));
         prototype.createLocalSlot("close",ProtosClosureValue.nativeClosure((activation,supplied)->requireListener(activation,supplied,prototype).closeForRuntime(activation)));
     }

@@ -5,27 +5,27 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ReadFrameLocal",
-      "method": "perform(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
+      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
       "operation": "isCleared",
       "receiver": "accessor",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,
-      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
-      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ReadFrameLocal",
-      "method": "perform(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
+      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
       "operation": "getObject",
       "receiver": "accessor",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,
-      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
-      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {

@@ -140,9 +140,8 @@ public final class ProtosProcessStandardStreamBinding {
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        if (!(maxBytesValue instanceof ProtosIntegerValue maxBytes)
-                || !maxBytes.fitsInIntForRuntime()
-                || maxBytes.signumForRuntime() <= 0) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(maxBytesValue)
+                || ProtosNumericValueSupport.exactInt(maxBytesValue) <= 0) {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -152,7 +151,7 @@ public final class ProtosProcessStandardStreamBinding {
             return operation.future();
         }
 
-        Request request = new Request(Kind.READ, receiver, operation, maxBytes.intValueExactForRuntime(), null);
+        Request request = new Request(Kind.READ, receiver, operation, ProtosNumericValueSupport.exactInt(maxBytesValue), null);
         enqueue(request);
         return operation.future();
     }
@@ -327,7 +326,7 @@ public final class ProtosProcessStandardStreamBinding {
         ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
         for (byte value : bytes) {
             result.indexedAdd(
-                    new ProtosIntegerValue(value & 0xff));
+                    ProtosNumericValueSupport.octet(value & 0xff));
         }
         request.operation.resolve(result);
         finish(request);

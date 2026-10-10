@@ -34,8 +34,9 @@ public final class ProtosFileFlow {
         void failed(int contributedPrefix);
     }
 
+    /** A host-representable non-negative position or size; the flow forms the exact Integer. */
     public interface IntegerCompletion {
-        void succeeded(ProtosIntegerValue value);
+        void succeeded(long value);
         void failed();
     }
 
@@ -67,7 +68,8 @@ public final class ProtosFileFlow {
     }
 
     public interface ReadableResource extends Resource {
-        Cancellation readAt(ProtosIntegerValue position, int maxBytes, ReadCompletion completion);
+        /** {@code position} is non-negative; the flow fails unrepresentable positions itself. */
+        Cancellation readAt(long position, int maxBytes, ReadCompletion completion);
     }
 
     /**
@@ -75,7 +77,8 @@ public final class ProtosFileFlow {
      * beyond EOF, the backend must provide the standard deterministic zero-valued logical gap.
      */
     public interface WritableResource extends Resource {
-        Cancellation writeAt(ProtosIntegerValue position, byte[] bytes, WriteCompletion completion);
+        /** {@code position} is non-negative; the flow fails unrepresentable positions itself. */
+        Cancellation writeAt(long position, byte[] bytes, WriteCompletion completion);
     }
 
     /** Internal end-position support needed for ByteSeekable.seekToEnd; does not imply ByteSized. */
@@ -88,7 +91,11 @@ public final class ProtosFileFlow {
     }
 
     public interface TruncatableResource extends Resource {
-        Cancellation truncate(ProtosIntegerValue size, ChangeCompletion completion);
+        /**
+         * {@code size} is non-negative. Truncation never extends, so the flow passes a size
+         * beyond the host range as {@link Long#MAX_VALUE}, which is equally a no-op.
+         */
+        Cancellation truncate(long size, ChangeCompletion completion);
     }
 
     public interface SyncableResource extends Resource {
@@ -352,12 +359,18 @@ public final class ProtosFileFlow {
     private void startRead(Request request) {
         ProtosIntegerValue start = currentPosition();
         request.startPosition = start;
+        if (!start.isSmallForRuntime()) {
+            // No host file has a byte at a position beyond the signed-64 range.
+            failIo(request);
+            finish(request);
+            return;
+        }
         try {
             setCancellation(
                     request,
                     ((ReadableResource) resource)
                             .readAt(
-                                    start,
+                                    start.smallValueForRuntime(),
                                     request.number.intValueExactForRuntime(),
                                     new ReadCompletion() {
                                         @Override
@@ -399,7 +412,7 @@ public final class ProtosFileFlow {
 
         ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
         for (byte octet : bytes) {
-            result.indexedAdd(new ProtosIntegerValue(octet & 0xff));
+            result.indexedAdd(ProtosNumericValueSupport.octet(octet & 0xff));
         }
         synchronized (this) {
             logicalPosition = advanced(request.startPosition, bytes.length);
@@ -419,12 +432,18 @@ public final class ProtosFileFlow {
             return;
         }
 
+        if (!start.isSmallForRuntime()) {
+            // No contribution is possible beyond the signed-64 host range.
+            failIo(request);
+            finish(request);
+            return;
+        }
         try {
             setCancellation(
                     request,
                     ((WritableResource) resource)
                             .writeAt(
-                                    start,
+                                    start.smallValueForRuntime(),
                                     request.bytes.clone(),
                                     new WriteCompletion() {
                                         @Override
@@ -524,13 +543,15 @@ public final class ProtosFileFlow {
                             .endPosition(
                                     new IntegerCompletion() {
                                         @Override
-                                        public void succeeded(ProtosIntegerValue value) {
-                                            if (value == null || value.signumForRuntime() < 0) {
+                                        public void succeeded(long end) {
+                                            if (end < 0) {
                                                 failIo(request);
                                                 finish(request);
                                                 return;
                                             }
                                             if (request.operation.commit()) {
+                                                ProtosIntegerValue value =
+                                                        new ProtosIntegerValue(end);
                                                 synchronized (ProtosFileFlow.this) {
                                                     logicalPosition = value;
                                                 }
@@ -559,14 +580,15 @@ public final class ProtosFileFlow {
                             .size(
                                     new IntegerCompletion() {
                                         @Override
-                                        public void succeeded(ProtosIntegerValue value) {
-                                            if (value == null || value.signumForRuntime() < 0) {
+                                        public void succeeded(long size) {
+                                            if (size < 0) {
                                                 failIo(request);
                                                 finish(request);
                                                 return;
                                             }
                                             if (request.operation.commit()) {
-                                                request.operation.resolve(value);
+                                                request.operation.resolve(
+                                                        new ProtosIntegerValue(size));
                                             }
                                             finish(request);
                                         }
@@ -589,7 +611,9 @@ public final class ProtosFileFlow {
                     request,
                     ((TruncatableResource) resource)
                             .truncate(
-                                    request.number,
+                                    request.number.isSmallForRuntime()
+                                            ? request.number.smallValueForRuntime()
+                                            : Long.MAX_VALUE,
                                     new ChangeCompletion() {
                                         @Override
                                         public boolean commitChange() {

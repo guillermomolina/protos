@@ -20,7 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -59,7 +59,7 @@ public final class ProtosStandardStringProtocol {
                         (activation, supplied) -> {
                             ProtosStringValue receiver = requireStringReceiver(activation);
                             requireArity(activation, supplied.size(), 0);
-                            return new ProtosIntegerValue(receiver.scalarCountForRuntime());
+                            return ProtosNumericValueSupport.integer(receiver.scalarCountForRuntime());
                         }));
 
         stringPrototype.createLocalSlot(
@@ -129,9 +129,8 @@ public final class ProtosStandardStringProtocol {
     private static int requireIntIndex(
             com.guillermomolina.protos.runtime.ProtosActivation activation,
             Object value) {
-        if (value instanceof ProtosIntegerValue integer
-                && integer.fitsInIntForRuntime()) {
-            return integer.intValueExactForRuntime();
+        if (ProtosNumericValueSupport.isIntegerInIntRange(value)) {
+            return ProtosNumericValueSupport.exactInt(value);
         }
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }

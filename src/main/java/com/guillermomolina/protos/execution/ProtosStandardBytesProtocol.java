@@ -21,7 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -95,7 +95,7 @@ public final class ProtosStandardBytesProtocol {
                             if (!supplied.isEmpty()) {
                                 return fail(activation);
                             }
-                            return new ProtosIntegerValue(bytes.indexedSize());
+                            return ProtosNumericValueSupport.integer(bytes.indexedSize());
                         }));
 
         bytesFactory.createLocalSlot(
@@ -188,11 +188,10 @@ public final class ProtosStandardBytesProtocol {
 
     private static int requireExistingIndex(
             Object candidate, int size, ProtosActivation activation) {
-        if (!(candidate instanceof ProtosIntegerValue integer)
-                || !integer.fitsInIntForRuntime()) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(candidate)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-        int index = integer.intValueExactForRuntime();
+        int index = ProtosNumericValueSupport.exactInt(candidate);
         if (index < 0 || index >= size) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
@@ -201,11 +200,10 @@ public final class ProtosStandardBytesProtocol {
 
     private static void requireOctet(
             Object candidate, ProtosActivation activation) {
-        if (!(candidate instanceof ProtosIntegerValue integer)
-                || !integer.fitsInIntForRuntime()) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(candidate)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-        int value = integer.intValueExactForRuntime();
+        int value = ProtosNumericValueSupport.exactInt(candidate);
         if (value < 0 || value > 255) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }

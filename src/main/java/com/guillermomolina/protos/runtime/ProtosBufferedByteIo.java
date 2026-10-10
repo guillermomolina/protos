@@ -92,9 +92,8 @@ public final class ProtosBufferedByteIo {
             Object maximum,
             ProtosBufferedByteReaderCPrimeExecution.Plan cPrimePlan) {
         check(activation);
-        if (!(maximum instanceof ProtosIntegerValue n)
-                || !n.fitsInIntForRuntime()
-                || n.signumForRuntime() <= 0) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(maximum)
+                || ProtosNumericValueSupport.exactInt(maximum) <= 0) {
             return failed(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -107,7 +106,7 @@ public final class ProtosBufferedByteIo {
                         activation,
                         operation,
                         Kind.READ,
-                        n.intValueExactForRuntime(),
+                        ProtosNumericValueSupport.exactInt(maximum),
                         null,
                         cPrimePlan));
     }
@@ -388,7 +387,7 @@ public final class ProtosBufferedByteIo {
 
     private List<?> readArguments(Req req) {
         return List.of(
-                new ProtosIntegerValue(
+                ProtosNumericValueSupport.integer(
                                 Math.max(req.maximum, READ_AHEAD)));
     }
 
@@ -1285,8 +1284,7 @@ public final class ProtosBufferedByteIo {
     private ProtosBytesValue bytes(byte[] values) {
         ProtosBytesValue bytes = new ProtosBytesValue(bytesPrototype);
         for (byte value : values) {
-            bytes.indexedAdd(
-                    new ProtosIntegerValue(value & 255));
+            bytes.indexedAdd(ProtosNumericValueSupport.octet(value & 255));
         }
         return bytes;
     }

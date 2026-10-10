@@ -867,6 +867,13 @@ final class CanonicalToBytecodeLowerer {
                     builder.emitLoadConstant(terminalClosurePlan);
                     endClosureCapture(builder);
                     builder.endReturn();
+                } else if (last instanceof CanonicalLookup terminalRead) {
+                    // I091: a retained carrier may return to an accepting caller.
+                    builder.beginReturn();
+                    builder.beginMaterializeReturnCarrier();
+                    emitLookup(builder, terminalRead, true);
+                    builder.endMaterializeReturnCarrier();
+                    builder.endReturn();
                 } else {
                     builder.beginReturn();
                     emitExpression(builder, last);
@@ -893,7 +900,20 @@ final class CanonicalToBytecodeLowerer {
 
                 beginStatement(builder, last);
 
-                if (requiresComposedInvocation(last)) {
+                boolean carrierTerminal =
+                        sharedScratch != null
+                                && last instanceof CanonicalSend terminalSend
+                                && primitiveResultSend(terminalSend);
+                if (carrierTerminal) {
+                    // I091: the final numeric result may return as a carrier.
+                    emitPrimitiveNumericOperandToLocal(
+                            builder,
+                            last,
+                            result,
+                            sharedScratch.preparedCall(),
+                            sharedScratch.childResult(),
+                            sharedScratch.resumeValue());
+                } else if (requiresComposedInvocation(last)) {
                     emitBodyExpressionToLocal(
                             builder,
                             last,
@@ -916,7 +936,13 @@ final class CanonicalToBytecodeLowerer {
                 endStatement(builder);
 
                 builder.beginReturn();
-                builder.emitLoadLocal(result);
+                if (carrierTerminal) {
+                    builder.beginMaterializeReturnCarrier();
+                    builder.emitLoadLocal(result);
+                    builder.endMaterializeReturnCarrier();
+                } else {
+                    builder.emitLoadLocal(result);
+                }
                 builder.endReturn();
             }
         }
@@ -3654,6 +3680,25 @@ final class CanonicalToBytecodeLowerer {
         }
         BytecodeLocal value = builder.createLocal("createValue", null);
         if (create.target().isEmpty()) {
+            /*
+             * I091: a frame-native creation may retain a primitive carrier
+             * from the guarded numeric chain; its own value is a guest value.
+             */
+            boolean carrierCreate =
+                    !scalarCreate
+                            && frameNativeOrdinal(create.name()) >= 0
+                            && primitiveNumericCarrierValue(create.value());
+            if (carrierCreate) {
+                emitPrimitiveNumericOperandToLocal(
+                        builder, create.value(), value, preparedCall, childResult, resumeValue);
+                builder.beginStoreLocal(result);
+                builder.beginMaterializePrimitiveNumericCarrier();
+                emitCreateCurrentBinding(builder, create, value);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+                builder.endStoreLocal();
+                return;
+            }
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
 
@@ -3881,9 +3926,27 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         }
 
-        emitBodyExpressionToLocal(
-                builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        /*
+         * I091: a bare lexical assignment may retain a primitive carrier from
+         * the guarded numeric chain. Only direct frame storage keeps it (every
+         * other destination materializes); the assignment's own value is
+         * always a guest value.
+         */
+        boolean carrierAssignment =
+                assign.target().isEmpty()
+                        && (capturedResolution.isPresent() || currentFrameLocal != null)
+                        && primitiveNumericCarrierValue(assign.value());
+        if (carrierAssignment) {
+            emitPrimitiveNumericOperandToLocal(
+                    builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        } else {
+            emitBodyExpressionToLocal(
+                    builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        }
         builder.beginStoreLocal(result);
+        if (carrierAssignment) {
+            builder.beginMaterializePrimitiveNumericCarrier();
+        }
         if (capturedResolution.isPresent()) {
             emitAssignCaptured(
                     builder,
@@ -3931,6 +3994,10 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignResolvedLexicalTarget();
+        }
+        if (carrierAssignment) {
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
         }
         builder.endStoreLocal();
     }
@@ -5580,9 +5647,21 @@ final class CanonicalToBytecodeLowerer {
             int positionalIndex) {
         ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
         if (currentActivationLocal == null) {
+            /*
+             * I091: a direct source caller may supply a primitive carrier.
+             * Only frame-native parameter storage retains it.
+             */
+            boolean materialize = form != ParameterBindingForm.FRAME_NATIVE;
+            if (materialize) {
+                builder.beginMaterializePrimitiveNumericCarrier();
+            }
             builder.beginLoadFrameClosureArgument();
             builder.emitLoadConstant(positionalIndex);
             builder.endLoadFrameClosureArgument();
+            if (materialize) {
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
         } else if (currentInlineCallbackFrameNative) {
             builder.beginLoadInlineClosureArgument(
                     currentRootFrameNativeLocals,
@@ -5868,6 +5947,18 @@ final class CanonicalToBytecodeLowerer {
     private void emitLookup(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
+        emitLookup(builder, lookup, false);
+    }
+
+    /*
+     * I091: carrierOperand is true only for an operand of the guarded
+     * primitive numeric chain, which may then receive a frame-retained
+     * primitive carrier. Every other read yields a guest value.
+     */
+    private void emitLookup(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalLookup lookup,
+            boolean carrierOperand) {
         if (currentRootAnalysis != null) {
             java.util.Optional<CanonicalBindingResolution> resolution =
                     currentRootAnalysis.resolutionOf(lookup);
@@ -5884,11 +5975,18 @@ final class CanonicalToBytecodeLowerer {
                 if (local != null
                         && ordinal != null
                         && currentActivationLocal == null) {
+                    if (!carrierOperand) {
+                        builder.beginMaterializePrimitiveNumericCarrier();
+                    }
                     builder.beginReadRootFrameLocal(
                             local,
                             currentRootFrameLayout.presentContinuityAt(ordinal));
                     builder.emitLoadConstant(resolvedName);
                     builder.endReadRootFrameLocal();
+                    if (!carrierOperand) {
+                        builder.emitLoadConstant(true);
+                        builder.endMaterializePrimitiveNumericCarrier();
+                    }
                     return;
                 }
                 if (local != null
@@ -5920,7 +6018,8 @@ final class CanonicalToBytecodeLowerer {
                             instanceof CanonicalBindingResolution.CapturedResolved captured) {
                 BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
                 if (ownerLocal != null && currentInlineCallbackFrameNative) {
-                    emitCapturedMaterializedRead(builder, captured, ownerLocal, true);
+                    emitGuestCapturedMaterializedRead(
+                            builder, captured, ownerLocal, true, carrierOperand);
                     return;
                 }
                 if (currentInlineCallbackFrameNative) {
@@ -5935,7 +6034,8 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
                 if (ownerLocal != null) {
-                    emitCapturedMaterializedRead(builder, captured, ownerLocal, false);
+                    emitGuestCapturedMaterializedRead(
+                            builder, captured, ownerLocal, false, carrierOperand);
                     return;
                 }
 
@@ -5959,6 +6059,27 @@ final class CanonicalToBytecodeLowerer {
         emitCurrentActivation(builder);
         builder.emitLoadConstant(lookup.name());
         builder.endLookup();
+    }
+
+    /*
+     * I091: the builtin materialized load reads the owner frame directly, so
+     * a retained primitive carrier is materialized unless the read is an
+     * operand of the guarded primitive numeric chain.
+     */
+    private void emitGuestCapturedMaterializedRead(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalBindingResolution.CapturedResolved captured,
+            BytecodeLocal ownerLocal,
+            boolean inlineCallback,
+            boolean carrierOperand) {
+        if (carrierOperand) {
+            emitCapturedMaterializedRead(builder, captured, ownerLocal, inlineCallback);
+            return;
+        }
+        builder.beginMaterializePrimitiveNumericCarrier();
+        emitCapturedMaterializedRead(builder, captured, ownerLocal, inlineCallback);
+        builder.emitLoadConstant(true);
+        builder.endMaterializePrimitiveNumericCarrier();
     }
 
     /**
@@ -6129,25 +6250,64 @@ final class CanonicalToBytecodeLowerer {
                         + identity.name());
     }
 
-    /* Numeric carriers are private to the guarded arithmetic expression chain. */
+    /*
+     * Numeric carriers are private to the guarded arithmetic expression chain.
+     * Ordering consumes carriers and always yields a guest Boolean.
+     */
     private static boolean primitiveNumericSendCandidate(CanonicalSend send) {
         return send.arguments().size() == 1
-                && ("+".equals(send.message())
-                        || "-".equals(send.message())
-                        || "*".equals(send.message())
-                        || "/".equals(send.message()))
+                && primitiveNumericSelector(send.message())
                 && !hasSpreadArgument(send.arguments());
     }
 
+    /*
+     * I091: a send whose fused direct source call may deliver a callee's
+     * primitive result to a carrier-permitting consumer.
+     */
+    private static boolean primitiveResultSend(CanonicalSend send) {
+        return primitiveNumericSendCandidate(send)
+                || (send.arguments().size() == 1 && !hasSpreadArgument(send.arguments()));
+    }
+
+    private static boolean primitiveNumericSelector(String selector) {
+        return switch (selector) {
+            case "+", "-", "*", "/", "<", "<=", ">", ">=" -> true;
+            default -> false;
+        };
+    }
+
+    /*
+     * I091: an argument worth staging as a carrier for an admitted direct
+     * source call (whose frame-native parameter binding retains it).
+     */
+    private static boolean primitiveNumericCarrierArgument(CanonicalExpression argument) {
+        return argument instanceof CanonicalLookup
+                || (argument instanceof CanonicalSend send && primitiveResultSend(send));
+    }
+
+    /* I091: a binding value the guarded chain or a raw binding read may yield as a carrier. */
+    private boolean primitiveNumericCarrierValue(CanonicalExpression value) {
+        if (value instanceof CanonicalLookup lookup) {
+            return !isScalarLocalRead(lookup);
+        }
+        return value instanceof CanonicalSend send && primitiveResultSend(send);
+    }
+
+    /*
+     * Whether the staged operand may hold a primitive carrier. A binding read
+     * may: frame storage retains carriers written by the chain (I091).
+     */
     private static boolean primitiveNumericCarrierSource(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLookup) {
+            return true;
+        }
         if (expression instanceof CanonicalLiteral literal) {
             Object value = materialize(literal);
             return (value instanceof ProtosIntegerValue integer
                     && integer.isSmallForRuntime())
                     || value instanceof ProtosFloatValue;
         }
-        return expression instanceof CanonicalSend send
-                && primitiveNumericSendCandidate(send);
+        return expression instanceof CanonicalSend send && primitiveResultSend(send);
     }
 
     private void emitPrimitiveNumericOperandToLocal(
@@ -6173,8 +6333,14 @@ final class CanonicalToBytecodeLowerer {
                 return;
             }
         }
-        if (expression instanceof CanonicalSend nested
-                && primitiveNumericSendCandidate(nested)) {
+        if (expression instanceof CanonicalLookup lookup
+                && !isScalarLocalRead(lookup)) {
+            builder.beginStoreLocal(target);
+            emitLookup(builder, lookup, true);
+            builder.endStoreLocal();
+            return;
+        }
+        if (expression instanceof CanonicalSend nested && primitiveResultSend(nested)) {
             builder.beginSourceSection(
                     nested.span().startOffset(), nested.span().length());
             emitComposedSend(builder, nested, target, preparedCall,
@@ -6276,6 +6442,7 @@ final class CanonicalToBytecodeLowerer {
                         || tryPrimitiveNumericSend;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
+        boolean carrierDirectArgument = false;
         java.util.List<BytecodeLocal> argumentValues =
                 java.util.List.of();
 
@@ -6328,6 +6495,16 @@ final class CanonicalToBytecodeLowerer {
                                     "sendArgument",
                                     null);
                     if (tryPrimitiveNumericSend) {
+                        emitPrimitiveNumericOperandToLocal(
+                                builder, argument, argumentValue,
+                                preparedCall, childResult, resumeValue);
+                    } else if (tryDirectSendOne
+                            && primitiveNumericCarrierArgument(argument)) {
+                        /*
+                         * I091: a fused direct source call may pass a
+                         * primitive carrier; the miss path materializes it.
+                         */
+                        carrierDirectArgument = true;
                         emitPrimitiveNumericOperandToLocal(
                                 builder, argument, argumentValue,
                                 preparedCall, childResult, resumeValue);
@@ -6444,6 +6621,15 @@ final class CanonicalToBytecodeLowerer {
              * native/structured calls, suspension and Error paths.
              */
             builder.beginBlock();
+            if (carrierDirectArgument) {
+                BytecodeLocal stagedArgument = argumentValues.get(0);
+                builder.beginStoreLocal(stagedArgument);
+                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.emitLoadLocal(stagedArgument);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+                builder.endStoreLocal();
+            }
         }
 
         builder.beginStoreLocal(preparedCall);
@@ -6567,7 +6753,18 @@ final class CanonicalToBytecodeLowerer {
              */
             builder.beginBlock();
             builder.beginStoreLocal(result);
+            /*
+             * I091: an admitted callee may return a primitive carrier; only
+             * a carrier-permitting consumer receives it unmaterialized.
+             */
+            if (!primitiveCarrierResult) {
+                builder.beginMaterializePrimitiveNumericCarrier();
+            }
             builder.emitLoadLocal(directSendResult);
+            if (!primitiveCarrierResult) {
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
             builder.endStoreLocal();
             builder.endBlock();
 

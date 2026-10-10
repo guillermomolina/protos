@@ -1132,19 +1132,16 @@ public final class ProtosCli {
         List<Object> fields = outcome.indexedSnapshot();
         if (fields.size() < 4
                 || !(fields.get(0) instanceof ProtosStringValue statusValue)
-                || !(fields.get(3) instanceof ProtosIntegerValue exitValue)) {
+                || !ProtosNumericValueSupport.isCurrentInteger(fields.get(3))) {
             throw new IllegalStateException("Test tool returned a malformed TestRunOutcome");
         }
 
         String status = statusValue.value();
-        final int exitCode;
-        try {
-            exitCode = exitValue.value().intValueExact();
-        } catch (ArithmeticException failure) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(fields.get(3))) {
             throw new IllegalStateException(
-                    "Test tool returned a non-CLI exit classification",
-                    failure);
+                    "Test tool returned a non-CLI exit classification");
         }
+        final int exitCode = ProtosNumericValueSupport.exactInt(fields.get(3));
 
         if (status.equals("completed")) {
             if (exitCode != 0 && exitCode != 1) {

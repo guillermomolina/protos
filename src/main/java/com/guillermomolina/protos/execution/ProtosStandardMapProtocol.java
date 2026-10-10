@@ -15,6 +15,7 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;  import java.util.*;
 public final class ProtosStandardMapProtocol {
  enum StructuredReadLookupKind { AT, CONTAINS_KEY, AT_IF_ABSENT }
@@ -224,7 +225,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
   p.createLocalSlot("atPut", STANDARD_AT_PUT);
   p.createLocalSlot("remove", STANDARD_REMOVE);
-  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(m.keyedSize());}));
+  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return ProtosNumericValueSupport.integer(m.keyedSize());}));
   p.createLocalSlot("each", STANDARD_EACH);
   p.createLocalSlot("match", STANDARD_MATCH);
  }

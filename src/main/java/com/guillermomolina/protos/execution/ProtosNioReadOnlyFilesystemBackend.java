@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -194,12 +193,10 @@ public final class ProtosNioReadOnlyFilesystemBackend
 
         @Override
         public synchronized ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
-            Objects.requireNonNull(position, "position");
+                long position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             Objects.requireNonNull(completion, "completion");
             if (closed
-                    || !position.isSmallForRuntime()
-                    || position.signumForRuntime() < 0
+                    || position < 0
                     || maxBytes <= 0) {
                 completion.failed();
                 return () -> {};
@@ -208,7 +205,7 @@ public final class ProtosNioReadOnlyFilesystemBackend
             int requested = Math.min(maxBytes, MAX_READ_CHUNK);
             ByteBuffer buffer = ByteBuffer.allocate(requested);
             try {
-                channel.position(position.smallValueForRuntime());
+                channel.position(position);
                 int read = channel.read(buffer);
                 if (read < 0) {
                     completion.eof();

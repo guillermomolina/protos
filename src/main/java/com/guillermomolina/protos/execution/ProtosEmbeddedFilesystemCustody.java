@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
@@ -466,8 +465,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
 
         @Override
         public synchronized ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
-            Objects.requireNonNull(position, "position");
+                long position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             Objects.requireNonNull(completion, "completion");
             if (closed || !representable(position) || maxBytes <= 0) {
                 completion.failed();
@@ -475,7 +473,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
             }
             ByteBuffer buffer = ByteBuffer.allocate(Math.min(maxBytes, MAX_READ_CHUNK));
             try {
-                channel.position(position.smallValueForRuntime());
+                channel.position(position);
                 int read = channel.read(buffer);
                 if (read < 0) {
                     completion.eof();
@@ -500,8 +498,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
          */
         @Override
         public synchronized ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
-            Objects.requireNonNull(position, "position");
+                long position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             Objects.requireNonNull(bytes, "bytes");
             Objects.requireNonNull(completion, "completion");
             if (closed || !representable(position)) {
@@ -512,7 +509,7 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
                 completion.succeeded();
                 return NO_FILE_CANCELLATION;
             }
-            long start = position.smallValueForRuntime();
+            long start = position;
             long previousSize;
             try {
                 previousSize = start > 0 ? channel.size() : 0;
@@ -592,30 +589,29 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
                 completion.failed();
                 return NO_FILE_CANCELLATION;
             }
-            completion.succeeded(new ProtosIntegerValue(size));
+            completion.succeeded(size);
             return NO_FILE_CANCELLATION;
         }
 
         /** One provider truncation: never extends, and a no-op commits nothing. */
         @Override
         public synchronized ProtosFileFlow.Cancellation truncate(
-                ProtosIntegerValue size, ProtosFileFlow.ChangeCompletion completion) {
-            Objects.requireNonNull(size, "size");
+                long size, ProtosFileFlow.ChangeCompletion completion) {
             Objects.requireNonNull(completion, "completion");
-            if (closed || size.signumForRuntime() < 0) {
+            if (closed || size < 0) {
                 completion.failed();
                 return NO_FILE_CANCELLATION;
             }
             try {
                 long current = channel.size();
-                if (!size.isSmallForRuntime() || size.smallValueForRuntime() >= current) {
+                if (size >= current) {
                     completion.succeeded();
                     return NO_FILE_CANCELLATION;
                 }
                 if (!completion.commitChange()) {
                     return NO_FILE_CANCELLATION;
                 }
-                channel.truncate(size.smallValueForRuntime());
+                channel.truncate(size);
             } catch (IOException | RuntimeException failure) {
                 completion.failed();
                 return NO_FILE_CANCELLATION;
@@ -678,8 +674,8 @@ final class ProtosEmbeddedFilesystemCustody implements ProtosStandardFilesystemP
             }
         }
 
-        private static boolean representable(ProtosIntegerValue position) {
-            return position.isSmallForRuntime() && position.signumForRuntime() >= 0;
+        private static boolean representable(long position) {
+            return position >= 0;
         }
     }
 }

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -157,11 +158,13 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     @TruffleBoundary
     private Object readPresentFrameBackedValueAt(int ordinal) {
         BytecodeLocation current = declaringLocation.update();
-        return current.getBytecodeNode()
-                .getLocalValue(
-                        current.getBytecodeIndex(),
-                        frame,
-                        frameBackedLayout.localOffsetAt(ordinal));
+        // I091: a frame may retain a primitive carrier; observers see the guest value.
+        return ProtosNumericValueSupport.guestValue(
+                current.getBytecodeNode()
+                        .getLocalValue(
+                                current.getBytecodeIndex(),
+                                frame,
+                                frameBackedLayout.localOffsetAt(ordinal)));
     }
 
     private void ensureGeneralEstablishmentOrder(BytecodeNode bytecodeNode) {

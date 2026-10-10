@@ -39,8 +39,10 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapIn
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -1010,6 +1012,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
+            /*
+             * I091: may yield a frame-retained primitive carrier. The lowerer
+             * materializes it for every consumer outside the guarded numeric
+             * chain.
+             */
             return accessor.getObject(bytecodeNode, frame);
         }
 
@@ -1043,7 +1050,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 BytecodeNode bytecodeNode,
                 MaterializedFrame frame) {
-            return ProtosBytecodeRootNode.ReadFrameLocal.perform(
+            // I091: the lowered consumer materializes a retained carrier.
+            return ProtosBytecodeRootNode.ReadFrameLocal.readRetainingCarrier(
                     accessor,
                     presenceContinuity,
                     ProtosFrameArguments.activation(arguments),
@@ -6252,13 +6260,26 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class MaterializePrimitiveNumericCarrier {
         @Specialization
         public static Object perform(Object value, boolean carrierPermitted) {
-            if (carrierPermitted && value instanceof Long small) {
-                return new ProtosIntegerValue(small.longValue());
+            return carrierPermitted
+                    ? ProtosNumericValueSupport.guestValue(value)
+                    : value;
+        }
+    }
+
+    /**
+     * I091: the implicit final value of a source root. A primitive numeric
+     * carrier is returned as is only to a fused direct source send that
+     * accepts it; every other caller receives the guest value.
+     */
+    @Operation
+    public static final class MaterializeReturnCarrier {
+        @Specialization
+        public static Object perform(Object value, @Bind VirtualFrame frame) {
+            if (ProtosNumericValueSupport.isPrimitiveCarrier(value)
+                    && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
+                return value;
             }
-            if (carrierPermitted && value instanceof Double floating) {
-                return new ProtosFloatValue(floating.doubleValue());
-            }
-            return value;
+            return ProtosNumericValueSupport.guestValue(value);
         }
     }
 
@@ -6289,7 +6310,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     "enteredContext == cachedContext",
                     "prelude == cachedPrelude",
                     "cachedInteger != null",
-                    "arithmetic(cachedInteger.operation())"
+                    "mixedArithmetic(cachedInteger.operation())"
                 },
                 assumptions = "cachedInteger.stability()",
                 limit = "3")
@@ -6311,13 +6332,18 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             long left = smallValue(receiver);
             long right = smallValue(argument);
             try {
-                long result = switch (cachedInteger.operation()) {
+                return switch (cachedInteger.operation()) {
                     case ADD -> Math.addExact(left, right);
                     case SUBTRACT -> Math.subtractExact(left, right);
                     case MULTIPLY -> Math.multiplyExact(left, right);
+                    // D196: Integer / Integer is the correctly rounded exact quotient (Float).
+                    case FLOAT_DIVIDE ->
+                            ProtosBinary64Rounding.primitiveQuotientAdmitted(left, right)
+                                    ? (Object) ProtosBinary64Rounding.dividePrimitiveIntegers(
+                                            left, right)
+                                    : MISS;
                     default -> throw new AssertionError("non-arithmetic canonical operation");
                 };
-                return result;
             } catch (ArithmeticException overflow) {
                 // Exact BigInteger arithmetic belongs to the selected native fallback.
                 return MISS;
@@ -6398,8 +6424,85 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             };
         }
 
+        record GuardedOrderingSend(
+                ProtosStandardNumberOrderingProtocol.Relation relation,
+                Assumption stability) {}
+
+        /*
+         * Standard Number ordering selected through an Integer receiver.
+         * Separate from the Float receiver family: each family's own
+         * prototype chain may override the inherited relation (D013).
+         */
         @Specialization(
-                replaces = {"canonical", "canonicalMixedInteger", "canonicalFloat"})
+                guards = {
+                    "smallInteger(receiver, receiverCarrier)",
+                    "smallNumeric(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedOrdering != null"
+                },
+                assumptions = "cachedOrdering.stability()",
+                limit = "3")
+        public static Object canonicalIntegerOrdering(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("integerOrderingGuard(selector, prelude, enteredContext)")
+                        GuardedOrderingSend cachedOrdering) {
+            long left = smallValue(receiver);
+            ProtosStandardNumberOrderingProtocol.Comparison comparison =
+                    smallFloat(argument, argumentCarrier)
+                            ? ProtosCurrentNumericRelations.reverse(
+                                    ProtosCurrentNumericRelations.compareFloatToLong(
+                                            floatValue(argument), left))
+                            : ProtosCurrentNumericRelations.compareLongs(
+                                    left, smallValue(argument));
+            return ProtosBooleanValue.of(cachedOrdering.relation().holds(comparison));
+        }
+
+        @Specialization(
+                guards = {
+                    "smallFloat(receiver, receiverCarrier)",
+                    "smallNumeric(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedOrdering != null"
+                },
+                assumptions = "cachedOrdering.stability()",
+                limit = "3")
+        public static Object canonicalFloatOrdering(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("floatOrderingGuard(selector, prelude, enteredContext)")
+                        GuardedOrderingSend cachedOrdering) {
+            double left = floatValue(receiver);
+            ProtosStandardNumberOrderingProtocol.Comparison comparison =
+                    smallFloat(argument, argumentCarrier)
+                            ? ProtosCurrentNumericRelations.compareFloats(
+                                    left, floatValue(argument))
+                            : ProtosCurrentNumericRelations.compareFloatToLong(
+                                    left, smallValue(argument));
+            return ProtosBooleanValue.of(cachedOrdering.relation().holds(comparison));
+        }
+
+        @Specialization(
+                replaces = {"canonical", "canonicalMixedInteger", "canonicalFloat",
+                    "canonicalIntegerOrdering", "canonicalFloatOrdering"})
         public static Object generic(
                 Object receiver, String selector, Object caller, Object argument,
                 boolean receiverCarrier, boolean argumentCarrier) {
@@ -6479,6 +6582,55 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return new GuardedFloatSend(operation, lookup.stability());
         }
 
+        static GuardedOrderingSend integerOrderingGuard(
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null || prelude == null) {
+                return null;
+            }
+            return orderingGuard(
+                    ProtosValueLookup.lookupGuardedInteger(
+                            new ProtosIntegerValue(0L), selector, prelude),
+                    selector, prelude);
+        }
+
+        static GuardedOrderingSend floatOrderingGuard(
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null || prelude == null) {
+                return null;
+            }
+            return orderingGuard(
+                    ProtosValueLookup.lookupGuardedFloat(
+                            new ProtosFloatValue(0.0), selector, prelude),
+                    selector, prelude);
+        }
+
+        private static GuardedOrderingSend orderingGuard(
+                ProtosValueLookup.GuardedLookup lookup,
+                String selector,
+                ProtosPrelude prelude) {
+            if (lookup == null) {
+                return null;
+            }
+            ProtosSlotLookupResult selected = lookup.selected();
+            if (!(selected.value() instanceof ProtosClosureValue closure)
+                    || !lookup.stability().isValid()) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            ProtosStandardNumberOrderingProtocol.Relation relation =
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            closure, selected.home(), selector, prelude);
+            if (relation == null) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            return new GuardedOrderingSend(relation, lookup.stability());
+        }
+
         static GuardedIntegerSend canonicalGuard(
                 String selector,
                 ProtosPrelude prelude,
@@ -6541,7 +6693,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                             receiver,
                             cachedSend.methodHome(),
                             exactCaller,
-                            ProtosReturnHome.unobservable(),
+                            /*
+                             * I091: the admitted home is unobservable; this
+                             * variant also lets the callee return a primitive
+                             * numeric carrier, which the lowered call site
+                             * consumes or materializes.
+                             */
+                            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
                             supplied0);
 
             try {

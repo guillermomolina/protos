@@ -19,7 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -179,12 +179,11 @@ public final class ProtosTestToolStalledCaseDiagnosticFacility implements AutoCl
     }
 
     private static long token(ProtosActivation caller, Object value) {
-        if (!(value instanceof ProtosIntegerValue integer)
-                || !integer.isSmallForRuntime()
-                || integer.signumForRuntime() < 0) {
+        if (!ProtosNumericValueSupport.isIntegerInLongRange(value)
+                || ProtosNumericValueSupport.exactLong(value) < 0) {
             throw toolError(caller);
         }
-        return integer.smallValueForRuntime();
+        return ProtosNumericValueSupport.exactLong(value);
     }
 
     private static ProtosSignalException toolError(ProtosActivation activation) {

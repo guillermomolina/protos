@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -55,7 +54,7 @@ final class ProtosForeignValueAdmission {
             case BOOLEAN -> ProtosBooleanValue.of((Boolean) descriptor.scalar());
             case NULL -> ProtosNullValue.INSTANCE;
             case STRING -> unicodeOrRaw(session, adapter, foreign, (String) descriptor.scalar());
-            case INTEGER -> new ProtosIntegerValue((BigInteger) descriptor.scalar());
+            case INTEGER -> (ProtosIntegerValue) descriptor.scalar();
             case BINARY64 -> new ProtosFloatValue((Double) descriptor.scalar());
             case RAW ->
                     new ProtosRawForeignValue(

@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
@@ -149,18 +150,16 @@ public final class ProtosStandardIpAddressProtocol {
 
     private static boolean validNumericState(
             Object versionValue, Object bitsValue) {
-        if (!(versionValue instanceof ProtosIntegerValue version)
-                || !(bitsValue instanceof ProtosIntegerValue bits)
-                || !version.isSmallForRuntime()) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(versionValue)) {
             return false;
         }
 
-        long ipVersion = version.smallValueForRuntime();
-        if (ipVersion == 4L) {
-            return bits.fitsUnsignedBitsForRuntime(32);
+        int ipVersion = ProtosNumericValueSupport.exactInt(versionValue);
+        if (ipVersion == 4) {
+            return ProtosNumericValueSupport.isUnsignedIntegerWithin(bitsValue, 32);
         }
-        if (ipVersion == 6L) {
-            return bits.fitsUnsignedBitsForRuntime(128);
+        if (ipVersion == 6) {
+            return ProtosNumericValueSupport.isUnsignedIntegerWithin(bitsValue, 128);
         }
         return false;
     }

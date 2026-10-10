@@ -666,7 +666,7 @@ public final class ProtosTextWriter {
                 new ProtosBytesValue(
                         activation.prelude().orElseThrow().bytesPrototypeForRuntime());
         for (byte value : encoded) {
-            bytes.indexedAdd(new ProtosIntegerValue(value & 0xff));
+            bytes.indexedAdd(ProtosNumericValueSupport.octet(value & 0xff));
         }
         return bytes;
     }

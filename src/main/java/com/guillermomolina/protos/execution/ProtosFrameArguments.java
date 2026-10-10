@@ -436,7 +436,7 @@ final class ProtosFrameArguments {
         ProtosReturnHome returnHome =
                 minimalMethod
                         ? ProtosReturnHome.unobservable()
-                        : (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
+                        : normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
         /*
          * The supplied values stay backed by this frame-argument array: the
          * user-argument range is written once by compactCall and never
@@ -813,7 +813,25 @@ final class ProtosFrameArguments {
         if (minimal != MINIMAL_NONE) {
             return minimalReturnHome(arguments, minimal);
         }
-        return (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
+        return normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
+    }
+
+    /* I091: the primitive-result marker denotes exactly the unobservable home. */
+    private static ProtosReturnHome normalizedReturnHome(Object home) {
+        return home == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
+                ? ProtosReturnHome.unobservable()
+                : (ProtosReturnHome) home;
+    }
+
+    /**
+     * I091: whether the caller of this invocation accepts a primitive numeric
+     * result. Only a fused direct source send writes the private marker, and
+     * only into a full compact header; argument 0 publication keeps it.
+     */
+    static boolean acceptsPrimitiveResult(Object[] arguments) {
+        return arguments.length > RETURN_HOME_INDEX
+                && arguments[RETURN_HOME_INDEX]
+                        == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime();
     }
 
     static boolean compactOwnsReturnHome(Object[] arguments) {

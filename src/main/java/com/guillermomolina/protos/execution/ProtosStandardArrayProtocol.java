@@ -22,7 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -157,7 +157,7 @@ public final class ProtosStandardArrayProtocol {
                             if (!supplied.isEmpty()) {
                                 throw invalid(activation);
                             }
-                            return new ProtosIntegerValue(array.indexedSize());
+                            return ProtosNumericValueSupport.integer(array.indexedSize());
                         }));
 
         arrayPrototype.createLocalSlot("each", STANDARD_EACH);
@@ -269,11 +269,10 @@ public final class ProtosStandardArrayProtocol {
             ProtosActivation activation,
             Object value,
             int size) {
-        if (!(value instanceof ProtosIntegerValue integer)
-                || !integer.fitsInIntForRuntime()) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(value)) {
             throw invalid(activation);
         }
-        int index = integer.intValueExactForRuntime();
+        int index = ProtosNumericValueSupport.exactInt(value);
         if (index < 0 || index >= size) {
             throw invalid(activation);
         }

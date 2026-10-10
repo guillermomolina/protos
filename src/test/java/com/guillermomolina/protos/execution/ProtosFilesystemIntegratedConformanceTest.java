@@ -285,7 +285,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                long position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             reads.incrementAndGet();
             completion.data(new byte[] {(byte) octet});
             return () -> {};
@@ -306,7 +306,7 @@ class ProtosFilesystemIntegratedConformanceTest {
         @Override
         public ProtosFileFlow.Cancellation endPosition(
                 ProtosFileFlow.IntegerCompletion completion) {
-            completion.succeeded(new ProtosIntegerValue(1));
+            completion.succeeded(1);
             return () -> {};
         }
     }

@@ -22,6 +22,7 @@ public final class ProtosIdentity {
     public static boolean identical(Object left,Object right) {
         if(left==right)return true;
         if(ProtosNumericValueSupport.sameCurrentFamilyIdentity(left,right))return true;
+        if(ProtosNumericValueSupport.sameRichNumericIdentity(left,right))return true;
         if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
         if(left instanceof ProtosActorRefValue a && right instanceof ProtosActorRefValue b)return a.denotesSameIncarnation(b);
         if(left instanceof ProtosGroupRefValue a && right instanceof ProtosGroupRefValue b)return a.denotesSameReference(b);
@@ -32,6 +33,7 @@ public final class ProtosIdentity {
     public static long identityHash(Object value){
         java.util.Objects.requireNonNull(value,"value");
         if(ProtosNumericValueSupport.isCurrentNumber(value))return ProtosNumericValueSupport.currentNumericIdentityHash(value);
+        if(ProtosNumericValueSupport.isRichNumericValue(value))return ProtosNumericValueSupport.richNumericIdentityHash(value);
         if(value instanceof ProtosStringValue st)return tagged(31,st.value().hashCode());
         if(value instanceof ProtosActorRefValue ref)return tagged(34,Long.hashCode(ref.incarnationIdentityForRuntime()));
         if(value instanceof ProtosGroupRefValue ref)return tagged(35,ref.semanticIdentityForRuntime().hashCode());

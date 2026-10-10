@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
@@ -145,13 +145,12 @@ public final class ProtosStandardNetworkProtocol {
         }
 
         Object versionValue = slots.ipVersion();
-        if (!(versionValue instanceof ProtosIntegerValue version)
-                || !version.fitsInIntForRuntime()
-                || (version.intValueExactForRuntime() != 4
-                        && version.intValueExactForRuntime() != 6)) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(versionValue)
+                || (ProtosNumericValueSupport.exactInt(versionValue) != 4
+                        && ProtosNumericValueSupport.exactInt(versionValue) != 6)) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
-        int ipVersion = version.intValueExactForRuntime();
+        int ipVersion = ProtosNumericValueSupport.exactInt(versionValue);
 
         ProtosObjectValue addressConstraint = null;
         Object addressValue = slots.address();
@@ -162,8 +161,8 @@ public final class ProtosStandardNetworkProtocol {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
             Object addressVersionValue = address.readLocalSlot("version").orElse(null);
-            if (!(addressVersionValue instanceof ProtosIntegerValue addressVersion)
-                    || !addressVersion.sameIntegerForRuntime(version)) {
+            if (!ProtosNumericValueSupport.isIntegerInIntRange(addressVersionValue)
+                    || ProtosNumericValueSupport.exactInt(addressVersionValue) != ipVersion) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
             addressConstraint = address;
@@ -172,13 +171,12 @@ public final class ProtosStandardNetworkProtocol {
         Integer portConstraint = null;
         Object portValue = slots.port();
         if (portValue != ProtosNullValue.INSTANCE) {
-            if (!(portValue instanceof ProtosIntegerValue port)
-                    || !port.fitsInIntForRuntime()
-                    || port.intValueExactForRuntime() < 1
-                    || port.intValueExactForRuntime() > 65535) {
+            if (!ProtosNumericValueSupport.isIntegerInIntRange(portValue)
+                    || ProtosNumericValueSupport.exactInt(portValue) < 1
+                    || ProtosNumericValueSupport.exactInt(portValue) > 65535) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
-            portConstraint = port.intValueExactForRuntime();
+            portConstraint = ProtosNumericValueSupport.exactInt(portValue);
         }
 
         ProtosNetworkListenFlow.ListenRequest captured =

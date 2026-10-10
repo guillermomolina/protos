@@ -16,7 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import java.io.IOException;
@@ -230,13 +230,14 @@ final class ProtosNioTcpListenerBackend
         }
 
         ProtosObjectValue logicalAddress = new ProtosObjectValue(addressPrototype);
-        logicalAddress.createLocalSlot("version", new ProtosIntegerValue(ipVersion));
-        logicalAddress.createLocalSlot("bits", ProtosIntegerValue.fromUnsignedBigEndianForRuntime(bytes));
+        logicalAddress.createLocalSlot("version", ProtosNumericValueSupport.integer(ipVersion));
+        logicalAddress.createLocalSlot(
+                "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes));
         logicalAddress.freeze();
 
         ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);
         endpoint.createLocalSlot("address", logicalAddress);
-        endpoint.createLocalSlot("port", new ProtosIntegerValue(socket.getPort()));
+        endpoint.createLocalSlot("port", ProtosNumericValueSupport.integer(socket.getPort()));
         return endpoint.freeze();
     }
 

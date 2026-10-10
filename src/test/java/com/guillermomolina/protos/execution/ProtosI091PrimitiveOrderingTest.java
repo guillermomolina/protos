@@ -1,0 +1,114 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+package com.guillermomolina.protos.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.nio.file.Path;
+import org.graalvm.polyglot.Context;
+import org.junit.jupiter.api.Test;
+
+/** I091: guarded primitive ordering and Integer quotient in the carrier chain. */
+final class ProtosI091PrimitiveOrderingTest {
+    @Test
+    void integerAndFloatOrderingOverCarriers() {
+        try (Context context = context()) {
+            assertTrue(eval(context, "1 < 2"));
+            assertFalse(eval(context, "2 < 2"));
+            assertTrue(eval(context, "2 <= 2"));
+            assertTrue(eval(context, "(1 + 2) > 2"));
+            assertTrue(eval(context, "(1 + 2) >= (6 / 2)"));
+            assertTrue(eval(context, "1.5 < 2"));
+            assertTrue(eval(context, "2 > 1.5"));
+            assertTrue(eval(context, "0.0 <= (0.0 * (0.0 - 1.0))"));
+            assertFalse(eval(context, "(0.0 * (0.0 - 1.0)) < 0.0"));
+        }
+    }
+
+    @Test
+    void unorderedAndLargeValuesRemainExact() {
+        try (Context context = context()) {
+            assertFalse(eval(context, "(0.0 / 0.0) < 1"));
+            assertFalse(eval(context, "1 >= (0.0 / 0.0)"));
+            // 2^63 - 1 rounds to 2^63 as binary64; the exact comparison still orders them.
+            assertTrue(eval(context, "9223372036854775807 < 9223372036854775807.0"));
+            assertTrue(eval(context, "9007199254740993 > 9007199254740992.0"));
+            // Overflowed operands leave the carrier chain and use the exact fallback.
+            assertTrue(eval(context, "(9223372036854775807 + 1) > 9223372036854775807"));
+        }
+    }
+
+    @Test
+    void integerQuotientIsCorrectlyRoundedFloat() {
+        try (Context context = context()) {
+            assertEquals(2.5d, context.eval(ProtosLanguage.ID, "5 / 2").asDouble());
+            double zero = context.eval(ProtosLanguage.ID, "0 / (0 - 5)").asDouble();
+            assertEquals(Double.doubleToRawLongBits(0.0d), Double.doubleToRawLongBits(zero));
+            assertEquals(1.0d / 3.0d, context.eval(ProtosLanguage.ID, "1 / 3").asDouble());
+            assertEquals(4611686018427387904.0d,
+                    context.eval(ProtosLanguage.ID,
+                            "9223372036854775807 / 2").asDouble());
+        }
+    }
+
+    @Test
+    void exactCanonicalOrderingClosureIsNotAnAliasOrCopiedNativeBody()
+            throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(
+                Path.of("protos", "lib", "core"));
+
+        for (String selector : new String[] {"<", "<=", ">", ">="}) {
+            ProtosClosureValue selected = (ProtosClosureValue)
+                    prelude.numberPrototype().readLocalSlot(selector).orElseThrow();
+
+            ProtosStandardNumberOrderingProtocol.Relation relation =
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            selected, prelude.numberPrototype(), selector, prelude);
+            assertSame(relation,
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            selected, prelude.numberPrototype(), selector, prelude));
+            assertTrue(relation != null);
+            assertNull(
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            ProtosClosureValue.nativeClosure(
+                                    selected.nativeBody().orElseThrow()),
+                            prelude.numberPrototype(), selector, prelude));
+            assertNull(
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            selected, prelude.integerPrototype(), selector, prelude));
+            assertNull(
+                    ProtosStandardNumberOrderingProtocol.canonicalRelationForSelection(
+                            selected, prelude.numberPrototype(),
+                            "<".equals(selector) ? ">" : "<", prelude));
+        }
+    }
+
+    private static boolean eval(Context context, String source) {
+        return context.eval(ProtosLanguage.ID, source).asBoolean();
+    }
+
+    private static Context context() {
+        String core = Path.of("protos", "lib", "core").toAbsolutePath().toString();
+        return Context.newBuilder(ProtosLanguage.ID).option("protos.CoreRoot", core).build();
+    }
+}

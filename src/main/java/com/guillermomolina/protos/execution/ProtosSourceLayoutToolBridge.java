@@ -51,7 +51,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -821,7 +821,7 @@ public final class ProtosSourceLayoutToolBridge {
                     string(sourceStep.role()));
             step.createLocalSlot(
                     "index",
-                    new ProtosIntegerValue(
+                    ProtosNumericValueSupport.integer(
                             sourceStep.index()));
             step.freeze();
             steps.add(step);

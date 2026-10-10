@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.328-SNAPSHOT
+
+- `I091` (#869): implement PLAT056 Candidate C primitive-first numeric execution.
+  - Carry small Integer/Float values as primitive `long`/`double` through guarded
+    arithmetic, ordering, Integer `/`, frame locals, captures, fused direct-send
+    arguments and returns, materializing guest values only at observable boundaries;
+    D013 overrides, assumptions and exact fallbacks are preserved.
+  - Extend the semantic numeric boundary and move file, byte, text, network, IP,
+    collection and tooling consumers off physical Integer dependencies; file backends
+    take `long` positions while `File` positions remain exact.
+  - Add the internal rich-numeric family identity capability for Candidate C guest
+    objects; Core-family isolation transfer remains gated by PLAT051.
+  - Reduce the I091 census to 161 `BigInteger` and 203 `ProtosIntegerValue` references
+    and add focal carrier, return, boundary and feasibility coverage.
+
 ## 0.3.327-SNAPSHOT
 
 - `I091` (#869): contain Java `BigInteger` dependencies behind exact numeric boundaries.

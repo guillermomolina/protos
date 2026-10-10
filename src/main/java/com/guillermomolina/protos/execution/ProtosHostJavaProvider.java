@@ -156,8 +156,7 @@ final class ProtosHostJavaProvider
                 || value instanceof Short
                 || value instanceof Integer
                 || value instanceof Long) {
-            return ProtosForeignAdmissionDescriptor.integral(
-                    BigInteger.valueOf(((Number) value).longValue()));
+            return ProtosForeignAdmissionDescriptor.integral(((Number) value).longValue());
         }
         if (value instanceof BigInteger integer) {
             return ProtosForeignAdmissionDescriptor.integral(integer);

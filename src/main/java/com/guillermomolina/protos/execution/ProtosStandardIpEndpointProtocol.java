@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
@@ -199,11 +200,10 @@ public final class ProtosStandardIpEndpointProtocol {
     }
 
     private static boolean validPort(Object portValue) {
-        if (!(portValue instanceof ProtosIntegerValue port)
-                || !port.fitsInIntForRuntime()) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(portValue)) {
             return false;
         }
-        int value = port.intValueExactForRuntime();
+        int value = ProtosNumericValueSupport.exactInt(portValue);
         return value >= 1 && value <= 65535;
     }
 

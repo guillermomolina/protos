@@ -300,7 +300,7 @@ class ProtosStandardFilesystemProtocolTest {
     private static final class ReadResource implements ProtosFileFlow.ReadableResource {
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                long position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             completion.eof();
             return () -> {};
         }
@@ -315,7 +315,7 @@ class ProtosStandardFilesystemProtocolTest {
             implements ProtosFileFlow.WritableResource {
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+                long position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             return () -> {};
         }
 
@@ -329,14 +329,14 @@ class ProtosStandardFilesystemProtocolTest {
             implements ProtosFileFlow.WritableResource, ProtosFileFlow.SeekableResource {
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+                long position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             return () -> {};
         }
 
         @Override
         public ProtosFileFlow.Cancellation endPosition(
                 ProtosFileFlow.IntegerCompletion completion) {
-            completion.succeeded(new ProtosIntegerValue(17));
+            completion.succeeded(17);
             return () -> {};
         }
 

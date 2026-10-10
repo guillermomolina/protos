@@ -21,7 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -168,8 +168,8 @@ public final class ProtosRegexUnicodeFacility {
     }
 
     private static int scalarBound(ProtosActivation activation, Object value) {
-        if (value instanceof ProtosIntegerValue integer && integer.fitsInIntForRuntime()) {
-            int bound = integer.intValueExactForRuntime();
+        if (ProtosNumericValueSupport.isIntegerInIntRange(value)) {
+            int bound = ProtosNumericValueSupport.exactInt(value);
             if (bound >= 0 && bound <= MAX_SCALAR) {
                 return bound;
             }
@@ -181,8 +181,8 @@ public final class ProtosRegexUnicodeFacility {
         UnicodeSet scalars = new UnicodeSet(set).remove(FIRST_SURROGATE, LAST_SURROGATE);
         List<Object> bounds = new ArrayList<>(scalars.getRangeCount() * 2);
         for (int index = 0; index < scalars.getRangeCount(); index++) {
-            bounds.add(new ProtosIntegerValue(scalars.getRangeStart(index)));
-            bounds.add(new ProtosIntegerValue(scalars.getRangeEnd(index)));
+            bounds.add(ProtosNumericValueSupport.integer(scalars.getRangeStart(index)));
+            bounds.add(ProtosNumericValueSupport.integer(scalars.getRangeEnd(index)));
         }
         return prelude(activation).newFrozenArray(bounds);
     }

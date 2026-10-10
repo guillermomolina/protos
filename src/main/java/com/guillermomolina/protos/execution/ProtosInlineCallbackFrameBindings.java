@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
@@ -123,7 +124,9 @@ final class ProtosInlineCallbackFrameBindings {
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
         try {
-            activation.createCurrentLocalSlotForRuntime(name, value);
+            // I091: the durable authority never retains a primitive carrier.
+            activation.createCurrentLocalSlotForRuntime(
+                    name, ProtosNumericValueSupport.guestValue(value));
         } catch (IllegalStateException invalidCreation) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
@@ -175,7 +178,8 @@ final class ProtosInlineCallbackFrameBindings {
             VirtualFrame frame) {
         if (!child.isActivationMaterialized()
                 && (presenceContinuity.isValid() || !accessor.isCleared(bytecodeNode, frame))) {
-            return accessor.getObject(bytecodeNode, frame);
+            return ProtosNumericValueSupport.guestValue(
+                    accessor.getObject(bytecodeNode, frame));
         }
         return ProtosBytecodeRootNode.Lookup.perform(
                 durableActivation(
@@ -230,6 +234,8 @@ final class ProtosInlineCallbackFrameBindings {
             return value;
         }
 
+        // I091: the durable authority is guest-observable and never retains a carrier.
+        value = ProtosNumericValueSupport.guestValue(value);
         ProtosActivation activation =
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
@@ -557,7 +563,8 @@ final class ProtosInlineCallbackFrameBindings {
             }
             durable.putBinding(
                     frameBackedLayout.nameAt(ordinal),
-                    frameBackedLocals.getObject(bytecodeNode, frame, ordinal));
+                    ProtosNumericValueSupport.guestValue(
+                            frameBackedLocals.getObject(bytecodeNode, frame, ordinal)));
             frameBackedLocals.clear(bytecodeNode, frame, ordinal);
         }
         return publishDurable(child, durable);

@@ -30,6 +30,13 @@ package com.guillermomolina.protos.runtime;
  */
 public final class ProtosReturnHome {
     private static final ProtosReturnHome UNOBSERVABLE = new ProtosReturnHome(false);
+    /*
+     * I091: frame-ABI-only variant of UNOBSERVABLE written by a fused direct
+     * source send whose caller accepts a primitive numeric result. The frame
+     * argument accessors normalize it to UNOBSERVABLE, so no activation,
+     * non-local return or guest observer ever sees it.
+     */
+    private static final ProtosReturnHome UNOBSERVABLE_PRIMITIVE_RESULT = new ProtosReturnHome(false);
 
     private boolean active;
 
@@ -46,9 +53,14 @@ public final class ProtosReturnHome {
         return UNOBSERVABLE;
     }
 
+    /** I091 frame-ABI marker; see {@link #unobservable()} for its semantics. */
+    public static ProtosReturnHome unobservableAcceptingPrimitiveResultForRuntime() {
+        return UNOBSERVABLE_PRIMITIVE_RESULT;
+    }
+
     /** False only for the {@link #unobservable()} marker, which has no lifecycle. */
     public boolean isMaterialized() {
-        return this != UNOBSERVABLE;
+        return this != UNOBSERVABLE && this != UNOBSERVABLE_PRIMITIVE_RESULT;
     }
 
     public boolean isActive() {

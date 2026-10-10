@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -134,7 +134,7 @@ public final class ProtosTestToolCatalogAcquisitionFacility {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (byte octet : content) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(octet & 0xff));
+                    ProtosNumericValueSupport.octet(octet & 0xff));
         }
         bytes.freeze();
         return bytes;

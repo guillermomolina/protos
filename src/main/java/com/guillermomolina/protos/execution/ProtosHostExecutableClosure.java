@@ -19,7 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -339,7 +339,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 || argument instanceof Long
                 || argument instanceof Short
                 || argument instanceof Byte) {
-            return new ProtosIntegerValue(((Number) argument).longValue());
+            return ProtosNumericValueSupport.integer(((Number) argument).longValue());
         }
         if (argument instanceof String text) {
             try {

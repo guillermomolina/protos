@@ -15,6 +15,7 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;  import java.util.*;
 public final class ProtosStandardIdentityMapProtocol {
  private static final class StandardAtIfAbsentBody implements ProtosNativeClosureBody {
@@ -75,7 +76,7 @@ public final class ProtosStandardIdentityMapProtocol {
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
   p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,2);if(m.isFrozen())throw err(a);Object k=x.get(0),v=x.get(1);ProtosNumericHashKey h=ProtosNumericHashKey.fromIdentity(k);var e=find(m,k,h);if(e!=null){m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,h,v);return v;}));
   p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);if(!m.isOpen())throw err(a);var e=find(m,x.get(0));if(e==null)throw err(a);return m.remove(e);}));
-  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,0);return new ProtosIntegerValue(m.keyedSize());}));
+  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,0);return ProtosNumericValueSupport.integer(m.keyedSize());}));
   p.createLocalSlot("each", STANDARD_EACH);
  }
  private static Object atIfAbsent(ProtosActivation a, List<?> x) {

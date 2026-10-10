@@ -54,14 +54,29 @@ final class ProtosBinary64Rounding {
             if (exactDenominator == 0L) {
                 throw new ArithmeticException("division by zero");
             }
-            if (exactNumerator == 0L) {
-                return 0.0d;
-            }
-            if (exactBinary64Integer(exactNumerator) && exactBinary64Integer(exactDenominator)) {
-                return (double) exactNumerator / (double) exactDenominator;
+            if (primitiveQuotientAdmitted(exactNumerator, exactDenominator)) {
+                return dividePrimitiveIntegers(exactNumerator, exactDenominator);
             }
         }
         return divideExactIntegers(numerator.value(), denominator.value());
+    }
+
+    /**
+     * I091 primitive carriers: true when {@link #dividePrimitiveIntegers} yields the exact
+     * correctly rounded quotient without arbitrary precision. A zero divisor is never admitted.
+     */
+    static boolean primitiveQuotientAdmitted(long numerator, long denominator) {
+        return denominator != 0L
+                && (numerator == 0L
+                        || (exactBinary64Integer(numerator) && exactBinary64Integer(denominator)));
+    }
+
+    /* Requires primitiveQuotientAdmitted; an exact zero quotient is +0.0. */
+    static double dividePrimitiveIntegers(long numerator, long denominator) {
+        if (numerator == 0L) {
+            return 0.0d;
+        }
+        return (double) numerator / (double) denominator;
     }
 
     private static boolean exactBinary64Integer(long value) {

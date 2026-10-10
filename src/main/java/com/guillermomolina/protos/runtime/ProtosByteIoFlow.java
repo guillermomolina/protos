@@ -355,7 +355,7 @@ public final class ProtosByteIoFlow {
             finish(r);return;
         }
         ProtosBytesValue result=new ProtosBytesValue(bytesPrototype);
-        for(byte b:bytes)result.indexedAdd(new ProtosIntegerValue(b&0xff));
+        for(byte b:bytes)result.indexedAdd(ProtosNumericValueSupport.octet(b&0xff));
         r.op.resolve(result);finish(r);
     }
 

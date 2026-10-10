@@ -398,10 +398,18 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         }
     }
 
+    /*
+     * Raw frame slots may retain an I091 primitive carrier; the binding's
+     * guest value is what that carrier denotes.
+     */
     private static void assertInteger(long expected, Object value) {
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                        .guestValue(value))
+                        .value());
     }
 
     /** The live inline callback region observed at one breakpoint hit. */

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.source.Source;
 
@@ -379,7 +380,7 @@ public final class ProtosExactExecutionFacility {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (byte octet : bytes) {
             value.indexedAdd(
-                    new ProtosIntegerValue(octet & 0xff));
+                    ProtosNumericValueSupport.octet(octet & 0xff));
         }
         value.freeze();
         return value;

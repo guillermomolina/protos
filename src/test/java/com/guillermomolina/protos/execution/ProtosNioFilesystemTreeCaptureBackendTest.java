@@ -27,7 +27,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
@@ -315,7 +314,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         AtomicReference<byte[]> bytes = new AtomicReference<>();
         ((ProtosFileFlow.ReadableResource) resource.get())
                 .readAt(
-                        new ProtosIntegerValue(0),
+                        0L,
                         64 * 1024,
                         new ProtosFileFlow.ReadCompletion() {
                             @Override
@@ -370,7 +369,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         assertFalse(failed.get());
 
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        ProtosIntegerValue position = new ProtosIntegerValue(0);
+        long position = 0L;
         while (true) {
             AtomicReference<byte[]> chunk = new AtomicReference<>();
             AtomicBoolean eof = new AtomicBoolean();
@@ -400,7 +399,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
             }
             assertNotNull(chunk.get());
             bytes.writeBytes(chunk.get());
-            position = position.addForRuntime(new ProtosIntegerValue(chunk.get().length));
+            position += chunk.get().length;
         }
         release.get().run();
         return bytes.toByteArray();

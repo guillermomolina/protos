@@ -20,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -304,13 +303,10 @@ public final class ProtosNioConfinedFilesystemBackend
 
         @Override
         public synchronized ProtosFileFlow.Cancellation writeAt(
-                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
-            Objects.requireNonNull(position, "position");
+                long position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             Objects.requireNonNull(bytes, "bytes");
             Objects.requireNonNull(completion, "completion");
-            if (closed
-                    || !position.isSmallForRuntime()
-                    || position.signumForRuntime() < 0) {
+            if (closed || position < 0) {
                 completion.failed(0);
                 return () -> {};
             }
@@ -321,7 +317,7 @@ public final class ProtosNioConfinedFilesystemBackend
 
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
             try {
-                channel.position(position.smallValueForRuntime());
+                channel.position(position);
                 if (!completion.commitFirstContribution()) {
                     return () -> {};
                 }

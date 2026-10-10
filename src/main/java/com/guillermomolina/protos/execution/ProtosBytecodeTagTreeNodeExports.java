@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -159,10 +160,11 @@ final class ProtosBytecodeTagTreeNodeExports {
 
             frameNativeRegion = true;
             Object value =
-                    bytecode.getLocalValue(
-                            bytecodeIndex,
-                            frame,
-                            offset);
+                    ProtosNumericValueSupport.guestValue(
+                            bytecode.getLocalValue(
+                                    bytecodeIndex,
+                                    frame,
+                                    offset));
             if (value == null) {
                 continue;
             }

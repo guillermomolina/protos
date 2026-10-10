@@ -1191,7 +1191,7 @@ fixture.activation());
 
             @Override
             public com.guillermomolina.protos.runtime.ProtosFileFlow.Cancellation readAt(
-                    com.guillermomolina.protos.runtime.ProtosIntegerValue position,
+                    long position,
                     int maxBytes,
                     com.guillermomolina.protos.runtime.ProtosFileFlow.ReadCompletion completion) {
                 if (closed) {
@@ -1200,7 +1200,7 @@ fixture.activation());
                 }
 
                 try {
-                    int start = position.intValueExactForRuntime();
+                    int start = Math.toIntExact(position);
                     if (start < 0) {
                         completion.failed();
                     } else if (start >= bytes.length) {

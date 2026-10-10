@@ -94,7 +94,12 @@ final class ProtosCurrentNumericRelations {
                                 ProtosNumericValueSupport.requireCurrentInteger(right)));
     }
 
-    private static Comparison compareFloats(double left, double right) {
+    /* I091 primitive carriers share the exact algorithms used for represented values. */
+    static Comparison compareLongs(long left, long right) {
+        return fromSign(Long.compare(left, right));
+    }
+
+    static Comparison compareFloats(double left, double right) {
         if (Double.isNaN(left) || Double.isNaN(right)) {
             return Comparison.UNORDERED;
         }
@@ -117,7 +122,10 @@ final class ProtosCurrentNumericRelations {
      * Exact for every non-NaN binary64: outside [-2^63, 2^63) the Float lies beyond every long;
      * inside, truncation toward zero is exact and only the fractional part can still decide.
      */
-    private static Comparison compareFloatToLong(double floating, long integer) {
+    static Comparison compareFloatToLong(double floating, long integer) {
+        if (Double.isNaN(floating)) {
+            return Comparison.UNORDERED;
+        }
         if (floating >= 0x1p63) {
             return Comparison.GREATER;
         }
@@ -168,7 +176,7 @@ final class ProtosCurrentNumericRelations {
         return Comparison.EQUAL;
     }
 
-    private static Comparison reverse(Comparison comparison) {
+    static Comparison reverse(Comparison comparison) {
         return switch (comparison) {
             case LESS -> Comparison.GREATER;
             case GREATER -> Comparison.LESS;

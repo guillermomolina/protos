@@ -88,7 +88,8 @@ public final class ProtosActivation {
         @Override
         public Object get(int index) {
             Objects.checkIndex(index, size());
-            return frameArguments[offset + index];
+            // I091: a compact caller may pass a primitive carrier; observers see the guest value.
+            return ProtosNumericValueSupport.guestValue(frameArguments[offset + index]);
         }
 
         @Override

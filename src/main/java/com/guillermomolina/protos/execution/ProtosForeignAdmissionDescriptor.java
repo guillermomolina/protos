@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.math.BigInteger;
 import java.util.EnumSet;
 import java.util.Objects;
@@ -68,7 +69,8 @@ record ProtosForeignAdmissionDescriptor(
                     case BOOLEAN -> scalar instanceof Boolean;
                     case NULL, RAW -> scalar == null;
                     case STRING -> scalar instanceof String;
-                    case INTEGER -> scalar instanceof BigInteger;
+                    // I091: the exact Protos Integer; small host integers need no BigInteger.
+                    case INTEGER -> scalar instanceof ProtosIntegerValue;
                     case BINARY64 -> scalar instanceof Double;
                 };
         if (!validScalar) {
@@ -94,7 +96,13 @@ record ProtosForeignAdmissionDescriptor(
     }
 
     static ProtosForeignAdmissionDescriptor integral(BigInteger value) {
-        return new ProtosForeignAdmissionDescriptor(Kind.INTEGER, value, null, Set.of());
+        return new ProtosForeignAdmissionDescriptor(
+                Kind.INTEGER, new ProtosIntegerValue(value), null, Set.of());
+    }
+
+    static ProtosForeignAdmissionDescriptor integral(long value) {
+        return new ProtosForeignAdmissionDescriptor(
+                Kind.INTEGER, new ProtosIntegerValue(value), null, Set.of());
     }
 
     /** A source binary floating value exactly representable as binary64. */
