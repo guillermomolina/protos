@@ -22,7 +22,6 @@ import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import org.junit.jupiter.api.Test;
 
-import java.math.BigInteger;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -37,7 +36,7 @@ final class ProtosArrayInteropTest {
     @Test
     void arrayExportsExactDenseIndexedState() throws Exception {
         ProtosStringValue first = new ProtosStringValue("first");
-        ProtosIntegerValue second = new ProtosIntegerValue(BigInteger.valueOf(2));
+        ProtosIntegerValue second = new ProtosIntegerValue(2);
         ProtosFloatValue third = new ProtosFloatValue(-0.0d);
         ProtosArrayValue array =
                 new ProtosArrayValue(

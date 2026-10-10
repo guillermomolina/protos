@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -75,7 +76,7 @@ final class ProtosFreshProcessExecutorTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue value =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(42), value.value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
         assertNull(outcome.error());
     }
 
@@ -114,7 +115,7 @@ final class ProtosFreshProcessExecutorTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.valueOf(42), captured.value());
+        assertEquals(42L, captured.longValue());
     }
 
     @Test
@@ -146,7 +147,7 @@ final class ProtosFreshProcessExecutorTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.valueOf(42), captured.value());
+        assertEquals(42L, captured.longValue());
     }
 
     @Test
@@ -168,7 +169,7 @@ final class ProtosFreshProcessExecutorTest {
 
         ProtosIntegerValue result =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(42), result.value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(result));
     }
 
     @Test
@@ -366,7 +367,7 @@ final class ProtosFreshProcessExecutorTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(expected), integer.value());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
         assertNull(outcome.error());
     }
 

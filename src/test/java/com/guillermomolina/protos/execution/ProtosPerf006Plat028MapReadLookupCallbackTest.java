@@ -30,7 +30,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -54,7 +53,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
             ProtosObjectValue conflictingKey = key();
             AtomicInteger hashCalls = new AtomicInteger();
 
-            map.append(stored, ProtosNumericHashKey.ofLong(7), new ProtosIntegerValue(BigInteger.ONE));
+            map.append(stored, ProtosNumericHashKey.ofLong(7), new ProtosIntegerValue(1L));
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("query", query);
@@ -170,7 +169,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(BigInteger.valueOf(7))));
+                                    new ProtosIntegerValue(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(
@@ -228,7 +227,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(BigInteger.valueOf(7))));
+                                    new ProtosIntegerValue(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(
@@ -301,7 +300,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(BigInteger.valueOf(7))));
+                                    new ProtosIntegerValue(7)));
             invalidEquality.createLocalSlot(
                     "==",
                     ProtosClosureValue.nativeClosure((activation, supplied) -> "bad-equality"));
@@ -355,7 +354,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 hashCalls.incrementAndGet();
-                                return new ProtosIntegerValue(BigInteger.valueOf(7));
+                                return new ProtosIntegerValue(7);
                             }));
 
             ProtosTask lookup =

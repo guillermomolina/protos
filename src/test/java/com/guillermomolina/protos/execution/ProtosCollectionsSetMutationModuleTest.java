@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -86,7 +87,7 @@ class ProtosCollectionsSetMutationModuleTest {
                 values,
                 "atPut",
                 List.of(
-                        new ProtosIntegerValue(BigInteger.ONE),
+                        new ProtosIntegerValue(1L),
                         ProtosBooleanValue.TRUE),
                 activation);
         if (frozen) {
@@ -120,6 +121,6 @@ class ProtosCollectionsSetMutationModuleTest {
     private static void assertInteger(BigInteger expected, Object value) {
         assertEquals(
                 expected,
-                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                ProtosTestIntegers.exact(value));
     }
 }

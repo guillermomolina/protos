@@ -175,7 +175,11 @@ final class ProtosForeignCallbackScope {
         for (Object foreign : foreignArguments) {
             admitted.add(
                     ProtosForeignValueAdmission.admit(
-                            origin.session(), origin.adapter(), live, foreign));
+                            origin.session(),
+                            origin.adapter(),
+                            live,
+                            foreign,
+                            caller.prelude().orElse(null)));
         }
 
         Object result;

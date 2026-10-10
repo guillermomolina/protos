@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -141,14 +140,14 @@ prelude.newModuleActivation());
                         new ProtosStringValue("completed"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(BigInteger.ZERO));
+                        new ProtosIntegerValue(0L));
         ProtosArrayValue completed1 =
                 array(
                         prelude,
                         new ProtosStringValue("completed"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        new ProtosIntegerValue(1L));
 
         ProtosArrayValue attempts =
                 array(prelude, new ProtosStringValue("infra-a"));
@@ -161,17 +160,17 @@ prelude.newModuleActivation());
                 array(
                         prelude,
                         array(prelude),
-                        new ProtosIntegerValue(BigInteger.ZERO),
+                        new ProtosIntegerValue(0L),
                         attempts,
                         cutover,
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        new ProtosIntegerValue(1L));
         ProtosArrayValue aborted =
                 array(
                         prelude,
                         new ProtosStringValue("infrastructure-aborted"),
                         ProtosNullValue.INSTANCE,
                         abortPayload,
-                        new ProtosIntegerValue(BigInteger.valueOf(3)));
+                        new ProtosIntegerValue(3));
 
         assertEquals(0, ProtosCli.testToolExitCodeForRuntime(completed0, err));
         assertEquals(1, ProtosCli.testToolExitCodeForRuntime(completed1, err));
@@ -206,8 +205,7 @@ prelude.newModuleActivation());
                                 "infrastructure-aborted"),
                         ProtosNullValue.INSTANCE,
                         ProtosNullValue.INSTANCE,
-                        new ProtosIntegerValue(
-                                BigInteger.valueOf(3)));
+                        new ProtosIntegerValue(3));
 
         assertEquals(
                 3,

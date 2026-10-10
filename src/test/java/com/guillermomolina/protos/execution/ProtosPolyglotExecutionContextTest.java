@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.math.BigInteger;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +61,7 @@ class ProtosPolyglotExecutionContextTest {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             ProtosIntegerValue result =
                     assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-            assertEquals(BigInteger.valueOf(42), result.value());
+            assertEquals(42L, result.longValue());
         }
     }
 

@@ -19,19 +19,38 @@ package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+/**
+ * I091 / PLAT056 Candidate C: a semantic Integer within the signed-64 range is a long-only
+ * {@link ProtosIntegerValue}; outside it, a FROZEN ordinary {@link ProtosLargeIntegerValue} owned
+ * by a Prelude. Every exact result is normalized, so the representation is a function of the value.
+ */
 final class ProtosIntegerValueRepresentationTest {
     private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
     private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
     private static final BigInteger ABOVE_LONG = LONG_MAX.add(BigInteger.ONE);
     private static final BigInteger BELOW_LONG = LONG_MIN.subtract(BigInteger.ONE);
 
+    private static ProtosPrelude prelude;
+
+    @BeforeAll
+    static void bootstrap() throws IOException {
+        prelude = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+    }
+
     @Test
-    void canonicalizesTheEntireSignedLongRangeToSmallRepresentation() {
+    void canonicalizesTheEntireSignedLongRangeToTheLongRepresentation() {
         for (BigInteger value :
                 new BigInteger[] {
                     BigInteger.ZERO,
@@ -40,13 +59,28 @@ final class ProtosIntegerValueRepresentationTest {
                     LONG_MAX,
                     LONG_MIN
                 }) {
-            ProtosIntegerValue integer = new ProtosIntegerValue(value);
-            assertTrue(integer.isSmallForRuntime(), value.toString());
-            assertEquals(value, integer.value());
+            Object integer = ProtosNumericValueSupport.integer(value, prelude);
+            assertSmall(value.longValueExact(), integer);
         }
 
-        assertFalse(new ProtosIntegerValue(ABOVE_LONG).isSmallForRuntime());
-        assertFalse(new ProtosIntegerValue(BELOW_LONG).isSmallForRuntime());
+        assertLarge(ABOVE_LONG, ProtosNumericValueSupport.integer(ABOVE_LONG, prelude));
+        assertLarge(BELOW_LONG, ProtosNumericValueSupport.integer(BELOW_LONG, prelude));
+    }
+
+    @Test
+    void largeIntegersAreFrozenOrdinaryObjectsDelegatingToTheIntegerPrototype() {
+        ProtosLargeIntegerValue large = assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.integer(ABOVE_LONG, prelude));
+        assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+        assertTrue(large.isFrozen());
+        assertTrue(large.localSlotsSnapshot().isEmpty());
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(large));
+        assertTrue(ProtosValueLookup.isInteger(large));
+        assertThrows(RuntimeException.class,
+                () -> large.createLocalSlot("mutated", ProtosNullValue.INSTANCE));
+        assertThrows(NullPointerException.class,
+                () -> ProtosNumericValueSupport.integer(ABOVE_LONG, (ProtosPrelude) null));
     }
 
     @Test
@@ -54,121 +88,89 @@ final class ProtosIntegerValueRepresentationTest {
         ProtosIntegerValue forty = new ProtosIntegerValue(40L);
         ProtosIntegerValue two = new ProtosIntegerValue(2L);
 
-        assertSmall(42L, forty.addForRuntime(two));
-        assertSmall(38L, forty.subtractForRuntime(two));
-        assertSmall(80L, forty.multiplyForRuntime(two));
-        assertSmall(20L, forty.divideForRuntime(two));
-        assertSmall(0L, forty.remainderForRuntime(two));
+        assertSmall(42L, ProtosNumericValueSupport.addIntegers(forty, two, null));
+        assertSmall(38L, ProtosNumericValueSupport.subtractIntegers(forty, two, null));
+        assertSmall(80L, ProtosNumericValueSupport.multiplyIntegers(forty, two, null));
+        assertSmall(20L, ProtosNumericValueSupport.quotientIntegers(forty, two, null));
+        assertSmall(0L, ProtosNumericValueSupport.remainderIntegers(forty, two, null));
 
-        assertBig(
+        assertLarge(
                 ABOVE_LONG,
-                new ProtosIntegerValue(Long.MAX_VALUE)
-                        .addForRuntime(new ProtosIntegerValue(1L)));
-
-        assertBig(
+                ProtosNumericValueSupport.addIntegers(
+                        new ProtosIntegerValue(Long.MAX_VALUE), new ProtosIntegerValue(1L), prelude));
+        assertLarge(
                 BELOW_LONG,
-                new ProtosIntegerValue(Long.MIN_VALUE)
-                        .subtractForRuntime(new ProtosIntegerValue(1L)));
+                ProtosNumericValueSupport.subtractIntegers(
+                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(1L), prelude));
 
-        ProtosIntegerValue multiplicand =
-                new ProtosIntegerValue(3_037_000_500L);
-        assertBig(
+        ProtosIntegerValue multiplicand = new ProtosIntegerValue(3_037_000_500L);
+        assertLarge(
                 BigInteger.valueOf(3_037_000_500L).pow(2),
-                multiplicand.multiplyForRuntime(multiplicand));
+                ProtosNumericValueSupport.multiplyIntegers(multiplicand, multiplicand, prelude));
     }
 
     @Test
-    void bigArithmeticNormalizesBackToSmallWhenTheResultFits() {
-        ProtosIntegerValue above = new ProtosIntegerValue(ABOVE_LONG);
+    void largeArithmeticNormalizesBackToTheLongRepresentationWhenTheResultFits() {
+        Object above = ProtosNumericValueSupport.integer(ABOVE_LONG, prelude);
         ProtosIntegerValue maximum = new ProtosIntegerValue(Long.MAX_VALUE);
 
-        ProtosIntegerValue result = above.subtractForRuntime(maximum);
-
-        assertSmall(1L, result);
+        assertSmall(1L, ProtosNumericValueSupport.subtractIntegers(above, maximum, null));
+        assertSmall(0L, ProtosNumericValueSupport.subtractIntegers(above, above, null));
     }
 
     @Test
     void quotientAndRemainderPreserveExactSignedSemantics() {
-        assertBig(
+        assertLarge(
                 BigInteger.ONE.shiftLeft(63),
-                new ProtosIntegerValue(Long.MIN_VALUE)
-                        .divideForRuntime(new ProtosIntegerValue(-1L)));
+                ProtosNumericValueSupport.quotientIntegers(
+                        new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L), prelude));
 
-        assertSmall(
-                2L,
-                new ProtosIntegerValue(7L)
-                        .divideForRuntime(new ProtosIntegerValue(3L)));
-        assertSmall(
-                -2L,
-                new ProtosIntegerValue(-7L)
-                        .divideForRuntime(new ProtosIntegerValue(3L)));
-        assertSmall(
-                -2L,
-                new ProtosIntegerValue(7L)
-                        .divideForRuntime(new ProtosIntegerValue(-3L)));
-        assertSmall(
-                2L,
-                new ProtosIntegerValue(-7L)
-                        .divideForRuntime(new ProtosIntegerValue(-3L)));
+        assertSmall(2L, quotient(7L, 3L));
+        assertSmall(-2L, quotient(-7L, 3L));
+        assertSmall(-2L, quotient(7L, -3L));
+        assertSmall(2L, quotient(-7L, -3L));
 
-        assertSmall(
-                1L,
-                new ProtosIntegerValue(7L)
-                        .remainderForRuntime(new ProtosIntegerValue(3L)));
-        assertSmall(
-                -1L,
-                new ProtosIntegerValue(-7L)
-                        .remainderForRuntime(new ProtosIntegerValue(3L)));
-        assertSmall(
-                1L,
-                new ProtosIntegerValue(7L)
-                        .remainderForRuntime(new ProtosIntegerValue(-3L)));
-        assertSmall(
-                -1L,
-                new ProtosIntegerValue(-7L)
-                        .remainderForRuntime(new ProtosIntegerValue(-3L)));
+        assertSmall(1L, remainder(7L, 3L));
+        assertSmall(-1L, remainder(-7L, 3L));
+        assertSmall(1L, remainder(7L, -3L));
+        assertSmall(-1L, remainder(-7L, -3L));
+        assertSmall(0L, remainder(Long.MIN_VALUE, -1L));
     }
 
     @Test
     void comparisonAndSemanticIdentityDependOnlyOnTheMathematicalInteger() {
         ProtosIntegerValue smallA = new ProtosIntegerValue(42L);
-        ProtosIntegerValue smallB =
-                new ProtosIntegerValue(BigInteger.valueOf(42L));
+        ProtosIntegerValue smallB = new ProtosIntegerValue(42L);
 
-        ProtosIntegerValue positiveBigA =
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(100));
-        ProtosIntegerValue positiveBigB =
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(100));
+        Object positiveBigA = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
+        Object positiveBigB = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
+        Object negativeBig =
+                ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100).negate(), prelude);
 
-        ProtosIntegerValue negativeBig =
-                new ProtosIntegerValue(
-                        BigInteger.ONE.shiftLeft(100).negate());
-
-        assertTrue(smallA.sameIntegerForRuntime(smallB));
+        assertTrue(ProtosNumericValueSupport.sameInteger(smallA, smallB));
         assertTrue(ProtosIdentity.identical(smallA, smallB));
-        assertEquals(0, smallA.compareToIntegerForRuntime(smallB));
+        assertEquals(0, ProtosNumericValueSupport.compareIntegers(smallA, smallB));
 
-        assertTrue(positiveBigA.sameIntegerForRuntime(positiveBigB));
+        assertTrue(ProtosNumericValueSupport.sameInteger(positiveBigA, positiveBigB));
         assertTrue(ProtosIdentity.identical(positiveBigA, positiveBigB));
-        assertEquals(
-                0,
-                positiveBigA.compareToIntegerForRuntime(positiveBigB));
+        assertEquals(ProtosIdentity.identityHash(positiveBigA), ProtosIdentity.identityHash(positiveBigB));
+        assertEquals(0, ProtosNumericValueSupport.compareIntegers(positiveBigA, positiveBigB));
+        assertFalse(ProtosIdentity.identical(positiveBigA, negativeBig));
 
-        assertTrue(smallA.compareToIntegerForRuntime(positiveBigA) < 0);
-        assertTrue(positiveBigA.compareToIntegerForRuntime(smallA) > 0);
+        assertTrue(ProtosNumericValueSupport.compareIntegers(smallA, positiveBigA) < 0);
+        assertTrue(ProtosNumericValueSupport.compareIntegers(positiveBigA, smallA) > 0);
 
-        assertTrue(negativeBig.compareToIntegerForRuntime(smallA) < 0);
-        assertTrue(smallA.compareToIntegerForRuntime(negativeBig) > 0);
+        assertTrue(ProtosNumericValueSupport.compareIntegers(negativeBig, smallA) < 0);
+        assertTrue(ProtosNumericValueSupport.compareIntegers(smallA, negativeBig) > 0);
+        assertTrue(ProtosNumericValueSupport.compareIntegers(negativeBig, positiveBigA) < 0);
     }
 
     @Test
-    void exactIntProjectionUsesTheSmallCarrierWithoutChangingIntegerSemantics() {
+    void exactIntProjectionUsesTheLongRepresentationWithoutChangingIntegerSemantics() {
         ProtosIntegerValue minimum = new ProtosIntegerValue(Integer.MIN_VALUE);
         ProtosIntegerValue maximum = new ProtosIntegerValue(Integer.MAX_VALUE);
-        ProtosIntegerValue above =
-                new ProtosIntegerValue((long) Integer.MAX_VALUE + 1L);
-        ProtosIntegerValue huge =
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(100));
+        ProtosIntegerValue above = new ProtosIntegerValue((long) Integer.MAX_VALUE + 1L);
+        Object huge = ProtosNumericValueSupport.integer(BigInteger.ONE.shiftLeft(100), prelude);
 
         assertTrue(minimum.fitsInIntForRuntime());
         assertTrue(maximum.fitsInIntForRuntime());
@@ -176,21 +178,28 @@ final class ProtosIntegerValueRepresentationTest {
         assertEquals(Integer.MAX_VALUE, maximum.intValueExactForRuntime());
 
         assertFalse(above.fitsInIntForRuntime());
-        assertFalse(huge.fitsInIntForRuntime());
+        assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(huge));
+        assertFalse(ProtosNumericValueSupport.isIntegerInLongRange(huge));
     }
 
-    private static void assertSmall(
-            long expected,
-            ProtosIntegerValue actual) {
-        assertTrue(actual.isSmallForRuntime());
-        assertEquals(expected, actual.smallValueForRuntime());
-        assertEquals(BigInteger.valueOf(expected), actual.value());
+    private static Object quotient(long left, long right) {
+        return ProtosNumericValueSupport.quotientIntegers(
+                new ProtosIntegerValue(left), new ProtosIntegerValue(right), null);
     }
 
-    private static void assertBig(
-            BigInteger expected,
-            ProtosIntegerValue actual) {
-        assertFalse(actual.isSmallForRuntime());
-        assertEquals(expected, actual.value());
+    private static Object remainder(long left, long right) {
+        return ProtosNumericValueSupport.remainderIntegers(
+                new ProtosIntegerValue(left), new ProtosIntegerValue(right), null);
+    }
+
+    private static void assertSmall(long expected, Object actual) {
+        assertEquals(expected, assertInstanceOf(ProtosIntegerValue.class, actual).longValue());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(actual));
+    }
+
+    private static void assertLarge(BigInteger expected, Object actual) {
+        ProtosLargeIntegerValue large = assertInstanceOf(ProtosLargeIntegerValue.class, actual);
+        assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+        assertEquals(expected, ProtosTestIntegers.exact(large));
     }
 }

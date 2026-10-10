@@ -28,7 +28,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -164,7 +163,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(BigInteger.valueOf(7))));
+                                    new ProtosIntegerValue(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(
@@ -224,7 +223,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 closedHashCalls.incrementAndGet();
-                                return new ProtosIntegerValue(BigInteger.ONE);
+                                return new ProtosIntegerValue(1L);
                             }));
             ProtosTask closedTask =
                     execute(
@@ -253,7 +252,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 frozenHashCalls.incrementAndGet();
-                                return new ProtosIntegerValue(BigInteger.ONE);
+                                return new ProtosIntegerValue(1L);
                             }));
             ProtosTask frozenTask =
                     execute(
@@ -292,7 +291,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 map.close();
-                                return new ProtosIntegerValue(BigInteger.valueOf(7));
+                                return new ProtosIntegerValue(7);
                             }));
             query.createLocalSlot(
                     "==",
@@ -342,7 +341,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                     "hash",
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) ->
-                                    new ProtosIntegerValue(BigInteger.valueOf(7))));
+                                    new ProtosIntegerValue(7)));
             query.createLocalSlot(
                     "==",
                     sourceClosure(

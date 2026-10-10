@@ -19,88 +19,57 @@ package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 
-import java.math.BigDecimal;
 import java.math.BigInteger;
 
-/** Exact host-width projection helpers for integral Protos interop values. */
+/**
+ * Exact binary32/binary64 projection helpers for integral Protos interop values.
+ *
+ * <p>An integer is exactly representable in a binary floating format when its magnitude is
+ * finite in that format and its significant bits (from the highest set bit down to the lowest
+ * set bit) fit the format precision. Both conditions are decided on the exact value, so no
+ * rounded conversion is ever compared against the original.
+ */
 final class ProtosIntegralInteropSupport {
-    private static final BigInteger BYTE_MIN = BigInteger.valueOf(Byte.MIN_VALUE);
-    private static final BigInteger BYTE_MAX = BigInteger.valueOf(Byte.MAX_VALUE);
-    private static final BigInteger SHORT_MIN = BigInteger.valueOf(Short.MIN_VALUE);
-    private static final BigInteger SHORT_MAX = BigInteger.valueOf(Short.MAX_VALUE);
-    private static final BigInteger INT_MIN = BigInteger.valueOf(Integer.MIN_VALUE);
-    private static final BigInteger INT_MAX = BigInteger.valueOf(Integer.MAX_VALUE);
-    private static final BigInteger LONG_MIN = BigInteger.valueOf(Long.MIN_VALUE);
-    private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
+    private static final int FLOAT_PRECISION = 24;
+    private static final int FLOAT_MAX_BITS = 128;
+    private static final int DOUBLE_PRECISION = 53;
+    private static final int DOUBLE_MAX_BITS = 1024;
 
     private ProtosIntegralInteropSupport() {}
 
-    static boolean fitsInByte(BigInteger value) {
-        return between(value, BYTE_MIN, BYTE_MAX);
+    static boolean fitsInFloat(long value) {
+        return exactSigned(value, FLOAT_PRECISION);
     }
 
-    static boolean fitsInShort(BigInteger value) {
-        return between(value, SHORT_MIN, SHORT_MAX);
+    static boolean fitsInDouble(long value) {
+        return exactSigned(value, DOUBLE_PRECISION);
     }
 
-    static boolean fitsInInt(BigInteger value) {
-        return between(value, INT_MIN, INT_MAX);
+    /** Exact representability of the unsigned 64-bit integer denoted by {@code bits}. */
+    static boolean unsignedFitsInFloat(long bits) {
+        return significantBits(bits) <= FLOAT_PRECISION;
     }
 
-    static boolean fitsInLong(BigInteger value) {
-        return between(value, LONG_MIN, LONG_MAX);
+    /** Exact representability of the unsigned 64-bit integer denoted by {@code bits}. */
+    static boolean unsignedFitsInDouble(long bits) {
+        return significantBits(bits) <= DOUBLE_PRECISION;
+    }
+
+    /**
+     * Value of the unsigned 64-bit integer denoted by {@code bits}; exact whenever
+     * {@link #unsignedFitsInDouble(long)} holds: a value at or above 2^63 has its highest bit
+     * set, so at most 53 significant bits leave the lowest bit zero and halving is exact.
+     */
+    static double unsignedToDouble(long bits) {
+        return bits >= 0L ? (double) bits : (double) (bits >>> 1) * 2.0;
     }
 
     static boolean fitsInFloat(BigInteger value) {
-        float converted = value.floatValue();
-        if (!Float.isFinite(converted)) {
-            return false;
-        }
-        try {
-            return new BigDecimal((double) converted).toBigIntegerExact().equals(value);
-        } catch (ArithmeticException notIntegral) {
-            return false;
-        }
+        return exactBig(value, FLOAT_PRECISION, FLOAT_MAX_BITS);
     }
 
     static boolean fitsInDouble(BigInteger value) {
-        double converted = value.doubleValue();
-        if (!Double.isFinite(converted)) {
-            return false;
-        }
-        try {
-            return new BigDecimal(converted).toBigIntegerExact().equals(value);
-        } catch (ArithmeticException notIntegral) {
-            return false;
-        }
-    }
-
-    static byte asByte(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInByte(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.byteValue();
-    }
-
-    static short asShort(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInShort(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.shortValue();
-    }
-
-    static int asInt(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInInt(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.intValue();
-    }
-
-    static long asLong(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInLong(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.longValue();
+        return exactBig(value, DOUBLE_PRECISION, DOUBLE_MAX_BITS);
     }
 
     static float asFloat(BigInteger value) throws UnsupportedMessageException {
@@ -117,7 +86,26 @@ final class ProtosIntegralInteropSupport {
         return value.doubleValue();
     }
 
-    private static boolean between(BigInteger value, BigInteger minimum, BigInteger maximum) {
-        return value.compareTo(minimum) >= 0 && value.compareTo(maximum) <= 0;
+    /* Long.MIN_VALUE negates to itself; as unsigned bits it is 2^63, a single significant bit. */
+    private static boolean exactSigned(long value, int precision) {
+        return significantBits(value < 0L ? -value : value) <= precision;
+    }
+
+    private static int significantBits(long unsignedMagnitude) {
+        if (unsignedMagnitude == 0L) {
+            return 0;
+        }
+        return Long.SIZE
+                - Long.numberOfLeadingZeros(unsignedMagnitude)
+                - Long.numberOfTrailingZeros(unsignedMagnitude);
+    }
+
+    private static boolean exactBig(BigInteger value, int precision, int maxBits) {
+        if (value.signum() == 0) {
+            return true;
+        }
+        BigInteger magnitude = value.abs();
+        int bits = magnitude.bitLength();
+        return bits <= maxBits && bits - magnitude.getLowestSetBit() <= precision;
     }
 }

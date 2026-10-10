@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,7 +83,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);
-            assertEquals(BigInteger.valueOf(42), integer.value());
+            assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
         }
 
         System.out.println("PERF006_B4B_DIRECT_OWNER_CONSUMPTION=PASS");
@@ -234,7 +235,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
             assertEquals(1, prefixExecutions.get());
 
             ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(BigInteger.valueOf(73));
+                    new ProtosIntegerValue(73);
             assertTrue(future.resolve(resolved, creator));
             assertEquals(ProtosTask.State.RUNNABLE, task.state());
 
@@ -279,7 +280,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);
-            assertEquals(BigInteger.valueOf(41), integer.value());
+            assertEquals(BigInteger.valueOf(41), ProtosTestIntegers.exact(integer));
         }
 
         System.out.println("PERF006_B4B_DEFAULT_RETURN_HOME=PASS");

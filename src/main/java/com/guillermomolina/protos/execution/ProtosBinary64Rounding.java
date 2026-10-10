@@ -18,13 +18,14 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
 import java.util.Objects;
 
 final class ProtosBinary64Rounding {
-    private static final BigInteger TWO_POW_52 = BigInteger.ONE.shiftLeft(52);
-    private static final BigInteger TWO_POW_53 = BigInteger.ONE.shiftLeft(53);
+    private static final long TWO_POW_52 = 1L << 52;
+    private static final long TWO_POW_53 = 1L << 53;
     private static final long SIGN_BIT = 0x8000000000000000L;
     private static final long POSITIVE_INFINITY_BITS = 0x7ff0000000000000L;
     private static final long EXACT_BINARY64_INTEGER_BOUND = 1L << 53;
@@ -32,12 +33,21 @@ final class ProtosBinary64Rounding {
     private ProtosBinary64Rounding() {}
 
     /** The binary64 value nearest to an exact Integer, ties to even. */
-    static double roundExactInteger(ProtosIntegerValue integer) {
+    static double roundExactInteger(Object integer) {
         Objects.requireNonNull(integer, "integer");
-        if (integer.isSmallForRuntime()) {
-            return (double) integer.smallValueForRuntime();
+        if (integer instanceof ProtosIntegerValue small) {
+            return (double) small.longValue();
         }
-        return divideExactIntegers(integer.value(), BigInteger.ONE);
+        return roundBigInteger(ProtosNumericValueSupport.exactBigInteger(integer));
+    }
+
+    /*
+     * BigInteger.doubleValue() is correctly rounded to nearest, ties to even, and overflows to
+     * infinity; a big Integer is never zero, so no signed-zero case arises.
+     */
+    @TruffleBoundary
+    private static double roundBigInteger(BigInteger value) {
+        return value.doubleValue();
     }
 
     /**
@@ -45,12 +55,13 @@ final class ProtosBinary64Rounding {
      * operands are exact binary64 integers, one IEEE division already rounds that exact
      * quotient once, so only other operands need arbitrary-precision scaling.
      */
-    static double divideExactIntegers(ProtosIntegerValue numerator, ProtosIntegerValue denominator) {
+    static double divideExactIntegers(Object numerator, Object denominator) {
         Objects.requireNonNull(numerator, "numerator");
         Objects.requireNonNull(denominator, "denominator");
-        if (numerator.isSmallForRuntime() && denominator.isSmallForRuntime()) {
-            long exactNumerator = numerator.smallValueForRuntime();
-            long exactDenominator = denominator.smallValueForRuntime();
+        if (numerator instanceof ProtosIntegerValue smallNumerator
+                && denominator instanceof ProtosIntegerValue smallDenominator) {
+            long exactNumerator = smallNumerator.longValue();
+            long exactDenominator = smallDenominator.longValue();
             if (exactDenominator == 0L) {
                 throw new ArithmeticException("division by zero");
             }
@@ -58,7 +69,9 @@ final class ProtosBinary64Rounding {
                 return dividePrimitiveIntegers(exactNumerator, exactDenominator);
             }
         }
-        return divideExactIntegers(numerator.value(), denominator.value());
+        return divideExactIntegers(
+                ProtosNumericValueSupport.exactBigInteger(numerator),
+                ProtosNumericValueSupport.exactBigInteger(denominator));
     }
 
     /**
@@ -121,15 +134,13 @@ final class ProtosBinary64Rounding {
         }
 
         if (exponent < -1022) {
-            BigInteger significand = roundedScaledQuotient(numerator, denominator, 1074);
-            return significand.longValueExact();
+            return roundedScaledQuotient(numerator, denominator, 1074);
         }
 
-        BigInteger significand =
-                roundedScaledQuotient(numerator, denominator, 52 - exponent);
+        long significand = roundedScaledQuotient(numerator, denominator, 52 - exponent);
 
-        if (significand.equals(TWO_POW_53)) {
-            significand = significand.shiftRight(1);
+        if (significand == TWO_POW_53) {
+            significand >>>= 1;
             exponent++;
         }
 
@@ -138,7 +149,7 @@ final class ProtosBinary64Rounding {
         }
 
         long exponentBits = ((long) exponent + 1023L) << 52;
-        long fractionBits = significand.subtract(TWO_POW_52).longValueExact();
+        long fractionBits = significand - TWO_POW_52;
         return exponentBits | fractionBits;
     }
 
@@ -156,7 +167,12 @@ final class ProtosBinary64Rounding {
                 : roughExponent;
     }
 
-    private static BigInteger roundedScaledQuotient(
+    /*
+     * The scale is chosen so the truncated quotient is below 2^53 (in [2^52, 2^53) for normal
+     * results, below 2^52 for subnormal ones); rounding then carries to at most 2^53, so the
+     * rounded significand is exact in a long.
+     */
+    private static long roundedScaledQuotient(
             BigInteger numerator,
             BigInteger denominator,
             int binaryShift) {
@@ -170,13 +186,13 @@ final class ProtosBinary64Rounding {
 
         BigInteger[] quotientAndRemainder =
                 scaledNumerator.divideAndRemainder(scaledDenominator);
-        BigInteger quotient = quotientAndRemainder[0];
+        long quotient = quotientAndRemainder[0].longValueExact();
         BigInteger remainder = quotientAndRemainder[1];
 
         int halfwayComparison = remainder.shiftLeft(1).compareTo(scaledDenominator);
         if (halfwayComparison > 0
-                || (halfwayComparison == 0 && quotient.testBit(0))) {
-            quotient = quotient.add(BigInteger.ONE);
+                || (halfwayComparison == 0 && (quotient & 1L) != 0L)) {
+            quotient++;
         }
         return quotient;
     }

@@ -69,8 +69,12 @@ record ProtosForeignAdmissionDescriptor(
                     case BOOLEAN -> scalar instanceof Boolean;
                     case NULL, RAW -> scalar == null;
                     case STRING -> scalar instanceof String;
-                    // I091: the exact Protos Integer; small host integers need no BigInteger.
-                    case INTEGER -> scalar instanceof ProtosIntegerValue;
+                    // I091: a signed-64 Integer, or a host BigInteger only beyond that range,
+                    // which admission mints with the admitting domain's Prelude.
+                    case INTEGER ->
+                            scalar instanceof ProtosIntegerValue
+                                    || (scalar instanceof BigInteger large
+                                            && large.bitLength() >= Long.SIZE);
                     case BINARY64 -> scalar instanceof Double;
                 };
         if (!validScalar) {
@@ -96,8 +100,12 @@ record ProtosForeignAdmissionDescriptor(
     }
 
     static ProtosForeignAdmissionDescriptor integral(BigInteger value) {
+        Objects.requireNonNull(value, "value");
         return new ProtosForeignAdmissionDescriptor(
-                Kind.INTEGER, new ProtosIntegerValue(value), null, Set.of());
+                Kind.INTEGER,
+                value.bitLength() < Long.SIZE ? new ProtosIntegerValue(value.longValue()) : value,
+                null,
+                Set.of());
     }
 
     static ProtosForeignAdmissionDescriptor integral(long value) {

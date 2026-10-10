@@ -35,7 +35,7 @@ final class ProtosAdditionalIndexedInteropTest {
     private final InteropLibrary interop = InteropLibrary.getUncached();
 
     private static ProtosIntegerValue octet(int value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     @Test

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,7 +83,7 @@ final class ProtosI050MultipleSlotCreationTest {
 
         activation.context().createLocalSlot(
                 "existing",
-                new ProtosIntegerValue(BigInteger.valueOf(99)));
+                new ProtosIntegerValue(99));
 
         ProtosExecutionOutcome outcome =
                 ProtosTestExecutionSupport.execute(
@@ -113,6 +114,6 @@ final class ProtosI050MultipleSlotCreationTest {
                         activation.context()
                                 .readLocalSlot(name)
                                 .orElseThrow());
-        assertEquals(BigInteger.valueOf(expected), value.value());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(value));
     }
 }

@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.execution;
 
-import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -25,8 +24,9 @@ import java.util.Objects;
  * <p>Only Protos Boolean, null, String, Integer, and Float values and raw foreign references of
  * the same session cross into a generic foreign operation. A {@link
  * ProtosForeignAdmissionDescriptor.Kind#RAW} argument carries the exact underlying target; every
- * other kind carries its lossless host scalar ({@link Boolean}, {@code null}, {@link String},
- * {@link BigInteger}, {@link Double}). The provider decides through {@link
+ * other kind carries its lossless host scalar ({@link Boolean}, {@code null}, {@link String}, an
+ * Integer as {@link Long} within the signed-long range and as {@link java.math.BigInteger} only
+ * beyond it, {@link Double}). The provider decides through {@link
  * ProtosForeignValueAdapter#acceptsArgument} whether it can represent the value losslessly.
  *
  * <p>A D189 callback argument has no admission kind: it is not a foreign value but an ephemeral

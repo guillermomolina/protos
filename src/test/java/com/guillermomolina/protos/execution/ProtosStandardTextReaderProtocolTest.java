@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -298,7 +297,7 @@ final class ProtosStandardTextReaderProtocolTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(BigInteger.valueOf(value)));
+                    new ProtosIntegerValue(value));
         }
         return bytes;
     }

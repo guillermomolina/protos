@@ -40,7 +40,7 @@ final class ProtosObjectInteropTest {
         parent.createLocalSlot("delegated", new ProtosStringValue("must-not-be-visible"));
 
         ProtosObjectValue value = new ProtosObjectValue(parent);
-        ProtosIntegerValue first = new ProtosIntegerValue(BigInteger.ONE);
+        ProtosIntegerValue first = new ProtosIntegerValue(1L);
         value.createLocalSlot("first", first);
         value.createLocalSlot("self", value);
 
@@ -65,7 +65,7 @@ final class ProtosObjectInteropTest {
                 UnknownIdentifierException.class,
                 () -> interop.readMember(value, "delegated"));
 
-        value.createLocalSlot("later", new ProtosIntegerValue(BigInteger.TWO));
+        value.createLocalSlot("later", new ProtosIntegerValue(2L));
         assertEquals(2L, memberInterop.getArraySize(members));
 
         Object freshMembers = interop.getMembers(value, false);
@@ -78,10 +78,10 @@ final class ProtosObjectInteropTest {
         ProtosArrayValue array =
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
-                        List.of(new ProtosIntegerValue(BigInteger.ONE)));
+                        List.of(new ProtosIntegerValue(1L)));
         array.createLocalSlot(
                 "host-visible-by-accident",
-                new ProtosIntegerValue(BigInteger.TWO));
+                new ProtosIntegerValue(2L));
 
         assertFalse(interop.hasMembers(array));
         assertThrows(
@@ -92,7 +92,7 @@ final class ProtosObjectInteropTest {
     @Test
     void objectInteropIsReadOnlyAndRejectsHostOnlySlotValues() throws Exception {
         ProtosObjectValue value = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosIntegerValue answer = new ProtosIntegerValue(BigInteger.valueOf(42));
+        ProtosIntegerValue answer = new ProtosIntegerValue(42);
         value.createLocalSlot("answer", answer);
         value.createLocalSlot("hostOnly", BigInteger.valueOf(99));
 
@@ -102,7 +102,7 @@ final class ProtosObjectInteropTest {
                 UnknownIdentifierException.class,
                 () -> interop.readMember(value, "hostOnly"));
 
-        ProtosIntegerValue replacement = new ProtosIntegerValue(BigInteger.ZERO);
+        ProtosIntegerValue replacement = new ProtosIntegerValue(0L);
         assertFalse(interop.isMemberModifiable(value, "answer"));
         assertFalse(interop.isMemberInsertable(value, "newSlot"));
         assertFalse(interop.isMemberRemovable(value, "answer"));

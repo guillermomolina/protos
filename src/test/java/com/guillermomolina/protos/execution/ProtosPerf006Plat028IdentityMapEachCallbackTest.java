@@ -97,11 +97,11 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
             ProtosIdentityMapValue identityMap = identityMap(prelude);
             ProtosObjectValue firstKey = key();
             ProtosObjectValue secondKey = key();
-            ProtosIntegerValue firstValue = new ProtosIntegerValue(BigInteger.ONE);
-            ProtosIntegerValue secondValue = new ProtosIntegerValue(BigInteger.TWO);
+            ProtosIntegerValue firstValue = new ProtosIntegerValue(1L);
+            ProtosIntegerValue secondValue = new ProtosIntegerValue(2L);
             ProtosObjectValue appendedKey = key();
-            ProtosIntegerValue appendedValue = new ProtosIntegerValue(BigInteger.valueOf(3));
-            ProtosIntegerValue replacementValue = new ProtosIntegerValue(BigInteger.valueOf(99));
+            ProtosIntegerValue appendedValue = new ProtosIntegerValue(3);
+            ProtosIntegerValue replacementValue = new ProtosIntegerValue(99);
             AtomicInteger callbacks = new AtomicInteger();
             List<List<Object>> seen = new ArrayList<>();
 
@@ -169,7 +169,7 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
                     ProtosClosureValue.nativeClosure(
                             (activation, supplied) -> {
                                 keyCallbacks.incrementAndGet();
-                                return new ProtosIntegerValue(BigInteger.valueOf(7));
+                                return new ProtosIntegerValue(7);
                             }));
             query.createLocalSlot(
                     "==",
@@ -288,7 +288,7 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
     }
 
     private static void append(ProtosIdentityMapValue map, Object key, BigInteger value) {
-        append(map, key, new ProtosIntegerValue(value));
+        append(map, key, new ProtosIntegerValue(value.longValueExact()));
     }
 
     private static void append(ProtosIdentityMapValue map, Object key, Object value) {

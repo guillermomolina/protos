@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -231,6 +232,15 @@ public final class ProtosStandardObjectProtocol {
         return instance;
     }
 
+    /*
+     * I091 / PLAT056 Candidate C: a large Integer is physically a frozen ordinary object, but it
+     * is a semantic Integer, so the reflective object primitives treat it exactly as they treat
+     * every other Integer representation: as a value with no slots that cannot be mutated.
+     */
+    private static boolean ordinaryReceiver(Object receiver) {
+        return !ProtosNumericValueSupport.isLargeInteger(receiver);
+    }
+
     private static Object hasSlot(ProtosActivation activation, List<?> supplied) {
         if (supplied.size() != 1
                 || !(supplied.get(0) instanceof ProtosStringValue name)) {
@@ -238,7 +248,7 @@ public final class ProtosStandardObjectProtocol {
         }
 
         Object receiver = activation.receiver();
-        if (receiver instanceof ProtosObjectValue ordinary) {
+        if (receiver instanceof ProtosObjectValue ordinary && ordinaryReceiver(receiver)) {
             return ProtosBooleanValue.of(ordinary.hasLocalSlot(name.value()));
         }
         return ProtosBooleanValue.FALSE;
@@ -251,7 +261,7 @@ public final class ProtosStandardObjectProtocol {
 
         ArrayList<String> names = new ArrayList<>();
         Object receiver = activation.receiver();
-        if (receiver instanceof ProtosObjectValue ordinary) {
+        if (receiver instanceof ProtosObjectValue ordinary && ordinaryReceiver(receiver)) {
             ArrayList<Object> ignoredValues = new ArrayList<>();
             ordinary.appendLocalBindingsTo(names, ignoredValues);
             names.sort(ProtosStandardObjectProtocol::compareUnicodeScalarStrings);
@@ -293,7 +303,7 @@ public final class ProtosStandardObjectProtocol {
         }
 
         Object receiver = activation.receiver();
-        if (!(receiver instanceof ProtosObjectValue ordinary)) {
+        if (!(receiver instanceof ProtosObjectValue ordinary) || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
 
@@ -309,7 +319,8 @@ public final class ProtosStandardObjectProtocol {
                 || !(supplied.get(0) instanceof ProtosStringValue name)) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
 
@@ -324,7 +335,8 @@ public final class ProtosStandardObjectProtocol {
         if (!supplied.isEmpty()) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
         return receiver.close();
@@ -334,7 +346,8 @@ public final class ProtosStandardObjectProtocol {
         if (!supplied.isEmpty()) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
         return receiver.freeze();
@@ -345,7 +358,8 @@ public final class ProtosStandardObjectProtocol {
                 || !(supplied.get(0) instanceof ProtosStringValue name)) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
         if (!receiver.hasLocalSlot(name.value())) {
@@ -360,7 +374,8 @@ public final class ProtosStandardObjectProtocol {
                 || !(supplied.get(1) instanceof ProtosStringValue aliasName)) {
             throw invalid(activation);
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)
+                || !ordinaryReceiver(receiver)) {
             throw invalid(activation);
         }
         if (!receiver.hasLocalSlot(sourceName.value())

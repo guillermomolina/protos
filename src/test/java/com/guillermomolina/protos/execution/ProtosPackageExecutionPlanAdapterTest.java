@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -104,7 +103,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
 
             Object generation = plan.readLocalSlot("generation").orElseThrow();
             plan.assignLocalSlot(
-                    "generation", new ProtosIntegerValue(BigInteger.valueOf(2)));
+                    "generation", new ProtosIntegerValue(2));
             assertThrows(
                     Exception.class,
                     () -> ProtosPackageExecutionPlanAdapter.detach(plan, PROJECT));

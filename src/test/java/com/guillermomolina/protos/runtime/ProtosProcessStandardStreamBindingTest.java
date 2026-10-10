@@ -105,9 +105,9 @@ final class ProtosProcessStandardStreamBindingTest {
         ProtosActivation actorB = prelude.newModuleActivation();
 
         ProtosFutureValue a =
-                first.readForRuntime(actorA, new ProtosIntegerValue(BigInteger.ONE));
+                first.readForRuntime(actorA, new ProtosIntegerValue(1L));
         ProtosFutureValue b =
-                second.readForRuntime(actorB, new ProtosIntegerValue(BigInteger.ONE));
+                second.readForRuntime(actorB, new ProtosIntegerValue(1L));
 
         assertEquals(1, stdin.started.get());
         assertEquals(ProtosFutureValue.State.PENDING, a.state());
@@ -121,16 +121,12 @@ final class ProtosProcessStandardStreamBindingTest {
         stdin.completeNext(new byte[] {22});
         assertEquals(
                 BigInteger.valueOf(11),
-                ((ProtosIntegerValue)
-                                ((ProtosBytesValue) a.resolvedValue().orElseThrow())
-                                        .indexedAt(0))
-                        .value());
+                ProtosTestIntegers.exact(((ProtosBytesValue) a.resolvedValue().orElseThrow())
+                                        .indexedAt(0)));
         assertEquals(
                 BigInteger.valueOf(22),
-                ((ProtosIntegerValue)
-                                ((ProtosBytesValue) b.resolvedValue().orElseThrow())
-                                        .indexedAt(0))
-                        .value());
+                ProtosTestIntegers.exact(((ProtosBytesValue) b.resolvedValue().orElseThrow())
+                                        .indexedAt(0)));
     }
 
     @Test
@@ -196,21 +192,19 @@ final class ProtosProcessStandardStreamBindingTest {
 
         ProtosProcessStandardStreamValue stream = process.stdinForRuntime().orElseThrow();
         ProtosFutureValue cancelled =
-                stream.readForRuntime(activation, new ProtosIntegerValue(BigInteger.ONE));
+                stream.readForRuntime(activation, new ProtosIntegerValue(1L));
         assertTrue(cancelled.cancelRequest());
         assertEquals(1, stdin.cancelled.get());
 
         stdin.completeNext(new byte[] {77});
         ProtosFutureValue next =
-                stream.readForRuntime(activation, new ProtosIntegerValue(BigInteger.ONE));
+                stream.readForRuntime(activation, new ProtosIntegerValue(1L));
 
         assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
         assertEquals(
                 BigInteger.valueOf(77),
-                ((ProtosIntegerValue)
-                                ((ProtosBytesValue) next.resolvedValue().orElseThrow())
-                                        .indexedAt(0))
-                        .value());
+                ProtosTestIntegers.exact(((ProtosBytesValue) next.resolvedValue().orElseThrow())
+                                        .indexedAt(0)));
         assertEquals(1, stdin.started.get());
     }
 
@@ -253,7 +247,7 @@ final class ProtosProcessStandardStreamBindingTest {
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prototype);
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value)));
+            bytes.indexedAdd(new ProtosIntegerValue(value));
         }
         return bytes;
     }

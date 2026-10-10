@@ -139,6 +139,16 @@ final class ProtosForeignValueFixture implements AutoCloseable {
     /** Explicitly source-classified foreign integral value. */
     record Integral(BigInteger value) {}
 
+    /**
+     * Provider-side host scalar of an outbound argument with every exact Integer as a host
+     * {@link BigInteger}; the internal argument carries a signed-long Integer as a {@link Long}.
+     */
+    static Object scalar(ProtosForeignArgument argument) {
+        return argument.value() instanceof Long small
+                ? BigInteger.valueOf(small)
+                : argument.value();
+    }
+
     /** Explicitly source-classified foreign binary floating value. */
     record Binary64(double value) {}
 
@@ -391,8 +401,8 @@ final class ProtosForeignValueFixture implements AutoCloseable {
         @Override
         public Object readElement(
                 ProtosForeignProviderSession session, Object target, ProtosForeignArgument index) {
-            events.add("at:" + index.value());
-            return fake(target).elements.get(((BigInteger) index.value()).intValueExact());
+            events.add("at:" + scalar(index));
+            return fake(target).elements.get(((BigInteger) scalar(index)).intValueExact());
         }
 
         @Override
@@ -401,8 +411,8 @@ final class ProtosForeignValueFixture implements AutoCloseable {
                 Object target,
                 ProtosForeignArgument index,
                 ProtosForeignArgument value) {
-            events.add("atPut:" + index.value());
-            fake(target).elements.set(((BigInteger) index.value()).intValueExact(), value.value());
+            events.add("atPut:" + scalar(index));
+            fake(target).elements.set(((BigInteger) scalar(index)).intValueExact(), scalar(value));
         }
 
         /** Provider-private pull iterator: a live position over the target's element list. */

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -79,7 +80,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                 assertInstanceOf(ProtosIntegerValue.class, observation.readLocalSlot("value").orElseThrow());
         // A value other than exactly 1 would mean the selected Test body ran zero or more than
         // once instead of exactly once.
-        assertEquals(BigInteger.ONE, value.value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(value));
     }
 
     @Test

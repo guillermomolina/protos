@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -58,7 +57,7 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
         ProtosTestResourceProviderTransaction transaction =
                 transaction(cleanupCalls, cleanupTerminal);
         ProtosCapturedProcessExecution.Result guest =
-                guest(new ProtosIntegerValue(BigInteger.valueOf(42)));
+                guest(new ProtosIntegerValue(42));
 
         CompletableFuture<ProtosTestResourceAttemptCompletion> terminal =
                 CompletableFuture.supplyAsync(
@@ -104,7 +103,7 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
 
         AtomicInteger cleanupCalls = new AtomicInteger();
         ProtosCapturedProcessExecution.Result guest =
-                guest(new ProtosIntegerValue(BigInteger.ONE));
+                guest(new ProtosIntegerValue(1L));
 
         ProtosTestResourceAttemptCompletion completion =
                 ProtosTestResourceAttemptTerminalizer
@@ -140,7 +139,7 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
         failedCleanup.completeExceptionally(cleanupFailure);
 
         ProtosCapturedProcessExecution.Result guest =
-                guest(new ProtosIntegerValue(BigInteger.TEN));
+                guest(new ProtosIntegerValue(10L));
         ProtosTestResourceAttemptCompletion completion =
                 ProtosTestResourceAttemptTerminalizer
                         .finishStarted(

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -61,7 +62,7 @@ class ProtosSourceFileLoaderTest {
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);
-            assertEquals(BigInteger.valueOf(42), integer.value());
+            assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
         } finally {
             Files.deleteIfExists(file);
         }

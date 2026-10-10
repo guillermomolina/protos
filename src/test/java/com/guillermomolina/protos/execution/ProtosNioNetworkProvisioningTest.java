@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -22,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -233,8 +233,7 @@ final class ProtosNioNetworkProvisioningTest {
                                 addressFactory,
                                 List.of(
                                         integer(4),
-                                        new ProtosIntegerValue(
-                                                BigInteger.valueOf(0x7f000001L))),
+                                        new ProtosIntegerValue(0x7f000001L)),
                                 activation);
         Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -251,7 +250,7 @@ final class ProtosNioNetworkProvisioningTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static ProtosFutureValue future(
@@ -269,8 +268,7 @@ final class ProtosNioNetworkProvisioningTest {
         ArrayList<Integer> result = new ArrayList<>();
         for (Object value : bytes.indexedSnapshot()) {
             result.add(
-                    assertInstanceOf(ProtosIntegerValue.class, value)
-                            .value()
+                    ProtosTestIntegers.exact(value)
                             .intValueExact());
         }
         return result;

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.cli;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -353,7 +354,7 @@ activation);
         }
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value(),
+                ProtosTestIntegers.exact(outcome.value()),
                 "D069 checkpoint " + checkpoint + " integer value");
     }
 
@@ -430,7 +431,7 @@ activation);
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(expectedValue), value.value());
+        assertEquals(BigInteger.valueOf(expectedValue), ProtosTestIntegers.exact(value));
     }
 
     private static String guestErrorParentName(

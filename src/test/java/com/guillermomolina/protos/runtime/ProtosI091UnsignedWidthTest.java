@@ -40,12 +40,12 @@ final class ProtosI091UnsignedWidthTest {
     @Test
     void ipv6BoundaryPreservesArbitraryPrecision() {
         BigInteger upper = BigInteger.ONE.shiftLeft(128);
-        assertTrue(new ProtosIntegerValue(upper.subtract(BigInteger.ONE))
-                .fitsUnsignedBitsForRuntime(128));
-        assertFalse(new ProtosIntegerValue(upper)
-                .fitsUnsignedBitsForRuntime(128));
-        assertFalse(new ProtosIntegerValue(upper.negate())
-                .fitsUnsignedBitsForRuntime(128));
+        assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(
+                ProtosTestIntegers.integer(upper.subtract(BigInteger.ONE)), 128));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(
+                ProtosTestIntegers.integer(upper), 128));
+        assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(
+                ProtosTestIntegers.integer(upper.negate()), 128));
     }
 
     @Test

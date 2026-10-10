@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
@@ -237,10 +237,7 @@ final class ProtosTestToolCaseSelectionTest {
                         .value());
         assertEquals(
                 BigInteger.ZERO,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(1))
-                        .value());
+                ProtosTestIntegers.exact(observed.indexedAt(1)));
     }
 
     /*
@@ -314,10 +311,7 @@ final class ProtosTestToolCaseSelectionTest {
                         .value());
         assertEquals(
                 BigInteger.ZERO,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(2))
-                        .value());
+                ProtosTestIntegers.exact(observed.indexedAt(2)));
     }
 
     /*

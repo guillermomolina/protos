@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -151,11 +152,15 @@ public final class ProtosStandardTextReaderProtocol {
             case READ_LINE -> {
                 ProtosIntegerValue maxBytes = null;
                 if (supplied.size() == 1) {
-                    if (!(supplied.get(0) instanceof ProtosIntegerValue integer)
-                            || integer.signumForRuntime() <= 0) {
+                    Object limit = supplied.get(0);
+                    if (!ProtosNumericValueSupport.isCurrentInteger(limit)
+                            || ProtosNumericValueSupport.integerSignum(limit) <= 0) {
                         yield invalidFuture(activation);
                     }
-                    maxBytes = integer;
+                    // A limit beyond the signed-64 range is exactly an unbounded line limit.
+                    maxBytes = limit instanceof ProtosIntegerValue integer
+                            ? integer
+                            : new ProtosIntegerValue(Long.MAX_VALUE);
                 } else if (!supplied.isEmpty()) {
                     yield invalidFuture(activation);
                 }

@@ -40,7 +40,6 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -107,8 +106,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
             ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(73));
+                    new ProtosIntegerValue(73);
             harness.activation().context().createLocalSlot("f", future);
 
             ProtosTask task =
@@ -335,8 +333,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             Harness harness = harness();
             ProtosFutureValue future = harness.future();
             ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(91));
+                    new ProtosIntegerValue(91);
 
             ProtosClosureValue extracted =
                     (ProtosClosureValue)
@@ -383,8 +380,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
             ProtosFutureValue first = harness.future();
             ProtosFutureValue second = harness.future();
             ProtosIntegerValue resolved =
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(107));
+                    new ProtosIntegerValue(107);
 
             ProtosClosureValue raw =
                     (ProtosClosureValue)

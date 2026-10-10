@@ -25,12 +25,12 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.cli.ProtosCli;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -443,7 +443,7 @@ class ProtosExternalForeignProviderTest {
     }
 
     private static BigInteger integer(Object value) {
-        return assertInstanceOf(ProtosIntegerValue.class, value).value();
+        return ProtosTestIntegers.exact(value);
     }
 
     /** Hosted Process over a host configured with exactly the given external provider paths. */

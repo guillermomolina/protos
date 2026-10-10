@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -169,7 +170,7 @@ final class ProtosCapturedProcessExecutionTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         result.outcome().value());
-        assertEquals(BigInteger.valueOf(expected), integer.value());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
         assertNull(result.outcome().error());
     }
 

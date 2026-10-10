@@ -20,8 +20,10 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
+import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
 
 /**
  * Current Integer/Float mathematical equality, ordering and normal hash.
@@ -36,7 +38,7 @@ final class ProtosCurrentNumericRelations {
     static boolean numericEquals(Object left, Object right) {
         if (left instanceof ProtosIntegerValue leftInteger
                 && right instanceof ProtosIntegerValue rightInteger) {
-            return leftInteger.sameIntegerForRuntime(rightInteger);
+            return leftInteger.longValue() == rightInteger.longValue();
         }
 
         if (left instanceof ProtosFloatValue leftFloat) {
@@ -54,14 +56,13 @@ final class ProtosCurrentNumericRelations {
                     ProtosNumericValueSupport.requireCurrentInteger(left));
         }
 
-        return ProtosNumericValueSupport.requireCurrentInteger(left)
-                .sameIntegerForRuntime(ProtosNumericValueSupport.requireCurrentInteger(right));
+        return ProtosNumericValueSupport.sameInteger(
+                ProtosNumericValueSupport.requireCurrentInteger(left),
+                ProtosNumericValueSupport.requireCurrentInteger(right));
     }
 
-    private static boolean floatEqualsExactInteger(double floating, ProtosIntegerValue integer) {
-        ProtosIntegerValue exact =
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(floating);
-        return exact != null && exact.sameIntegerForRuntime(integer);
+    private static boolean floatEqualsExactInteger(double floating, Object integer) {
+        return compareFloatToInteger(floating, integer) == Comparison.EQUAL;
     }
 
     static Comparison compare(Object left, Object right) {
@@ -72,7 +73,7 @@ final class ProtosCurrentNumericRelations {
 
         if (left instanceof ProtosIntegerValue leftInteger
                 && right instanceof ProtosIntegerValue rightInteger) {
-            return fromSign(leftInteger.compareToIntegerForRuntime(rightInteger));
+            return fromSign(Long.compare(leftInteger.longValue(), rightInteger.longValue()));
         }
 
         if (left instanceof ProtosFloatValue leftFloat) {
@@ -89,9 +90,9 @@ final class ProtosCurrentNumericRelations {
                     ProtosNumericValueSupport.requireCurrentInteger(left)));
         }
         return fromSign(
-                ProtosNumericValueSupport.requireCurrentInteger(left)
-                        .compareToIntegerForRuntime(
-                                ProtosNumericValueSupport.requireCurrentInteger(right)));
+                ProtosNumericValueSupport.compareIntegers(
+                        ProtosNumericValueSupport.requireCurrentInteger(left),
+                        ProtosNumericValueSupport.requireCurrentInteger(right)));
     }
 
     /* I091 primitive carriers share the exact algorithms used for represented values. */
@@ -108,14 +109,14 @@ final class ProtosCurrentNumericRelations {
         return Comparison.EQUAL;
     }
 
-    private static Comparison compareFloatToInteger(double floating, ProtosIntegerValue integer) {
+    private static Comparison compareFloatToInteger(double floating, Object integer) {
         if (Double.isNaN(floating)) {
             return Comparison.UNORDERED;
         }
-        if (integer.isSmallForRuntime()) {
-            return compareFloatToLong(floating, integer.smallValueForRuntime());
+        if (integer instanceof ProtosIntegerValue small) {
+            return compareFloatToLong(floating, small.longValue());
         }
-        return compareFloatToBigInteger(floating, integer.value());
+        return compareFloatToBigInteger(floating, integer);
     }
 
     /*
@@ -139,36 +140,34 @@ final class ProtosCurrentNumericRelations {
         return compareFloats(floating, (double) truncated);
     }
 
-    private static Comparison compareFloatToBigInteger(double floating, BigInteger integer) {
+    /*
+     * A big Integer lies outside the signed-long range, so a finite Float inside [-2^63, 2^63)
+     * is decided by the Integer's sign alone; a Float outside that range is integral and is
+     * compared exactly as the Integer it denotes.
+     */
+    private static Comparison compareFloatToBigInteger(
+            double floating,
+            Object integer) {
         if (floating == Double.POSITIVE_INFINITY) {
             return Comparison.GREATER;
         }
         if (floating == Double.NEGATIVE_INFINITY) {
             return Comparison.LESS;
         }
-
-        long bits = Double.doubleToRawLongBits(floating);
-        boolean negative = (bits & Long.MIN_VALUE) != 0;
-        int encodedExponent = (int) ((bits >>> 52) & 0x7ffL);
-        long fraction = bits & 0x000fffffffffffffL;
-
-        BigInteger significand;
-        int binaryShift;
-        if (encodedExponent == 0) {
-            significand = BigInteger.valueOf(fraction);
-            binaryShift = -1074;
-        } else {
-            significand = BigInteger.valueOf(fraction | (1L << 52));
-            binaryShift = encodedExponent - 1075;
+        if (floating >= -0x1p63 && floating < 0x1p63) {
+            return ProtosNumericValueSupport.integerSignum(integer) > 0
+                    ? Comparison.LESS
+                    : Comparison.GREATER;
         }
-        if (negative) significand = significand.negate();
-
-        if (binaryShift >= 0) {
-            return fromSign(significand.shiftLeft(binaryShift).compareTo(integer));
-        }
-        return fromSign(significand.compareTo(integer.shiftLeft(-binaryShift)));
+        return fromSign(compareExact(
+                ProtosStandardNumericConversionProtocol.largeIntegralBinary64(floating),
+                ProtosNumericValueSupport.exactBigInteger(integer)));
     }
 
+    @TruffleBoundary
+    private static int compareExact(BigInteger left, BigInteger right) {
+        return left.compareTo(right);
+    }
 
     private static Comparison fromSign(int sign) {
         if (sign < 0) return Comparison.LESS;
@@ -188,9 +187,10 @@ final class ProtosCurrentNumericRelations {
 
     private static final ProtosIntegerValue NAN_NORMAL_HASH = new ProtosIntegerValue(2146959360L);
 
-    static ProtosIntegerValue normalHash(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer;
+    /** {@code prelude} owns a hash outside the signed-64 range. */
+    static Object normalHash(Object value, ProtosPrelude prelude) {
+        if (ProtosNumericValueSupport.isCurrentInteger(value)) {
+            return value;
         }
 
         if (ProtosNumericValueSupport.isCurrentFloat(value)) {
@@ -201,9 +201,9 @@ final class ProtosCurrentNumericRelations {
                 return NAN_NORMAL_HASH;
             }
 
-            ProtosIntegerValue integral =
+            Object integral =
                     ProtosStandardNumericConversionProtocol
-                            .exactIntegralBinary64(number);
+                            .exactIntegralBinary64(number, prelude);
 
             return integral != null
                     ? integral

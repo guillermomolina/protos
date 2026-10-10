@@ -2312,6 +2312,24 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    // ---- Number literals ------------------------------------------------------------
+
+    /**
+     * I091 / PLAT056 Candidate C: an Integer literal outside the signed-64 range. Its value is an
+     * ordinary guest object owned by the executing Prelude, so it is minted on evaluation with
+     * that Prelude's Integer prototype rather than embedded as a constant shared by every
+     * execution domain that runs this code. Signed-64 literals remain primitive constants.
+     */
+    @Operation
+    public static final class LargeIntegerLiteral {
+        @Specialization
+        @TruffleBoundary
+        public static Object perform(Object caller, java.math.BigInteger value) {
+            return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integer(
+                    value, TryDirectSendOne.callerPrelude(caller));
+        }
+    }
+
     // ---- Closure literals and inline Object construction ---------------------------
 
     @Operation
@@ -2914,7 +2932,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                         GuardedIntegerSend cachedInteger) {
             PreparedClosureCall canonical =
                     ProtosBytecodeRootNode.PrepareSendArguments.canonicalIntegerResultOrNull(
-                            cachedInteger, receiver, supplied);
+                            cachedInteger, receiver, supplied, prelude);
             if (canonical != null) {
                 return canonical;
             }
@@ -3459,7 +3477,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             if (cachedInteger.operation() != null) {
                 Object direct =
                         ProtosStandardIntegerProtocol.tryExecuteCanonicalOperationOne(
-                                cachedInteger.operation(), receiver, supplied0);
+                                cachedInteger.operation(), receiver, supplied0, prelude);
                 if (direct != null) {
                     return PreparedClosureCall.immediateResult(direct);
                 }
@@ -6511,15 +6529,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         static boolean smallInteger(Object value, boolean carrierPermitted) {
             return (carrierPermitted && value instanceof Long)
-                    || (value instanceof ProtosIntegerValue integer
-                            && integer.isSmallForRuntime());
+                    || value instanceof ProtosIntegerValue;
         }
 
         static long smallValue(Object value) {
             if (value instanceof Long carrier) {
                 return carrier.longValue();
             }
-            return ((ProtosIntegerValue) value).smallValueForRuntime();
+            return ((ProtosIntegerValue) value).longValue();
         }
 
         static boolean arithmetic(

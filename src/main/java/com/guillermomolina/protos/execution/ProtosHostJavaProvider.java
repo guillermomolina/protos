@@ -272,7 +272,7 @@ final class ProtosHostJavaProvider
                         case BOOLEAN ->
                                 type == boolean.class || type == Boolean.class ? value : REJECTED;
                         case STRING -> type == String.class ? value : REJECTED;
-                        case INTEGER -> integral((BigInteger) value, type);
+                        case INTEGER -> integral(value, type);
                         case BINARY64 -> binary((Double) value, type);
                         case RAW ->
                                 catalogue.lookup(type).isPresent() && type.isInstance(value)
@@ -288,21 +288,29 @@ final class ProtosHostJavaProvider
         throw JavaFailure.rejected("argument has no lossless Java representation");
     }
 
-    private static Object integral(BigInteger value, Class<?> type) {
+    /*
+     * An Integer argument is a Long within the signed-long range and a BigInteger only beyond it,
+     * so fixed-width targets narrow exactly from the long and a BigInteger argument fits none.
+     */
+    private static Object integral(Object value, Class<?> type) {
         if (type == BigInteger.class) {
-            return value;
+            return value instanceof Long small ? BigInteger.valueOf(small) : value;
         }
+        if (!(value instanceof Long small)) {
+            return REJECTED;
+        }
+        long exact = small;
         if (type == long.class || type == Long.class) {
-            return value.longValueExact();
+            return exact;
         }
         if (type == int.class || type == Integer.class) {
-            return value.intValueExact();
+            return exact == (int) exact ? (Object) (int) exact : REJECTED;
         }
         if (type == short.class || type == Short.class) {
-            return value.shortValueExact();
+            return exact == (short) exact ? (Object) (short) exact : REJECTED;
         }
         if (type == byte.class || type == Byte.class) {
-            return value.byteValueExact();
+            return exact == (byte) exact ? (Object) (byte) exact : REJECTED;
         }
         return REJECTED;
     }

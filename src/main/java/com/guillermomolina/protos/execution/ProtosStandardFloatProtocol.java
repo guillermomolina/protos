@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -161,9 +160,9 @@ public final class ProtosStandardFloatProtocol {
             double right;
             if (argument instanceof ProtosFloatValue floating) {
                 right = floating.value();
-            } else if (argument instanceof ProtosIntegerValue integer) {
+            } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
                 right = ProtosStandardNumericConversionProtocol
-                        .integerToBinary64(integer);
+                        .integerToBinary64(argument);
             } else {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));

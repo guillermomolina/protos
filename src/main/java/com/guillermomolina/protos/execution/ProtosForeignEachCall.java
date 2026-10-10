@@ -122,7 +122,8 @@ final class ProtosForeignEachCall {
                                             handle.session(),
                                             handle.adapter(),
                                             live,
-                                            handle.adapter().iteratorNext(live, iterator)));
+                                            handle.adapter().iteratorNext(live, iterator),
+                                            prelude));
         }
         return current;
     }

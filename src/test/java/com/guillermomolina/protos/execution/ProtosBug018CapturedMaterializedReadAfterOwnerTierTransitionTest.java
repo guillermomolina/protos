@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -99,10 +100,10 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
                 language -> {
                     Object observed =
                             observedAfterOwnerTransition(
-                                    language, new ProtosIntegerValue(BigInteger.valueOf(42)));
+                                    language, new ProtosIntegerValue(42));
                     assertEquals(
                             BigInteger.valueOf(42),
-                            assertInstanceOf(ProtosIntegerValue.class, observed).value());
+                            ProtosTestIntegers.exact(observed));
                 });
     }
 

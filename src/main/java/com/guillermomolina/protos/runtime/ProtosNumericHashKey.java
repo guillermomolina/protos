@@ -37,13 +37,14 @@ public final class ProtosNumericHashKey {
         return new ProtosNumericHashKey(value, null);
     }
 
-    public static ProtosNumericHashKey fromSemanticInteger(
-            ProtosIntegerValue value) {
+    /** Key of a value admitted by {@link ProtosNumericValueSupport#isCurrentInteger}. */
+    public static ProtosNumericHashKey fromSemanticInteger(Object value) {
         Objects.requireNonNull(value, "value");
-        if (value.isSmallForRuntime()) {
-            return ofLong(value.smallValueForRuntime());
+        if (value instanceof ProtosIntegerValue small) {
+            return ofLong(small.longValue());
         }
-        return fromCanonicalTwosComplement(value.value().toByteArray());
+        return fromCanonicalTwosComplement(
+                ProtosNumericValueSupport.exactBigInteger(value).toByteArray());
     }
 
     public static ProtosNumericHashKey fromIdentity(Object value) {

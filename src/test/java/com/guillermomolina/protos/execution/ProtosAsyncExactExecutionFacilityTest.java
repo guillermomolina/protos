@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -387,7 +388,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(expectedValue), value.value());
+        assertEquals(BigInteger.valueOf(expectedValue), ProtosTestIntegers.exact(value));
         assertEquals(
                 expectedStdout,
                 bytesText(
@@ -409,7 +410,7 @@ final class ProtosAsyncExactExecutionFacilityTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             bytes.indexedAt(index));
-            raw[index] = (byte) octet.value().intValueExact();
+            raw[index] = (byte) ProtosTestIntegers.exact(octet).intValueExact();
         }
         return new String(raw, StandardCharsets.UTF_8);
     }

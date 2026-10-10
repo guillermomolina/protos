@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -210,7 +211,7 @@ class ProtosStandardLibraryModuleResolverTest {
         assertNotSame(first, otherActor);
         ProtosIntegerValue value =
                 (ProtosIntegerValue) first.readLocalSlot("value").orElseThrow();
-        assertEquals(BigInteger.valueOf(7), value.value());
+        assertEquals(BigInteger.valueOf(7), ProtosTestIntegers.exact(value));
     }
 
     @Test

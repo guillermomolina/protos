@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -657,7 +658,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             ProtosIntegerValue value =
                     assertInstanceOf(
                             ProtosIntegerValue.class, assertCompletedObservationValue(future));
-            assertEquals(BigInteger.valueOf(2), value.value());
+            assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(value));
         }
     }
 
@@ -706,10 +707,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    assertCompletedObservationValue(firstCase))
-                            .value());
+                    ProtosTestIntegers.exact(assertCompletedObservationValue(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -722,10 +720,7 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // counter would already be at 1 and this request would observe 2.
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    assertCompletedObservationValue(secondCase))
-                            .value());
+                    ProtosTestIntegers.exact(assertCompletedObservationValue(secondCase)));
         }
     }
 

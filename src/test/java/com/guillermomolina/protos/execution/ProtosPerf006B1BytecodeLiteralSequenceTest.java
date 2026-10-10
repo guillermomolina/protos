@@ -23,11 +23,11 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -44,6 +44,27 @@ import org.junit.jupiter.api.Test;
 final class ProtosPerf006B1BytecodeLiteralSequenceTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
+
+    /**
+     * I091: an Integer literal beyond the signed-64 range is an ordinary guest object minted with
+     * the executing Prelude, so it is evaluated where one exists rather than in a bare root.
+     */
+    @Test
+    void largeIntegerLiteralIsMintedByTheExecutingPrelude() throws Exception {
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(
+                        new ProtosCoreBootstrap()
+                                .bootstrap(java.nio.file.Path.of("protos", "lib", "core")))) {
+            Object large =
+                    hosted.evaluatePersistent(
+                            "<perf006-b1-large-literal>", "92233720368547758081234567890");
+            assertEquals(
+                    new java.math.BigInteger("92233720368547758081234567890"),
+                    ProtosTestIntegers.exact(large));
+            assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);
+        }
+    }
 
     @Test
     void canonicalLiteralAndSequenceSubsetExecutesThroughBytecode() throws Exception {
@@ -62,20 +83,10 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                         executeBytecodeValue("\"hello\""))
                                 .value());
 
-                assertEquals(
-                        new java.math.BigInteger("92233720368547758081234567890"),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        executeBytecodeValue(
-                                                "92233720368547758081234567890"))
-                                .value());
 
                 assertEquals(
                         java.math.BigInteger.valueOf(255),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        executeBytecodeValue("0xFF"))
-                                .value());
+                        ProtosTestIntegers.exact(executeBytecodeValue("0xFF")));
 
                 assertEquals(
                         Double.doubleToRawLongBits(1.25d),
@@ -87,11 +98,8 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
 
                 assertEquals(
                         java.math.BigInteger.valueOf(42),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        executeBytecodeValue(
-                                                "\"discarded\"\nfalse\n0x2A"))
-                                .value());
+                        ProtosTestIntegers.exact(executeBytecodeValue(
+                                                "\"discarded\"\nfalse\n0x2A")));
             } finally {
                 context.leave();
             }

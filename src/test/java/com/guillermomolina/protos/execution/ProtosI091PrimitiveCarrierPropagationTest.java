@@ -120,7 +120,7 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
     void carrierMaterializationIsTheOnlyRecognition() {
         Object integer = ProtosNumericValueSupport.guestValue(41L);
         Object floating = ProtosNumericValueSupport.guestValue(0.5d);
-        assertEquals(41L, ((ProtosIntegerValue) integer).smallValueForRuntime());
+        assertEquals(41L, ((ProtosIntegerValue) integer).longValue());
         assertEquals(0.5d, ((ProtosFloatValue) floating).value());
         Object other = new Object();
         assertSame(other, ProtosNumericValueSupport.guestValue(other));

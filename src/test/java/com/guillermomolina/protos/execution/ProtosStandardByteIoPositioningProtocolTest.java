@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
@@ -10,7 +11,7 @@ import org.junit.jupiter.api.Test;
 
 class ProtosStandardByteIoPositioningProtocolTest {
     private static ProtosPrelude core() throws Exception{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
-    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(BigInteger.valueOf(n));}
+    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(n);}
     private static ProtosBytesValue bytes(ProtosObjectValue p,int...v){var b=new ProtosBytesValue(p);for(int x:v)b.indexedAdd(i(x));return b;}
 
     @Test void extendedSurfaceReturnsFuturesAndValidatesArguments()throws Exception{
@@ -38,7 +39,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         b.completeHeldWrite();
         assertSame(r,write.resolvedValue().orElseThrow());
         assertEquals(1,b.flushCalls);assertSame(r,flush.resolvedValue().orElseThrow());
-        assertEquals(BigInteger.valueOf(3),((ProtosIntegerValue)size.resolvedValue().orElseThrow()).value());
+        assertEquals(BigInteger.valueOf(3),ProtosTestIntegers.exact(size.resolvedValue().orElseThrow()));
     }
 
     @Test void seekReadWriteAndPositionObserveLogicalOrder()throws Exception{
@@ -47,7 +48,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
         ProtosStandardByteIoProtocol.installExtended(r,bp,a,b);
         assertEquals(BigInteger.valueOf(2),value(ProtosInvocation.invokeMessage(r,"seek",List.of(i(2)),a)));
         var read=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"read",List.of(i(1)),a);
-        assertEquals(12,((ProtosIntegerValue)((ProtosBytesValue)read.resolvedValue().orElseThrow()).indexedAt(0)).value().intValue());
+        assertEquals(12,ProtosTestIntegers.exact(((ProtosBytesValue)read.resolvedValue().orElseThrow()).indexedAt(0)).intValue());
         assertEquals(BigInteger.valueOf(3),value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
         ProtosInvocation.invokeMessage(r,"write",List.of(bytes(bp,99)),a);
         assertEquals(BigInteger.valueOf(4),value(ProtosInvocation.invokeMessage(r,"position",List.of(),a)));
@@ -77,7 +78,7 @@ class ProtosStandardByteIoPositioningProtocolTest {
     }
 
     private static BigInteger value(Object x){
-        var f=(ProtosFutureValue)x;return ((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value();
+        var f=(ProtosFutureValue)x;return ProtosTestIntegers.exact(f.resolvedValue().orElseThrow());
     }
 
     private static final class MemoryBackend implements ProtosByteIoFlow.ExtendedBackend{
@@ -99,14 +100,14 @@ class ProtosStandardByteIoPositioningProtocolTest {
         }
         public ProtosByteIoFlow.Cancellation flush(ProtosByteIoFlow.ReceiverCompletion c){flushCalls++;c.succeeded();return()->{};}
         public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation seek(ProtosIntegerValue p,ProtosByteIoFlow.IntegerCompletion c){position=p.intValueExactForRuntime();c.succeeded(p);return()->{};}
-        public ProtosByteIoFlow.Cancellation seekBy(ProtosIntegerValue o,ProtosByteIoFlow.IntegerCompletion c){
-            ProtosIntegerValue p=new ProtosIntegerValue(position).addForRuntime(o);if(p.signumForRuntime()<0){c.failed();return()->{};}position=p.intValueExactForRuntime();c.succeeded(p);return()->{};
+        public ProtosByteIoFlow.Cancellation seek(Object p,ProtosByteIoFlow.IntegerCompletion c){position=((ProtosIntegerValue)p).intValueExactForRuntime();c.succeeded(p);return()->{};}
+        public ProtosByteIoFlow.Cancellation seekBy(Object o,ProtosByteIoFlow.IntegerCompletion c){
+            ProtosIntegerValue p=new ProtosIntegerValue(Math.addExact(position,((ProtosIntegerValue)o).longValue()));if(p.signumForRuntime()<0){c.failed();return()->{};}position=p.intValueExactForRuntime();c.succeeded(p);return()->{};
         }
         public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(new ProtosIntegerValue(position));return()->{};}
         public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){sizeCalls++;c.succeeded(new ProtosIntegerValue(data.length));return()->{};}
-        public ProtosByteIoFlow.Cancellation truncate(ProtosIntegerValue n,ProtosByteIoFlow.ReceiverCompletion c){
-            int x=n.intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};
+        public ProtosByteIoFlow.Cancellation truncate(Object n,ProtosByteIoFlow.ReceiverCompletion c){
+            int x=((ProtosIntegerValue)n).intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};
         }
     }
 }

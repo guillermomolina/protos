@@ -24,7 +24,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
@@ -72,7 +71,7 @@ final class ProtosPerf006Plat028BooleanCallbackTest {
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
             assertEquals(1, prefixCalls.get());
 
-            ProtosIntegerValue result = new ProtosIntegerValue(BigInteger.valueOf(42));
+            ProtosIntegerValue result = new ProtosIntegerValue(42);
             assertTrue(future.resolve(result, module));
             assertEquals(ProtosTask.State.RUNNABLE, task.state());
             assertTrue(domain.dispatchOne());

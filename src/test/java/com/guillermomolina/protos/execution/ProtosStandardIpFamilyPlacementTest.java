@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -29,8 +30,8 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Files;
@@ -245,8 +246,8 @@ final class ProtosStandardIpFamilyPlacementTest {
                 ProtosStandardIpEndpointProtocol.recognizesValue(
                         copy, endpointPrototype, addressPrototype));
         assertEquals(
-                ((ProtosIntegerValue) source.readLocalSlot("port").orElseThrow()).value(),
-                ((ProtosIntegerValue) copy.readLocalSlot("port").orElseThrow()).value());
+                ProtosTestIntegers.exact(source.readLocalSlot("port").orElseThrow()),
+                ProtosTestIntegers.exact(copy.readLocalSlot("port").orElseThrow()));
 
         ProtosObjectValue sourceAddress =
                 (ProtosObjectValue) source.readLocalSlot("address").orElseThrow();
@@ -256,9 +257,8 @@ final class ProtosStandardIpFamilyPlacementTest {
         assertSame(addressPrototype, copyAddress.parent().orElseThrow());
         assertTrue(ProtosStandardIpAddressProtocol.sameCanonicalState(sourceAddress, copyAddress));
         assertTrue(
-                ProtosStandardIpAddressProtocol.canonicalHash(sourceAddress)
-                        .sameIntegerForRuntime(
-                                ProtosStandardIpAddressProtocol.canonicalHash(
-                                        copyAddress)));
+                ProtosNumericValueSupport.sameInteger(
+                        ProtosStandardIpAddressProtocol.canonicalHash(sourceAddress, prelude),
+                        ProtosStandardIpAddressProtocol.canonicalHash(copyAddress, prelude)));
     }
 }

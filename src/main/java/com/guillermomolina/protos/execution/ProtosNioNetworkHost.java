@@ -52,7 +52,8 @@ final class ProtosNioNetworkHost implements AutoCloseable {
         ProtosObjectValue addressPrototype = owningPrelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue endpointPrototype = owningPrelude.ipEndpointPrototypeForRuntime();
         return new ProtosNetworkCapabilityValue(
-                owningPrelude, backend(addressPrototype, endpointPrototype));
+                owningPrelude,
+                backend(addressPrototype, endpointPrototype, owningPrelude.integerPrototype()));
     }
 
     /**
@@ -61,13 +62,16 @@ final class ProtosNioNetworkHost implements AutoCloseable {
      * directly so the capability can exist before any poller does.
      */
     ProtosNioNetworkBackend backend(
-            ProtosObjectValue addressPrototype, ProtosObjectValue endpointPrototype) {
+            ProtosObjectValue addressPrototype,
+            ProtosObjectValue endpointPrototype,
+            ProtosObjectValue integerPrototype) {
         return new ProtosNioNetworkBackend(
                 poller,
                 ProtosNioNetworkHost::resolveIpv6,
                 Objects.requireNonNull(addressPrototype, "addressPrototype"),
                 Objects.requireNonNull(endpointPrototype, "endpointPrototype"),
-                ProtosNioNetworkHost::authorizedIpv6ListenAddresses);
+                ProtosNioNetworkHost::authorizedIpv6ListenAddresses,
+                Objects.requireNonNull(integerPrototype, "integerPrototype"));
     }
 
     ProtosNioHostIoPoller pollerForTesting() {

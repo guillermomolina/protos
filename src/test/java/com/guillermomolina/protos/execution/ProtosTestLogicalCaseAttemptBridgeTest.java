@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -112,7 +113,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
             assertEquals(
                     BigInteger.valueOf(22),
-                    value.value());
+                    ProtosTestIntegers.exact(value));
 
             assertEquals(0, result.stdout().length);
             assertEquals(0, result.stderr().length);
@@ -431,13 +432,13 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
 
             assertEquals(
                     BigInteger.valueOf(11),
-                    ((ProtosIntegerValue) first.outcome().value()).value());
+                    ProtosTestIntegers.exact(first.outcome().value()));
             assertEquals(
                     BigInteger.valueOf(22),
-                    ((ProtosIntegerValue) second.outcome().value()).value());
+                    ProtosTestIntegers.exact(second.outcome().value()));
             assertEquals(
                     BigInteger.valueOf(11),
-                    ((ProtosIntegerValue) firstAgain.outcome().value()).value());
+                    ProtosTestIntegers.exact(firstAgain.outcome().value()));
 
             assertSame(first.sourcePrelude(), second.sourcePrelude());
             assertSame(first.sourcePrelude(), firstAgain.sourcePrelude());

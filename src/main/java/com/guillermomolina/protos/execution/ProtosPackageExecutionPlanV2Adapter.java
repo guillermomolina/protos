@@ -22,6 +22,7 @@ import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAda
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireExactFields;
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireField;
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireInteger;
+import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireIntInteger;
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireMap;
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireObject;
 import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapter.requireString;
@@ -29,7 +30,7 @@ import static com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAda
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.IOException;
@@ -81,7 +82,7 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         ProtosObjectValue plan = requireObject(rawPlan, "plan");
         requireExactFields(plan, PLAN_FIELDS, "plan");
 
-        int generation = requireInteger(plan, "generation").intValueExactForRuntime();
+        int generation = requireIntInteger(plan, "generation");
         if (generation != 2) {
             throw new IOException("unsupported PackageExecutionPlan generation");
         }
@@ -260,9 +261,9 @@ public final class ProtosPackageExecutionPlanV2Adapter {
 
         boolean consistent =
                 numeric
-                        ? number instanceof ProtosIntegerValue integer
-                                && integer.value().signum() >= 0
-                                && integer.value().toString().equals(text)
+                        ? ProtosNumericValueSupport.isCurrentInteger(number)
+                                && ProtosNumericValueSupport.integerSignum(number) >= 0
+                                && ProtosNumericValueSupport.integerDecimalText(number).equals(text)
                         : number instanceof ProtosNullValue
                                 && !text.chars().allMatch(c -> c >= '0' && c <= '9');
         if (!consistent) {
@@ -283,11 +284,11 @@ public final class ProtosPackageExecutionPlanV2Adapter {
 
     private static BigInteger requireNonNegative(ProtosObjectValue object, String name)
             throws IOException {
-        ProtosIntegerValue value = requireInteger(object, name);
-        if (value.signumForRuntime() < 0) {
+        Object value = requireInteger(object, name);
+        if (ProtosNumericValueSupport.integerSignum(value) < 0) {
             throw new IOException(name + " is negative");
         }
-        return value.value();
+        return ProtosNumericValueSupport.exactBigInteger(value);
     }
 
     private static String requireNonEmptyString(Object value, String label) throws IOException {

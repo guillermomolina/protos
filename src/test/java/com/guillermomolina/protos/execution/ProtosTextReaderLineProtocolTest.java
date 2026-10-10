@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -40,7 +39,7 @@ final class ProtosTextReaderLineProtocolTest {
                 readLine(
                         f.reader,
                         f.activation,
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        new ProtosIntegerValue(1L));
         assertEquals(ProtosFutureValue.State.FAILED, first.state());
         ProtosObjectValue lineError = first.failedError().orElseThrow();
         assertErrorParent(f.prelude, lineError, "LineTooLong");
@@ -56,7 +55,7 @@ final class ProtosTextReaderLineProtocolTest {
                 readLine(
                         malformed.reader,
                         malformed.activation,
-                        new ProtosIntegerValue(BigInteger.valueOf(2)));
+                        new ProtosIntegerValue(2));
         assertEquals(ProtosFutureValue.State.FAILED, decoding.state());
         assertErrorParent(
                 malformed.prelude,
@@ -116,7 +115,7 @@ final class ProtosTextReaderLineProtocolTest {
             lines.add(observedDepth(readLine(f.reader, f.activation), lineDepths, index));
         }
         ProtosFutureValue tooLong =
-                readLine(f.reader, f.activation, new ProtosIntegerValue(BigInteger.ONE));
+                readLine(f.reader, f.activation, new ProtosIntegerValue(1L));
         List<ProtosFutureValue> followers = new ArrayList<>();
         long[] followerDepths = new long[count];
         for (int index = 0; index < count; index++) {
@@ -239,8 +238,7 @@ final class ProtosTextReaderLineProtocolTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(value & 0xff)));
+                    new ProtosIntegerValue(value & 0xff));
         }
         return bytes;
     }

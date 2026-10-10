@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
@@ -19,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -218,7 +218,7 @@ final class ProtosPackageContentVerificationTest {
                             ProtosInvocation.invokeMessage(
                                     file,
                                     "read",
-                                    List.of(new ProtosIntegerValue(BigInteger.valueOf(4096))),
+                                    List.of(new ProtosIntegerValue(4096)),
                                     activation));
             assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
             Object readValue = read.resolvedValue().orElseThrow();
@@ -229,8 +229,7 @@ final class ProtosPackageContentVerificationTest {
             for (Object octet : bytes.indexedSnapshot()) {
                 result.add(
                         (byte)
-                                assertInstanceOf(ProtosIntegerValue.class, octet)
-                                        .value()
+                                ProtosTestIntegers.exact(octet)
                                         .intValueExact());
             }
         }

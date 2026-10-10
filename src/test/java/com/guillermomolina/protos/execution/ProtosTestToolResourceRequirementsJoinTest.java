@@ -167,8 +167,7 @@ fixture.prelude().newModuleActivation());
         return assertInstanceOf(
                         com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
                         array.indexedAt(index))
-                .value()
-                .intValueExact();
+                .intValueExactForRuntime();
     }
 
     private record Fixture(ProtosPrelude prelude) {}

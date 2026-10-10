@@ -209,7 +209,7 @@ public final class ProtosActorValueTransfer {
                 return value;
             }
             Object copiedNumber =
-                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value);
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
             if (copiedNumber != null) {
                 return remember(value, copiedNumber);
             }
@@ -387,7 +387,9 @@ public final class ProtosActorValueTransfer {
         }
 
         private boolean needsPopulation(Object value) {
+            // I091: a large Integer is rematerialized whole by allocation; it has no slots.
             return value instanceof ProtosObjectValue
+                    && !ProtosNumericValueSupport.isLargeInteger(value)
                     && !isSharedStandardObject((ProtosObjectValue) value)
                     && !(value instanceof ProtosClosureValue)
                     && !(value instanceof ProtosFutureValue);

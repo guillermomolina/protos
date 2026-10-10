@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -50,24 +51,24 @@ class ProtosArrayConformanceCompletionTest {
         ProtosArrayValue xs =
                 prelude.newArray(
                         List.of(
-                                new ProtosIntegerValue(BigInteger.ONE),
-                                new ProtosIntegerValue(BigInteger.TWO)));
+                                new ProtosIntegerValue(1L),
+                                new ProtosIntegerValue(2L)));
         activation.context().createLocalSlot("xs", xs);
 
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
+                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
 
         xs.close();
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs[0] = 2")).value());
+                ProtosTestIntegers.exact(execute(activation, "xs[0] = 2")));
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) xs.indexedAt(0)).value());
+                ProtosTestIntegers.exact(xs.indexedAt(0)));
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
+                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
 
         xs.freeze();
         ProtosSignalException signal =
@@ -77,10 +78,10 @@ class ProtosArrayConformanceCompletionTest {
         assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) xs.indexedAt(0)).value());
+                ProtosTestIntegers.exact(xs.indexedAt(0)));
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
+                ProtosTestIntegers.exact(execute(activation, "xs.size()")));
     }
 
     @Test
@@ -91,8 +92,8 @@ class ProtosArrayConformanceCompletionTest {
         ProtosArrayValue xs =
                 prelude.newArray(
                         List.of(
-                                new ProtosIntegerValue(BigInteger.ONE),
-                                new ProtosIntegerValue(BigInteger.TWO)));
+                                new ProtosIntegerValue(1L),
+                                new ProtosIntegerValue(2L)));
         List<Object> seen = new ArrayList<>();
         ProtosObjectValue error = ProtosCoreErrors.newError(activation);
         ProtosClosureValue callback =
@@ -113,7 +114,7 @@ class ProtosArrayConformanceCompletionTest {
         assertEquals(1, seen.size());
         assertEquals(
                 BigInteger.ONE,
-                ((ProtosIntegerValue) seen.get(0)).value());
+                ProtosTestIntegers.exact(seen.get(0)));
     }
 
     private static Object execute(ProtosActivation activation, String source) {

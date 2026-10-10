@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -163,19 +164,13 @@ final class ProtosSemanticTransferMaterializationTest {
             ProtosActivation root = hosted.activation();
             assertEquals(
                     BigInteger.valueOf(42),
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    await(
+                    ProtosTestIntegers.exact(await(
                                             hosted,
                                             "worker: Actor.spawn(\"plat051-holder\", \"holder\", 0)\n"
-                                                    + "worker.request(\"echo\", 42)"))
-                            .value());
+                                                    + "worker.request(\"echo\", 42)")));
             assertEquals(
                     BigInteger.valueOf(7),
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    await(hosted, "((value) => { value }).parallel(7)"))
-                            .value());
+                    ProtosTestIntegers.exact(await(hosted, "((value) => { value }).parallel(7)")));
             assertEquals(0, family.materialized.get());
             assertTrue(root.actorModuleState().lookup(GUEST_KEY).isEmpty());
         }

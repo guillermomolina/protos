@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -13,7 +14,7 @@ final class ProtosTcpListenerLifecycleTest {
 
     @Test void localPortIsSynchronousSnapshotWithoutBackendEffect() throws Exception {
         Fixture x=fixture(43210); Object value=ProtosInvocation.invokeMessage(x.listener,"localPort",List.of(),x.activation);
-        assertEquals(BigInteger.valueOf(43210),assertInstanceOf(ProtosIntegerValue.class,value).value());
+        assertEquals(BigInteger.valueOf(43210),ProtosTestIntegers.exact(value));
         assertEquals(0,x.backend.closeStarts); assertTrue(x.listener.isOpen());
     }
 
@@ -42,7 +43,7 @@ final class ProtosTcpListenerLifecycleTest {
     }
 
     @Test void localPortAndCloseRequireZeroArguments() throws Exception {
-        Fixture x=fixture(54000); Object extra=new ProtosIntegerValue(BigInteger.ONE);
+        Fixture x=fixture(54000); Object extra=new ProtosIntegerValue(1L);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"localPort",List.of(extra),x.activation));
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"close",List.of(extra),x.activation));
         assertEquals(0,x.backend.closeStarts);

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -220,7 +221,7 @@ class ProtosStandardFutureProtocolTest {
                 aggregate.state(),
                 "later failure must not overtake unresolved lower index");
 
-        first.resolve(new ProtosIntegerValue(BigInteger.TEN), activation);
+        first.resolve(new ProtosIntegerValue(10L), activation);
 
         assertEquals(ProtosFutureValue.State.FAILED, aggregate.state());
         assertSame(laterError, aggregate.failedError().orElseThrow());
@@ -292,7 +293,7 @@ class ProtosStandardFutureProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, ownerResult.state());
         assertEquals(
                 BigInteger.valueOf(42),
-                ((ProtosIntegerValue) ownerResult.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(ownerResult.resolvedValue().orElseThrow()));
         assertEquals(0, domain.liveTaskCount());
     }
 
@@ -338,7 +339,7 @@ class ProtosStandardFutureProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, source.state());
         assertEquals(ProtosFutureValue.State.CANCELLED, destination.state());
         Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
-        assertEquals(BigInteger.ZERO, ((ProtosIntegerValue) transforms).value());
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(transforms));
         assertEquals(0, domain.liveTaskCount());
     }
 
@@ -386,7 +387,7 @@ class ProtosStandardFutureProtocolTest {
             assertSame(ProtosNullValue.INSTANCE, source.resolvedValue().orElseThrow());
         }
         Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
-        assertEquals(BigInteger.ZERO, ((ProtosIntegerValue) transforms).value());
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(transforms));
         assertFalse(ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(0, domain.liveTaskCount());
     }
@@ -410,7 +411,7 @@ class ProtosStandardFutureProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, destination.state());
         assertEquals(
                 BigInteger.valueOf(42),
-                ((ProtosIntegerValue) destination.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(destination.resolvedValue().orElseThrow()));
         assertEquals(0, domain.liveTaskCount());
     }
 

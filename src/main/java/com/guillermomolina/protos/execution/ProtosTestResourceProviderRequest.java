@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,7 +39,8 @@ final class ProtosTestResourceProviderRequest {
     record Binding(
             String resourceKey,
             String mode,
-            ProtosIntegerValue units,
+            /* An exact semantic Integer, or null (ProtosNumericValueSupport). */
+            Object units,
             String scope,
             String provider,
             String profile) {

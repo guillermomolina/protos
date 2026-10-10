@@ -133,7 +133,7 @@ public final class ProtosFileFlow {
     }
 
     private static final int DEFAULT_MAX_RETAINED_WRITE_BYTES = 1024 * 1024;
-    private static final ProtosIntegerValue ZERO = new ProtosIntegerValue(0L);
+    private static final Object ZERO = ProtosNumericValueSupport.integer(0L);
 
     private final ProtosObjectValue receiver;
     private final ProtosObjectValue bytesPrototype;
@@ -145,7 +145,8 @@ public final class ProtosFileFlow {
     private final int maxRetainedWriteBytes;
     private final ArrayDeque<Request> operations = new ArrayDeque<>();
 
-    private ProtosIntegerValue logicalPosition = ZERO;
+    /* The exact semantic Integer position; beyond the signed-64 range only after seeks. */
+    private Object logicalPosition = ZERO;
     private int retainedWriteBytes;
 
     public ProtosFileFlow(
@@ -243,10 +244,11 @@ public final class ProtosFileFlow {
         if (!capabilities.seekable()) {
             return ioFailedFuture(activation);
         }
-        if (!(value instanceof ProtosIntegerValue target) || target.signumForRuntime() < 0) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(value)
+                || ProtosNumericValueSupport.integerSignum(value) < 0) {
             return invalidFuture(activation);
         }
-        return enqueue(new Request(Kind.SEEK, begin(activation), target, null));
+        return enqueue(new Request(Kind.SEEK, begin(activation), value, null));
     }
 
     public ProtosFutureValue seekBy(ProtosActivation activation, Object value) {
@@ -254,10 +256,10 @@ public final class ProtosFileFlow {
         if (!capabilities.seekable()) {
             return ioFailedFuture(activation);
         }
-        if (!(value instanceof ProtosIntegerValue displacement)) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(value)) {
             return invalidFuture(activation);
         }
-        return enqueue(new Request(Kind.SEEK_BY, begin(activation), displacement, null));
+        return enqueue(new Request(Kind.SEEK_BY, begin(activation), value, null));
     }
 
     public ProtosFutureValue seekToEnd(ProtosActivation activation) {
@@ -281,10 +283,11 @@ public final class ProtosFileFlow {
         if (!capabilities.truncatable()) {
             return ioFailedFuture(activation);
         }
-        if (!(value instanceof ProtosIntegerValue target) || target.signumForRuntime() < 0) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(value)
+                || ProtosNumericValueSupport.integerSignum(value) < 0) {
             return invalidFuture(activation);
         }
-        return enqueue(new Request(Kind.TRUNCATE, begin(activation), target, null));
+        return enqueue(new Request(Kind.TRUNCATE, begin(activation), value, null));
     }
 
     public ProtosFutureValue sync(ProtosActivation activation) {
@@ -357,9 +360,9 @@ public final class ProtosFileFlow {
     }
 
     private void startRead(Request request) {
-        ProtosIntegerValue start = currentPosition();
+        Object start = currentPosition();
         request.startPosition = start;
-        if (!start.isSmallForRuntime()) {
+        if (!(start instanceof ProtosIntegerValue hostStart)) {
             // No host file has a byte at a position beyond the signed-64 range.
             failIo(request);
             finish(request);
@@ -370,8 +373,8 @@ public final class ProtosFileFlow {
                     request,
                     ((ReadableResource) resource)
                             .readAt(
-                                    start.smallValueForRuntime(),
-                                    request.number.intValueExactForRuntime(),
+                                    hostStart.longValue(),
+                                    ((ProtosIntegerValue) request.number).intValueExactForRuntime(),
                                     new ReadCompletion() {
                                         @Override
                                         public void data(byte[] bytes) {
@@ -400,7 +403,7 @@ public final class ProtosFileFlow {
 
     private void completeReadData(Request request, byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
-        if (bytes.length == 0 || bytes.length > request.number.intValueExactForRuntime()) {
+        if (bytes.length == 0 || bytes.length > ((ProtosIntegerValue) request.number).intValueExactForRuntime()) {
             failIo(request);
             finish(request);
             return;
@@ -422,7 +425,7 @@ public final class ProtosFileFlow {
     }
 
     private void startWrite(Request request) {
-        ProtosIntegerValue start = currentPosition();
+        Object start = currentPosition();
         request.startPosition = start;
         if (request.bytes.length == 0) {
             if (request.operation.commit()) {
@@ -432,7 +435,7 @@ public final class ProtosFileFlow {
             return;
         }
 
-        if (!start.isSmallForRuntime()) {
+        if (!(start instanceof ProtosIntegerValue hostStart)) {
             // No contribution is possible beyond the signed-64 host range.
             failIo(request);
             finish(request);
@@ -443,7 +446,7 @@ public final class ProtosFileFlow {
                     request,
                     ((WritableResource) resource)
                             .writeAt(
-                                    start.smallValueForRuntime(),
+                                    hostStart.longValue(),
                                     request.bytes.clone(),
                                     new WriteCompletion() {
                                         @Override
@@ -502,7 +505,7 @@ public final class ProtosFileFlow {
     }
 
     private void completeLocalPosition(Request request) {
-        ProtosIntegerValue position = currentPosition();
+        Object position = currentPosition();
         if (request.operation.commit()) {
             request.operation.resolve(position);
         }
@@ -520,8 +523,10 @@ public final class ProtosFileFlow {
     }
 
     private void completeSeekBy(Request request) {
-        ProtosIntegerValue target = currentPosition().addForRuntime(request.number);
-        if (target.signumForRuntime() < 0) {
+        Object target =
+                ProtosNumericValueSupport.addIntegers(
+                        currentPosition(), request.number, owningPrelude());
+        if (ProtosNumericValueSupport.integerSignum(target) < 0) {
             failIo(request);
             finish(request);
             return;
@@ -550,8 +555,8 @@ public final class ProtosFileFlow {
                                                 return;
                                             }
                                             if (request.operation.commit()) {
-                                                ProtosIntegerValue value =
-                                                        new ProtosIntegerValue(end);
+                                                Object value =
+                                                        ProtosNumericValueSupport.integer(end);
                                                 synchronized (ProtosFileFlow.this) {
                                                     logicalPosition = value;
                                                 }
@@ -588,7 +593,7 @@ public final class ProtosFileFlow {
                                             }
                                             if (request.operation.commit()) {
                                                 request.operation.resolve(
-                                                        new ProtosIntegerValue(size));
+                                                        ProtosNumericValueSupport.integer(size));
                                             }
                                             finish(request);
                                         }
@@ -611,8 +616,8 @@ public final class ProtosFileFlow {
                     request,
                     ((TruncatableResource) resource)
                             .truncate(
-                                    request.number.isSmallForRuntime()
-                                            ? request.number.smallValueForRuntime()
+                                    request.number instanceof ProtosIntegerValue size
+                                            ? size.longValue()
                                             : Long.MAX_VALUE,
                                     new ChangeCompletion() {
                                         @Override
@@ -750,7 +755,7 @@ public final class ProtosFileFlow {
         }
     }
 
-    private ProtosIntegerValue currentPosition() {
+    private Object currentPosition() {
         synchronized (this) {
             return logicalPosition;
         }
@@ -817,24 +822,31 @@ public final class ProtosFileFlow {
         }
     }
 
-    private static ProtosIntegerValue advanced(ProtosIntegerValue start, int octets) {
-        return start.addForRuntime(new ProtosIntegerValue(octets));
+    private Object advanced(Object start, int octets) {
+        return ProtosNumericValueSupport.addIntegers(
+                start, ProtosNumericValueSupport.integer(octets), owningPrelude());
+    }
+
+    /* Owner of a position beyond the signed-64 range: the File's own domain Prelude. */
+    private ProtosPrelude owningPrelude() {
+        return constructionActivation.prelude().orElse(null);
     }
 
     private static final class Request {
         private final Kind kind;
         private final ProtosIoOperation operation;
-        private final ProtosIntegerValue number;
+        /* The exact semantic Integer argument, if any. */
+        private final Object number;
         private final byte[] bytes;
         private boolean started;
         private boolean cancellationRequested;
         private Cancellation cancellation;
-        private ProtosIntegerValue startPosition;
+        private Object startPosition;
 
         private Request(
                 Kind kind,
                 ProtosIoOperation operation,
-                ProtosIntegerValue number,
+                Object number,
                 byte[] bytes) {
             this.kind = kind;
             this.operation = operation;

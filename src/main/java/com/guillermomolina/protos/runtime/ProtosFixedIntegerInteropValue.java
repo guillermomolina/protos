@@ -35,47 +35,68 @@ import java.util.Objects;
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosFixedIntegerInteropValue implements TruffleObject {
+    /**
+     * Width and signedness of a fixed host integral family. Range membership is decided
+     * exactly from the bit length, never from overflowing primitive arithmetic.
+     */
     public enum Kind {
-        UINT8(BigInteger.ZERO, BigInteger.ONE.shiftLeft(8).subtract(BigInteger.ONE)),
-        INT8(BigInteger.ONE.shiftLeft(7).negate(), BigInteger.ONE.shiftLeft(7).subtract(BigInteger.ONE)),
-        UINT16(BigInteger.ZERO, BigInteger.ONE.shiftLeft(16).subtract(BigInteger.ONE)),
-        INT16(BigInteger.ONE.shiftLeft(15).negate(), BigInteger.ONE.shiftLeft(15).subtract(BigInteger.ONE)),
-        UINT32(BigInteger.ZERO, BigInteger.ONE.shiftLeft(32).subtract(BigInteger.ONE)),
-        INT32(BigInteger.ONE.shiftLeft(31).negate(), BigInteger.ONE.shiftLeft(31).subtract(BigInteger.ONE)),
-        UINT64(BigInteger.ZERO, BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE)),
-        INT64(BigInteger.ONE.shiftLeft(63).negate(), BigInteger.ONE.shiftLeft(63).subtract(BigInteger.ONE));
+        UINT8(8, false),
+        INT8(8, true),
+        UINT16(16, false),
+        INT16(16, true),
+        UINT32(32, false),
+        INT32(32, true),
+        UINT64(64, false),
+        INT64(64, true);
 
-        private final BigInteger minimum;
-        private final BigInteger maximum;
+        private final int width;
+        private final boolean signed;
 
-        Kind(BigInteger minimum, BigInteger maximum) {
-            this.minimum = minimum;
-            this.maximum = maximum;
+        Kind(int width, boolean signed) {
+            this.width = width;
+            this.signed = signed;
+        }
+
+        public int width() {
+            return width;
+        }
+
+        public boolean signed() {
+            return signed;
         }
 
         public BigInteger minimum() {
-            return minimum;
+            return BigInteger.valueOf(signed ? -1L << (width - 1) : 0L);
         }
 
         public BigInteger maximum() {
-            return maximum;
+            if (!signed && width == Long.SIZE) {
+                return unsigned(-1L);
+            }
+            return BigInteger.valueOf(signed ? ~(-1L << (width - 1)) : ~(-1L << width));
         }
 
+        /** A signed n-bit value has bit length at most n - 1; an unsigned one is non-negative. */
         public boolean contains(BigInteger value) {
             Objects.requireNonNull(value, "value");
-            return value.compareTo(minimum) >= 0 && value.compareTo(maximum) <= 0;
+            if (signed) {
+                return value.bitLength() <= width - 1;
+            }
+            return value.signum() >= 0 && value.bitLength() <= width;
         }
     }
 
     private final Kind kind;
-    private final BigInteger value;
+    /** Two's-complement bits of the value; unsigned for UINT64 values at or above 2^63. */
+    private final long bits;
 
     public ProtosFixedIntegerInteropValue(Kind kind, BigInteger value) {
         this.kind = Objects.requireNonNull(kind, "kind");
-        this.value = Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(value, "value");
         if (!kind.contains(value)) {
             throw new IllegalArgumentException(value + " is outside " + kind + " range");
         }
+        this.bits = value.longValue();
     }
 
     public Kind kind() {
@@ -83,7 +104,17 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
     }
 
     public BigInteger value() {
-        return value;
+        return beyondSignedLong() ? unsigned(bits) : BigInteger.valueOf(bits);
+    }
+
+    /** The exact unsigned 64-bit integer denoted by {@code bits}. */
+    private static BigInteger unsigned(long bits) {
+        BigInteger high = BigInteger.valueOf(bits >>> 1).shiftLeft(1);
+        return (bits & 1L) == 0L ? high : high.setBit(0);
+    }
+
+    private boolean beyondSignedLong() {
+        return bits < 0L && !kind.signed;
     }
 
     @ExportMessage
@@ -93,22 +124,22 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
 
     @ExportMessage
     boolean fitsInByte() {
-        return ProtosIntegralInteropSupport.fitsInByte(value);
+        return bits >= Byte.MIN_VALUE && bits <= Byte.MAX_VALUE && !beyondSignedLong();
     }
 
     @ExportMessage
     boolean fitsInShort() {
-        return ProtosIntegralInteropSupport.fitsInShort(value);
+        return bits >= Short.MIN_VALUE && bits <= Short.MAX_VALUE && !beyondSignedLong();
     }
 
     @ExportMessage
     boolean fitsInInt() {
-        return ProtosIntegralInteropSupport.fitsInInt(value);
+        return bits >= Integer.MIN_VALUE && bits <= Integer.MAX_VALUE && !beyondSignedLong();
     }
 
     @ExportMessage
     boolean fitsInLong() {
-        return ProtosIntegralInteropSupport.fitsInLong(value);
+        return !beyondSignedLong();
     }
 
     @ExportMessage
@@ -118,51 +149,77 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
 
     @ExportMessage
     boolean fitsInFloat() {
-        return ProtosIntegralInteropSupport.fitsInFloat(value);
+        return beyondSignedLong()
+                ? ProtosIntegralInteropSupport.unsignedFitsInFloat(bits)
+                : ProtosIntegralInteropSupport.fitsInFloat(bits);
     }
 
     @ExportMessage
     boolean fitsInDouble() {
-        return ProtosIntegralInteropSupport.fitsInDouble(value);
+        return beyondSignedLong()
+                ? ProtosIntegralInteropSupport.unsignedFitsInDouble(bits)
+                : ProtosIntegralInteropSupport.fitsInDouble(bits);
     }
 
     @ExportMessage
     byte asByte() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asByte(value);
+        if (!fitsInByte()) {
+            throw UnsupportedMessageException.create();
+        }
+        return (byte) bits;
     }
 
     @ExportMessage
     short asShort() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asShort(value);
+        if (!fitsInShort()) {
+            throw UnsupportedMessageException.create();
+        }
+        return (short) bits;
     }
 
     @ExportMessage
     int asInt() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asInt(value);
+        if (!fitsInInt()) {
+            throw UnsupportedMessageException.create();
+        }
+        return (int) bits;
     }
 
     @ExportMessage
     long asLong() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asLong(value);
+        if (!fitsInLong()) {
+            throw UnsupportedMessageException.create();
+        }
+        return bits;
     }
 
     @ExportMessage
     BigInteger asBigInteger() {
-        return value;
+        return value();
     }
 
     @ExportMessage
     float asFloat() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asFloat(value);
+        if (!fitsInFloat()) {
+            throw UnsupportedMessageException.create();
+        }
+        return beyondSignedLong()
+                ? (float) ProtosIntegralInteropSupport.unsignedToDouble(bits)
+                : (float) bits;
     }
 
     @ExportMessage
     double asDouble() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asDouble(value);
+        if (!fitsInDouble()) {
+            throw UnsupportedMessageException.create();
+        }
+        return beyondSignedLong()
+                ? ProtosIntegralInteropSupport.unsignedToDouble(bits)
+                : (double) bits;
     }
 
     @ExportMessage
     String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
-        return value.toString();
+        return beyondSignedLong() ? Long.toUnsignedString(bits) : Long.toString(bits);
     }
 }

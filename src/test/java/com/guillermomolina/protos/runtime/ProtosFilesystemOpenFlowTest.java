@@ -20,7 +20,6 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -105,7 +104,7 @@ class ProtosFilesystemOpenFlowTest {
         invalid.add(unknownLocalSlot);
 
         ProtosObjectValue nonBoolean = options();
-        nonBoolean.createLocalSlot("write", new ProtosIntegerValue(BigInteger.ONE));
+        nonBoolean.createLocalSlot("write", new ProtosIntegerValue(1L));
         invalid.add(nonBoolean);
 
         for (ProtosObjectValue candidate : invalid) {

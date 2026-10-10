@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -61,7 +62,7 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     void successfulCanonicalArithmeticExecutesWithoutGeneralNativeInvocationState()
             throws Exception {
         inEnteredContext(prelude -> {
-            ProtosIntegerValue receiver = new ProtosIntegerValue(LONG_MAX);
+            ProtosIntegerValue receiver = new ProtosIntegerValue(Long.MAX_VALUE);
             PreparedClosureCall prepared = guardedSend(prelude, receiver, "+", integer(1));
 
             PrepareSendArguments.GuardedIntegerSend cached =
@@ -100,16 +101,16 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     void representativeOperationsRetainExactResults() throws Exception {
         inEnteredContext(prelude -> {
             assertEquals(HUGE.subtract(BigInteger.ONE),
-                    integerValue(run(prelude, new ProtosIntegerValue(HUGE), "-", integer(1))));
+                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "-", integer(1))));
             assertEquals(HUGE.multiply(HUGE),
-                    integerValue(run(prelude, new ProtosIntegerValue(HUGE), "*",
-                            new ProtosIntegerValue(HUGE))));
+                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "*",
+                            ProtosTestIntegers.integer(HUGE, prelude))));
             assertEquals(HUGE.divide(BigInteger.valueOf(7)),
-                    integerValue(run(prelude, new ProtosIntegerValue(HUGE), "div", integer(7))));
+                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "div", integer(7))));
             assertEquals(HUGE.mod(BigInteger.valueOf(7)),
-                    integerValue(run(prelude, new ProtosIntegerValue(HUGE), "mod", integer(7))));
+                    integerValue(run(prelude, ProtosTestIntegers.integer(HUGE, prelude), "mod", integer(7))));
             assertSame(ProtosBooleanValue.TRUE,
-                    run(prelude, new ProtosIntegerValue(HUGE), ">", integer(0)));
+                    run(prelude, ProtosTestIntegers.integer(HUGE, prelude), ">", integer(0)));
             assertSame(ProtosBooleanValue.FALSE, run(prelude, integer(0), ">", integer(0)));
         });
     }
@@ -268,11 +269,11 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static BigInteger integerValue(Object value) {
-        return assertInstanceOf(ProtosIntegerValue.class, value).value();
+        return ProtosTestIntegers.exact(value);
     }
 
     private static Object privateField(Object target, String name)

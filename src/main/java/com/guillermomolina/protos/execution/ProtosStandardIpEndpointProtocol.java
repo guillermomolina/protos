@@ -22,7 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -151,7 +151,8 @@ public final class ProtosStandardIpEndpointProtocol {
         ProtosObjectValue rightAddress = addressSlot(right);
         return ProtosBooleanValue.of(
                 ProtosStandardIpAddressProtocol.sameCanonicalState(leftAddress, rightAddress)
-                        && portSlot(left).sameIntegerForRuntime(portSlot(right)));
+                        && ProtosNumericValueSupport.sameInteger(
+                                portSlot(left), portSlot(right)));
     }
 
     private static Object hash(
@@ -167,12 +168,16 @@ public final class ProtosStandardIpEndpointProtocol {
 
         ProtosObjectValue endpoint =
                 (ProtosObjectValue) activation.receiver();
-        ProtosIntegerValue addressHash =
+        ProtosPrelude prelude = activation.prelude().orElse(null);
+        Object addressHash =
                 ProtosStandardIpAddressProtocol.canonicalHash(
-                        addressSlot(endpoint));
+                        addressSlot(endpoint), prelude);
 
-        return addressHash.multiplyForRuntime(new ProtosIntegerValue(31L))
-                .addForRuntime(portSlot(endpoint));
+        return ProtosNumericValueSupport.addIntegers(
+                ProtosNumericValueSupport.multiplyIntegers(
+                        addressHash, ProtosNumericValueSupport.integer(31L), prelude),
+                portSlot(endpoint),
+                prelude);
     }
 
     static boolean recognizesValue(
@@ -211,8 +216,9 @@ public final class ProtosStandardIpEndpointProtocol {
         return (ProtosObjectValue) endpoint.readLocalSlot("address").orElseThrow();
     }
 
-    private static ProtosIntegerValue portSlot(ProtosObjectValue endpoint) {
-        return (ProtosIntegerValue) endpoint.readLocalSlot("port").orElseThrow();
+    private static Object portSlot(ProtosObjectValue endpoint) {
+        return ProtosNumericValueSupport.requireCurrentInteger(
+                endpoint.readLocalSlot("port").orElseThrow());
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

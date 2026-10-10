@@ -198,6 +198,11 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
                 argument.kind() == ProtosForeignAdmissionDescriptor.Kind.RAW
                         ? ProtosForeignValueClass.Kind.HANDLE
                         : ProtosForeignValueClass.Kind.valueOf(argument.kind().name());
-        return new ProtosForeignArgumentValue(kind, argument.value());
+        // D188: the public SPI carries every exact Integer as a host BigInteger.
+        Object value =
+                argument.value() instanceof Long small
+                        ? java.math.BigInteger.valueOf(small)
+                        : argument.value();
+        return new ProtosForeignArgumentValue(kind, value);
     }
 }

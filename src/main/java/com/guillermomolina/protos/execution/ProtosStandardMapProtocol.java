@@ -476,8 +476,8 @@ public final class ProtosStandardMapProtocol {
  }
  private static ProtosNumericHashKey hash(ProtosMapValue m,Object k,ProtosActivation a){m.enterComparison();Object h;try{h=ProtosInvocation.invokeMessage(k,"hash",List.of(),a);}finally{m.leaveComparison();}return requireHashResultForStructured(h,a);}
  static ProtosNumericHashKey requireHashResultForStructured(Object h, ProtosActivation a) {
-  if (h instanceof ProtosIntegerValue i) {
-   return ProtosNumericHashKey.fromSemanticInteger(i);
+  if (ProtosNumericValueSupport.isCurrentInteger(h)) {
+   return ProtosNumericHashKey.fromSemanticInteger(h);
   }
   throw err(a);
  }

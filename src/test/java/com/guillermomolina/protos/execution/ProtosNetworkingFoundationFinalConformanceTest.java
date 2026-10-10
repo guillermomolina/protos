@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -193,7 +194,7 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(0x7f000001L))),
+                                List.of(integer(4), new ProtosIntegerValue(0x7f000001L)),
                                 activation);
         Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -212,12 +213,12 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
         List<Object> actual = bytes.indexedSnapshot();
         assertEquals(expected.length, actual.size());
         for (int i = 0; i < expected.length; i++) {
-            assertEquals(BigInteger.valueOf(expected[i]), ((ProtosIntegerValue) actual.get(i)).value());
+            assertEquals(BigInteger.valueOf(expected[i]), ProtosTestIntegers.exact(actual.get(i)));
         }
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static void closeAndAwait(ProtosTcpConnectionValue connection, ProtosActivation activation)

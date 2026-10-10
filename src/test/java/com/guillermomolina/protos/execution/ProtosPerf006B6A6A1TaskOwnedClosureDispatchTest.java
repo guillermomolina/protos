@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -100,8 +101,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                     return ProtosNativeSuspension.pending(
                                             dependency,
                                             () ->
-                                                    new ProtosIntegerValue(
-                                                            BigInteger.valueOf(7)));
+                                                    new ProtosIntegerValue(7));
                                 }));
 
                 ProtosClosureValue closure =
@@ -136,10 +136,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 assertEquals(ProtosTask.State.COMPLETED, task.state());
                 assertEquals(
                         BigInteger.valueOf(99),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        task.result().orElseThrow())
-                                .value());
+                        ProtosTestIntegers.exact(task.result().orElseThrow()));
                 assertEquals(
                         1,
                         probes.get(),
@@ -194,13 +191,10 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
 
                         assertEquals(
                                 BigInteger.valueOf(42),
-                                assertInstanceOf(
-                                                ProtosIntegerValue.class,
-                                                ProtosClosureInvoker.invoke(
+                                ProtosTestIntegers.exact(ProtosClosureInvoker.invoke(
                                                         closure,
                                                         List.of(),
-                                                        module))
-                                        .value());
+                                                        module)));
                         firstClosure[0] = closure;
                         foreignTemplate[0] = template;
                         return null;
@@ -230,13 +224,10 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
 
                         assertEquals(
                                 BigInteger.valueOf(42),
-                                assertInstanceOf(
-                                                ProtosIntegerValue.class,
-                                                ProtosClosureInvoker.invoke(
+                                ProtosTestIntegers.exact(ProtosClosureInvoker.invoke(
                                                         rebound,
                                                         List.of(),
-                                                        module))
-                                        .value());
+                                                        module)));
 
                         assertEquals(
                                 1,
@@ -296,7 +287,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
 
                         assertEquals(
                                 BigInteger.valueOf(42),
-                                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                                ProtosTestIntegers.exact(value));
                         assertEquals(
                                 0,
                                 ProtosLanguageContext.current()
@@ -346,10 +337,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
                 assertEquals(
                         BigInteger.valueOf(42),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        future.resolvedValue().orElseThrow())
-                                .value());
+                        ProtosTestIntegers.exact(future.resolvedValue().orElseThrow()));
                 assertEquals(1, executions.get());
             } finally {
                 context.leave();
@@ -373,7 +361,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 module.executionDomain());
                 assertTrue(
                         source.resolve(
-                                new ProtosIntegerValue(BigInteger.valueOf(41)),
+                                new ProtosIntegerValue(41),
                                 module));
 
                 ProtosClosureValue transform =
@@ -397,10 +385,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 assertEquals(ProtosFutureValue.State.RESOLVED, destination.state());
                 assertEquals(
                         BigInteger.valueOf(42),
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        destination.resolvedValue().orElseThrow())
-                                .value());
+                        ProtosTestIntegers.exact(destination.resolvedValue().orElseThrow()));
             } finally {
                 context.leave();
             }

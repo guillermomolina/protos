@@ -40,7 +40,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -247,7 +246,7 @@ activation);
     private static void appendCapturedBytes(ProtosBytesValue capture, byte[] bytes) {
         for (byte value : bytes) {
             capture.indexedAdd(
-                    new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+                    new ProtosIntegerValue(value & 0xff));
         }
     }
 

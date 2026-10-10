@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -86,7 +87,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 Object finalResult = root.getCallTarget().call(module);
                 ProtosIntegerValue integer =
                         assertInstanceOf(ProtosIntegerValue.class, finalResult);
-                assertEquals(BigInteger.valueOf(42), integer.value());
+                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
 
                 ProtosClosureValue closureF =
                         assertInstanceOf(
@@ -169,7 +170,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                         assertInstanceOf(ProtosIntegerValue.class, finalResult);
                 assertEquals(
                         BigInteger.valueOf(42),
-                        integer.value(),
+                        ProtosTestIntegers.exact(integer),
                         "x must remain visible by reference two Closure levels below "
                                 + "the default expression that first captured it");
 

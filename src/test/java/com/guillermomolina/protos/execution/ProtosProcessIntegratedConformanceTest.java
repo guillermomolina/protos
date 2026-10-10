@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -101,10 +102,7 @@ final class ProtosProcessIntegratedConformanceTest {
         assertFalse(ProtosIdentity.identical(argsFromRoot, copiedArgs));
         assertEquals(
                 BigInteger.valueOf(2),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                invoke(copiedArgs, "size", fixture.activation))
-                        .value());
+                ProtosTestIntegers.exact(invoke(copiedArgs, "size", fixture.activation)));
         assertEquals(
                 "beta",
                 assertInstanceOf(
@@ -112,7 +110,7 @@ final class ProtosProcessIntegratedConformanceTest {
                                 ProtosInvocation.invokeMessage(
                                         copiedArgs,
                                         "at",
-                                        List.of(new ProtosIntegerValue(BigInteger.ONE)),
+                                        List.of(new ProtosIntegerValue(1L)),
                                         fixture.activation))
                         .value());
 
@@ -440,7 +438,7 @@ activation);
 
     private static void appendCapturedBytes(ProtosBytesValue capture, byte[] bytes) {
         for (byte value : bytes) {
-            capture.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+            capture.indexedAdd(new ProtosIntegerValue(value & 0xff));
         }
     }
 

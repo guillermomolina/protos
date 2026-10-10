@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -116,14 +117,14 @@ class ProtosFilesystemIntegratedConformanceTest {
                         ProtosInvocation.invokeMessage(
                                 file,
                                 "read",
-                                List.of(new ProtosIntegerValue(BigInteger.ONE)),
+                                List.of(new ProtosIntegerValue(1L)),
                                 activation);
         ProtosBytesValue bytes =
                 (ProtosBytesValue) read.resolvedValue().orElseThrow();
 
         assertEquals(
                 BigInteger.valueOf(7),
-                ((ProtosIntegerValue) bytes.indexedAt(0)).value());
+                ProtosTestIntegers.exact(bytes.indexedAt(0)));
         assertEquals(1, first.reads.get());
         assertEquals(0, replacement.reads.get());
     }

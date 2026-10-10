@@ -21,7 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -126,7 +126,7 @@ public final class ProtosStandardIpAddressProtocol {
             throw invalid(activation);
         }
         ProtosObjectValue address = (ProtosObjectValue) activation.receiver();
-        return canonicalHash(address);
+        return canonicalHash(address, activation.prelude().orElse(null));
     }
 
     static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
@@ -166,21 +166,26 @@ public final class ProtosStandardIpAddressProtocol {
 
     static boolean sameCanonicalState(
             ProtosObjectValue left, ProtosObjectValue right) {
-        return integerSlot(left, "version")
-                        .sameIntegerForRuntime(integerSlot(right, "version"))
-                && integerSlot(left, "bits")
-                        .sameIntegerForRuntime(integerSlot(right, "bits"));
+        return ProtosNumericValueSupport.sameInteger(
+                        integerSlot(left, "version"), integerSlot(right, "version"))
+                && ProtosNumericValueSupport.sameInteger(
+                        integerSlot(left, "bits"), integerSlot(right, "bits"));
     }
 
-    static ProtosIntegerValue canonicalHash(ProtosObjectValue address) {
-        ProtosIntegerValue version = integerSlot(address, "version");
-        ProtosIntegerValue bits = integerSlot(address, "bits");
-        return bits.multiplyForRuntime(new ProtosIntegerValue(31L))
-                .addForRuntime(version);
+    /** {@code prelude} owns a hash beyond the signed-64 range (IPv6 bits). */
+    static Object canonicalHash(ProtosObjectValue address, ProtosPrelude prelude) {
+        Object version = integerSlot(address, "version");
+        Object bits = integerSlot(address, "bits");
+        return ProtosNumericValueSupport.addIntegers(
+                ProtosNumericValueSupport.multiplyIntegers(
+                        bits, ProtosNumericValueSupport.integer(31L), prelude),
+                version,
+                prelude);
     }
 
-    private static ProtosIntegerValue integerSlot(ProtosObjectValue address, String name) {
-        return (ProtosIntegerValue) address.readLocalSlot(name).orElseThrow();
+    private static Object integerSlot(ProtosObjectValue address, String name) {
+        return ProtosNumericValueSupport.requireCurrentInteger(
+                address.readLocalSlot(name).orElseThrow());
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

@@ -81,7 +81,7 @@ final class ProtosNetworkCapabilityTransferTest {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue ordinary = new ProtosObjectValue(prelude.networkPrototype());
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(java.math.BigInteger.valueOf(7)));
+        ordinary.createLocalSlot("payload", new ProtosIntegerValue(7));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =
@@ -92,10 +92,7 @@ final class ProtosNetworkCapabilityTransferTest {
         assertSame(prelude.networkPrototype(), actorCopy.parent().orElseThrow());
         assertEquals(
                 java.math.BigInteger.valueOf(7),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                actorCopy.readLocalSlot("payload").orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(actorCopy.readLocalSlot("payload").orElseThrow()));
         assertTrue(actorCopy.isFrozen());
 
         Object copied =

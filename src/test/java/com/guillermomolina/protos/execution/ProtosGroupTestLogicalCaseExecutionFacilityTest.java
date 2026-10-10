@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -134,7 +135,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // request to the one member spawned through the Group-flavored "workers"
             // module overlay (not the ordinary test resolver, which has no such
             // specifier) and the selected Test body actually executed exactly once.
-            assertEquals(BigInteger.valueOf(1), value.value());
+            assertEquals(BigInteger.valueOf(1), ProtosTestIntegers.exact(value));
         }
     }
 
@@ -178,7 +179,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // 5 then 5, combined as first * 10 + second: only reachable if both
             // requests were routed through the same Group/member acquisition within
             // this one Case.
-            assertEquals(BigInteger.valueOf(55), value.value());
+            assertEquals(BigInteger.valueOf(55), ProtosTestIntegers.exact(value));
         }
     }
 
@@ -217,7 +218,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertCompletedIntegerObservation(firstCase).value());
+                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -237,7 +238,7 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
             // freshly-tagged value of 1.
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertCompletedIntegerObservation(secondCase).value());
+                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(secondCase)));
         }
     }
 

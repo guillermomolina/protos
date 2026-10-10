@@ -23,7 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -189,7 +189,7 @@ public final class ProtosLoggingFacility {
         }
         Map<String, Object> slots = object.localSlotsSnapshot();
         return slots.keySet().equals(INSTANT_SLOTS)
-                && slots.get("nanoseconds") instanceof ProtosIntegerValue;
+                && ProtosNumericValueSupport.isCurrentInteger(slots.get("nanoseconds"));
     }
 
     /**
@@ -202,7 +202,7 @@ public final class ProtosLoggingFacility {
         if (value == ProtosNullValue.INSTANCE
                 || value instanceof ProtosBooleanValue
                 || value instanceof ProtosStringValue
-                || value instanceof ProtosIntegerValue
+                || ProtosNumericValueSupport.isCurrentInteger(value)
                 || value instanceof ProtosFloatValue) {
             return true;
         }
@@ -262,8 +262,8 @@ public final class ProtosLoggingFacility {
         ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
         return prelude.newFrozenArray(
                 List.of(
-                        new ProtosIntegerValue(decimal.unscaledValue()),
-                        new ProtosIntegerValue(-decimal.scale())));
+                        ProtosNumericValueSupport.integer(decimal.unscaledValue(), prelude),
+                        ProtosNumericValueSupport.integer(-(long) decimal.scale())));
     }
 
     static BigDecimal shortestDecimal(double magnitude) {

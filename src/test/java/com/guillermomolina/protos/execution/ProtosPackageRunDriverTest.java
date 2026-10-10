@@ -16,9 +16,9 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -52,7 +52,7 @@ final class ProtosPackageRunDriverTest extends ProtosPackageRunDriverTestSupport
                         generationOneOnlyStages());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(BigInteger.valueOf(42), ((ProtosIntegerValue) outcome.value()).value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(outcome.value()));
         assertEquals("argument-value\n", stdout.utf8());
         assertEquals(List.of(), provider.calls);
     }

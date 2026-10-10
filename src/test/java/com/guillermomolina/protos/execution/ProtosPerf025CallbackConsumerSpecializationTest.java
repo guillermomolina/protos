@@ -23,11 +23,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.Instruction;
@@ -405,11 +406,8 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
     private static void assertInteger(long expected, Object value) {
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                com.guillermomolina.protos.runtime.ProtosNumericValueSupport
-                                        .guestValue(value))
-                        .value());
+                ProtosTestIntegers.exact(com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                        .guestValue(value)));
     }
 
     /** The live inline callback region observed at one breakpoint hit. */
@@ -489,9 +487,12 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) ->
                                 new ProtosIntegerValue(
-                                        assertInstanceOf(ProtosIntegerValue.class, supplied.get(0))
-                                                .value()
-                                                .multiply(BigInteger.TEN))));
+                                        Math.multiplyExact(
+                                                assertInstanceOf(
+                                                                ProtosIntegerValue.class,
+                                                                supplied.get(0))
+                                                        .longValue(),
+                                                10L))));
         AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
         List<Stop> stops = new ArrayList<>();
         ProtosExecutionOutcome outcome;

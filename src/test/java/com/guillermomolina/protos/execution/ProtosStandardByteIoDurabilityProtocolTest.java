@@ -3,14 +3,13 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.*;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardByteIoDurabilityProtocolTest {
     private static ProtosPrelude core() throws Exception{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
-    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(BigInteger.valueOf(n));}
+    private static ProtosIntegerValue i(long n){return new ProtosIntegerValue(n);}
     private static ProtosBytesValue bytes(ProtosObjectValue p,int...v){var b=new ProtosBytesValue(p);for(int x:v)b.indexedAdd(i(x));return b;}
     private static Fixture fixture(boolean syncable)throws Exception{
         var p=core();var a=p.newModuleActivation();var bp=new ProtosObjectValue(ProtosObjectValue.rootObject());ProtosStandardBytesProtocol.install(bp);
@@ -85,11 +84,11 @@ class ProtosStandardByteIoDurabilityProtocolTest {
         void writeNow(byte[]x){int end=position+x.length;if(end>data.length)data=Arrays.copyOf(data,end);System.arraycopy(x,0,data,position,x.length);position=end;}
         public ProtosByteIoFlow.Cancellation flush(ProtosByteIoFlow.ReceiverCompletion c){c.succeeded();return()->{};}
         public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation seek(ProtosIntegerValue p,ProtosByteIoFlow.IntegerCompletion c){position=p.intValueExactForRuntime();c.succeeded(p);return()->{};}
-        public ProtosByteIoFlow.Cancellation seekBy(ProtosIntegerValue o,ProtosByteIoFlow.IntegerCompletion c){var p=new ProtosIntegerValue(position).addForRuntime(o);if(p.signumForRuntime()<0)c.failed();else{position=p.intValueExactForRuntime();c.succeeded(p);}return()->{};}
+        public ProtosByteIoFlow.Cancellation seek(Object p,ProtosByteIoFlow.IntegerCompletion c){position=((ProtosIntegerValue)p).intValueExactForRuntime();c.succeeded(p);return()->{};}
+        public ProtosByteIoFlow.Cancellation seekBy(Object o,ProtosByteIoFlow.IntegerCompletion c){var p=new ProtosIntegerValue(Math.addExact(position,((ProtosIntegerValue)o).longValue()));if(p.signumForRuntime()<0)c.failed();else{position=p.intValueExactForRuntime();c.succeeded(p);}return()->{};}
         public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(new ProtosIntegerValue(position));return()->{};}
         public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(data.length));return()->{};}
-        public ProtosByteIoFlow.Cancellation truncate(ProtosIntegerValue n,ProtosByteIoFlow.ReceiverCompletion c){int x=n.intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
+        public ProtosByteIoFlow.Cancellation truncate(Object n,ProtosByteIoFlow.ReceiverCompletion c){int x=((ProtosIntegerValue)n).intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
     }
 
     private static final class SyncMemoryBackend extends ExtendedMemoryBackend implements ProtosByteIoFlow.SyncBackend{

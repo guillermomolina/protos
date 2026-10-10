@@ -42,6 +42,8 @@ final class ProtosNioTcpListenerBackend
     private final int ipVersion;
     private final List<ServerSocketChannel> channels;
     private final ProtosObjectValue addressPrototype;
+    /* I091: owner of accepted address bits beyond the signed-64 range; see the network backend. */
+    private final ProtosObjectValue integerPrototype;
     private final ProtosObjectValue endpointPrototype;
     private final AtomicBoolean physicalClosed = new AtomicBoolean();
     // Poller-owned queue: cardinality is proportional only to admitted pending accepts.
@@ -53,7 +55,9 @@ final class ProtosNioTcpListenerBackend
             int ipVersion,
             List<ServerSocketChannel> channels,
             ProtosObjectValue addressPrototype,
-            ProtosObjectValue endpointPrototype) {
+            ProtosObjectValue endpointPrototype,
+            ProtosObjectValue integerPrototype) {
+        this.integerPrototype = integerPrototype;
         this.poller = Objects.requireNonNull(poller, "poller");
         if (ipVersion != 4 && ipVersion != 6) {
             throw new IllegalArgumentException("listener IP version must be 4 or 6");
@@ -232,7 +236,8 @@ final class ProtosNioTcpListenerBackend
         ProtosObjectValue logicalAddress = new ProtosObjectValue(addressPrototype);
         logicalAddress.createLocalSlot("version", ProtosNumericValueSupport.integer(ipVersion));
         logicalAddress.createLocalSlot(
-                "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes));
+                "bits",
+                ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes, integerPrototype));
         logicalAddress.freeze();
 
         ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);

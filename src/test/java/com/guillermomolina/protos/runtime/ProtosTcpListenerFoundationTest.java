@@ -59,13 +59,10 @@ final class ProtosTcpListenerFoundationTest {
         assertTrue(listener.localSlotsSnapshot().isEmpty());
         assertSame(resourceState, listener.resourceStateForRuntime());
 
-        listener.createLocalSlot("label", new ProtosIntegerValue(BigInteger.valueOf(13)));
+        listener.createLocalSlot("label", new ProtosIntegerValue(13));
         assertEquals(
                 BigInteger.valueOf(13),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                listener.readLocalSlot("label").orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(listener.readLocalSlot("label").orElseThrow()));
         assertNotSame(listener, new ProtosTcpListenerValue(prelude, resourceState));
     }
 
@@ -94,7 +91,7 @@ final class ProtosTcpListenerFoundationTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = prelude.tcpListenerPrototypeForRuntime();
         ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(BigInteger.valueOf(17)));
+        ordinary.createLocalSlot("payload", new ProtosIntegerValue(17));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =

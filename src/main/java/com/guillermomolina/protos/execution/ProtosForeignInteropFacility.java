@@ -129,7 +129,8 @@ public final class ProtosForeignInteropFacility {
                                     handle,
                                     live,
                                     construction.run(
-                                            handle.adapter(), live, handle.target(), exported)));
+                                            handle.adapter(), live, handle.target(), exported),
+                                    prelude));
         } finally {
             outbound.expire();
         }
@@ -152,7 +153,8 @@ public final class ProtosForeignInteropFacility {
                         ProtosForeignProjectedOperations.admit(
                                 handle,
                                 live,
-                                handle.adapter().readMember(live, handle.target(), name)));
+                                handle.adapter().readMember(live, handle.target(), name),
+                                prelude));
     }
 
     /** Answers the exact supplied {@code value}: no readback, readmission, or provider token. */

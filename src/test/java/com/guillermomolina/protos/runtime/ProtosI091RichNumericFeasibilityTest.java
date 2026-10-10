@@ -70,6 +70,16 @@ final class ProtosI091RichNumericFeasibilityTest {
     }
 
     @Test
+    void reflectionSeesOnlyOrdinarySlotsAndNeverTheExactBacking() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue half = RATIO.mint(root, BigInteger.ONE, BigInteger.TWO);
+
+        assertTrue(half.localSlotsSnapshot().isEmpty());
+        assertFalse(half.hasLocalSlot("numerator"));
+        assertSame(root, half.parent().orElseThrow());
+    }
+
+    @Test
     void membershipCannotBeForgedOrObservedBeforeFreezing() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue minted = RATIO.mint(root, BigInteger.ONE, BigInteger.TWO);

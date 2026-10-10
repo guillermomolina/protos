@@ -19,7 +19,10 @@ package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /** I091-B1: current numeric semantics and transfer boundary regressions. */
@@ -52,7 +55,7 @@ final class ProtosNumericValueSupportTest {
     void currentNumericValueIdentityAndHashAreUnchanged() {
         ProtosIntegerValue first = new ProtosIntegerValue(42L);
         ProtosIntegerValue twin =
-                new ProtosIntegerValue(BigInteger.valueOf(42L));
+                new ProtosIntegerValue(42L);
         ProtosIntegerValue other = new ProtosIntegerValue(43L);
 
         assertTrue(ProtosNumericValueSupport.sameCurrentFamilyIdentity(first, twin));
@@ -89,36 +92,39 @@ final class ProtosNumericValueSupportTest {
     }
 
     @Test
-    void detachedNumberCopiesPreserveExactValuesAndIeeeBits() {
+    void detachedNumberCopiesPreserveExactValuesAndIeeeBits() throws IOException {
+        ProtosPrelude destination = new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
         ProtosIntegerValue small = new ProtosIntegerValue(Long.MIN_VALUE);
-        ProtosIntegerValue large =
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(130));
+        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(130));
         ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0d);
 
         ProtosIntegerValue smallCopy = assertInstanceOf(
                 ProtosIntegerValue.class,
-                ProtosNumericValueSupport.copyCurrentNumberOrNull(small));
-        ProtosIntegerValue largeCopy = assertInstanceOf(
-                ProtosIntegerValue.class,
-                ProtosNumericValueSupport.copyCurrentNumberOrNull(large));
+                ProtosNumericValueSupport.copyCurrentNumberOrNull(small, destination));
+        ProtosLargeIntegerValue largeCopy = assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.copyCurrentNumberOrNull(large, destination));
         ProtosFloatValue floatCopy = assertInstanceOf(
                 ProtosFloatValue.class,
-                ProtosNumericValueSupport.copyCurrentNumberOrNull(negativeZero));
+                ProtosNumericValueSupport.copyCurrentNumberOrNull(negativeZero, destination));
 
         assertNotSame(small, smallCopy);
         assertNotSame(large, largeCopy);
         assertNotSame(negativeZero, floatCopy);
 
-        assertTrue(smallCopy.isSmallForRuntime());
-        assertEquals(Long.MIN_VALUE, smallCopy.smallValueForRuntime());
-        assertEquals(large.value(), largeCopy.value());
-        assertFalse(largeCopy.isSmallForRuntime());
+        assertEquals(Long.MIN_VALUE, smallCopy.longValue());
+        assertEquals(ProtosTestIntegers.exact(large), ProtosTestIntegers.exact(largeCopy));
+        // I091: a large Integer is rematerialized with the destination's Integer prototype.
+        assertSame(destination.integerPrototype(), largeCopy.parent().orElseThrow());
+        assertTrue(largeCopy.isFrozen());
+        assertTrue(ProtosIdentity.identical(large, largeCopy));
+        assertEquals(ProtosIdentity.identityHash(large), ProtosIdentity.identityHash(largeCopy));
         assertEquals(
                 Double.doubleToRawLongBits(negativeZero.value()),
                 Double.doubleToRawLongBits(floatCopy.value()));
 
-        assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(12L));
+        assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(12L, destination));
         assertNull(ProtosNumericValueSupport.copyCurrentNumberOrNull(
-                ProtosBooleanValue.TRUE));
+                ProtosBooleanValue.TRUE, destination));
     }
 }

@@ -17,16 +17,24 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /** I091 compact numeric paths must agree exactly with the arbitrary-precision semantics. */
@@ -49,7 +57,7 @@ final class ProtosI091CompactNumericPathsTest {
         assertEquals(
                 0x1p64 / 3.0,
                 ProtosBinary64Rounding.divideExactIntegers(
-                        new ProtosIntegerValue(BigInteger.ONE.shiftLeft(64)),
+                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64)),
                         new ProtosIntegerValue(3L)));
         assertEquals(
                 0x1p63,
@@ -73,25 +81,31 @@ final class ProtosI091CompactNumericPathsTest {
         assertEquals(Comparison.UNORDERED, compare(new ProtosIntegerValue(1L), Double.NaN));
         assertEquals(
                 Comparison.LESS,
-                compare(new ProtosIntegerValue(BigInteger.ONE.shiftLeft(64)), 0x1p65));
+                compare(ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64)), 0x1p65));
     }
 
     @Test
-    void integralBinary64ExtractionSplitsAtTheSignedLongRange() {
-        ProtosIntegerValue minimum =
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0x1p63);
-        assertTrue(minimum.isSmallForRuntime());
-        assertEquals(Long.MIN_VALUE, minimum.smallValueForRuntime());
+    void integralBinary64ExtractionSplitsAtTheSignedLongRange() throws IOException {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        ProtosIntegerValue minimum = assertInstanceOf(
+                ProtosIntegerValue.class,
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0x1p63, prelude));
+        assertEquals(Long.MIN_VALUE, minimum.longValue());
 
-        ProtosIntegerValue twoPow63 =
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0x1p63);
-        assertFalse(twoPow63.isSmallForRuntime());
-        assertEquals(BigInteger.ONE.shiftLeft(63), twoPow63.value());
+        ProtosLargeIntegerValue twoPow63 = assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0x1p63, prelude));
+        assertSame(prelude.integerPrototype(), twoPow63.parent().orElseThrow());
+        assertEquals(BigInteger.ONE.shiftLeft(63), ProtosTestIntegers.exact(twoPow63));
         assertEquals(
                 BigInteger.ONE.shiftLeft(70).negate(),
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0x1p70).value());
-        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0x1p-1074));
-        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0.5));
+                ProtosTestIntegers.exact(
+                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                                -0x1p70, prelude)));
+        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                0x1p-1074, prelude));
+        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0.5, prelude));
     }
 
     @Test
@@ -103,12 +117,13 @@ final class ProtosI091CompactNumericPathsTest {
                 ProtosCurrentNumericRelations.numericEquals(
                         new ProtosIntegerValue((1L << 60) + 1L), floating));
         assertTrue(
-                ProtosCurrentNumericRelations.normalHash(integer)
-                        .sameIntegerForRuntime(
-                                ProtosCurrentNumericRelations.normalHash(floating)));
+                ProtosNumericValueSupport.sameInteger(
+                        ProtosCurrentNumericRelations.normalHash(integer, null),
+                        ProtosCurrentNumericRelations.normalHash(floating, null)));
         assertEquals(
                 BigInteger.valueOf(Double.hashCode(0.5)),
-                ProtosCurrentNumericRelations.normalHash(new ProtosFloatValue(0.5)).value());
+                ProtosTestIntegers.exact(
+                        ProtosCurrentNumericRelations.normalHash(new ProtosFloatValue(0.5), null)));
     }
 
     private static double divide(long numerator, long denominator) {
@@ -116,7 +131,7 @@ final class ProtosI091CompactNumericPathsTest {
                 new ProtosIntegerValue(numerator), new ProtosIntegerValue(denominator));
     }
 
-    private static Comparison compare(ProtosIntegerValue integer, double floating) {
+    private static Comparison compare(Object integer, double floating) {
         return ProtosCurrentNumericRelations.compare(integer, new ProtosFloatValue(floating));
     }
 }

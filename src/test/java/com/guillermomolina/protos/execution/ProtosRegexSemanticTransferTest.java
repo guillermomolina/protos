@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -335,12 +336,11 @@ final class ProtosRegexSemanticTransferTest {
         try (ProtosHostedExecutionTestFixture hosted = ProtosHostedExecutionTestFixture.open(prelude(holder))) {
             ProtosActivation root = hosted.activation();
             assertEquals(BigInteger.valueOf(7),
-                    assertInstanceOf(ProtosIntegerValue.class, await(hosted, "((v) => { v }).parallel(7)")).value());
+                    ProtosTestIntegers.exact(await(hosted, "((v) => { v }).parallel(7)")));
             assertEquals(BigInteger.valueOf(42),
-                    assertInstanceOf(ProtosIntegerValue.class,
-                            await(hosted,
+                    ProtosTestIntegers.exact(await(hosted,
                                     "worker: Actor.spawn(\"plat051b-holder\", \"holder\", 0)\n"
-                                            + "worker.request(\"echo\", 42)")).value());
+                                            + "worker.request(\"echo\", 42)")));
             assertTrue(root.actorModuleState().lookup(ProtosRegexUnicodeFacility.MODULE_KEY).isEmpty());
         }
     }
@@ -436,7 +436,7 @@ final class ProtosRegexSemanticTransferTest {
             return string.value();
         }
         if (value instanceof ProtosIntegerValue integer) {
-            return integer.value().longValueExact();
+            return ProtosTestIntegers.exact(integer).longValueExact();
         }
         if (value == ProtosBooleanValue.TRUE || value == ProtosBooleanValue.FALSE) {
             return value == ProtosBooleanValue.TRUE;

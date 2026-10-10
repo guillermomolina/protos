@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -59,7 +60,7 @@ class ProtosForeignValueProjectionTest {
                 arguments -> {
                     BigInteger sum = BigInteger.ZERO;
                     for (ProtosForeignArgument argument : arguments) {
-                        if (argument.value() instanceof BigInteger integer) {
+                        if (ProtosForeignValueFixture.scalar(argument) instanceof BigInteger integer) {
                             sum = sum.add(integer);
                         }
                     }
@@ -132,7 +133,7 @@ class ProtosForeignValueProjectionTest {
 
             assertEquals(
                     BigInteger.valueOf(6),
-                    ((ProtosIntegerValue) fixture.eval(M + "f: m.fn\nf(1, 2, 3, \"s\", 1.5, true, null)")).value());
+                    ProtosTestIntegers.exact(fixture.eval(M + "f: m.fn\nf(1, 2, 3, \"s\", 1.5, true, null)")));
             List<ProtosForeignArgument> received = provider.executions.get(0);
             assertEquals(
                     List.of(
@@ -154,11 +155,11 @@ class ProtosForeignValueProjectionTest {
             provider.events.clear();
             assertEquals(
                     BigInteger.valueOf(5),
-                    ((ProtosIntegerValue) fixture.eval(M + "m.obj.method(2, 3)")).value());
+                    ProtosTestIntegers.exact(fixture.eval(M + "m.obj.method(2, 3)")));
             assertEquals(1, provider.count("read:method"));
             assertEquals(
                     BigInteger.valueOf(4),
-                    ((ProtosIntegerValue) fixture.eval(M + "m.fn(4)")).value());
+                    ProtosTestIntegers.exact(fixture.eval(M + "m.fn(4)")));
             assertEquals(1, provider.count("read:fn"));
         }
     }
@@ -172,9 +173,9 @@ class ProtosForeignValueProjectionTest {
         try (ProtosForeignValueFixture fixture =
                 fixture(new Fake(false).member("array", array).member("both", both))) {
             String a = M + "a: m.array\n";
-            assertEquals(BigInteger.ONE, ((ProtosIntegerValue) fixture.eval(a + "a[0]")).value());
+            assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(fixture.eval(a + "a[0]")));
             assertEquals("two", ((ProtosStringValue) fixture.eval(a + "a.at(1)")).value());
-            assertEquals(BigInteger.valueOf(9), ((ProtosIntegerValue) fixture.eval(a + "a[0] = 9")).value());
+            assertEquals(BigInteger.valueOf(9), ProtosTestIntegers.exact(fixture.eval(a + "a[0] = 9")));
             assertEquals(BigInteger.valueOf(9), array.elements.get(0));
             assertMissing(fixture, fixture.failure(M + "b: m.both\nb[0]"));
             assertSame(ProtosObjectValue.rootObject(), fixture.eval(a + "a.parent()"));

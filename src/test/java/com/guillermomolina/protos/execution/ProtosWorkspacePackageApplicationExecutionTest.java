@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -81,7 +82,7 @@ final class ProtosWorkspacePackageApplicationExecutionTest {
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue value = (ProtosIntegerValue) outcome.value();
-        assertEquals(BigInteger.valueOf(42), value.value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
         assertEquals("argument-value\nenvironment-value\n", stdout.utf8());
 
         ProtosProcessRuntime process = observed.get();

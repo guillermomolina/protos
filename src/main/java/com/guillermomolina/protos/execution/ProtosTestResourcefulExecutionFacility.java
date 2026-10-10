@@ -21,7 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -350,7 +350,7 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
 
             String key = requireString(caller, fields.get(0));
             String mode = requireString(caller, fields.get(1));
-            ProtosIntegerValue units = optionalInteger(caller, fields.get(2));
+            Object units = optionalInteger(caller, fields.get(2));
             String scope = requireString(caller, fields.get(3));
             String provider = requireString(caller, fields.get(4));
             String profile = optionalString(caller, fields.get(5));
@@ -385,14 +385,14 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         return requireString(caller, value);
     }
 
-    private static ProtosIntegerValue optionalInteger(ProtosActivation caller, Object value) {
+    private static Object optionalInteger(ProtosActivation caller, Object value) {
         if (value == ProtosNullValue.INSTANCE) {
             return null;
         }
-        if (!(value instanceof ProtosIntegerValue integer)) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(value)) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
-        return integer;
+        return value;
     }
 
     private static Throwable unwrapCompletionFailure(Throwable failure) {

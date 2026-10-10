@@ -1759,7 +1759,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosObjectValue perform(
                 ProtosActivation activation,
                 Object target) {
-            if (target instanceof ProtosObjectValue object) {
+            // I091: a large Integer is a frozen object physically but an immutable Integer value.
+            if (target instanceof ProtosObjectValue object
+                    && !ProtosNumericValueSupport.isLargeInteger(target)) {
                 return object;
             }
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
@@ -2194,7 +2196,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 Object sourceValue,
                 ComposeReservedNames reservedNames) {
-            if (!(sourceValue instanceof ProtosObjectValue source)) {
+            if (!(sourceValue instanceof ProtosObjectValue source)
+                    || ProtosNumericValueSupport.isLargeInteger(sourceValue)) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
 
@@ -3152,7 +3155,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 supplied,
                                 activation));
             }
-            if (receiver instanceof ProtosObjectValue prototype) {
+            if (receiver instanceof ProtosObjectValue prototype
+                    && !ProtosNumericValueSupport.isLargeInteger(receiver)) {
                 ProtosObjectValue instance = new ProtosObjectValue(prototype);
                 return PreparedStandardObjectCall.construction(
                         prepareSend(
@@ -8887,7 +8891,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
             PreparedClosureCall canonical =
-                    canonicalIntegerResultOrNull(cachedInteger, receiver, supplied);
+                    canonicalIntegerResultOrNull(cachedInteger, receiver, supplied, prelude);
             if (canonical != null) {
                 return canonical;
             }
@@ -8950,7 +8954,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 .tryExecuteCanonicalOperationOne(
                                         cachedInteger.operation(),
                                         receiver,
-                                        supplied0);
+                                        supplied0,
+                                        // I091: owner of a result beyond the signed-64 range.
+                                        caller instanceof ProtosActivation entered
+                                                ? entered.preludeOrNullForRuntime()
+                                                : ProtosFrameArguments.preludeOrNull(
+                                                        (Object[]) caller));
                 if (directResult != null) {
                     return PreparedClosureCall.immediateResult(directResult);
                 }
@@ -8972,7 +8981,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static PreparedClosureCall canonicalIntegerResultOrNull(
                 GuardedIntegerSend cachedInteger,
                 Object receiver,
-                Object[] supplied) {
+                Object[] supplied,
+                ProtosPrelude prelude) {
             if (cachedInteger.operation() == null) {
                 return null;
             }
@@ -8980,7 +8990,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardIntegerProtocol.tryExecuteCanonicalOperation(
                             cachedInteger.operation(),
                             receiver,
-                            supplied);
+                            supplied,
+                            // I091: owner of a result beyond the signed-64 range.
+                            prelude);
             return directResult == null
                     ? null
                     : PreparedClosureCall.immediateResult(directResult);

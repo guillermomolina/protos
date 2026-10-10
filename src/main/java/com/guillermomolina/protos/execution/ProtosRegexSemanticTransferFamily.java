@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -225,6 +225,7 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                 || groups.size() != count.intValue() + 1) {
             return false;
         }
+        int captureCount = count.intValue();
         for (int group = 0; group < groups.size(); group++) {
             if (!(groups.get(group) instanceof ProtosSemanticTransferPayload entry)
                     || !acceptsGroup(entry, group)) {
@@ -232,7 +233,7 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
             }
         }
         Set<String> seenNames = new HashSet<>();
-        Set<BigInteger> seenGroups = new HashSet<>();
+        boolean[] namedGroups = new boolean[captureCount + 1];
         for (int index = 0; index < names.size(); index++) {
             if (!(names.get(index) instanceof ProtosSemanticTransferPayload pair)
                     || pair.size() != 2
@@ -241,9 +242,10 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                     || group.signum() <= 0
                     || group.compareTo(count) > 0
                     || !seenNames.add(name)
-                    || !seenGroups.add(group)) {
+                    || namedGroups[group.intValue()]) {
                 return false;
             }
+            namedGroups[group.intValue()] = true;
         }
         return true;
     }
@@ -259,8 +261,18 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                 && entry.get(3) instanceof BigInteger end
                 && start.signum() >= 0
                 && start.compareTo(end) <= 0
-                && end.subtract(start)
-                        .equals(BigInteger.valueOf(text.codePointCount(0, text.length())));
+                && spansCodePoints(start, end, text.codePointCount(0, text.length()));
+    }
+
+    /*
+     * PLAT051 carries bounds as exact Integers. Non-negative bounds within the signed-long range
+     * subtract exactly as longs; only larger bounds need arbitrary-precision subtraction.
+     */
+    private static boolean spansCodePoints(BigInteger start, BigInteger end, int length) {
+        if (end.bitLength() < Long.SIZE) {
+            return end.longValue() - start.longValue() == length;
+        }
+        return end.subtract(start).equals(BigInteger.valueOf(length));
     }
 
     @Override
@@ -293,11 +305,11 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                                 : ProtosNullValue.INSTANCE);
                 bounds.add(
                         participates
-                                ? new ProtosIntegerValue((BigInteger) entry.get(2))
+                                ? ProtosNumericValueSupport.integer((BigInteger) entry.get(2), prelude)
                                 : ProtosNullValue.INSTANCE);
                 bounds.add(
                         participates
-                                ? new ProtosIntegerValue((BigInteger) entry.get(3))
+                                ? ProtosNumericValueSupport.integer((BigInteger) entry.get(3), prelude)
                                 : ProtosNullValue.INSTANCE);
                 groupNames.add(ProtosNullValue.INSTANCE);
             }
@@ -339,7 +351,7 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
     }
 
     private static BigInteger integer(Object value) {
-        return ((ProtosIntegerValue) value).value();
+        return ProtosNumericValueSupport.exactBigInteger(value);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

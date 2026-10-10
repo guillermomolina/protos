@@ -20,6 +20,8 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.Objects;
@@ -40,12 +42,16 @@ import java.util.Objects;
 final class ProtosForeignValueAdmission {
     private ProtosForeignValueAdmission() {}
 
-    /** Admits one provider value; runs inside the entered operation that produced it. */
+    /**
+     * Admits one provider value; runs inside the entered operation that produced it.
+     * {@code prelude} is the admitting domain's, which owns an Integer beyond the signed-64 range.
+     */
     static Object admit(
             ProtosForeignProviderSessionBinding session,
             ProtosForeignValueAdapter adapter,
             ProtosForeignProviderSession live,
-            Object foreign)
+            Object foreign,
+            ProtosPrelude prelude)
             throws Exception {
         Objects.requireNonNull(foreign, "foreign value");
         ProtosForeignAdmissionDescriptor descriptor =
@@ -54,7 +60,10 @@ final class ProtosForeignValueAdmission {
             case BOOLEAN -> ProtosBooleanValue.of((Boolean) descriptor.scalar());
             case NULL -> ProtosNullValue.INSTANCE;
             case STRING -> unicodeOrRaw(session, adapter, foreign, (String) descriptor.scalar());
-            case INTEGER -> (ProtosIntegerValue) descriptor.scalar();
+            case INTEGER ->
+                    descriptor.scalar() instanceof java.math.BigInteger large
+                            ? ProtosNumericValueSupport.integer(large, prelude)
+                            : descriptor.scalar();
             case BINARY64 -> new ProtosFloatValue((Double) descriptor.scalar());
             case RAW ->
                     new ProtosRawForeignValue(
@@ -94,10 +103,14 @@ final class ProtosForeignValueAdmission {
             argument =
                     new ProtosForeignArgument(
                             ProtosForeignAdmissionDescriptor.Kind.STRING, string.value());
-        } else if (value instanceof ProtosIntegerValue integer) {
+        } else if (ProtosNumericValueSupport.isCurrentInteger(value)) {
+            // I091: an exact Integer within the signed-long range crosses as a Long.
             argument =
                     new ProtosForeignArgument(
-                            ProtosForeignAdmissionDescriptor.Kind.INTEGER, integer.value());
+                            ProtosForeignAdmissionDescriptor.Kind.INTEGER,
+                            value instanceof ProtosIntegerValue integer
+                                    ? (Object) integer.longValue()
+                                    : ProtosNumericValueSupport.exactBigInteger(value));
         } else if (value instanceof ProtosFloatValue floating) {
             argument =
                     new ProtosForeignArgument(

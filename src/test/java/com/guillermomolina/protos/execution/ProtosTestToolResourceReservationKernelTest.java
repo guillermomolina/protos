@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -54,7 +55,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         ProtosArrayValue held = arrayAt(observed, 0);
         assertEquals(0, held.indexedSize());
         assertTrue(held.isFrozen());
-        assertEquals(BigInteger.ZERO, integerAt(observed, 1).value());
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 1)));
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
     }
 
@@ -84,12 +85,12 @@ final class ProtosTestToolResourceReservationKernelTest {
         assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(0));
         assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(1));
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(2));
-        assertEquals(BigInteger.valueOf(4), integerAt(observed, 3).value());
-        assertEquals(BigInteger.valueOf(2), integerAt(observed, 4).value());
+        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 3)));
+        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 4)));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(5));
-        assertEquals(BigInteger.valueOf(3), integerAt(observed, 6).value());
-        assertEquals(BigInteger.valueOf(2), integerAt(observed, 7).value());
+        assertEquals(BigInteger.valueOf(3), ProtosTestIntegers.exact(integerAt(observed, 6)));
+        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 7)));
     }
 
     @Test
@@ -123,7 +124,7 @@ final class ProtosTestToolResourceReservationKernelTest {
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(3));
-        assertEquals(BigInteger.ONE, integerAt(observed, 4).value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 4)));
     }
 
     @Test
@@ -166,9 +167,9 @@ final class ProtosTestToolResourceReservationKernelTest {
 
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
-        assertEquals(BigInteger.ZERO, integerAt(observed, 1).value());
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 1)));
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
-        assertEquals(BigInteger.ONE, integerAt(observed, 3).value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 3)));
     }
 
     @Test
@@ -198,8 +199,8 @@ final class ProtosTestToolResourceReservationKernelTest {
 
         ProtosArrayValue observed = completedArray(source);
         assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(0));
-        assertEquals(BigInteger.valueOf(2), integerAt(observed, 1).value());
-        assertEquals(BigInteger.ONE, integerAt(observed, 2).value());
+        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 1)));
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 2)));
         assertInstanceOf(
                 ProtosArrayValue.class, observed.indexedAt(3));
     }

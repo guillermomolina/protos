@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -409,8 +408,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                 .execute(
                                         fixture.activation(),
                                         List.of(
-                                                new ProtosIntegerValue(
-                                                        BigInteger.ONE))));
+                                                new ProtosIntegerValue(1L))));
     }
 
     @Test

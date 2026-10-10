@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -175,7 +176,7 @@ class ProtosModuleRuntimeTest {
         assertSame(a1, a2, "distinct spellings resolving to one ModuleKey must share one Actor-local instance");
         assertEquals(1, resolver.loads("a"), "A must execute/load once even through A -> B -> A");
         assertEquals(1, resolver.loads("b"));
-        assertEquals(java.math.BigInteger.TEN, ((ProtosIntegerValue) a1.readLocalSlot("aSeenByB").orElseThrow()).value());
+        assertEquals(java.math.BigInteger.TEN, ProtosTestIntegers.exact(a1.readLocalSlot("aSeenByB").orElseThrow()));
         assertTrue(a1.hasLocalSlot("after"));
     }
 
@@ -249,7 +250,7 @@ class ProtosModuleRuntimeTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         module.readLocalSlot("value").orElseThrow());
-        assertEquals(java.math.BigInteger.valueOf(7), value.value());
+        assertEquals(java.math.BigInteger.valueOf(7), ProtosTestIntegers.exact(value));
         assertEquals(1, resolver.loads("direct"));
     }
 

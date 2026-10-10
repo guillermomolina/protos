@@ -16,17 +16,20 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -140,79 +143,78 @@ class ProtosStandardIntegerArithmeticTest {
                                 "+",
                                 new ProtosIntegerValue(40L),
                                 new ProtosIntegerValue(2L)));
-        assertTrue(smallAdd.isSmallForRuntime());
-        assertEquals(BigInteger.valueOf(42L), smallAdd.value());
+        assertEquals(42L, smallAdd.longValue());
 
-        ProtosIntegerValue promotedAdd =
+        // I091: an exact result outside the signed-64 range is a large Integer object.
+        ProtosLargeIntegerValue promotedAdd =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        ProtosLargeIntegerValue.class,
                         direct(
                                 prelude,
                                 "+",
                                 new ProtosIntegerValue(Long.MAX_VALUE),
                                 new ProtosIntegerValue(1L)));
-        assertFalse(promotedAdd.isSmallForRuntime());
+        assertSame(prelude.integerPrototype(), promotedAdd.parent().orElseThrow());
         assertEquals(
                 BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
-                promotedAdd.value());
+                ProtosTestIntegers.exact(promotedAdd));
 
-        ProtosIntegerValue promotedDivision =
+        ProtosLargeIntegerValue promotedDivision =
                 assertInstanceOf(
-                        ProtosIntegerValue.class,
+                        ProtosLargeIntegerValue.class,
                         direct(
                                 prelude,
                                 "div",
                                 new ProtosIntegerValue(Long.MIN_VALUE),
                                 new ProtosIntegerValue(-1L)));
-        assertFalse(promotedDivision.isSmallForRuntime());
         assertEquals(
                 BigInteger.valueOf(Long.MIN_VALUE).negate(),
-                promotedDivision.value());
+                ProtosTestIntegers.exact(promotedDivision));
 
         Object add =
                 direct(prelude, "+",
-                        new ProtosIntegerValue(huge),
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        ProtosTestIntegers.integer(huge, prelude),
+                        new ProtosIntegerValue(1L));
         assertEquals(
                 huge.add(BigInteger.ONE),
-                assertInstanceOf(ProtosIntegerValue.class, add).value());
+                ProtosTestIntegers.exact(add));
 
         Object multiply =
                 direct(prelude, "*",
-                        new ProtosIntegerValue(huge),
-                        new ProtosIntegerValue(huge));
+                        ProtosTestIntegers.integer(huge, prelude),
+                        ProtosTestIntegers.integer(huge, prelude));
         assertEquals(
                 huge.multiply(huge),
-                assertInstanceOf(ProtosIntegerValue.class, multiply).value());
+                ProtosTestIntegers.exact(multiply));
 
         Object quotient =
                 direct(prelude, "div",
-                        new ProtosIntegerValue(huge),
-                        new ProtosIntegerValue(BigInteger.valueOf(7)));
+                        ProtosTestIntegers.integer(huge, prelude),
+                        new ProtosIntegerValue(7));
         assertEquals(
                 huge.divide(BigInteger.valueOf(7)),
-                assertInstanceOf(ProtosIntegerValue.class, quotient).value());
+                ProtosTestIntegers.exact(quotient));
 
         Object remainder =
                 direct(prelude, "mod",
-                        new ProtosIntegerValue(huge),
-                        new ProtosIntegerValue(BigInteger.valueOf(7)));
+                        ProtosTestIntegers.integer(huge, prelude),
+                        new ProtosIntegerValue(7));
         assertEquals(
                 huge.remainder(BigInteger.valueOf(7)),
-                assertInstanceOf(ProtosIntegerValue.class, remainder).value());
+                ProtosTestIntegers.exact(remainder));
 
         assertNull(
                 direct(prelude, "+",
-                        new ProtosIntegerValue(BigInteger.ONE),
+                        new ProtosIntegerValue(1L),
                         ProtosBooleanValue.TRUE));
         assertNull(
                 direct(prelude, "div",
-                        new ProtosIntegerValue(BigInteger.ONE),
-                        new ProtosIntegerValue(BigInteger.ZERO)));
+                        new ProtosIntegerValue(1L),
+                        new ProtosIntegerValue(0L)));
         assertNull(
                 direct(prelude, "mod",
-                        new ProtosIntegerValue(BigInteger.ONE),
-                        new ProtosIntegerValue(BigInteger.ZERO)));
+                        new ProtosIntegerValue(1L),
+                        new ProtosIntegerValue(0L)));
     }
 
     @Test
@@ -245,7 +247,7 @@ class ProtosStandardIntegerArithmeticTest {
         ProtosFloatValue invalidProduct = assertInstanceOf(
                 ProtosFloatValue.class,
                 direct(prelude, "*",
-                        new ProtosIntegerValue(huge),
+                        ProtosTestIntegers.integer(huge, prelude),
                         new ProtosFloatValue(0.0)));
         assertTrue(Double.isNaN(invalidProduct.value()));
 
@@ -281,7 +283,8 @@ class ProtosStandardIntegerArithmeticTest {
         return ProtosStandardIntegerProtocol.tryExecuteCanonicalOperation(
                 operation,
                 receiver,
-                new Object[] {argument});
+                new Object[] {argument},
+                prelude);
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

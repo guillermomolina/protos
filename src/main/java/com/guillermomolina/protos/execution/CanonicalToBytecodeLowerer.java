@@ -3670,12 +3670,11 @@ final class CanonicalToBytecodeLowerer {
         if (scalarCreate
                 && create.value() instanceof CanonicalLiteral literal) {
             // PERF034-E: a literal is its own operand; no createValue local.
-            Object constant = materialize(literal);
             emitScalarCreate(
                     builder,
                     create,
                     result,
-                    () -> builder.emitLoadConstant(constant));
+                    () -> emitLiteral(builder, literal));
             return;
         }
         BytecodeLocal value = builder.createLocal("createValue", null);
@@ -3831,7 +3830,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         builder.beginStoreLocal(local);
         if (assign.value() instanceof CanonicalLiteral literal) {
-            builder.emitLoadConstant(materialize(literal));
+            emitLiteral(builder, literal);
         } else if (assign.value() instanceof CanonicalLookup read
                 && isScalarLocalRead(read)) {
             builder.emitLoadLocal(currentRootFrameLocals.get(read.name()));
@@ -5857,7 +5856,7 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral literal) {
-            builder.emitLoadConstant(materialize(literal));
+            emitLiteral(builder, literal);
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
@@ -6303,8 +6302,7 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalLiteral literal) {
             Object value = materialize(literal);
-            return (value instanceof ProtosIntegerValue integer
-                    && integer.isSmallForRuntime())
+            return value instanceof ProtosIntegerValue
                     || value instanceof ProtosFloatValue;
         }
         return expression instanceof CanonicalSend send && primitiveResultSend(send);
@@ -6319,10 +6317,9 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         if (expression instanceof CanonicalLiteral literal) {
             Object value = materialize(literal);
-            if (value instanceof ProtosIntegerValue integer
-                    && integer.isSmallForRuntime()) {
+            if (value instanceof ProtosIntegerValue integer) {
                 builder.beginStoreLocal(target);
-                builder.emitLoadConstant(integer.smallValueForRuntime());
+                builder.emitLoadConstant(integer.longValue());
                 builder.endStoreLocal();
                 return;
             }
@@ -7169,6 +7166,23 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
+    }
+
+    /*
+     * I091: a literal is a constant unless it is an Integer outside the signed-64 range, which is
+     * an ordinary guest object minted with the executing Prelude on each evaluation.
+     */
+    private void emitLiteral(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder, CanonicalLiteral literal) {
+        Object constant = materialize(literal);
+        if (constant instanceof java.math.BigInteger large) {
+            builder.beginLargeIntegerLiteral();
+            emitSendCallerOperand(builder);
+            builder.emitLoadConstant(large);
+            builder.endLargeIntegerLiteral();
+            return;
+        }
+        builder.emitLoadConstant(constant);
     }
 
     private static Object materialize(CanonicalLiteral literal) {

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -33,7 +34,6 @@ import com.guillermomolina.protos.execution.ProtosForeignValueFixture.Marker;
 import com.guillermomolina.protos.execution.ProtosForeignValueFixture.TestForeignFailure;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -102,7 +102,7 @@ class ProtosForeignCallbackTest {
     /** Hands a projected callback result back to Protos as the provider's own value. */
     private static Object back(ProtosForeignArgument result) {
         return switch (result.kind()) {
-            case INTEGER -> new Integral((BigInteger) result.value());
+            case INTEGER -> new Integral((BigInteger) ProtosForeignValueFixture.scalar(result));
             case BINARY64 -> new Binary64((Double) result.value());
             case NULL -> Marker.NULL;
             default -> result.value();
@@ -110,7 +110,7 @@ class ProtosForeignCallbackTest {
     }
 
     private static long integer(Object value) {
-        return ((ProtosIntegerValue) value).value().longValueExact();
+        return ProtosTestIntegers.exact(value).longValueExact();
     }
 
     @Test
@@ -213,18 +213,21 @@ class ProtosForeignCallbackTest {
                                 sum =
                                         sum.add(
                                                 (BigInteger)
-                                                        invoke(
+                                                        ProtosForeignValueFixture.scalar(
+                                                                invoke(
                                                                         arguments.get(0),
                                                                         new Integral(
-                                                                                BigInteger.valueOf(i)))
-                                                                .value());
+                                                                                BigInteger.valueOf(i)))));
                             }
                             return new Integral(sum);
                         }
                         return back(
                                 invoke(
                                         arguments.get(0),
-                                        new Integral((BigInteger) arguments.get(1).value())));
+                                        new Integral(
+                                                (BigInteger)
+                                                        ProtosForeignValueFixture.scalar(
+                                                                arguments.get(1)))));
                     };
             assertEquals(12, integer(setup.eval("m.fn((i) => i * 2)")));
             // Each level is a nested foreign call whose callback re-enters the same execution.

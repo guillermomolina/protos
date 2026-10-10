@@ -23,7 +23,6 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,8 +44,8 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(BigInteger.ONE),
-                                    new ProtosIntegerValue(BigInteger.TWO)));
+                                    new ProtosIntegerValue(1L),
+                                    new ProtosIntegerValue(2L)));
             AtomicInteger callbacks = new AtomicInteger();
 
             module.context().createLocalSlot("gate", gate);
@@ -93,8 +92,8 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(BigInteger.ONE),
-                                    new ProtosIntegerValue(BigInteger.TWO)));
+                                    new ProtosIntegerValue(1L),
+                                    new ProtosIntegerValue(2L)));
             AtomicInteger callbacks = new AtomicInteger();
 
             module.context().createLocalSlot("array", array);
@@ -105,7 +104,7 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
                                 callbacks.incrementAndGet();
                                 array.indexedPut(
                                         1,
-                                        new ProtosIntegerValue(BigInteger.valueOf(99)));
+                                        new ProtosIntegerValue(99));
                                 return ProtosNullValue.INSTANCE;
                             }));
 

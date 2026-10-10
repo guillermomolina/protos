@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -73,21 +72,29 @@ public final class ProtosStandardIntegerProtocol {
      * prototype home and the current Prelude.
      */
     enum CanonicalIntegerOperation {
-        ADD("+", false),
-        SUBTRACT("-", false),
-        MULTIPLY("*", false),
-        FLOAT_DIVIDE("/", true),
-        QUOTIENT("div", true),
-        REMAINDER("mod", true);
+        ADD("+", false, ProtosNumericValueSupport.Operation.ADD),
+        SUBTRACT("-", false, ProtosNumericValueSupport.Operation.SUBTRACT),
+        MULTIPLY("*", false, ProtosNumericValueSupport.Operation.MULTIPLY),
+        FLOAT_DIVIDE("/", true, null),
+        QUOTIENT("div", true, ProtosNumericValueSupport.Operation.QUOTIENT),
+        REMAINDER("mod", true, ProtosNumericValueSupport.Operation.REMAINDER);
 
         private final String selector;
         private final boolean requiresNonZeroDivisor;
+        private final ProtosNumericValueSupport.Operation exactOperation;
 
         CanonicalIntegerOperation(
                 String selector,
-                boolean requiresNonZeroDivisor) {
+                boolean requiresNonZeroDivisor,
+                ProtosNumericValueSupport.Operation exactOperation) {
             this.selector = selector;
             this.requiresNonZeroDivisor = requiresNonZeroDivisor;
+            this.exactOperation = exactOperation;
+        }
+
+        /** The exact Integer operation, or null for the Float-valued quotient. */
+        ProtosNumericValueSupport.Operation exactOperation() {
+            return exactOperation;
         }
 
         String selector() {
@@ -179,7 +186,8 @@ public final class ProtosStandardIntegerProtocol {
     static Object tryExecuteCanonicalOperation(
             CanonicalIntegerOperation operation,
             Object receiver,
-            Object[] supplied) {
+            Object[] supplied,
+            ProtosPrelude prelude) {
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(supplied, "supplied");
 
@@ -187,53 +195,65 @@ public final class ProtosStandardIntegerProtocol {
             return null;
         }
         return tryExecuteCanonicalOperationOne(
-                operation, receiver, supplied[0]);
+                operation, receiver, supplied[0], prelude);
     }
 
     /**
      * PERF038-H: fixed-arity canonical Integer Send1.
      * No supplied argument vector or caller activation is needed
      * when the canonical operation accepts these exact operands.
+     *
+     * <p>I091: {@code prelude} owns a result outside the signed-64 range. When it is
+     * null (a fast path without one), such a result answers null so the caller keeps the
+     * ordinary native path, whose activation always supplies the Prelude.
      */
     static Object tryExecuteCanonicalOperationOne(
             CanonicalIntegerOperation operation,
             Object receiver,
-            Object supplied0) {
+            Object supplied0,
+            ProtosPrelude prelude) {
         Objects.requireNonNull(operation, "operation");
 
-        if (!(receiver instanceof ProtosIntegerValue integer)) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(receiver)) {
             return null;
         }
 
         if (supplied0 instanceof ProtosFloatValue floating) {
             return switch (operation) {
                 case ADD, SUBTRACT, MULTIPLY, FLOAT_DIVIDE ->
-                        executeMixedFloatOperation(operation, integer, floating);
+                        executeMixedFloatOperation(operation, receiver, floating);
                 case QUOTIENT, REMAINDER -> null;
             };
         }
 
-        if (!(supplied0 instanceof ProtosIntegerValue argument)
+        if (!ProtosNumericValueSupport.isCurrentInteger(supplied0)
                 || (operation.requiresNonZeroDivisor()
-                        && argument.signumForRuntime() == 0)) {
+                        && ProtosNumericValueSupport.integerSignum(supplied0) == 0)) {
+            return null;
+        }
+        if (prelude == null && operation.exactOperation() != null
+                && ProtosNumericValueSupport.needsPreludeForResult(
+                        operation.exactOperation(), receiver, supplied0)) {
             return null;
         }
 
         return executeValidCanonicalOperation(
-                operation, integer, argument);
+                operation, receiver, supplied0, prelude);
     }
 
     private static Object executeCanonicalWithActivation(
             CanonicalIntegerOperation operation,
             ProtosActivation activation,
             List<?> supplied) {
-        ProtosIntegerValue receiver = requireIntegerReceiver(activation);
+        Object receiver = requireIntegerReceiver(activation);
         if (supplied.size() != 1) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
         }
+        ProtosPrelude prelude = activation.prelude().orElseThrow(
+                () -> new IllegalStateException("Integer arithmetic requires Core prelude"));
         Object result = tryExecuteCanonicalOperationOne(
-                operation, receiver, supplied.get(0));
+                operation, receiver, supplied.get(0), prelude);
         if (result == null) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
@@ -243,24 +263,29 @@ public final class ProtosStandardIntegerProtocol {
 
     private static Object executeValidCanonicalOperation(
             CanonicalIntegerOperation operation,
-            ProtosIntegerValue receiver,
-            ProtosIntegerValue argument) {
+            Object receiver,
+            Object argument,
+            ProtosPrelude prelude) {
         return switch (operation) {
-            case ADD -> receiver.addForRuntime(argument);
-            case SUBTRACT -> receiver.subtractForRuntime(argument);
-            case MULTIPLY -> receiver.multiplyForRuntime(argument);
+            case ADD -> ProtosNumericValueSupport.addIntegers(receiver, argument, prelude);
+            case SUBTRACT ->
+                    ProtosNumericValueSupport.subtractIntegers(receiver, argument, prelude);
+            case MULTIPLY ->
+                    ProtosNumericValueSupport.multiplyIntegers(receiver, argument, prelude);
             case FLOAT_DIVIDE ->
                     new ProtosFloatValue(
                             ProtosBinary64Rounding.divideExactIntegers(
                                     receiver, argument));
-            case QUOTIENT -> receiver.divideForRuntime(argument);
-            case REMAINDER -> receiver.remainderForRuntime(argument);
+            case QUOTIENT ->
+                    ProtosNumericValueSupport.quotientIntegers(receiver, argument, prelude);
+            case REMAINDER ->
+                    ProtosNumericValueSupport.remainderIntegers(receiver, argument, prelude);
         };
     }
 
     private static ProtosFloatValue executeMixedFloatOperation(
             CanonicalIntegerOperation operation,
-            ProtosIntegerValue receiver,
+            Object receiver,
             ProtosFloatValue argument) {
         double left = ProtosStandardNumericConversionProtocol
                 .integerToBinary64(receiver);
@@ -326,11 +351,12 @@ public final class ProtosStandardIntegerProtocol {
         return closure;
     }
 
-    private static ProtosIntegerValue requireIntegerReceiver(
+    private static Object requireIntegerReceiver(
             com.guillermomolina.protos.runtime.ProtosActivation activation) {
-        if (!(activation.receiver() instanceof ProtosIntegerValue integer)) {
+        Object receiver = activation.receiver();
+        if (!ProtosNumericValueSupport.isCurrentInteger(receiver)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-        return integer;
+        return receiver;
     }
 }

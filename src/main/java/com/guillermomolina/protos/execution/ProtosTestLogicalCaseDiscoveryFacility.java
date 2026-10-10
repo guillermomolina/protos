@@ -471,7 +471,7 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
         }
 
         if (ProtosNumericValueSupport.isCurrentInteger(value)) {
-            return ProtosNumericValueSupport.copyCurrentNumberOrNull(value);
+            return ProtosNumericValueSupport.copyCurrentNumberOrNull(value, callerPrelude);
         }
 
         if (value instanceof ProtosArrayValue array) {

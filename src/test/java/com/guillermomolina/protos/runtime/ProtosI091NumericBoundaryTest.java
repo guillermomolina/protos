@@ -37,7 +37,7 @@ final class ProtosI091NumericBoundaryTest {
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
                 new ProtosIntegerValue(1L + Integer.MAX_VALUE)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(80))));
+                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(80))));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(new ProtosFloatValue(1.0)));
         assertFalse(ProtosNumericValueSupport.isIntegerInIntRange(1));
         assertThrows(IllegalArgumentException.class,
@@ -46,7 +46,9 @@ final class ProtosI091NumericBoundaryTest {
 
     @Test
     void unsignedCodecPreservesExactAddressBits() {
-        Object max128 = ProtosNumericValueSupport.integerFromUnsignedBigEndian(filled(16));
+        Object max128 = ProtosNumericValueSupport.integerFromUnsignedBigEndian(
+                filled(16), ProtosObjectValue.rootObject());
+        assertTrue(ProtosNumericValueSupport.isLargeInteger(max128));
         assertTrue(ProtosNumericValueSupport.isUnsignedIntegerWithin(max128, 128));
         assertFalse(ProtosNumericValueSupport.isUnsignedIntegerWithin(max128, 32));
         assertArrayEquals(filled(16),
@@ -60,11 +62,11 @@ final class ProtosI091NumericBoundaryTest {
     void octetIntegersAreSharedValueEqualIntegers() {
         assertSame(ProtosNumericValueSupport.octet(255), ProtosNumericValueSupport.integer(255));
         assertEquals(255L,
-                ((ProtosIntegerValue) ProtosNumericValueSupport.octet(255)).smallValueForRuntime());
+                ((ProtosIntegerValue) ProtosNumericValueSupport.octet(255)).longValue());
         assertTrue(ProtosIdentity.identical(
                 ProtosNumericValueSupport.octet(7), new ProtosIntegerValue(7)));
         assertEquals(256L,
-                ((ProtosIntegerValue) ProtosNumericValueSupport.integer(256)).smallValueForRuntime());
+                ((ProtosIntegerValue) ProtosNumericValueSupport.integer(256)).longValue());
         assertThrows(IllegalArgumentException.class, () -> ProtosNumericValueSupport.octet(256));
     }
 

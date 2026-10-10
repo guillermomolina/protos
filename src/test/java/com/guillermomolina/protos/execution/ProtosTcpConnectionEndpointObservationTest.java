@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -102,7 +101,7 @@ final class ProtosTcpConnectionEndpointObservationTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(bits))),
+                                List.of(integer(4), new ProtosIntegerValue(bits)),
                                 activation);
         Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -120,7 +119,7 @@ final class ProtosTcpConnectionEndpointObservationTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static final class RecordingBackend implements ProtosTcpConnectionFlow.Backend {

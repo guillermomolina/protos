@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -118,7 +119,7 @@ final class ProtosPerf006B6A4OrdinaryNativeFastPathTest {
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
             ProtosIntegerValue result = (ProtosIntegerValue) task.result().orElseThrow();
-            assertEquals(BigInteger.valueOf(3), result.value());
+            assertEquals(BigInteger.valueOf(3), ProtosTestIntegers.exact(result));
         }
 
         System.out.println("PERF006_B6A4_CORE_NATIVE_PROTOCOL=PASS");

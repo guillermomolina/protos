@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -165,7 +166,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
             assertEquals(
                     BigInteger.valueOf(22),
-                    value.value());
+                    ProtosTestIntegers.exact(value));
         }
     }
 
@@ -409,7 +410,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
 
             assertEquals(
                     BigInteger.valueOf(2),
-                    value.value());
+                    ProtosTestIntegers.exact(value));
         }
     }
 

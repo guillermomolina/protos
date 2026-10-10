@@ -22,11 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -85,10 +85,7 @@ final class ProtosInvalidSuperExecutionTest {
                 signal.error().parent().orElseThrow());
         assertEquals(
                 BigInteger.valueOf(12),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                activation.context().readLocalSlot("order").orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(activation.context().readLocalSlot("order").orElseThrow()));
     }
 
     @Test
@@ -128,10 +125,7 @@ final class ProtosInvalidSuperExecutionTest {
                 signal.error().parent().orElseThrow());
         assertEquals(
                 BigInteger.valueOf(125),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                activation.context().readLocalSlot("order").orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(activation.context().readLocalSlot("order").orElseThrow()));
     }
 
     @Test

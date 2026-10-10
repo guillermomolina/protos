@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Denied;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Greeter;
 import com.guillermomolina.protos.execution.ProtosHostJavaFixtureTypes.Lazy;
@@ -33,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -509,7 +509,7 @@ class ProtosHostJavaProviderTest {
     }
 
     private static BigInteger integer(Object value) {
-        return assertInstanceOf(ProtosIntegerValue.class, value).value();
+        return ProtosTestIntegers.exact(value);
     }
 
     private static void assertForeign(Fixture fixture, ProtosObjectValue error) {

@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -103,7 +104,8 @@ public final class ProtosActorBootstrap {
                                     ProtosActorValueTransfer.materializeArguments(
                                             transferredArguments, activation)),
                             activation);
-            if (!(result instanceof ProtosObjectValue behavior)) {
+            if (!(result instanceof ProtosObjectValue behavior)
+                    || ProtosNumericValueSupport.isLargeInteger(result)) {
                 throw bootstrapError(activation);
             }
             actor.bindMessageEnvironmentForRuntime(prelude, canonicalModuleKey);

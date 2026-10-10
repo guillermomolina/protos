@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -156,6 +157,6 @@ final class ProtosPerf025C1ObjectBodyInlineControlTest {
                 () -> "outcome=" + outcome.state() + ", error=" + outcome.error());
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(expected), integer.value());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(integer));
     }
 }

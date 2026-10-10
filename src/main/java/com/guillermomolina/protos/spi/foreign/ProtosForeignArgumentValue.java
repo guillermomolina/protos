@@ -16,14 +16,12 @@
  */
 package com.guillermomolina.protos.spi.foreign;
 
-import java.math.BigInteger;
-
 /**
  * Lossless outbound value Protos passes to a foreign operation (D188).
  *
  * <p>Only Protos Boolean, null, String, Integer, and Float values and handles of the same session
  * cross. {@link #value()} is a {@link Boolean}, {@code null}, a {@link String}, a {@link
- * BigInteger}, a {@link Double}, or the exact handle. Protos callbacks are not passed through
- * this contract.
+ * java.math.BigInteger}, a {@link Double}, or the exact handle. Protos callbacks are not passed
+ * through this contract.
  */
 public record ProtosForeignArgumentValue(ProtosForeignValueClass.Kind kind, Object value) {}

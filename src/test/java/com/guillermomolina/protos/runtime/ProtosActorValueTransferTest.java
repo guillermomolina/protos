@@ -33,7 +33,7 @@ final class ProtosActorValueTransferTest {
     void scalarValuesCopyWhileCanonicalSingletonsRemainCanonical() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
-        ProtosIntegerValue integer = new ProtosIntegerValue(BigInteger.valueOf(42));
+        ProtosIntegerValue integer = new ProtosIntegerValue(42);
         ProtosStringValue string = new ProtosStringValue("snapshot");
         ProtosPathValue path =
                 new ProtosPathValue(
@@ -108,8 +108,8 @@ final class ProtosActorValueTransferTest {
     void bytesSnapshotOwnsIndependentIndexedAndLocalState() throws Exception {
         ProtosActivation source = core().newModuleActivation();
         ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
-        bytes.indexedAdd(new ProtosIntegerValue(BigInteger.ONE));
-        bytes.indexedAdd(new ProtosIntegerValue(BigInteger.TWO));
+        bytes.indexedAdd(new ProtosIntegerValue(1L));
+        bytes.indexedAdd(new ProtosIntegerValue(2L));
         ProtosObjectValue metadata = new ProtosObjectValue(ProtosObjectValue.rootObject());
         bytes.createLocalSlot("metadata", metadata);
 
@@ -117,10 +117,10 @@ final class ProtosActorValueTransferTest {
                 assertInstanceOf(
                         ProtosBytesValue.class,
                         ProtosActorValueTransfer.snapshotValue(bytes, source));
-        bytes.indexedPut(0, new ProtosIntegerValue(BigInteger.valueOf(9)));
+        bytes.indexedPut(0, new ProtosIntegerValue(9));
 
         assertNotSame(bytes, copied);
-        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) copied.indexedAt(0)).value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(copied.indexedAt(0)));
         assertNotSame(metadata, copied.readLocalSlot("metadata").orElseThrow());
     }
 

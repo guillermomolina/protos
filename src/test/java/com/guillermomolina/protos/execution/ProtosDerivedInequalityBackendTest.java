@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
@@ -104,7 +103,7 @@ class ProtosDerivedInequalityBackendTest {
                 "==",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) ->
-                                new ProtosIntegerValue(BigInteger.ONE)));
+                                new ProtosIntegerValue(1L)));
 
         assertThrows(
                 ProtosSignalException.class,

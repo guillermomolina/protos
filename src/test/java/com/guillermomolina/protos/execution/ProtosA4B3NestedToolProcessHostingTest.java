@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -95,7 +96,7 @@ final class ProtosA4B3NestedToolProcessHostingTest {
                                 observation.readLocalSlot("value").orElseThrow());
 
                 assertEquals("completed", state.value());
-                assertEquals(BigInteger.valueOf(42), value.value());
+                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
                 assertEquals(
                         1,
                         runtimeHost.activeProcessContextCountForTesting(),

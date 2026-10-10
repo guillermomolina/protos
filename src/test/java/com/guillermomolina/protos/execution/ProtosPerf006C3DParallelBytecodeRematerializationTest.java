@@ -15,7 +15,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -87,11 +86,8 @@ final class ProtosPerf006C3DParallelBytecodeRematerializationTest {
                 assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
                 assertEquals(
                         BigInteger.valueOf(42),
-                        org.junit.jupiter.api.Assertions
-                                .assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        future.resolvedValue().orElseThrow())
-                                .value());
+                        com.guillermomolina.protos.runtime.ProtosTestIntegers.exact(
+                                future.resolvedValue().orElseThrow()));
 
                 ProtosLanguageContext languageContext =
                         context.currentLanguageContextForTesting();

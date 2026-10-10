@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
 
@@ -25,25 +26,31 @@ class ProtosStandardNumericConversionTest {
     // Deliberately Java-side: this tests the representation helper used by
     // numeric conversion/equality bridges, not observable source-level behavior.
     @Test
-    void exactIntegralBinary64ExtractionUsesActualBinaryValue() {
+    void exactIntegralBinary64ExtractionUsesActualBinaryValue() throws java.io.IOException {
         assertEquals(
                 new BigInteger("99999999999999991611392"),
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1e23).value());
+                ProtosTestIntegers.exact(
+                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                                1e23,
+                                new ProtosCoreBootstrap()
+                                        .bootstrap(java.nio.file.Path.of("protos", "lib", "core")))));
         assertEquals(
                 BigInteger.ZERO,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0.0d).value());
+                ProtosTestIntegers.exact(
+                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0.0d, null)));
         assertEquals(
                 BigInteger.ONE,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.0d).value());
+                ProtosTestIntegers.exact(
+                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.0d, null)));
         assertEquals(
                 null,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.5d));
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.5d, null));
         assertEquals(
                 null,
                 ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
-                        Double.POSITIVE_INFINITY));
+                        Double.POSITIVE_INFINITY, null));
         assertEquals(
                 null,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(Double.NaN));
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(Double.NaN, null));
     }
 }

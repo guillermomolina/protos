@@ -3,6 +3,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -129,7 +130,7 @@ final class ProtosTextIoFinalConformanceTest {
                         readLine(
                                 exact,
                                 activation,
-                                new ProtosIntegerValue(BigInteger.valueOf(2)))));
+                                new ProtosIntegerValue(2))));
 
         ScriptedSource shortSource = new ScriptedSource(activation);
         shortSource.bytes(0xe1, 0x80, '\n');
@@ -138,7 +139,7 @@ final class ProtosTextIoFinalConformanceTest {
                 readLine(
                         shortReader,
                         activation,
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        new ProtosIntegerValue(1L));
         assertEquals(ProtosFutureValue.State.FAILED, tooLong.state());
         assertErrorParent(prelude, tooLong.failedError().orElseThrow(), "LineTooLong");
     }
@@ -173,7 +174,7 @@ final class ProtosTextIoFinalConformanceTest {
                 readLine(
                         bounded,
                         activation,
-                        new ProtosIntegerValue(BigInteger.ONE));
+                        new ProtosIntegerValue(1L));
         assertEquals(ProtosFutureValue.State.FAILED, tooLong.state());
         assertErrorParent(prelude, tooLong.failedError().orElseThrow(), "LineTooLong");
     }
@@ -322,7 +323,7 @@ final class ProtosTextIoFinalConformanceTest {
     private static ProtosBytesValue bytes(ProtosPrelude prelude, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+            bytes.indexedAdd(new ProtosIntegerValue(value & 0xff));
         }
         return bytes;
     }
@@ -389,7 +390,7 @@ final class ProtosTextIoFinalConformanceTest {
             byte[] result = new byte[values.size()];
             for (int index = 0; index < values.size(); index++) {
                 BigInteger value =
-                        assertInstanceOf(ProtosIntegerValue.class, values.get(index)).value();
+                        ProtosTestIntegers.exact(values.get(index));
                 result[index] = (byte) value.intValueExact();
             }
             return result;

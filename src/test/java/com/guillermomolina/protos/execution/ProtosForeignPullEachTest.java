@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -34,7 +35,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -257,15 +257,13 @@ class ProtosForeignPullEachTest {
             fixture.provider.events.clear();
             assertEquals(
                     BigInteger.valueOf(42),
-                    ((ProtosIntegerValue)
-                                    fixture.eval(
+                    ProtosTestIntegers.exact(fixture.eval(
                                             s
                                                     + "f: () => {\n"
                                                     + "    s.each((x) => { log(x)\n ^42 })\n"
                                                     + "    0\n"
                                                     + "}\n"
-                                                    + "f()"))
-                            .value());
+                                                    + "f()")));
             assertEquals(List.of("iterator", "hasNext", "next:0", "block"), pulls(fixture));
             assertNoLeak(fixture);
         }
@@ -278,8 +276,7 @@ class ProtosForeignPullEachTest {
                 fixture(iterable(new Integral(BigInteger.ONE), new Integral(BigInteger.TWO)))) {
             assertEquals(
                     BigInteger.valueOf(30),
-                    ((ProtosIntegerValue)
-                                    fixture.eval(
+                    ProtosTestIntegers.exact(fixture.eval(
                                             M
                                                     + "s: m.seq\n"
                                                     + "total: 0\n"
@@ -287,8 +284,7 @@ class ProtosForeignPullEachTest {
                                                     + "    total = total + (() => x * 10).future().value()\n"
                                                     + "    log(x)\n"
                                                     + "})\n"
-                                                    + "total"))
-                            .value());
+                                                    + "total")));
             assertEquals(
                     List.of("iterator", "hasNext", "next:0", "block", "hasNext", "next:1", "block", "hasNext"),
                     pulls(fixture));

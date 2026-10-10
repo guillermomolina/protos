@@ -8,7 +8,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.file.Path;
@@ -101,8 +101,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
     private static int completedInteger(String source) throws Exception {
         ProtosExecutionOutcome outcome = execute(source);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        return assertInstanceOf(ProtosIntegerValue.class, outcome.value())
-                .value()
+        return ProtosTestIntegers.exact(outcome.value())
                 .intValueExact();
     }
 

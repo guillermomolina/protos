@@ -62,13 +62,10 @@ final class ProtosTcpConnectionFoundationTest {
         assertTrue(connection.localSlotsSnapshot().isEmpty());
         assertSame(resourceState, connection.resourceStateForRuntime());
 
-        connection.createLocalSlot("label", new ProtosIntegerValue(BigInteger.valueOf(7)));
+        connection.createLocalSlot("label", new ProtosIntegerValue(7));
         assertEquals(
                 BigInteger.valueOf(7),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                connection.readLocalSlot("label").orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(connection.readLocalSlot("label").orElseThrow()));
         assertNotSame(connection, new ProtosTcpConnectionValue(prelude, resourceState));
     }
 
@@ -98,7 +95,7 @@ final class ProtosTcpConnectionFoundationTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = prelude.tcpConnectionPrototypeForRuntime();
         ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
-        ordinary.createLocalSlot("payload", new ProtosIntegerValue(BigInteger.valueOf(11)));
+        ordinary.createLocalSlot("payload", new ProtosIntegerValue(11));
         ordinary.freeze();
 
         ProtosObjectValue actorCopy =

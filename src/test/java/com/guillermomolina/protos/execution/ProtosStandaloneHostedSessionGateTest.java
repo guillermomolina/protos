@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -214,7 +214,7 @@ final class ProtosStandaloneHostedSessionGateTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(
                 BigInteger.ZERO,
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
+                ProtosTestIntegers.exact(outcome.value()));
     }
 
     /** One public session operation running on its own named platform thread. */

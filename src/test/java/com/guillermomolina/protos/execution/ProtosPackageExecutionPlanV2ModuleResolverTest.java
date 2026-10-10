@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -453,7 +454,7 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
             ProtosObjectValue module, String slotName, long expected) {
         ProtosIntegerValue value =
                 (ProtosIntegerValue) module.readLocalSlot(slotName).orElseThrow();
-        assertEquals(BigInteger.valueOf(expected), value.value());
+        assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(value));
     }
 
     private static ProtosPackageContentIdentity content(String hex) {

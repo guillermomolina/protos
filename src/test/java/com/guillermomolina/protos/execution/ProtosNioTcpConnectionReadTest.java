@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -31,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -177,15 +177,15 @@ final class ProtosNioTcpConnectionReadTest {
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(
-                                        new ProtosIntegerValue(BigInteger.valueOf(4)),
-                                        new ProtosIntegerValue(BigInteger.valueOf(0x7f000001L))),
+                                        new ProtosIntegerValue(4),
+                                        new ProtosIntegerValue(0x7f000001L)),
                                 activation);
         Object endpointFactory =
                 prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory,
-                        List.of(address, new ProtosIntegerValue(BigInteger.valueOf(port))),
+                        List.of(address, new ProtosIntegerValue(port)),
                         activation);
     }
 
@@ -194,7 +194,7 @@ final class ProtosNioTcpConnectionReadTest {
                 ProtosInvocation.invokeMessage(
                         x.connection,
                         "read",
-                        List.of(new ProtosIntegerValue(BigInteger.valueOf(maxBytes))),
+                        List.of(new ProtosIntegerValue(maxBytes)),
                         x.activation);
     }
 
@@ -203,7 +203,7 @@ final class ProtosNioTcpConnectionReadTest {
                 assertInstanceOf(ProtosBytesValue.class, future.resolvedValue().orElseThrow());
         ArrayList<Integer> result = new ArrayList<>();
         for (Object value : bytes.indexedSnapshot()) {
-            result.add(assertInstanceOf(ProtosIntegerValue.class, value).value().intValueExact());
+            result.add(ProtosTestIntegers.exact(value).intValueExact());
         }
         return result;
     }

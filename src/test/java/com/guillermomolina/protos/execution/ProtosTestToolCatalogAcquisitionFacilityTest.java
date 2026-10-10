@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -30,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -183,7 +183,7 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
                 () ->
                         invoke(
                                 wrongType,
-                                new ProtosIntegerValue(BigInteger.ONE)));
+                                new ProtosIntegerValue(1L)));
     }
 
     private static Fixture fixture(Path cwd) throws Exception {
@@ -223,7 +223,7 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             bytes.indexedAt(index));
-            result[index] = (byte) octet.value().intValueExact();
+            result[index] = (byte) ProtosTestIntegers.exact(octet).intValueExact();
         }
         return result;
     }

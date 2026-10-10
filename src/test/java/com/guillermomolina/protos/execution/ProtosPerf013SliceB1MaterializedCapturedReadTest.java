@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -81,7 +82,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
 
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(42), integer.value());
+                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
             } finally {
                 context.leave();
             }
@@ -158,7 +159,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                  */
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(7), integer.value());
+                assertEquals(BigInteger.valueOf(7), ProtosTestIntegers.exact(integer));
             } finally {
                 context.leave();
             }
@@ -187,7 +188,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
 
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(9), integer.value());
+                assertEquals(BigInteger.valueOf(9), ProtosTestIntegers.exact(integer));
             } finally {
                 context.leave();
             }
@@ -390,7 +391,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
 
                 Object result = root.getCallTarget().call(module);
                 ProtosIntegerValue integer = assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(BigInteger.valueOf(42), integer.value());
+                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(integer));
             } finally {
                 context.leave();
             }

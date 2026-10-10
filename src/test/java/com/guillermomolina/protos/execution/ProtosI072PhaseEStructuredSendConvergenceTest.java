@@ -45,7 +45,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -177,8 +176,8 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
             ProtosArrayValue array =
                     prelude.newArray(
                             List.of(
-                                    new ProtosIntegerValue(BigInteger.ONE),
-                                    new ProtosIntegerValue(BigInteger.TWO)));
+                                    new ProtosIntegerValue(1L),
+                                    new ProtosIntegerValue(2L)));
             ProtosObjectValue overrideResult = new ProtosObjectValue(ProtosObjectValue.rootObject());
             AtomicInteger callbacks = new AtomicInteger();
             AtomicInteger overrideCalls = new AtomicInteger();

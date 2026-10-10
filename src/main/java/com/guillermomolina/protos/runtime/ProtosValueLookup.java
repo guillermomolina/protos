@@ -330,6 +330,12 @@ public final class ProtosValueLookup {
      * representation contract to the owning prelude's Integer prototype.
      */
     public static boolean isInteger(Object receiver) {
+        /*
+         * I091: a large Integer is a FROZEN slotless ordinary object whose parent is its minting
+         * Prelude's Integer prototype. It is never observed outside that Prelude (every
+         * cross-domain path rematerializes it), so its own lookup step is as fixed as the
+         * represented step of a signed-64 Integer.
+         */
         return ProtosNumericValueSupport.isCurrentInteger(receiver);
     }
 
@@ -485,6 +491,9 @@ public final class ProtosValueLookup {
         while (true) {
             if (current instanceof ProtosObjectValue ordinary) {
                 if (stability != null
+                        && !(admitRepresentedReceiverStep
+                                && current == receiver
+                                && ProtosNumericValueSupport.isLargeInteger(current))
                         && !(selectionOnly
                                 ? ordinary.trackSlotSelectionDependency(name, stability)
                                 : ordinary.trackLookupDependency(name, stability))) {

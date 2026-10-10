@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -110,9 +111,9 @@ final class ProtosTestToolResourceAdmissionBindingTest {
 
         assertEquals("gpu", stringAt(observed, 1).value());
         assertEquals("shared", stringAt(observed, 2).value());
-        assertEquals(BigInteger.valueOf(2), integerAt(observed, 3).value());
+        assertEquals(BigInteger.valueOf(2), ProtosTestIntegers.exact(integerAt(observed, 3)));
         assertEquals("gpu", stringAt(observed, 4).value());
-        assertEquals(BigInteger.valueOf(4), integerAt(observed, 5).value());
+        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 5)));
         assertEquals("placement", stringAt(observed, 6).value());
         assertEquals("device/gpu", stringAt(observed, 7).value());
         assertEquals("a100", stringAt(observed, 8).value());

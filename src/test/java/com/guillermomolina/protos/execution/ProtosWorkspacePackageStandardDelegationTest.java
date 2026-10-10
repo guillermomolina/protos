@@ -4,6 +4,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.io.IOException;
@@ -23,7 +24,7 @@ final class ProtosWorkspacePackageStandardDelegationTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, r);
         ProtosObjectValue module = new ProtosModuleRuntime(r).loadCanonicalModule(entry, prelude.newModuleActivation());
         ProtosIntegerValue v=(ProtosIntegerValue)module.readLocalSlot("result").orElseThrow();
-        assertEquals(java.math.BigInteger.valueOf(88),v.value());
+        assertEquals(java.math.BigInteger.valueOf(88),ProtosTestIntegers.exact(v));
         assertEquals("std:probe/Thing",std.specifier);
         assertEquals(Optional.of(entry),std.importer);
         assertEquals(1,std.resolveCalls.get()); assertEquals(1,std.loadCalls.get());

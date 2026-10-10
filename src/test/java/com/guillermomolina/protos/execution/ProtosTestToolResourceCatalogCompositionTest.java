@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -58,7 +59,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
                         + "Array(calls, catalog, path)\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertEquals(BigInteger.ZERO, integerAt(observed, 0).value());
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(integerAt(observed, 0)));
 
         ProtosArrayValue catalog = arrayAt(observed, 1);
         assertEquals(0, catalog.indexedSize());
@@ -104,7 +105,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
                         + "Catalog.entryProfile(entry))\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertEquals(BigInteger.ONE, integerAt(observed, 0).value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(integerAt(observed, 0)));
         assertEquals("catalog.toml", stringAt(observed, 1).value());
 
         ProtosArrayValue catalog = arrayAt(observed, 2);
@@ -112,7 +113,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
         assertTrue(catalog.isFrozen());
 
         assertEquals("gpu", stringAt(observed, 3).value());
-        assertEquals(BigInteger.valueOf(4), integerAt(observed, 4).value());
+        assertEquals(BigInteger.valueOf(4), ProtosTestIntegers.exact(integerAt(observed, 4)));
         assertEquals("placement", stringAt(observed, 5).value());
         assertEquals("device/gpu", stringAt(observed, 6).value());
         assertEquals("a100", stringAt(observed, 7).value());

@@ -155,7 +155,8 @@ final class ProtosForeignProjectedOperations {
                                     handle.session(),
                                     handle.adapter(),
                                     live,
-                                    handle.adapter().readMember(live, handle.target(), name));
+                                    handle.adapter().readMember(live, handle.target(), name),
+                                    prelude);
                         });
         return value == NOT_FAITHFUL ? Optional.empty() : selected(value);
     }
@@ -228,7 +229,8 @@ final class ProtosForeignProjectedOperations {
                             admit(
                                     handle,
                                     live,
-                                    handle.adapter().execute(live, handle.target(), exported)));
+                                    handle.adapter().execute(live, handle.target(), exported),
+                                    prelude));
         } finally {
             outbound.expire();
         }
@@ -252,7 +254,8 @@ final class ProtosForeignProjectedOperations {
                             admit(
                                     handle,
                                     live,
-                                    handle.adapter().readElement(live, handle.target(), index)));
+                                    handle.adapter().readElement(live, handle.target(), index),
+                                    prelude));
         } finally {
             outbound.expire();
         }
@@ -285,9 +288,13 @@ final class ProtosForeignProjectedOperations {
 
     /** D188 admission of one normal provider result under the handle's exact binding. */
     static Object admit(
-            ProtosForeignHandle handle, ProtosForeignProviderSession live, Object foreign)
+            ProtosForeignHandle handle,
+            ProtosForeignProviderSession live,
+            Object foreign,
+            ProtosPrelude prelude)
             throws Exception {
-        return ProtosForeignValueAdmission.admit(handle.session(), handle.adapter(), live, foreign);
+        return ProtosForeignValueAdmission.admit(
+                handle.session(), handle.adapter(), live, foreign, prelude);
     }
 
     /**

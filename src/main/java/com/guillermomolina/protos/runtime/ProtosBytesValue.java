@@ -26,7 +26,7 @@ public final class ProtosBytesValue extends ProtosObjectValue{
   byte[] result=new byte[octets.size()];
   for(int i=0;i<result.length;i++){
    if(!(octets.get(i) instanceof ProtosIntegerValue octet)||!octet.fitsUnsignedBitsForRuntime(Byte.SIZE))throw new IllegalStateException("Bytes invariant violated");
-   result[i]=(byte)octet.smallValueForRuntime();
+   result[i]=(byte)octet.longValue();
   }
   return result;
  }

@@ -20,8 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
@@ -241,10 +241,7 @@ final class ProtosTestToolFileOptionTest {
 
         assertEquals(
                 BigInteger.valueOf(3),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(0))
-                        .value());
+                ProtosTestIntegers.exact(observed.indexedAt(0)));
 
         assertEquals(
                 "catalog.toml",

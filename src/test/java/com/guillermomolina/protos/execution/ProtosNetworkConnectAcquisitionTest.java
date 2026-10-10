@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -289,12 +288,12 @@ final class ProtosNetworkConnectAcquisitionTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         addressFactory,
-                        List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(bits))),
+                        List.of(integer(4), new ProtosIntegerValue(bits)),
                         activation);
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static void assertFailedAs(

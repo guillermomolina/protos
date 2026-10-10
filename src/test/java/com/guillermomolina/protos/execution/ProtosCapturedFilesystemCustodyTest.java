@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
@@ -197,17 +198,14 @@ final class ProtosCapturedFilesystemCustodyTest {
                         ProtosInvocation.invokeMessage(
                                 file,
                                 "read",
-                                List.of(new ProtosIntegerValue(BigInteger.valueOf(4096))),
+                                List.of(new ProtosIntegerValue(4096)),
                                 activation));
         ProtosBytesValue bytes =
                 assertInstanceOf(ProtosBytesValue.class, read.resolvedValue().orElseThrow());
         byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
             BigInteger octet =
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    bytes.indexedAt(index))
-                            .value();
+                    ProtosTestIntegers.exact(bytes.indexedAt(index));
             raw[index] = (byte) octet.intValueExact();
         }
 

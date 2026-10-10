@@ -15,6 +15,7 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;import java.nio.file.Path;import java.util.*;
@@ -26,7 +27,7 @@ class ProtosParallelExecutionTest{
  @Test void closedPublicSurface()throws Exception{var p=core();assertFalse(p.bindings().hasLocalSlot("P"));assertFalse(p.arrayPrototype().hasLocalSlot("parallelEach"));assertTrue(ProtosObjectValue.rootObject().hasLocalSlot("parallel"));for(String n:List.of("parallelMap","parallelFilter","parallelFindIndex","parallelReduce","parallelSort"))assertFalse(p.arrayPrototype().hasLocalSlot(n),n+" is Standard Library policy (D160), not Core Array");}
  @Test void standardPublicationFreezesSharedPrototypesWithoutFreezingChildren()throws Exception{var p=core();assertTrue(ProtosObjectValue.rootObject().isFrozen());assertTrue(p.integerPrototype().isFrozen());ProtosObjectValue child=new ProtosObjectValue(p.integerPrototype());assertFalse(child.isFrozen());child.createLocalSlot("probe",ProtosNullValue.INSTANCE);assertTrue(child.hasLocalSlot("probe"));}
  @Test void executorBounded()throws Exception{core();assertTrue(ProtosParallelRuntime.configuredCarrierLimit()>=2);assertTrue(ProtosParallelRuntime.liveCarrierCountForTesting()<=ProtosParallelRuntime.configuredCarrierLimit());}
- @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();var f=(ProtosFutureValue)evalHosted(h,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(BigInteger.valueOf(42),((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value());}}
+ @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();var f=(ProtosFutureValue)evalHosted(h,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(BigInteger.valueOf(42),ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));}}
 
  @Test void identityMapSnapshotCaptureIsIsolatedFromLaterSourceMutation()throws Exception{
   var p=core();
@@ -41,10 +42,7 @@ class ProtosParallelExecutionTest{
                + "((copy) => copy[1]).parallel(m)"));
    assertEquals(
        BigInteger.valueOf(20),
-       assertInstanceOf(
-           ProtosIntegerValue.class,
-           evalHosted(h,"m[1] = 20"))
-           .value());
+       ProtosTestIntegers.exact(evalHosted(h,"m[1] = 20")));
    while(f.isPending()){
     dispatchHosted(h,d);
     Thread.onSpinWait();
@@ -52,10 +50,7 @@ class ProtosParallelExecutionTest{
    assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
    assertEquals(
        BigInteger.TEN,
-       assertInstanceOf(
-           ProtosIntegerValue.class,
-           f.resolvedValue().orElseThrow())
-           .value());
+       ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));
    dispatchHosted(h,d);
    assertEquals(0,d.liveTaskCount());
   }
@@ -94,14 +89,14 @@ class ProtosParallelExecutionTest{
    var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
     observedPending[0]++;
     assertEquals(ProtosTask.State.RUNNING,current.state());
-    resolve.accept(new ProtosIntegerValue(BigInteger.valueOf(42)));
+    resolve.accept(new ProtosIntegerValue(42));
     assertEquals(ProtosTask.State.RUNNING,current.state());
    }));
    var producer=f.producerTask().orElseThrow();
    dispatchHosted(h,d);
    assertEquals(1,observedPending[0]);
    assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
-   assertEquals(BigInteger.valueOf(42),((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value());
+   assertEquals(BigInteger.valueOf(42),ProtosTestIntegers.exact(f.resolvedValue().orElseThrow()));
    assertEquals(ProtosTask.State.COMPLETED,producer.state());
    assertEquals(0,d.liveTaskCount());
   }
@@ -119,7 +114,7 @@ class ProtosParallelExecutionTest{
    var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
     observedPending[0]++;
     assertTrue(current.requestCancellation());
-    resolve.accept(new ProtosIntegerValue(BigInteger.valueOf(42)));
+    resolve.accept(new ProtosIntegerValue(42));
    }));
    var producer=f.producerTask().orElseThrow();
    dispatchHosted(h,d);

@@ -23,6 +23,13 @@ import java.util.Objects;
 public final class ProtosNumberLiteral {
     private ProtosNumberLiteral() {}
 
+    /**
+     * The value of a number literal: a {@link ProtosFloatValue}, a {@link ProtosIntegerValue}
+     * within the signed-64 range, or, for an Integer literal outside that range, its exact value
+     * as a host {@link BigInteger}. The latter is a lowering-time descriptor, not a guest value:
+     * the large Integer is an ordinary guest object owned by the executing Prelude, so the
+     * executable code mints it when the literal is evaluated (I091 / PLAT056 Candidate C).
+     */
     public static Object materialize(String spelling) {
         Objects.requireNonNull(spelling, "spelling");
         String normalized = spelling.replace("_", "");
@@ -45,20 +52,32 @@ public final class ProtosNumberLiteral {
         }
 
         String digits = normalized.substring(digitsStart);
-        if (digits.length() <= signedLongSafeDigits(radix)) {
-            return new ProtosIntegerValue(Long.parseLong(digits, radix));
+        long exact = parseNonNegativeLong(digits, radix);
+        if (exact >= 0L) {
+            return new ProtosIntegerValue(exact);
         }
-        return new ProtosIntegerValue(new BigInteger(digits, radix));
+        return new BigInteger(digits, radix);
     }
 
-    /** Longest digit run that cannot exceed the signed-long range in the given radix. */
-    private static int signedLongSafeDigits(int radix) {
-        return switch (radix) {
-            case 2 -> 63;
-            case 8 -> 21;
-            case 16 -> 15;
-            default -> 18;
-        };
+    /**
+     * The exact value of a non-empty digit run when it fits the signed-long range, otherwise
+     * -1. Digits are recognized exactly as {@link Long#parseLong(String, int)} recognizes them;
+     * runs that overflow or are not plain digits are left to the arbitrary-precision parser,
+     * which also reports malformed spellings.
+     */
+    private static long parseNonNegativeLong(String digits, int radix) {
+        if (digits.isEmpty()) {
+            return -1L;
+        }
+        long value = 0L;
+        for (int index = 0; index < digits.length(); index++) {
+            int digit = Character.digit(digits.charAt(index), radix);
+            if (digit < 0 || value > (Long.MAX_VALUE - digit) / radix) {
+                return -1L;
+            }
+            value = value * radix + digit;
+        }
+        return value;
     }
 
     private static boolean isFloat(String spelling) {

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -72,7 +73,7 @@ final class ProtosA4B3ModuleProcessHostingTest {
                         assertInstanceOf(
                                 ProtosIntegerValue.class,
                                 module.readLocalSlot("value").orElseThrow());
-                assertEquals(BigInteger.valueOf(42), value.value());
+                assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
                 assertEquals(1, resolver.loads("m"));
                 assertSame(engine, context.engineForTesting());
             } finally {

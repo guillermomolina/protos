@@ -20,9 +20,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedSession;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -194,14 +194,13 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
             assertEquals(
                     expected,
-                    assertInstanceOf(ProtosIntegerValue.class, session.initialOutcome().value())
-                            .value());
+                    ProtosTestIntegers.exact(session.initialOutcome().value()));
             for (int call = 0; call < REPEATS; call++) {
                 ProtosExecutionOutcome outcome = session.invokeTopLevel("run");
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
                 assertEquals(
                         expected,
-                        assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
+                        ProtosTestIntegers.exact(outcome.value()));
             }
         }
     }
@@ -210,7 +209,7 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
+                ProtosTestIntegers.exact(outcome.value()));
     }
 
     private ProtosStandaloneHostedSession open(String source) throws Exception {

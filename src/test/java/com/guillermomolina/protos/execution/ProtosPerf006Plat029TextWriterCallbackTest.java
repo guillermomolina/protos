@@ -10,7 +10,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -69,7 +68,7 @@ final class ProtosPerf006Plat029TextWriterCallbackTest {
             assertEquals(0, f.domain.liveTaskCount());
 
             ProtosIntegerValue gateValue =
-                    new ProtosIntegerValue(BigInteger.valueOf(7));
+                    new ProtosIntegerValue(7);
             assertTrue(gate.resolve(gateValue, f.module));
             assertEquals(
                     1,

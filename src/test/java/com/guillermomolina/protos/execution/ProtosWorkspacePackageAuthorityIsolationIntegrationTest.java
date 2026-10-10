@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -82,7 +83,7 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue value = (ProtosIntegerValue) outcome.value();
-        assertEquals(BigInteger.valueOf(73), value.value());
+        assertEquals(BigInteger.valueOf(73), ProtosTestIntegers.exact(value));
 
         ProtosProcessRuntime tool = toolProcess.get();
         ProtosProcessRuntime application = applicationProcess.get();

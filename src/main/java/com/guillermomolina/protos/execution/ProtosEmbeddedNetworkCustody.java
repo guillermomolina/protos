@@ -54,6 +54,7 @@ final class ProtosEmbeddedNetworkCustody
     private static final ProtosNetworkListenFlow.Cancellation NO_LISTEN_CANCELLATION = () -> {};
 
     private final ProtosObjectValue addressPrototype;
+    private final ProtosObjectValue integerPrototype;
     private final ProtosObjectValue endpointPrototype;
     private final HostFactory hostFactory;
     /* Guarded by this. */
@@ -70,6 +71,7 @@ final class ProtosEmbeddedNetworkCustody
         Objects.requireNonNull(prelude, "prelude");
         // Fails bootstrap explicitly when the Prelude does not retain the canonical families.
         this.addressPrototype = prelude.ipAddressPrototypeForRuntime();
+        this.integerPrototype = prelude.integerPrototype();
         this.endpointPrototype = prelude.ipEndpointPrototypeForRuntime();
         this.hostFactory = Objects.requireNonNull(hostFactory, "hostFactory");
     }
@@ -119,7 +121,7 @@ final class ProtosEmbeddedNetworkCustody
             }
             host = opened;
             activations++;
-            backend = opened.backend(addressPrototype, endpointPrototype);
+            backend = opened.backend(addressPrototype, endpointPrototype, integerPrototype);
         }
         return backend;
     }

@@ -25,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -54,8 +53,7 @@ final class ProtosTestToolI8D4C2ResourcefulInspectionFacilityTest {
                                 new ProtosTestResourceProviderLease(
                                         Map.of(
                                                 "gpu",
-                                                new ProtosIntegerValue(
-                                                        BigInteger.valueOf(42))),
+                                                new ProtosIntegerValue(42)),
                                         () -> {
                                             cleanupCalls.incrementAndGet();
                                             return CompletableFuture.completedFuture(null);

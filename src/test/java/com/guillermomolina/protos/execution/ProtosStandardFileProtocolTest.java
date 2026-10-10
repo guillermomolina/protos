@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -17,7 +18,7 @@ class ProtosStandardFileProtocolTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... octets) {
@@ -95,9 +96,7 @@ class ProtosStandardFileProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue)
-                                positionAfterRead.resolvedValue().orElseThrow())
-                        .value());
+                ProtosTestIntegers.exact(positionAfterRead.resolvedValue().orElseThrow()));
 
         ProtosFutureValue write =
                 (ProtosFutureValue)
@@ -118,7 +117,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.valueOf(5),
-                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -139,7 +138,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.ZERO,
-                ((ProtosIntegerValue) zero.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(zero.resolvedValue().orElseThrow()));
 
         ProtosFutureValue write =
                 (ProtosFutureValue)
@@ -159,7 +158,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) two.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(two.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -172,7 +171,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "seek", List.of(integer(10)), fixture.activation);
         assertEquals(
                 BigInteger.TEN,
-                ((ProtosIntegerValue) seek.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(seek.resolvedValue().orElseThrow()));
 
         ProtosFutureValue invalidRelative =
                 (ProtosFutureValue)
@@ -187,7 +186,7 @@ class ProtosStandardFileProtocolTest {
         fixture.resource.endCompletions.remove().succeeded(6);
         assertEquals(
                 BigInteger.valueOf(6),
-                ((ProtosIntegerValue) end.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(end.resolvedValue().orElseThrow()));
 
         ProtosFutureValue size =
                 (ProtosFutureValue)
@@ -196,7 +195,7 @@ class ProtosStandardFileProtocolTest {
         fixture.resource.sizeCompletions.remove().succeeded(20);
         assertEquals(
                 BigInteger.valueOf(20),
-                ((ProtosIntegerValue) size.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(size.resolvedValue().orElseThrow()));
 
         ProtosFutureValue truncate =
                 (ProtosFutureValue)
@@ -213,7 +212,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.valueOf(6),
-                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
 
         ProtosFutureValue sync =
                 (ProtosFutureValue)
@@ -247,7 +246,7 @@ class ProtosStandardFileProtocolTest {
         fixture.resource.endCompletions.remove().succeeded(6);
         assertEquals(
                 BigInteger.valueOf(6),
-                ((ProtosIntegerValue) end.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(end.resolvedValue().orElseThrow()));
 
         // The write uses the File's own logical position; it does not re-select the end.
         assertEquals(6L, fixture.resource.writePositions.remove());
@@ -263,7 +262,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.valueOf(8),
-                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
     }
 
     @Test
@@ -325,7 +324,7 @@ class ProtosStandardFileProtocolTest {
                                 fixture.file, "position", List.of(), fixture.activation);
         assertEquals(
                 BigInteger.ZERO,
-                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
     }
 
     private record Fixture(

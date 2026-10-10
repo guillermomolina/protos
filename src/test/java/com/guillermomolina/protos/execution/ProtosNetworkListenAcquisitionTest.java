@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
@@ -25,7 +26,7 @@ final class ProtosNetworkListenAcquisitionTest {
         invocation.completion.succeeded(new Object(),51000,listenerBackend,release::incrementAndGet);
         ProtosTcpListenerValue listener=assertInstanceOf(ProtosTcpListenerValue.class,future.resolvedValue().orElseThrow());
         assertEquals(0,release.get()); assertTrue(listener.hasAcceptForRuntime());
-        assertEquals(BigInteger.valueOf(51000),assertInstanceOf(ProtosIntegerValue.class,ProtosInvocation.invokeMessage(listener,"localPort",List.of(),x.activation)).value());
+        assertEquals(BigInteger.valueOf(51000),ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(listener,"localPort",List.of(),x.activation)));
         ProtosFutureValue accept=assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(listener,"accept",List.of(),x.activation));
         assertEquals(ProtosFutureValue.State.PENDING,accept.state()); assertEquals(1,listenerBackend.accepts.size());
     }
@@ -98,8 +99,8 @@ final class ProtosNetworkListenAcquisitionTest {
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue request(Object version,Object address,Object port){ ProtosObjectValue r=new ProtosObjectValue(ProtosObjectValue.rootObject()); r.createLocalSlot("ipVersion",version); r.createLocalSlot("address",address); r.createLocalSlot("port",port); return r; }
     private static ProtosObjectValue ipAddress(Fixture x,int version,long bits){ return ipAddress(x,version,BigInteger.valueOf(bits)); }
-    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),new ProtosIntegerValue(bits)),x.activation); }
-    private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(BigInteger.valueOf(v)); }
+    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),ProtosTestIntegers.integer(bits,x.prelude)),x.activation); }
+    private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(v); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 
     private record Fixture(ProtosPrelude prelude,ProtosActivation activation,RecordingNetworkBackend backend,ProtosNetworkCapabilityValue network) {}

@@ -22,12 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -223,10 +223,7 @@ final class ProtosTestToolManifestPlanTest {
                         .value());
         assertEquals(
                 2,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(4))
-                        .value()
+                ProtosTestIntegers.exact(observed.indexedAt(4))
                         .intValueExact());
         assertEquals(
                 "db/integration",
@@ -415,10 +412,7 @@ invalidFixture.activation());
                         .value());
         assertEquals(
                 2,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(4))
-                        .value()
+                ProtosTestIntegers.exact(observed.indexedAt(4))
                         .intValueExact());
         assertEquals(
                 "db/integration",
@@ -506,17 +500,11 @@ fixture.activation());
         assertEquals(2, sizes.indexedSize());
         assertEquals(
                 1,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                sizes.indexedAt(0))
-                        .value()
+                ProtosTestIntegers.exact(sizes.indexedAt(0))
                         .intValueExact());
         assertEquals(
                 1,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                sizes.indexedAt(1))
-                        .value()
+                ProtosTestIntegers.exact(sizes.indexedAt(1))
                         .intValueExact());
     }
 
@@ -554,8 +542,7 @@ fixture.activation());
 
             assertEquals(
                     rowCount,
-                    assertInstanceOf(ProtosIntegerValue.class, result)
-                            .value()
+                    ProtosTestIntegers.exact(result)
                             .intValueExact());
         }
     }
@@ -649,8 +636,7 @@ fixture.activation());
 
             assertEquals(
                     3,
-                    assertInstanceOf(ProtosIntegerValue.class, result)
-                            .value()
+                    ProtosTestIntegers.exact(result)
                             .intValueExact());
         }
     }
@@ -756,10 +742,7 @@ fixture.activation());
             assertEquals(13, observed.indexedSize());
             assertEquals(
                     3,
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    observed.indexedAt(0))
-                            .value()
+                    ProtosTestIntegers.exact(observed.indexedAt(0))
                             .intValueExact());
             assertEquals("ns/keep.protos", stringAt(observed, 1));
             assertEquals("keep.protos", stringAt(observed, 2));
@@ -842,10 +825,7 @@ fixture.activation());
         assertEquals(7, observed.indexedSize());
         assertEquals(
                 6,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(0))
-                        .value()
+                ProtosTestIntegers.exact(observed.indexedAt(0))
                         .intValueExact());
         assertEquals("sample.protos", stringAt(observed, 1));
         assertEquals("sample.protos", stringAt(observed, 2));
@@ -896,10 +876,7 @@ fixture.activation());
             assertEquals(9, observed.indexedSize());
             assertEquals(
                     3,
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    observed.indexedAt(0))
-                            .value()
+                    ProtosTestIntegers.exact(observed.indexedAt(0))
                             .intValueExact());
             assertEquals("ns/root-only/build-current.protos", stringAt(observed, 1));
             assertEquals("fixtures/build-current.protos", stringAt(observed, 2));
@@ -940,17 +917,11 @@ fixture.activation());
         assertEquals(4, observed.indexedSize());
         assertEquals(
                 6,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(0))
-                        .value()
+                ProtosTestIntegers.exact(observed.indexedAt(0))
                         .intValueExact());
         assertEquals(
                 1,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                observed.indexedAt(1))
-                        .value()
+                ProtosTestIntegers.exact(observed.indexedAt(1))
                         .intValueExact());
         assertEquals("project-tree", stringAt(observed, 2));
         assertEquals("workspace", stringAt(observed, 3));
@@ -1006,10 +977,7 @@ fixture.activation());
                 assertEquals(2, observed.indexedSize());
                 assertEquals(
                         expectedCounts[index],
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        observed.indexedAt(0))
-                                .value()
+                        ProtosTestIntegers.exact(observed.indexedAt(0))
                                 .intValueExact());
                 assertSame(
                         ProtosBooleanValue.TRUE,

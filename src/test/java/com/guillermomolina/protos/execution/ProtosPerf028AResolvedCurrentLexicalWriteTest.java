@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -665,7 +666,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
             return bigInteger.longValueExact();
         }
         if (value instanceof ProtosIntegerValue integerValue) {
-            return integerValue.value().longValueExact();
+            return ProtosTestIntegers.exact(integerValue).longValueExact();
         }
         throw new AssertionError("expected a Protos integer result, got: " + value);
     }

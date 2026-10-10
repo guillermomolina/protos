@@ -35,7 +35,7 @@ class ProtosFilesystemTransferTest {
         for (ProtosObjectValue capability :
                 List.of(new ProtosFileValue(), new ProtosFilesystemValue())) {
             ProtosObjectValue descendant = new ProtosObjectValue(capability);
-            descendant.createLocalSlot("ordinaryData", new ProtosIntegerValue(java.math.BigInteger.ONE));
+            descendant.createLocalSlot("ordinaryData", new ProtosIntegerValue(1L));
 
             ProtosSignalException signal =
                     assertThrows(

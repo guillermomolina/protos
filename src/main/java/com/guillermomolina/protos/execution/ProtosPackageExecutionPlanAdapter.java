@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -61,7 +61,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         ProtosObjectValue plan = requireObject(rawPlan, "plan");
         requireExactFields(plan, PLAN_FIELDS, "plan");
 
-        int generation = requireInteger(plan, "generation").intValueExactForRuntime();
+        int generation = requireIntInteger(plan, "generation");
         if (generation != 1) {
             throw new IOException("unsupported PackageExecutionPlan generation");
         }
@@ -242,13 +242,23 @@ public final class ProtosPackageExecutionPlanAdapter {
         return map;
     }
 
-    static ProtosIntegerValue requireInteger(ProtosObjectValue object, String name)
+    /** The exact semantic Integer field {@code name}. */
+    static Object requireInteger(ProtosObjectValue object, String name)
             throws IOException {
         Object value = requireField(object, name);
-        if (!(value instanceof ProtosIntegerValue integer)) {
+        if (!ProtosNumericValueSupport.isCurrentInteger(value)) {
             throw new IOException(name + " is not an Integer");
         }
-        return integer;
+        return value;
+    }
+
+    /** The exact {@code int} Integer field {@code name}. */
+    static int requireIntInteger(ProtosObjectValue object, String name) throws IOException {
+        Object value = requireInteger(object, name);
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(value)) {
+            throw new IOException(name + " is not an int Integer");
+        }
+        return ProtosNumericValueSupport.exactInt(value);
     }
 
     static String requireString(Object value, String label)

@@ -39,7 +39,6 @@ import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
@@ -166,7 +165,7 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static void assertNonTransferable(ProtosPrelude prelude, ThrowingAction action) {

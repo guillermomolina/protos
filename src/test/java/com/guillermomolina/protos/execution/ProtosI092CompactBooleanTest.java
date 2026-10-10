@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -119,6 +119,6 @@ final class ProtosI092CompactBooleanTest {
     private static void assertInteger(long expected, Object value) {
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                ProtosTestIntegers.exact(value));
     }
 }

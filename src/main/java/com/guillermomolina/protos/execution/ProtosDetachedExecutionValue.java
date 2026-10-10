@@ -111,7 +111,7 @@ public final class ProtosDetachedExecutionValue {
                 return remember(value, value);
             }
             Object copiedNumber =
-                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value);
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value, prelude);
             if (copiedNumber != null) {
                 return remember(value, copiedNumber);
             }
@@ -172,6 +172,7 @@ public final class ProtosDetachedExecutionValue {
                 return;
             }
             if (!(value instanceof ProtosObjectValue source)
+                    || ProtosNumericValueSupport.isLargeInteger(value)
                     || isSharedStandardObject(source)
                     || nonTransferableRuntimeValue(value)) {
                 populated.add(value);

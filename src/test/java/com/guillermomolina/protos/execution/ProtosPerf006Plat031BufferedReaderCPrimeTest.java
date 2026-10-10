@@ -3,6 +3,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -345,7 +346,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(BigInteger.valueOf(value)));
+                    new ProtosIntegerValue(value));
         }
         return bytes;
     }
@@ -357,10 +358,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
         for (int index = 0; index < expected.length; index++) {
             assertEquals(
                     BigInteger.valueOf(expected[index]),
-                    assertInstanceOf(
-                                    ProtosIntegerValue.class,
-                                    bytes.indexedAt(index))
-                            .value());
+                    ProtosTestIntegers.exact(bytes.indexedAt(index)));
         }
     }
 

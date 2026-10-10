@@ -30,7 +30,6 @@ import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -413,14 +412,14 @@ final class ProtosI026FDapBehaviorTest {
         ProtosObjectValue context = new ProtosObjectValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("text", new ProtosStringValue("hello"));
         context.createLocalSlot("flag", ProtosBooleanValue.TRUE);
-        context.createLocalSlot("number", new ProtosIntegerValue(BigInteger.valueOf(42)));
+        context.createLocalSlot("number", new ProtosIntegerValue(42));
         context.createLocalSlot(
                 "array",
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
                         List.of(
                                 new ProtosStringValue("first"),
-                                new ProtosIntegerValue(BigInteger.valueOf(7)))));
+                                new ProtosIntegerValue(7))));
         return new ProtosActivation(context, List.of(), context);
     }
 

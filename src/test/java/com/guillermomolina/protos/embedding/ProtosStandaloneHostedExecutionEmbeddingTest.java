@@ -20,11 +20,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -92,7 +92,7 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             assertEquals(
                     BigInteger.valueOf(42),
-                    assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
+                    ProtosTestIntegers.exact(outcome.value()));
         }
     }
 
@@ -147,6 +147,6 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(
-                expected, assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
+                expected, ProtosTestIntegers.exact(outcome.value()));
     }
 }

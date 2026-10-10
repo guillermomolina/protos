@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -82,11 +83,8 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         assertEquals(0, listenerRelease.get());
         assertEquals(
                 BigInteger.valueOf(51000),
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                ProtosInvocation.invokeMessage(
-                                        listener, "localPort", List.of(), x.activation))
-                        .value());
+                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(
+                                        listener, "localPort", List.of(), x.activation)));
 
         ProtosIntegerValue marker = integer(7);
         listener.createLocalSlot("label", marker);
@@ -230,7 +228,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
-                                List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(bits))),
+                                List.of(integer(4), new ProtosIntegerValue(bits)),
                                 x.activation);
         Object endpointFactory = x.prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
@@ -239,7 +237,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static void assertEndpointEquals(Fixture x, Object actual, Object expected) {

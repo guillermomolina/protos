@@ -4,7 +4,6 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
@@ -87,7 +86,7 @@ class ProtosByteIoFirstEffectGateTest {
     private static ProtosBytesValue bytes(ProtosObjectValue prototype, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prototype);
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value)));
+            bytes.indexedAdd(new ProtosIntegerValue(value));
         }
         return bytes;
     }

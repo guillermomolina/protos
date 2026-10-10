@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -149,7 +150,7 @@ final class ProtosParallelPolyglotContextRoutingTest {
                         ProtosClosureValue.nativeClosure(
                                 (activation, arguments) -> {
                                     nestedContext.set(ProtosLanguageContext.current());
-                                    return new ProtosIntegerValue(BigInteger.valueOf(73));
+                                    return new ProtosIntegerValue(73);
                                 }));
 
         ProtosFutureValue result =
@@ -166,7 +167,7 @@ final class ProtosParallelPolyglotContextRoutingTest {
         assertSame(expected, nestedContext.get(), "nested P must inherit the same Process placement");
         assertEquals(
                 BigInteger.valueOf(73),
-                ((ProtosIntegerValue) result.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(result.resolvedValue().orElseThrow()));
     }
 
     private static Object eval(

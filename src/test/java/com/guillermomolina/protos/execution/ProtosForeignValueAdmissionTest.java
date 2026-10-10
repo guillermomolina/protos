@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -33,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
@@ -83,7 +83,7 @@ class ProtosForeignValueAdmissionTest {
                     assertInstanceOf(ProtosStringValue.class, fixture.eval(M + "m.text")).value());
             assertEquals(
                     big,
-                    assertInstanceOf(ProtosIntegerValue.class, fixture.eval(M + "m.big")).value());
+                    ProtosTestIntegers.exact(fixture.eval(M + "m.big")));
             assertEquals(
                     0.1,
                     assertInstanceOf(ProtosFloatValue.class, fixture.eval(M + "m.dbl")).value());
@@ -138,12 +138,10 @@ class ProtosForeignValueAdmissionTest {
             // Host equals/hashCode of the doubles are total; none of it may be imported.
             assertEquals(
                     BigInteger.TWO,
-                    ((ProtosIntegerValue)
-                                    fixture.eval(
+                    ProtosTestIntegers.exact(fixture.eval(
                                             M
                                                     + "mp: Map()\nmp[m.unstable] = 1\n"
-                                                    + "mp[m.unstable] = 2\nmp.size()"))
-                            .value());
+                                                    + "mp[m.unstable] = 2\nmp.size()")));
             assertSame(
                     ProtosBooleanValue.TRUE,
                     fixture.eval(M + "mp: Map()\nmp[m.stable] = 1\nmp.containsKey(m.stable)"));
@@ -188,17 +186,15 @@ class ProtosForeignValueAdmissionTest {
             }
             assertEquals(
                     BigInteger.TEN,
-                    ((ProtosIntegerValue)
-                                    ProtosActorValueTransfer.snapshotValue(
-                                            scalar, fixture.activation()))
-                            .value());
+                    ProtosTestIntegers.exact(ProtosActorValueTransfer.snapshotValue(
+                                            scalar, fixture.activation())));
 
             for (Object value : List.of(raw, facade, projectedCall, holder)) {
                 assertEquals("NonParallel", parallelCopyFailure(value, fixture));
             }
             assertEquals(
                     BigInteger.TEN,
-                    ((ProtosIntegerValue) parallelCopy(scalar, fixture)).value());
+                    ProtosTestIntegers.exact(parallelCopy(scalar, fixture)));
             // The facade still owns its foreign state after the rejected transfers.
             assertSame(
                     root,

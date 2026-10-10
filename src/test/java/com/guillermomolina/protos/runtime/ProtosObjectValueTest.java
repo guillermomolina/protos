@@ -50,7 +50,7 @@ class ProtosObjectValueTest {
     void anyProtosValueMayBeADelegationParent() {
         ProtosObjectValue stringChild = new ProtosObjectValue(new ProtosStringValue("parent"));
         ProtosObjectValue numberChild =
-                new ProtosObjectValue(new ProtosIntegerValue(java.math.BigInteger.valueOf(42)));
+                new ProtosObjectValue(new ProtosIntegerValue(42));
         ProtosObjectValue booleanChild = new ProtosObjectValue(ProtosBooleanValue.TRUE);
         ProtosObjectValue nullChild = new ProtosObjectValue(ProtosNullValue.INSTANCE);
 

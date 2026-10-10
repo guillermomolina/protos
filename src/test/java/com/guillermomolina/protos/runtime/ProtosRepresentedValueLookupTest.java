@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -59,7 +58,7 @@ class ProtosRepresentedValueLookupTest {
 
         ProtosSlotLookupResult integerSelected =
                 ProtosValueLookup.lookup(
-                                new ProtosIntegerValue(BigInteger.valueOf(42)),
+                                new ProtosIntegerValue(42),
                                 "call",
                                 prelude)
                         .orElseThrow();

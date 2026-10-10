@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -380,10 +380,6 @@ final class ProtosCommandLineResultModelTest {
     }
 
     private static BigInteger integerSlot(ProtosObjectValue object, String name) {
-        return assertInstanceOf(
-                        ProtosIntegerValue.class,
-                        object.localSlotsSnapshot().get(name),
-                        name)
-                .value();
+        return ProtosTestIntegers.exact(object.localSlotsSnapshot().get(name));
     }
 }

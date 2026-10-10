@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -299,7 +300,7 @@ class ProtosMapMatchProtocolTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.ONE, first.value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(first));
 
         ProtosArrayValue nested =
                 assertInstanceOf(
@@ -349,7 +350,7 @@ class ProtosMapMatchProtocolTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         captures.indexedAt(0));
-        assertEquals(BigInteger.ONE, captured.value());
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(captured));
     }
 
     @Test

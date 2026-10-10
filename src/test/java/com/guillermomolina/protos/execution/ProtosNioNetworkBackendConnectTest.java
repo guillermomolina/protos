@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -305,8 +306,8 @@ final class ProtosNioNetworkBackendConnectTest {
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(
-                                        new ProtosIntegerValue(BigInteger.valueOf(version)),
-                                        new ProtosIntegerValue(bits)),
+                                        new ProtosIntegerValue(version),
+                                        ProtosTestIntegers.integer(bits, prelude)),
                                 activation);
         Object endpointFactory =
                 prelude.ipEndpointPrototypeForRuntime();
@@ -315,7 +316,7 @@ final class ProtosNioNetworkBackendConnectTest {
                         endpointFactory,
                         List.of(
                                 address,
-                                new ProtosIntegerValue(BigInteger.valueOf(port))),
+                                new ProtosIntegerValue(port)),
                         activation);
     }
 

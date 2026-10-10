@@ -32,7 +32,8 @@ public final class ProtosStandardHashSupport {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            return ProtosCurrentNumericRelations.normalHash(receiver);
+                            return ProtosCurrentNumericRelations.normalHash(
+                                    receiver, activation.prelude().orElse(null));
                         }));
     }
  }

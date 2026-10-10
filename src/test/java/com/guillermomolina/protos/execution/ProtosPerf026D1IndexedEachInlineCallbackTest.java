@@ -24,13 +24,13 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -771,7 +771,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
     private static void assertInteger(long expected, Object value) {
         assertEquals(
                 BigInteger.valueOf(expected),
-                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                ProtosTestIntegers.exact(value));
     }
 
     private static int rootTags(BytecodeNode bytecodeNode) {

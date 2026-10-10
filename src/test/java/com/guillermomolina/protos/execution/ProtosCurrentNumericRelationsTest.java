@@ -21,16 +21,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+import java.io.IOException;
 import java.math.BigInteger;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 final class ProtosCurrentNumericRelationsTest {
 
     @Test
     void equalityUsesExactMathematicalValue() {
-        ProtosIntegerValue beyond =
-                new ProtosIntegerValue(
-                        BigInteger.ONE.shiftLeft(53).add(BigInteger.ONE));
+        ProtosIntegerValue beyond = new ProtosIntegerValue((1L << 53) + 1L);
         ProtosFloatValue rounded =
                 new ProtosFloatValue((double) (1L << 53));
 
@@ -46,8 +48,8 @@ final class ProtosCurrentNumericRelationsTest {
                 floating, integer));
 
         assertEquals(
-                ProtosCurrentNumericRelations.normalHash(integer).value(),
-                ProtosCurrentNumericRelations.normalHash(floating).value());
+                hash(integer, null),
+                hash(floating, null));
     }
 
     @Test
@@ -60,12 +62,8 @@ final class ProtosCurrentNumericRelationsTest {
                 positive, negative));
         assertFalse(ProtosCurrentNumericRelations.numericEquals(nan, nan));
 
-        assertEquals(
-                ProtosCurrentNumericRelations.normalHash(positive).value(),
-                ProtosCurrentNumericRelations.normalHash(negative).value());
-        assertEquals(
-                BigInteger.valueOf(2146959360L),
-                ProtosCurrentNumericRelations.normalHash(nan).value());
+        assertEquals(hash(positive, null), hash(negative, null));
+        assertEquals(BigInteger.valueOf(2146959360L), hash(nan, null));
 
         assertEquals(
                 ProtosStandardNumberOrderingProtocol.Comparison.UNORDERED,
@@ -73,7 +71,8 @@ final class ProtosCurrentNumericRelationsTest {
     }
 
     @Test
-    void orderingIsExactAcrossBinary64Boundaries() {
+    void orderingIsExactAcrossBinary64Boundaries() throws IOException {
+        ProtosPrelude prelude = corePrelude();
         ProtosIntegerValue max =
                 new ProtosIntegerValue(Long.MAX_VALUE);
         ProtosFloatValue rounded =
@@ -87,8 +86,7 @@ final class ProtosCurrentNumericRelationsTest {
                 ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
                 ProtosStandardNumberOrderingProtocol.compare(rounded, max));
 
-        ProtosIntegerValue huge =
-                new ProtosIntegerValue(BigInteger.ONE.shiftLeft(130));
+        Object huge = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(130), prelude);
 
         assertEquals(
                 ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
@@ -100,9 +98,42 @@ final class ProtosCurrentNumericRelationsTest {
                 new ProtosFloatValue(Math.scalb(1.0, 130));
 
         assertTrue(ProtosCurrentNumericRelations.numericEquals(huge, exact));
-        assertEquals(
-                ProtosCurrentNumericRelations.normalHash(huge).value(),
-                ProtosCurrentNumericRelations.normalHash(exact).value());
+        assertEquals(hash(huge, prelude), hash(exact, prelude));
+        assertSame(huge, ProtosCurrentNumericRelations.normalHash(huge, prelude));
+    }
+
+    @Test
+    void floatOrderingAgainstBigIntegersIsExactOnBothSidesOfTheLongRange() {
+        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        Object belowMinLong =
+                ProtosTestIntegers.integer(
+                        BigInteger.ONE.shiftLeft(63).negate().subtract(BigInteger.ONE));
+        Object twoPow70Plus1 =
+                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70).add(BigInteger.ONE));
+
+        assertTrue(ProtosCurrentNumericRelations.numericEquals(
+                twoPow63, new ProtosFloatValue(0x1p63)));
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.LESS,
+                new ProtosFloatValue(0x1.fffffffffffffp62), twoPow63);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
+                new ProtosFloatValue(-0x1p63), belowMinLong);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
+                new ProtosFloatValue(-0.0), belowMinLong);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.LESS,
+                new ProtosFloatValue(0x1p70), twoPow70Plus1);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.GREATER,
+                new ProtosFloatValue(0x1.0000000000001p70), twoPow70Plus1);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.LESS,
+                new ProtosFloatValue(-0x1p70), belowMinLong);
+        assertComparison(ProtosStandardNumberOrderingProtocol.Comparison.UNORDERED,
+                new ProtosFloatValue(Double.NaN), twoPow63);
+    }
+
+    private static void assertComparison(
+            ProtosStandardNumberOrderingProtocol.Comparison expected,
+            ProtosFloatValue floating,
+            Object integer) {
+        assertEquals(expected, ProtosStandardNumberOrderingProtocol.compare(floating, integer));
     }
 
     @Test
@@ -114,6 +145,14 @@ final class ProtosCurrentNumericRelationsTest {
 
         assertThrows(
                 IllegalArgumentException.class,
-                () -> ProtosCurrentNumericRelations.normalHash(BigInteger.ONE));
+                () -> ProtosCurrentNumericRelations.normalHash(BigInteger.ONE, null));
+    }
+
+    private static BigInteger hash(Object number, ProtosPrelude prelude) {
+        return ProtosTestIntegers.exact(ProtosCurrentNumericRelations.normalHash(number, prelude));
+    }
+
+    private static ProtosPrelude corePrelude() throws IOException {
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 }

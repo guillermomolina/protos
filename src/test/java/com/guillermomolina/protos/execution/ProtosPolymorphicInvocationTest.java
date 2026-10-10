@@ -22,9 +22,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -109,7 +109,7 @@ class ProtosPolymorphicInvocationTest {
 
         assertEquals(
                 BigInteger.valueOf(99),
-                assertInstanceOf(ProtosIntegerValue.class, result).value());
+                ProtosTestIntegers.exact(result));
     }
 
     private static Object execute(ProtosPrelude prelude, String source) {

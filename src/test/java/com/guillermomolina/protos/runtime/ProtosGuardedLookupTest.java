@@ -780,7 +780,7 @@ final class ProtosGuardedLookupTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     /** PERF016: admission is by representation family, never by value or identity. */
@@ -789,7 +789,7 @@ final class ProtosGuardedLookupTest {
         var prelude = corePrelude();
         var first = integer(3);
         var second = integer(3);
-        var huge = new ProtosIntegerValue(BigInteger.TWO.pow(200));
+        var huge = ProtosTestIntegers.integer(BigInteger.TWO.pow(200), prelude);
         for (Object receiver : new Object[] {first, second, huge}) {
             assertTrue(ProtosValueLookup.isInteger(receiver));
             assertNotNull(ProtosValueLookup.lookupGuardedInteger(receiver, "-", prelude));

@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.329-SNAPSHOT
+
+- `I091` (#869): complete PLAT056 Candidate C Integer representation and `BigInteger` containment.
+  - `ProtosIntegerValue` now holds only a signed-64 `long`; exact Integers outside that
+    range are `ProtosLargeIntegerValue`, a frozen ordinary object delegating to its minting
+    Prelude's Integer prototype. Every exact result is normalized in both directions, large
+    literals are minted per evaluating Prelude, and Actor/P/detached transfers
+    rematerialize large values with the destination prototype. Observable Integer
+    semantics are unchanged; a distinct D197 `BigInteger` family remains with I090.
+  - Centralize exact Integer arithmetic, ordering, identity, hashing, decimal text and
+    unsigned codecs in `ProtosNumericValueSupport`; reflective object primitives, mutation
+    targets, composition and Actor bootstrap treat large Integers exactly as Integers.
+  - Replace `BigInteger` range constants and round trips in fixed-width interop with exact
+    bit-length checks and `long` storage; keep binary64 rounding significands, literal
+    admission, Float projections, numeric relations, Regex payload validation, SemVer
+    prerelease checks and outbound foreign Integers on primitive paths.
+  - Reduce the I091 census from 161 to 121 `BigInteger` and from 203 to 90
+    `ProtosIntegerValue` references and migrate the affected tests.
+
 ## 0.3.328-SNAPSHOT
 
 - `I091` (#869): implement PLAT056 Candidate C primitive-first numeric execution.

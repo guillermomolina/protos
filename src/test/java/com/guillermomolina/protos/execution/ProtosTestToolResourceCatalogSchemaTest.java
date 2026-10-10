@@ -21,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -229,10 +229,7 @@ fixture.prelude().newModuleActivation());
     }
 
     private static int integerAt(ProtosArrayValue array, int index) {
-        return assertInstanceOf(
-                        ProtosIntegerValue.class,
-                        array.indexedAt(index))
-                .value()
+        return ProtosTestIntegers.exact(array.indexedAt(index))
                 .intValueExact();
     }
 

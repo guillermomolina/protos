@@ -42,7 +42,7 @@ final class ProtosNumericHashKeyTest {
 
         ProtosNumericHashKey positive =
                 ProtosNumericHashKey.fromSemanticInteger(
-                        new ProtosIntegerValue(huge));
+                        ProtosTestIntegers.integer(huge));
         ProtosNumericHashKey same =
                 ProtosNumericHashKey.fromCanonicalTwosComplement(
                         huge.toByteArray());

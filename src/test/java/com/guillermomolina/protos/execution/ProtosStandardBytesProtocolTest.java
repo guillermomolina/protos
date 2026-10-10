@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -160,11 +161,11 @@ class ProtosStandardBytesProtocolTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static BigInteger intValue(Object value) {
-        return ((ProtosIntegerValue) value).value();
+        return ProtosTestIntegers.exact(value);
     }
 
     private static Fixture fixture() throws IOException {

@@ -135,6 +135,15 @@ public final class ProtosFloatValue implements ProtosRepresentedValue {
         if (!fitsInBigInteger()) {
             throw UnsupportedMessageException.create();
         }
+        if (value >= -0x1p63 && value < 0x1p63) {
+            return BigInteger.valueOf((long) value);
+        }
+        return largeIntegralValue(value);
+    }
+
+    /* An integral binary64 at or beyond 2^63 in magnitude is denoted exactly by its decimal. */
+    @TruffleBoundary
+    private static BigInteger largeIntegralValue(double value) {
         return new BigDecimal(value).toBigIntegerExact();
     }
 

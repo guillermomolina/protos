@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -441,7 +440,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
     }
 
     private static void setInteger(ProtosObjectValue object, String name, long value) {
-        object.assignLocalSlot(name, new ProtosIntegerValue(BigInteger.valueOf(value)));
+        object.assignLocalSlot(name, new ProtosIntegerValue(value));
     }
 
     private static ProtosStringValue str(String value) {

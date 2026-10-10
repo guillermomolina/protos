@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
@@ -88,7 +89,7 @@ class ProtosPolyglotNestedCallTargetSharingTest {
 
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             ProtosIntegerValue result = assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-            assertEquals(BigInteger.valueOf(expected), result.value());
+            assertEquals(BigInteger.valueOf(expected), ProtosTestIntegers.exact(result));
 
             process.requestTerminationForRuntime();
             assertEquals(ProtosProcessRuntime.LifecycleState.TERMINATED, process.lifecycleState());

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -198,7 +199,7 @@ final class ProtosNioTcpListenerBackendTest {
         ProtosObjectValue request = new ProtosObjectValue(ProtosObjectValue.rootObject());
         request.createLocalSlot("ipVersion", integer(version));
         request.createLocalSlot("address", address == null ? ProtosNullValue.INSTANCE : address);
-        request.createLocalSlot("port", port == null ? ProtosNullValue.INSTANCE : new ProtosIntegerValue(port));
+        request.createLocalSlot("port", port == null ? ProtosNullValue.INSTANCE : ProtosTestIntegers.integer(port, x.prelude));
         return assertInstanceOf(
                 ProtosFutureValue.class,
                 ProtosInvocation.invokeMessage(
@@ -224,7 +225,7 @@ final class ProtosNioTcpListenerBackendTest {
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         factory,
-                        List.of(integer(version), new ProtosIntegerValue(bits)),
+                        List.of(integer(version), ProtosTestIntegers.integer(bits, x.prelude)),
                         x.activation);
     }
 
@@ -233,10 +234,7 @@ final class ProtosNioTcpListenerBackendTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         endpoint.readLocalSlot("address").orElseThrow());
-        return assertInstanceOf(
-                        ProtosIntegerValue.class,
-                        address.readLocalSlot("version").orElseThrow())
-                .value()
+        return ProtosTestIntegers.exact(address.readLocalSlot("version").orElseThrow())
                 .intValueExact();
     }
 
@@ -278,7 +276,7 @@ final class ProtosNioTcpListenerBackendTest {
     }
 
     private static ProtosIntegerValue integer(long value) {
-        return new ProtosIntegerValue(BigInteger.valueOf(value));
+        return new ProtosIntegerValue(value);
     }
 
     private static void awaitTerminal(ProtosFutureValue future) throws Exception {

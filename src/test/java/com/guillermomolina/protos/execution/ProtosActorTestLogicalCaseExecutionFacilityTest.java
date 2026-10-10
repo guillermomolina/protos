@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -132,7 +133,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             // A value of exactly 1 is only reachable if Actor.spawn("workers", ...) resolved
             // the Actor-flavored "workers" module (not the ordinary test resolver, which has
             // no such specifier) and the selected Test body actually executed exactly once.
-            assertEquals(BigInteger.valueOf(1), value.value());
+            assertEquals(BigInteger.valueOf(1), ProtosTestIntegers.exact(value));
         }
     }
 
@@ -175,7 +176,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
 
             // 0 -> 1 -> 2, combined as first * 10 + second: only reachable if both requests
             // were served by the same Actor incarnation within this one Case.
-            assertEquals(BigInteger.valueOf(12), value.value());
+            assertEquals(BigInteger.valueOf(12), ProtosTestIntegers.exact(value));
         }
     }
 
@@ -214,7 +215,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             assertTrue(activation.executionDomain().dispatchOne());
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertCompletedIntegerObservation(firstCase).value());
+                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(firstCase)));
 
             ProtosFutureValue secondCase =
                     invoke(
@@ -231,7 +232,7 @@ final class ProtosActorTestLogicalCaseExecutionFacilityTest {
             // counter would already be at 1 and this request would observe 2.
             assertEquals(
                     BigInteger.valueOf(1),
-                    assertCompletedIntegerObservation(secondCase).value());
+                    ProtosTestIntegers.exact(assertCompletedIntegerObservation(secondCase)));
         }
     }
 

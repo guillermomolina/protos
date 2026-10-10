@@ -20,6 +20,8 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -31,36 +33,43 @@ import org.junit.jupiter.api.Test;
 /** I091 compact-Integer support that must stay exact without arbitrary-precision allocation. */
 final class ProtosI091CompactIntegerSupportTest {
     private final InteropLibrary interop = InteropLibrary.getUncached();
+    private static final ProtosObjectValue PROTOTYPE = ProtosObjectValue.rootObject();
 
     @Test
     void unsignedBigEndianCodecIsExactAcrossRepresentations() {
-        ProtosIntegerValue ipv4 =
-                ProtosIntegerValue.fromUnsignedBigEndianForRuntime(
-                        new byte[] {(byte) 192, (byte) 168, 0, 1});
-        assertTrue(ipv4.isSmallForRuntime());
-        assertEquals(BigInteger.valueOf(3232235521L), ipv4.value());
+        ProtosIntegerValue ipv4 = assertInstanceOf(
+                ProtosIntegerValue.class,
+                ProtosNumericValueSupport.integerFromUnsignedBigEndian(
+                        new byte[] {(byte) 192, (byte) 168, 0, 1}, PROTOTYPE));
+        assertEquals(3232235521L, ipv4.longValue());
         assertArrayEquals(
                 new byte[] {(byte) 192, (byte) 168, 0, 1}, ipv4.toUnsignedBigEndianForRuntime(4));
 
         byte[] allOnes = new byte[8];
         java.util.Arrays.fill(allOnes, (byte) 0xff);
-        ProtosIntegerValue beyondLong = ProtosIntegerValue.fromUnsignedBigEndianForRuntime(allOnes);
-        assertFalse(beyondLong.isSmallForRuntime());
-        assertEquals(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE), beyondLong.value());
-        assertArrayEquals(allOnes, beyondLong.toUnsignedBigEndianForRuntime(8));
+        ProtosLargeIntegerValue beyondLong = assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.integerFromUnsignedBigEndian(allOnes, PROTOTYPE));
+        assertEquals(
+                BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE),
+                ProtosTestIntegers.exact(beyondLong));
+        assertArrayEquals(allOnes, ProtosNumericValueSupport.unsignedBigEndianOrNull(beyondLong, 8));
 
         byte[] ipv6 = new byte[16];
         ipv6[15] = 1;
-        ProtosIntegerValue loopback = ProtosIntegerValue.fromUnsignedBigEndianForRuntime(ipv6);
-        assertTrue(loopback.isSmallForRuntime());
+        ProtosIntegerValue loopback = assertInstanceOf(
+                ProtosIntegerValue.class,
+                ProtosNumericValueSupport.integerFromUnsignedBigEndian(ipv6, (ProtosPrelude) null));
         assertArrayEquals(ipv6, loopback.toUnsignedBigEndianForRuntime(16));
 
         byte[] ipv6Max = new byte[16];
         java.util.Arrays.fill(ipv6Max, (byte) 0xff);
         assertArrayEquals(
                 ipv6Max,
-                ProtosIntegerValue.fromUnsignedBigEndianForRuntime(ipv6Max)
-                        .toUnsignedBigEndianForRuntime(16));
+                ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                        ProtosNumericValueSupport.integerFromUnsignedBigEndian(ipv6Max, PROTOTYPE),
+                        16));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(beyondLong, 7));
 
         assertThrows(
                 ArithmeticException.class,
@@ -83,7 +92,9 @@ final class ProtosI091CompactIntegerSupportTest {
                     Long.toString(sample));
         }
         BigInteger huge = BigInteger.ONE.shiftLeft(100).negate();
-        assertEquals(huge.hashCode(), new ProtosIntegerValue(huge).exactHashCodeForRuntime());
+        assertEquals(
+                huge.hashCode(),
+                ProtosNumericValueSupport.integerHashCode(ProtosTestIntegers.integer(huge)));
     }
 
     @Test
@@ -108,7 +119,7 @@ final class ProtosI091CompactIntegerSupportTest {
         assertTrue(interop.fitsInFloat(new ProtosIntegerValue(1L << 24)));
         assertFalse(interop.fitsInFloat(new ProtosIntegerValue((1L << 24) + 1L)));
 
-        ProtosIntegerValue twoPow64 = new ProtosIntegerValue(BigInteger.ONE.shiftLeft(64));
+        Object twoPow64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64));
         assertFalse(interop.fitsInLong(twoPow64));
         assertTrue(interop.fitsInDouble(twoPow64));
         assertEquals(0x1p64, interop.asDouble(twoPow64));
@@ -134,15 +145,137 @@ final class ProtosI091CompactIntegerSupportTest {
         assertLiteral(Long.MAX_VALUE, "0b" + "1".repeat(63));
         assertLiteral(0xfffffffffffffffL, "0xfffffffffffffff");
 
-        ProtosIntegerValue beyond =
-                (ProtosIntegerValue) ProtosNumberLiteral.materialize("0xffffffffffffffff");
-        assertFalse(beyond.isSmallForRuntime());
-        assertEquals(BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE), beyond.value());
+        // Beyond the signed-64 range a literal is a lowering-time exact descriptor.
+        assertEquals(
+                BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE),
+                ProtosNumberLiteral.materialize("0xffffffffffffffff"));
+    }
+
+    @Test
+    void integerLiteralsAdmitEveryLongExactlyAndOverflowToArbitraryPrecision() {
+        assertLiteral(Long.MAX_VALUE, "0x7fffffffffffffff");
+        assertLiteral(Long.MAX_VALUE, "9_223_372_036_854_775_807");
+        assertLiteral(1L, "0000000000000000000000001");
+        assertLiteral(0L, "0x0000000000000000000");
+        assertLiteral(1_000_000_000_000_000_000L, "1000000000000000000");
+
+        assertEquals(BigInteger.ONE.shiftLeft(63), ProtosNumberLiteral.materialize("9223372036854775808"));
+        assertEquals(BigInteger.ONE.shiftLeft(63), ProtosNumberLiteral.materialize("0x8000000000000000"));
+
+        assertThrows(NumberFormatException.class, () -> ProtosNumberLiteral.materialize("0x"));
+    }
+
+    @Test
+    void smallDividedByBigNeedsNoArbitraryPrecisionAndStaysExact() {
+        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        Object twoPow70 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70));
+        Object negativeTwoPow70 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(70).negate());
+        ProtosIntegerValue minLong = new ProtosIntegerValue(Long.MIN_VALUE);
+        ProtosIntegerValue five = new ProtosIntegerValue(5L);
+        ProtosIntegerValue minusFive = new ProtosIntegerValue(-5L);
+
+        // No Prelude: a small-by-large quotient or remainder never needs to mint a large value.
+        assertSmall(-1L, ProtosNumericValueSupport.quotientIntegers(minLong, twoPow63, null));
+        assertSmall(0L, ProtosNumericValueSupport.remainderIntegers(minLong, twoPow63, null));
+        assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(five, twoPow70, null));
+        assertSmall(5L, ProtosNumericValueSupport.remainderIntegers(five, twoPow70, null));
+        assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(minusFive, negativeTwoPow70, null));
+        assertSmall(-5L, ProtosNumericValueSupport.remainderIntegers(minusFive, negativeTwoPow70, null));
+        assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(minLong, negativeTwoPow70, null));
+        assertSmall(Long.MIN_VALUE,
+                ProtosNumericValueSupport.remainderIntegers(minLong, negativeTwoPow70, null));
+        assertSmall(0L, ProtosNumericValueSupport.quotientIntegers(
+                minLong, ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63).add(BigInteger.ONE)),
+                null));
+
+        BigInteger big = BigInteger.ONE.shiftLeft(63).add(BigInteger.TWO);
+        for (long dividend : new long[] {Long.MIN_VALUE, Long.MAX_VALUE, -1L, 0L, 7L}) {
+            ProtosIntegerValue left = new ProtosIntegerValue(dividend);
+            Object right = ProtosTestIntegers.integer(big);
+            assertEquals(BigInteger.valueOf(dividend).divide(big),
+                    ProtosTestIntegers.exact(
+                            ProtosNumericValueSupport.quotientIntegers(left, right, null)));
+            assertEquals(BigInteger.valueOf(dividend).remainder(big),
+                    ProtosTestIntegers.exact(
+                            ProtosNumericValueSupport.remainderIntegers(left, right, null)));
+        }
+    }
+
+    @Test
+    void arithmeticNormalizesInBothDirectionsAtTheSignedLongBoundary() {
+        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        assertInstanceOf(ProtosLargeIntegerValue.class, large);
+        // Demotion: an exact result back inside the signed-64 range is a ProtosIntegerValue,
+        // so no owner Prelude is needed for it.
+        assertSmall(Long.MAX_VALUE,
+                ProtosNumericValueSupport.subtractIntegers(large, new ProtosIntegerValue(1L), null));
+        assertSmall(Long.MIN_VALUE,
+                ProtosNumericValueSupport.multiplyIntegers(
+                        large, new ProtosIntegerValue(-1L), null));
+        assertSmall(1L << 62,
+                ProtosNumericValueSupport.multiplyIntegers(
+                        new ProtosIntegerValue(1L << 31), new ProtosIntegerValue(1L << 31), null));
+
+        // Promotion needs the owning Prelude exactly when the exact result leaves the range.
+        assertTrue(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.ADD,
+                new ProtosIntegerValue(Long.MAX_VALUE), new ProtosIntegerValue(1L)));
+        assertTrue(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.SUBTRACT,
+                new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(1L)));
+        assertTrue(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.MULTIPLY,
+                new ProtosIntegerValue(1L << 32), new ProtosIntegerValue(1L << 31)));
+        assertFalse(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.MULTIPLY,
+                new ProtosIntegerValue(1L << 31), new ProtosIntegerValue(1L << 31)));
+        assertTrue(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.QUOTIENT,
+                new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L)));
+        assertFalse(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.REMAINDER,
+                new ProtosIntegerValue(Long.MIN_VALUE), new ProtosIntegerValue(-1L)));
+        assertFalse(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.QUOTIENT, new ProtosIntegerValue(5L), large));
+        assertTrue(ProtosNumericValueSupport.needsPreludeForResult(
+                ProtosNumericValueSupport.Operation.ADD, large, new ProtosIntegerValue(-1L)));
+    }
+
+    @Test
+    void decimalTextIsCanonicalAcrossRepresentations() {
+        assertEquals("-9223372036854775808",
+                new ProtosIntegerValue(Long.MIN_VALUE).decimalTextForRuntime());
+        assertEquals("0", new ProtosIntegerValue(0L).decimalTextForRuntime());
+        BigInteger huge = BigInteger.ONE.shiftLeft(100).negate();
+        assertEquals(huge.toString(),
+                ProtosNumericValueSupport.integerDecimalText(ProtosTestIntegers.integer(huge)));
+    }
+
+    @Test
+    void integralFloatProjectsToExactBigIntegerInAndBeyondTheLongRange()
+            throws UnsupportedMessageException {
+        assertEquals(BigInteger.valueOf(-(1L << 62)),
+                interop.asBigInteger(new ProtosFloatValue(-0x1p62)));
+        assertEquals(BigInteger.valueOf(Long.MIN_VALUE),
+                interop.asBigInteger(new ProtosFloatValue(-0x1p63)));
+        assertEquals(BigInteger.ONE.shiftLeft(63),
+                interop.asBigInteger(new ProtosFloatValue(0x1p63)));
+        assertEquals(BigInteger.ONE.shiftLeft(1000).negate(),
+                interop.asBigInteger(new ProtosFloatValue(-0x1p1000)));
+        assertEquals(BigInteger.ZERO, interop.asBigInteger(new ProtosFloatValue(0.0)));
+        assertFalse(interop.fitsInBigInteger(new ProtosFloatValue(-0.0)));
+        assertFalse(interop.fitsInBigInteger(new ProtosFloatValue(0.5)));
+        assertThrows(UnsupportedMessageException.class,
+                () -> interop.asBigInteger(new ProtosFloatValue(Double.POSITIVE_INFINITY)));
+    }
+
+    private static void assertSmall(long expected, Object value) {
+        assertEquals(expected, assertInstanceOf(ProtosIntegerValue.class, value).longValue());
     }
 
     private static void assertLiteral(long expected, String spelling) {
-        ProtosIntegerValue value = (ProtosIntegerValue) ProtosNumberLiteral.materialize(spelling);
-        assertTrue(value.isSmallForRuntime(), spelling);
-        assertEquals(expected, value.smallValueForRuntime(), spelling);
+        ProtosIntegerValue value =
+                assertInstanceOf(ProtosIntegerValue.class, ProtosNumberLiteral.materialize(spelling));
+        assertEquals(expected, value.longValue(), spelling);
     }
 }

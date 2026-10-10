@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.*;
 import org.graalvm.polyglot.Context;
 import java.math.BigInteger;
@@ -477,10 +478,7 @@ final class ProtosStandardTextWriterProtocolTest {
             byte[] result = new byte[values.size()];
             for (int i = 0; i < values.size(); i++) {
                 BigInteger value =
-                        assertInstanceOf(
-                                        ProtosIntegerValue.class,
-                                        values.get(i))
-                                .value();
+                        ProtosTestIntegers.exact(values.get(i));
                 result[i] = (byte) value.intValueExact();
             }
             return result;

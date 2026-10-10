@@ -554,13 +554,12 @@ public final class ProtosTextReader {
 
     /**
      * Line byte accounting is bounded by retained host memory and so never exceeds
-     * {@code Long.MAX_VALUE}; an absent limit or an Integer limit beyond that range is therefore
-     * exactly equivalent to {@code Long.MAX_VALUE}.
+     * {@code Long.MAX_VALUE}; an absent limit is therefore exactly equivalent to
+     * {@code Long.MAX_VALUE}, and so is any Integer limit beyond that range, which callers pass
+     * as {@code Long.MAX_VALUE}.
      */
     private static long lineByteLimit(ProtosIntegerValue maxBytes) {
-        return maxBytes == null || !maxBytes.isSmallForRuntime()
-                ? Long.MAX_VALUE
-                : maxBytes.smallValueForRuntime();
+        return maxBytes == null ? Long.MAX_VALUE : maxBytes.longValue();
     }
 
     private void completeText(Request request, ReadResult result) {

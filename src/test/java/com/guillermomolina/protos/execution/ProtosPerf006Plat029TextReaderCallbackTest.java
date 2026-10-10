@@ -10,7 +10,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -329,7 +328,7 @@ final class ProtosPerf006Plat029TextReaderCallbackTest {
     private static ProtosBytesValue bytes(ProtosPrelude prelude, int... values) {
         ProtosBytesValue bytes = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value)));
+            bytes.indexedAdd(new ProtosIntegerValue(value));
         }
         return bytes;
     }

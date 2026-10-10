@@ -4,6 +4,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -97,15 +98,13 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                             (activation, supplied) -> {
                                 ProtosIntegerValue octet =
                                         (ProtosIntegerValue) supplied.get(0);
-                                observed.add(octet.value());
+                                observed.add(ProtosTestIntegers.exact(octet));
                                 if (observed.size() == 1) {
                                     bytes.indexedPut(
                                             1,
-                                            new ProtosIntegerValue(
-                                                    BigInteger.valueOf(99)));
+                                            new ProtosIntegerValue(99));
                                 }
-                                return new ProtosIntegerValue(
-                                        BigInteger.valueOf(77));
+                                return new ProtosIntegerValue(77);
                             }));
 
             ProtosTask task =
@@ -125,9 +124,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                     observed);
             assertEquals(
                     BigInteger.valueOf(99),
-                    ((ProtosIntegerValue)
-                                    bytes.indexedAt(1))
-                            .value());
+                    ProtosTestIntegers.exact(bytes.indexedAt(1)));
         }
 
         System.out.println("PERF006_PLAT028_BYTES_EACH_SNAPSHOT=PASS");
@@ -142,8 +139,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (long value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(value)));
+                    new ProtosIntegerValue(value));
         }
         return bytes;
     }

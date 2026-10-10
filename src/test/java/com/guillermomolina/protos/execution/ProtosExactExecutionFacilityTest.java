@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -195,7 +196,7 @@ final class ProtosExactExecutionFacilityTest {
                 assertInstanceOf(
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
-        assertEquals(BigInteger.valueOf(42), value.value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
     }
 
     @Test
@@ -228,8 +229,8 @@ final class ProtosExactExecutionFacilityTest {
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertTrue(
-                value.value().equals(BigInteger.ONE)
-                        || value.value().equals(BigInteger.TWO),
+                ProtosTestIntegers.exact(value).equals(BigInteger.ONE)
+                        || ProtosTestIntegers.exact(value).equals(BigInteger.TWO),
                 "Group request must resolve through exactly one eligible retained fixture member");
     }
 

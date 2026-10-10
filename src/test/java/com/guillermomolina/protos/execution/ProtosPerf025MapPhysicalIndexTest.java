@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -124,9 +123,9 @@ final class ProtosPerf025MapPhysicalIndexTest {
         ProtosIdentityMapValue map = new ProtosIdentityMapValue(parent);
 
         ProtosIntegerValue first =
-                new ProtosIntegerValue(BigInteger.valueOf(42));
+                new ProtosIntegerValue(42);
         ProtosIntegerValue semanticallyIdentical =
-                new ProtosIntegerValue(BigInteger.valueOf(42));
+                new ProtosIntegerValue(42);
 
         assertNotSame(first, semanticallyIdentical);
         assertTrue(ProtosIdentity.identical(first, semanticallyIdentical));

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -57,8 +58,7 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
                             new ProtosTestResourceProviderLease(
                                     Map.of(
                                             "gpu",
-                                            new ProtosIntegerValue(
-                                                    BigInteger.valueOf(42))),
+                                            new ProtosIntegerValue(42)),
                                     () -> {
                                         cleanupCalls.incrementAndGet();
                                         return CompletableFuture.completedFuture(null);
@@ -98,7 +98,7 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
                     assertInstanceOf(
                             ProtosIntegerValue.class,
                             guest.outcome().value());
-            assertEquals(BigInteger.valueOf(42), value.value());
+            assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(value));
             assertEquals(0, guest.stdout().length);
             assertEquals(0, guest.stderr().length);
         }
@@ -209,7 +209,7 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
                                 new ProtosTestResourceProviderLease(
                                         Map.of(
                                                 "gpu",
-                                                new ProtosIntegerValue(BigInteger.ONE)),
+                                                new ProtosIntegerValue(1L)),
                                         () -> {
                                             cleanupCalls.incrementAndGet();
                                             return CompletableFuture.completedFuture(null);

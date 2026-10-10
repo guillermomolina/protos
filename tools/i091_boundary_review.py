@@ -35,6 +35,7 @@ def review_boundary(path):
 
     numeric = {
         "ProtosIntegerValue",
+        "ProtosLargeIntegerValue",
         "ProtosFloatValue",
         "ProtosNumberLiteral",
         "ProtosNumericValueSupport",

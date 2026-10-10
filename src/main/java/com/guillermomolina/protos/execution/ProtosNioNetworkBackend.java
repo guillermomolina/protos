@@ -60,10 +60,15 @@ final class ProtosNioNetworkBackend
     private final ProtosObjectValue listenAddressPrototype;
     private final ProtosObjectValue listenEndpointPrototype;
     private final Ipv6ListenAddressProvider ipv6ListenAddressProvider;
+    /*
+     * I091: owner of materialized address bits beyond the signed-64 range (IPv6); null only for
+     * backends built without an owning Prelude, which then cannot materialize such bits.
+     */
+    private final ProtosObjectValue integerPrototype;
 
     ProtosNioNetworkBackend(
             ProtosNioHostIoPoller poller, Ipv6ScopeResolver ipv6ScopeResolver) {
-        this(poller, ipv6ScopeResolver, null, null, () -> List.of());
+        this(poller, ipv6ScopeResolver, null, null, () -> List.of(), null);
     }
 
     ProtosNioNetworkBackend(
@@ -72,6 +77,18 @@ final class ProtosNioNetworkBackend
             ProtosObjectValue listenAddressPrototype,
             ProtosObjectValue listenEndpointPrototype,
             Ipv6ListenAddressProvider ipv6ListenAddressProvider) {
+        this(poller, ipv6ScopeResolver, listenAddressPrototype, listenEndpointPrototype,
+                ipv6ListenAddressProvider, null);
+    }
+
+    ProtosNioNetworkBackend(
+            ProtosNioHostIoPoller poller,
+            Ipv6ScopeResolver ipv6ScopeResolver,
+            ProtosObjectValue listenAddressPrototype,
+            ProtosObjectValue listenEndpointPrototype,
+            Ipv6ListenAddressProvider ipv6ListenAddressProvider,
+            ProtosObjectValue integerPrototype) {
+        this.integerPrototype = integerPrototype;
         this.poller = Objects.requireNonNull(poller, "poller");
         this.ipv6ScopeResolver =
                 Objects.requireNonNull(ipv6ScopeResolver, "ipv6ScopeResolver");
@@ -94,7 +111,7 @@ final class ProtosNioNetworkBackend
 
         HostEndpoint target;
         try {
-            target = HostEndpoint.decode(endpoint, ipv6ScopeResolver);
+            target = HostEndpoint.decode(endpoint, ipv6ScopeResolver, integerPrototype);
         } catch (IOException | RuntimeException invalidHostInterpretation) {
             reportFailure(completion);
             return NO_CANCELLATION;
@@ -183,7 +200,8 @@ final class ProtosNioNetworkBackend
                                 plan.ipVersion(),
                                 channels,
                                 listenAddressPrototype,
-                                listenEndpointPrototype);
+                                listenEndpointPrototype,
+                                integerPrototype);
                 listenerBackend = acquired;
                 for (ServerSocketChannel channel : channels) {
                     SelectionKey key = poller.register(channel, 0, acquired);
@@ -522,20 +540,25 @@ final class ProtosNioNetworkBackend
         private final InetSocketAddress socketAddress;
         private final ProtosObjectValue endpointPrototype;
         private final ProtosObjectValue addressPrototype;
+        private final ProtosObjectValue integerPrototype;
 
         private HostEndpoint(
                 int version,
                 InetSocketAddress socketAddress,
                 ProtosObjectValue endpointPrototype,
-                ProtosObjectValue addressPrototype) {
+                ProtosObjectValue addressPrototype,
+                ProtosObjectValue integerPrototype) {
             this.version = version;
             this.socketAddress = socketAddress;
             this.endpointPrototype = endpointPrototype;
             this.addressPrototype = addressPrototype;
+            this.integerPrototype = integerPrototype;
         }
 
         private static HostEndpoint decode(
-                ProtosObjectValue endpoint, Ipv6ScopeResolver ipv6ScopeResolver)
+                ProtosObjectValue endpoint,
+                Ipv6ScopeResolver ipv6ScopeResolver,
+                ProtosObjectValue integerPrototype)
                 throws IOException {
             Object endpointParent = endpoint.parent().orElse(null);
             if (!(endpointParent instanceof ProtosObjectValue endpointPrototype)) {
@@ -600,7 +623,8 @@ final class ProtosNioNetworkBackend
                     version,
                     new InetSocketAddress(hostAddress, portNumber),
                     endpointPrototype,
-                    addressPrototype);
+                    addressPrototype,
+                    integerPrototype);
         }
 
         private StandardProtocolFamily protocolFamily() {
@@ -631,7 +655,9 @@ final class ProtosNioNetworkBackend
             address.createLocalSlot(
                     "version", ProtosNumericValueSupport.integer(version));
             address.createLocalSlot(
-                    "bits", ProtosNumericValueSupport.integerFromUnsignedBigEndian(bytes));
+                    "bits",
+                    ProtosNumericValueSupport.integerFromUnsignedBigEndian(
+                            bytes, integerPrototype));
             address.freeze();
 
             ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);

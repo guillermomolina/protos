@@ -21,9 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -104,10 +104,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         assertEquals("shared", stringAt(secondRequirement, 1));
         assertEquals(
                 2,
-                assertInstanceOf(
-                                ProtosIntegerValue.class,
-                                secondRequirement.indexedAt(2))
-                        .value()
+                ProtosTestIntegers.exact(secondRequirement.indexedAt(2))
                         .intValueExact());
     }
 

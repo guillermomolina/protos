@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -47,7 +48,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
     @Test
     void bundleUsesCanonicalCoreMapProtocolAndIsFrozen() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        Object gpu = new ProtosIntegerValue(BigInteger.valueOf(41));
+        Object gpu = new ProtosIntegerValue(41);
         Object db = new ProtosStringValue("db-capability");
 
         LinkedHashMap<String, Object> capabilities = new LinkedHashMap<>();
@@ -72,7 +73,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
                                 "atPut",
                                 List.of(
                                         new ProtosStringValue("other"),
-                                        new ProtosIntegerValue(BigInteger.ONE)),
+                                        new ProtosIntegerValue(1L)),
                                 prelude.newModuleActivation()));
     }
 
@@ -80,7 +81,7 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
     void resourcefulStandaloneRootActorReceivesExactFrozenResourcesLocal()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosIntegerValue gpu = new ProtosIntegerValue(BigInteger.valueOf(42));
+        ProtosIntegerValue gpu = new ProtosIntegerValue(42);
         ProtosMapValue resources =
                 ProtosTestResourceCapabilityBundle.createResourceful(
                         prelude, Map.of("gpu", gpu));
@@ -116,7 +117,7 @@ bootstrap.activation());
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue observed =
                 assertInstanceOf(ProtosIntegerValue.class, outcome.value());
-        assertEquals(BigInteger.valueOf(42), observed.value());
+        assertEquals(BigInteger.valueOf(42), ProtosTestIntegers.exact(observed));
     }
 
     @Test
@@ -169,7 +170,7 @@ bootstrap.activation());
                         second,
                         Map.of(
                                 "gpu",
-                                new ProtosIntegerValue(BigInteger.ONE)));
+                                new ProtosIntegerValue(1L)));
         assertThrows(
                 IllegalStateException.class,
                 () -> standaloneWithResources(first, foreign));

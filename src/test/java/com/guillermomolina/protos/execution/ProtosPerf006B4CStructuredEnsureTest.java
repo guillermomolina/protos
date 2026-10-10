@@ -44,7 +44,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,7 +73,7 @@ final class ProtosPerf006B4CStructuredEnsureTest {
                     nativeClosure(
                             (activation, supplied) -> {
                                 cleanups.incrementAndGet();
-                                return new ProtosIntegerValue(BigInteger.valueOf(999));
+                                return new ProtosIntegerValue(999);
                             }));
 
             Object result =

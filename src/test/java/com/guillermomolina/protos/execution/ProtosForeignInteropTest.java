@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -97,7 +98,8 @@ class ProtosForeignInteropTest {
                     provider.executions.get(0).stream().map(ProtosForeignArgument::kind).toList());
             assertEquals("constructed", text(fixture.eval(M + "I.instantiate(m.cls, 2)")));
             assertEquals(
-                    BigInteger.TWO, provider.instantiations.get(0).get(0).value());
+                    BigInteger.TWO,
+                    ProtosForeignValueFixture.scalar(provider.instantiations.get(0).get(0)));
 
             // Both capabilities: the operation named by the program selects the meaning.
             assertEquals("executed", text(fixture.eval(M + "I.invoke(m.both)")));
@@ -156,7 +158,7 @@ class ProtosForeignInteropTest {
             assertEquals(0, provider.count("read:secret"));
             assertEquals(
                     BigInteger.valueOf(7),
-                    ((ProtosIntegerValue) fixture.eval(h + "I.readMember(h, \"secret\")")).value());
+                    ProtosTestIntegers.exact(fixture.eval(h + "I.readMember(h, \"secret\")")));
             assertInstanceOf(
                     ProtosRawForeignValue.class, fixture.eval(h + "I.readMember(h, \"child\")"));
         }
@@ -216,8 +218,7 @@ class ProtosForeignInteropTest {
                         "foreign call", text(fixture.eval(a + "I.readMember(a, \"call\")")), input);
                 assertEquals(
                         BigInteger.valueOf(3),
-                        ((ProtosIntegerValue) fixture.eval(a + "I.writeMember(a, \"z\", 3)"))
-                                .value(),
+                        ProtosTestIntegers.exact(fixture.eval(a + "I.writeMember(a, \"z\", 3)")),
                         input);
             }
             assertEquals(2, fixture.provider.count("write:z"));
@@ -378,7 +379,7 @@ class ProtosForeignInteropTest {
                     seen.set(callback.callback().callableOrNullForRuntime());
                     ProtosForeignArgument result =
                             invoke(callback, new Integral(BigInteger.TWO));
-                    return new Integral((BigInteger) result.value());
+                    return new Integral((BigInteger) ProtosForeignValueFixture.scalar(result));
                 };
         all.constructor = all.body;
         try (ProtosForeignValueFixture fixture = fixture(new Fake(false).member("all", all))) {

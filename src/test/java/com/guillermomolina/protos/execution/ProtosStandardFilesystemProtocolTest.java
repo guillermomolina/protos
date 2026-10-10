@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
@@ -134,7 +135,7 @@ class ProtosStandardFilesystemProtocolTest {
                                 file, "position", List.of(), x.activation);
         assertEquals(
                 BigInteger.ZERO,
-                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+                ProtosTestIntegers.exact(position.resolvedValue().orElseThrow()));
     }
 
     @Test

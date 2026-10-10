@@ -1166,7 +1166,8 @@ public final class ProtosCli {
             if (abortFields.size() == 5
                     && abortFields.get(2) instanceof ProtosArrayValue attempts
                     && abortFields.get(3) instanceof ProtosArrayValue cutover
-                    && abortFields.get(4) instanceof ProtosIntegerValue retained) {
+                    && ProtosNumericValueSupport.isCurrentInteger(abortFields.get(4))) {
+                Object retained = abortFields.get(4);
                 err.println(
                         "infrastructure attempts: "
                                 + attempts.indexedSnapshot().size());
@@ -1175,7 +1176,7 @@ public final class ProtosCli {
                                 + cutover.indexedSnapshot().size());
                 err.println(
                         "retained unsafe reservations: "
-                                + retained.value());
+                                + ProtosNumericValueSupport.integerDecimalText(retained));
             }
         }
 

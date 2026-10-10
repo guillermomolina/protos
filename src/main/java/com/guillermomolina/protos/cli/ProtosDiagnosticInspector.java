@@ -30,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosGroupRefValue;
 import com.guillermomolina.protos.runtime.ProtosGroupSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -108,8 +108,8 @@ final class ProtosDiagnosticInspector {
             state.append("false");
             return;
         }
-        if (value instanceof ProtosIntegerValue integer) {
-            state.append(integer.value().toString());
+        if (ProtosNumericValueSupport.isCurrentInteger(value)) {
+            state.append(ProtosNumericValueSupport.integerDecimalText(value));
             return;
         }
         if (value instanceof ProtosFloatValue floating) {

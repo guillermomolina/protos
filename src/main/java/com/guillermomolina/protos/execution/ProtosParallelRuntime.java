@@ -285,7 +285,7 @@ public final class ProtosParallelRuntime {
             // carry provider-session state with no P transfer contract.
             if(v instanceof ProtosForeignProjectedReceiver||(v instanceof ProtosClosureValue c&&ProtosForeignProjectedOperations.isProjectionClosure(c)))throw new NonParallel();
             Object copiedNumber =
-                    ProtosNumericValueSupport.copyCurrentNumberOrNull(v);
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(v, a.prelude().orElse(null));
             if (copiedNumber != null) return copiedNumber;
             if(v instanceof ProtosStringValue x)return x.copyForRuntime();
             if(v instanceof ProtosPathValue x)return new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.components());

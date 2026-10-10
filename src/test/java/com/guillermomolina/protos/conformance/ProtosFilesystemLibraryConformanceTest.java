@@ -47,7 +47,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CountDownLatch;
@@ -717,8 +716,7 @@ final class ProtosFilesystemLibraryConformanceTest {
         ProtosBytesValue result = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (int index = 0; index < size; index++) {
             result.indexedAdd(
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf((index * 31L + 7L) & 0xffL)));
+                    new ProtosIntegerValue((index * 31L + 7L) & 0xffL));
         }
         return result;
     }
