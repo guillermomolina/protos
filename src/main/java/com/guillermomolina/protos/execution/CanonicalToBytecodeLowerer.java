@@ -21,8 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
@@ -55,6 +54,7 @@ import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
+import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -189,6 +189,12 @@ final class CanonicalToBytecodeLowerer {
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
             bindingAnalysisByClosure = new java.util.IdentityHashMap<>();
+    /*
+     * I091: exact host descriptors of the number literals of this lowering, parsed once per
+     * literal node however many lowering decisions consult it.
+     */
+    private final java.util.IdentityHashMap<CanonicalLiteral, Object> numberLiteralDescriptors =
+            new java.util.IdentityHashMap<>();
     private CanonicalBindingAnalysis moduleBindingAnalysis;
 
     /**
@@ -6341,14 +6347,12 @@ final class CanonicalToBytecodeLowerer {
      * Whether the staged operand may hold a primitive carrier. A binding read
      * may: frame storage retains carriers written by the chain (I091).
      */
-    private static boolean primitiveNumericCarrierSource(CanonicalExpression expression) {
+    private boolean primitiveNumericCarrierSource(CanonicalExpression expression) {
         if (expression instanceof CanonicalLookup) {
             return true;
         }
         if (expression instanceof CanonicalLiteral literal) {
-            Object value = materialize(literal);
-            return value instanceof ProtosIntegerValue
-                    || value instanceof ProtosFloatValue;
+            return primitiveNumberLiteralOrNull(literal) != null;
         }
         return expression instanceof CanonicalSend send && primitiveResultSend(send);
     }
@@ -6361,16 +6365,11 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         if (expression instanceof CanonicalLiteral literal) {
-            Object value = materialize(literal);
-            if (value instanceof ProtosIntegerValue integer) {
+            // The staged operand is the literal's own carrier: a Long or Double descriptor.
+            Object carrier = primitiveNumberLiteralOrNull(literal);
+            if (carrier != null) {
                 builder.beginStoreLocal(target);
-                builder.emitLoadConstant(integer.longValue());
-                builder.endStoreLocal();
-                return;
-            }
-            if (value instanceof ProtosFloatValue floating) {
-                builder.beginStoreLocal(target);
-                builder.emitLoadConstant(floating.value());
+                builder.emitLoadConstant(carrier);
                 builder.endStoreLocal();
                 return;
             }
@@ -7538,25 +7537,47 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I091: a literal is a constant unless it is an Integer outside the signed-64 range, which is
-     * an ordinary guest object minted with the executing Prelude on each evaluation.
+     * I091: a literal is a guest constant unless it is an Integer outside the signed-64 range,
+     * which is an ordinary guest object minted with the executing Prelude on each evaluation.
+     * The constant of a signed-64 Integer or Float literal is immutable, carries no prototype,
+     * and compares by value, so one constant serves every execution domain.
      */
     private void emitLiteral(
             ProtosSemanticBytecodeRootNodeGen.Builder builder, CanonicalLiteral literal) {
-        Object constant = materialize(literal);
-        if (constant instanceof java.math.BigInteger large) {
+        if (literal.kind() == CanonicalLiteral.Kind.NUMBER
+                && numberLiteralDescriptor(literal) instanceof BigInteger large) {
             builder.beginLargeIntegerLiteral();
             emitSendCallerOperand(builder);
             builder.emitLoadConstant(large);
             builder.endLargeIntegerLiteral();
             return;
         }
-        builder.emitLoadConstant(constant);
+        builder.emitLoadConstant(guestLiteralConstant(literal));
     }
 
-    private static Object materialize(CanonicalLiteral literal) {
+    /*
+     * I091: the Long or Double descriptor of a number literal that may be staged as a primitive
+     * carrier, or null for every other literal (including a large Integer literal).
+     */
+    private Object primitiveNumberLiteralOrNull(CanonicalLiteral literal) {
+        if (literal.kind() != CanonicalLiteral.Kind.NUMBER) {
+            return null;
+        }
+        Object descriptor = numberLiteralDescriptor(literal);
+        return descriptor instanceof Long || descriptor instanceof Double ? descriptor : null;
+    }
+
+    private Object numberLiteralDescriptor(CanonicalLiteral literal) {
+        return numberLiteralDescriptors.computeIfAbsent(
+                literal, number -> ProtosNumberLiteral.parse(number.value()));
+    }
+
+    /* The guest constant of a literal other than a large Integer literal. */
+    private Object guestLiteralConstant(CanonicalLiteral literal) {
         return switch (literal.kind()) {
-            case NUMBER -> ProtosNumberLiteral.materialize(literal.value());
+            case NUMBER -> numberLiteralDescriptor(literal) instanceof Long small
+                    ? ProtosNumericValueSupport.integer(small)
+                    : ProtosNumericValueSupport.floating((Double) numberLiteralDescriptor(literal));
             case STRING -> new ProtosStringValue(literal.value());
             case TRUE -> ProtosBooleanValue.TRUE;
             case FALSE -> ProtosBooleanValue.FALSE;

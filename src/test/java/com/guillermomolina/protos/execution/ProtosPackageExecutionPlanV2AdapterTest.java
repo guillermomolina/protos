@@ -24,11 +24,14 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -377,6 +380,95 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
                     IOException.class,
                     () -> ProtosPackageExecutionPlanV2Adapter.detach(plan, projectRoot));
         }
+    }
+
+    @Test
+    void detachesComponentsAndNumericPrereleaseBeyondSignedSixtyFourExactly() throws Exception {
+        BigInteger hugeMajor = BigInteger.ONE.shiftLeft(70).add(BigInteger.valueOf(3L));
+        BigInteger hugeNumber = BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE);
+        String twoText = hugeMajor + ".0.0";
+        String preText = "1.0.0-rc." + hugeNumber;
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosObjectValue plan = buildPlan(hosted, "internal/Thing");
+            for (ProtosObjectValue version : List.of(
+                    version(rawPackage(plan, 3)),
+                    (ProtosObjectValue) edgeRef(plan, 2, "target")
+                            .readLocalSlot("version").orElseThrow())) {
+                version.assignLocalSlot("major", ProtosTestIntegers.integer(hugeMajor, prelude));
+                version.assignLocalSlot("text", str(twoText));
+            }
+            ProtosObjectValue preVersion = version(rawPackage(plan, 5));
+            ProtosObjectValue numeric = (ProtosObjectValue)
+                    ((ProtosArrayValue) preVersion.readLocalSlot("prerelease").orElseThrow())
+                            .indexedAt(1);
+            numeric.assignLocalSlot("number", ProtosTestIntegers.integer(hugeNumber, prelude));
+            numeric.assignLocalSlot("text", str(hugeNumber.toString()));
+            preVersion.assignLocalSlot("text", str(preText));
+
+            ProtosPackageExecutionPlanV2 detached =
+                    ProtosPackageExecutionPlanV2Adapter.detach(plan, projectRoot);
+            var two = assertInstanceOf(
+                    ProtosPackageExecutionPlanV2.RegistryRef.class, external(detached, 3).ref());
+            assertEquals(hugeMajor.toString(), two.version().major());
+            assertEquals("0", two.version().minor());
+            assertEquals(twoText, two.version().text());
+            assertEquals(two, detached.dependencies().get(2).target());
+            var pre = assertInstanceOf(
+                    ProtosPackageExecutionPlanV2.RegistryRef.class, external(detached, 5).ref());
+            assertEquals(
+                    List.of(
+                            new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(false, "rc"),
+                            new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(
+                                    true, hugeNumber.toString())),
+                    pre.version().prerelease());
+            assertEquals(preText, pre.version().text());
+        }
+    }
+
+    @Test
+    void rejectsNonIntegerNegativeLargeAndNonCanonicalVersionRepresentations() throws Exception {
+        BigInteger huge = BigInteger.ONE.shiftLeft(70);
+        assertRejected(plan -> version(rawPackage(plan, 2))
+                .assignLocalSlot("major", new ProtosFloatValue(1.0d)));
+        assertRejected(plan -> version(rawPackage(plan, 2))
+                .assignLocalSlot("major", str("1")));
+        assertRejected(plan -> {
+            ProtosObjectValue version = version(rawPackage(plan, 2));
+            version.assignLocalSlot("major", ProtosTestIntegers.integer(huge.negate(), prelude));
+            version.assignLocalSlot("text", str(huge.negate() + ".0.0"));
+        });
+        // The text must be exactly the canonical rendering: no leading zeros or sign.
+        assertRejected(plan -> version(rawPackage(plan, 2)).assignLocalSlot("text", str("01.0.0")));
+        assertRejected(plan -> version(rawPackage(plan, 2)).assignLocalSlot("text", str("+1.0.0")));
+        assertRejected(plan -> {
+            ProtosObjectValue version = version(rawPackage(plan, 2));
+            version.assignLocalSlot("major", ProtosTestIntegers.integer(huge, prelude));
+            version.assignLocalSlot("text", str("1.0.0"));
+        });
+        // A large Integer is never an ordinary structural record.
+        assertRejected(plan -> ref(rawPackage(plan, 2))
+                .assignLocalSlot("version", ProtosTestIntegers.integer(huge, prelude)));
+        assertRejected(plan -> rawPackage(plan, 2)
+                .assignLocalSlot("ref", ProtosTestIntegers.integer(huge, prelude)));
+        // Numeric prerelease identifiers: Integer number, canonical text, digits-only alphanumeric.
+        assertRejected(plan -> prereleaseIdentifier(plan, 1)
+                .assignLocalSlot("text", str("01")));
+        assertRejected(plan -> prereleaseIdentifier(plan, 1)
+                .assignLocalSlot("number", ProtosTestIntegers.integer(huge, prelude)));
+        assertRejected(plan -> prereleaseIdentifier(plan, 1)
+                .assignLocalSlot("number", new ProtosFloatValue(1.0d)));
+        assertRejected(plan -> {
+            prereleaseIdentifier(plan, 0).assignLocalSlot("text", str("7"));
+            version(rawPackage(plan, 5)).assignLocalSlot("text", str("1.0.0-7.1"));
+        });
+    }
+
+    private static ProtosObjectValue prereleaseIdentifier(ProtosObjectValue plan, int index) {
+        return (ProtosObjectValue)
+                ((ProtosArrayValue) version(rawPackage(plan, 5)).readLocalSlot("prerelease")
+                                .orElseThrow())
+                        .indexedAt(index);
     }
 
     private void assertRejected(Consumer<ProtosObjectValue> mutation) throws Exception {

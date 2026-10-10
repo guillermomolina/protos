@@ -17,7 +17,10 @@
 
 package com.guillermomolina.protos.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -61,5 +64,62 @@ final class ProtosI091UnsignedWidthTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new ProtosIntegerValue(1L)
                         .fitsUnsignedBitsForRuntime(-1));
+    }
+
+    @Test
+    void bitWidthsAroundTheSigned64Boundary() {
+        int[] widths = {0, 1, 7, 8, 31, 32, 63, 64, 65, 128};
+        for (int bits : widths) {
+            assertTrue(new ProtosIntegerValue(0L).fitsUnsignedBitsForRuntime(bits));
+            assertFalse(new ProtosIntegerValue(-1L).fitsUnsignedBitsForRuntime(bits));
+            assertFalse(new ProtosIntegerValue(Long.MIN_VALUE).fitsUnsignedBitsForRuntime(bits));
+            boolean maxFits = bits >= 63;
+            assertEquals(maxFits,
+                    new ProtosIntegerValue(Long.MAX_VALUE).fitsUnsignedBitsForRuntime(bits));
+            if (bits > 0 && bits < 63) {
+                long max = (1L << bits) - 1L;
+                assertTrue(new ProtosIntegerValue(max).fitsUnsignedBitsForRuntime(bits));
+                assertFalse(new ProtosIntegerValue(max + 1L).fitsUnsignedBitsForRuntime(bits));
+            }
+        }
+        assertFalse(new ProtosIntegerValue(1L).fitsUnsignedBitsForRuntime(0));
+    }
+
+    @Test
+    void octetWidthIsDistinctFromBitWidthAndNeverWraps() {
+        assertEquals(0, ProtosNumericValueSupport.unsignedBitsOfOctets(0));
+        assertEquals(64, ProtosNumericValueSupport.unsignedBitsOfOctets(8));
+        assertEquals(128, ProtosNumericValueSupport.unsignedBitsOfOctets(16));
+        // 2^29 octets would wrap to bit width 0 under int arithmetic; it saturates instead.
+        assertEquals(Integer.MAX_VALUE, ProtosNumericValueSupport.unsignedBitsOfOctets(1 << 29));
+        assertEquals(Integer.MAX_VALUE,
+                ProtosNumericValueSupport.unsignedBitsOfOctets(Integer.MAX_VALUE));
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtosNumericValueSupport.unsignedBitsOfOctets(-1));
+
+        assertArrayEquals(new byte[] {0, 0, 0, (byte) 0xff},
+                new ProtosIntegerValue(255L).toUnsignedBigEndianForRuntime(4));
+        assertArrayEquals(new byte[0], new ProtosIntegerValue(0L).toUnsignedBigEndianForRuntime(0));
+        assertThrows(ArithmeticException.class,
+                () -> new ProtosIntegerValue(1L).toUnsignedBigEndianForRuntime(0));
+        assertThrows(ArithmeticException.class,
+                () -> new ProtosIntegerValue(-1L).toUnsignedBigEndianForRuntime(1 << 29));
+        assertThrows(ArithmeticException.class,
+                () -> new ProtosIntegerValue(1L).toUnsignedBigEndianForRuntime(-1));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                new ProtosIntegerValue(-1L), 1 << 29));
+        assertNull(ProtosNumericValueSupport.unsignedBigEndianOrNull(
+                new ProtosIntegerValue(1L), -1));
+    }
+
+    @Test
+    void largeEncodingRefusesAWidthItDoesNotFit() {
+        Object twoPow64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64));
+        ProtosLargeIntegerValue large = (ProtosLargeIntegerValue) twoPow64;
+        assertThrows(ArithmeticException.class, () -> large.toUnsignedBigEndian(8));
+        assertEquals(9, large.toUnsignedBigEndian(9).length);
+        ProtosLargeIntegerValue negative = (ProtosLargeIntegerValue)
+                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate());
+        assertThrows(ArithmeticException.class, () -> negative.toUnsignedBigEndian(16));
     }
 }

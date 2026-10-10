@@ -21,12 +21,23 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
+import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -53,6 +64,105 @@ final class ProtosStandardEncodingProtocolTest {
         assertPortable(encoding, "UTF16BE", ProtosEncodingValue.PortableKind.UTF16BE);
         assertPortable(encoding, "Latin1", ProtosEncodingValue.PortableKind.LATIN1);
         assertFalse(encoding.hasLocalSlot("call"));
+    }
+
+    // I091: decode admits exactly the Integers 0..255 as octets; encode yields shared octets.
+    @Test
+    void decodeAdmitsOnlyExactOctetIntegers() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation a = prelude.newModuleActivation();
+        Object latin1 = descriptor(prelude, "Latin1");
+        ProtosObjectValue bytesPrototype = bytesPrototype(prelude, a);
+
+        assertEquals(
+                "\u0000\u00ff",
+                decode(latin1, bytes(bytesPrototype, new ProtosIntegerValue(0), new ProtosIntegerValue(255)), a));
+
+        Object[] invalid = {
+            new ProtosIntegerValue(-1),
+            new ProtosIntegerValue(256),
+            new ProtosIntegerValue((1L << 32) + 65),
+            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude),
+            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(65)), prelude),
+            new ProtosFloatValue(65.0d),
+        };
+        for (Object bad : invalid) {
+            ProtosBytesValue bytes = bytes(bytesPrototype, new ProtosIntegerValue(65), bad);
+            ProtosSignalException signal =
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> ProtosInvocation.invokeMessage(latin1, "decode", List.of(bytes), a),
+                            String.valueOf(bad));
+            // A malformed octet is an argument Error, not a text conversion failure.
+            assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
+        }
+    }
+
+    @Test
+    void portableEncodingsRoundTripAndMalformedTextIsAnEncodingError() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation a = prelude.newModuleActivation();
+        String text = "a\u00e9\uD83D\uDE00";
+        for (String name : List.of("UTF8", "UTF16LE", "UTF16BE")) {
+            Object encoding = descriptor(prelude, name);
+            ProtosBytesValue encoded =
+                    assertInstanceOf(
+                            ProtosBytesValue.class,
+                            ProtosInvocation.invokeMessage(
+                                    encoding, "encode", List.of(new ProtosStringValue(text)), a));
+            for (Object octet : encoded.indexedSnapshot()) {
+                assertTrue(ProtosTestIntegers.exact(octet).bitLength() <= 8, name);
+            }
+            assertEquals(text, decode(encoding, encoded, a), name);
+        }
+        ProtosBytesValue utf8 =
+                (ProtosBytesValue)
+                        ProtosInvocation.invokeMessage(
+                                descriptor(prelude, "UTF8"), "encode", List.of(new ProtosStringValue("\uD83D\uDE00")), a);
+        assertEquals(
+                List.of(BigInteger.valueOf(0xf0), BigInteger.valueOf(0x9f), BigInteger.valueOf(0x98), BigInteger.valueOf(0x80)),
+                utf8.indexedSnapshot().stream().map(ProtosTestIntegers::exact).toList());
+
+        ProtosBytesValue malformed =
+                bytes(bytesPrototype(prelude, a), new ProtosIntegerValue(0xc3), new ProtosIntegerValue(0x28));
+        assertEncodingError(
+                a, () -> ProtosInvocation.invokeMessage(descriptor(prelude, "UTF8"), "decode", List.of(malformed), a));
+        assertEncodingError(
+                a,
+                () ->
+                        ProtosInvocation.invokeMessage(
+                                descriptor(prelude, "Latin1"), "encode", List.of(new ProtosStringValue("\u20ac")), a));
+    }
+
+    private static Object descriptor(ProtosPrelude prelude, String name) {
+        return prelude.encodingPrototype().readLocalSlot(name).orElseThrow();
+    }
+
+    private static ProtosObjectValue bytesPrototype(ProtosPrelude prelude, ProtosActivation a) {
+        Object encoded =
+                ProtosInvocation.invokeMessage(
+                        descriptor(prelude, "UTF8"), "encode", List.of(new ProtosStringValue("")), a);
+        return (ProtosObjectValue) ((ProtosBytesValue) encoded).parent().orElseThrow();
+    }
+
+    private static ProtosBytesValue bytes(ProtosObjectValue prototype, Object... octets) {
+        ProtosBytesValue bytes = new ProtosBytesValue(prototype);
+        for (Object octet : octets) {
+            bytes.indexedAdd(octet);
+        }
+        return bytes;
+    }
+
+    private static String decode(Object encoding, ProtosBytesValue bytes, ProtosActivation a) {
+        return ((ProtosStringValue) ProtosInvocation.invokeMessage(encoding, "decode", List.of(bytes), a))
+                .value();
+    }
+
+    private static void assertEncodingError(ProtosActivation a, Runnable operation) {
+        ProtosSignalException signal = assertThrows(ProtosSignalException.class, operation::run);
+        assertSame(
+                ProtosCoreErrors.prototype(a, ProtosCoreErrors.StandardError.ENCODING_ERROR),
+                signal.error().parent().orElseThrow());
     }
 
     private static void assertPortable(

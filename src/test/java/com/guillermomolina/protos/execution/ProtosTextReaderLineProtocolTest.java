@@ -151,6 +151,59 @@ final class ProtosTextReaderLineProtocolTest {
         }
     }
 
+    // I091: the line limit is a primitive bound; any Integer beyond signed-64 bounds nothing.
+    @Test
+    void lineLimitsAreExactAtEveryMagnitudeAndExcludeTheTerminator() throws Exception {
+        Fixture f = fixture("UTF8");
+        Object beyondLong =
+                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64), f.prelude);
+        // "é" is two UTF-8 octets; "a" one; the terminator never counts.
+        f.source.bytes('a', '\n', 0xc3, 0xa9, '\n', 'x', 'y', '\n', 'z', '\n', 'w', '\n');
+        assertEquals("a", stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(1L))));
+        assertEquals("\u00e9",
+                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(2L))));
+        assertEquals("xy",
+                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(Long.MAX_VALUE))));
+        assertEquals("z", stringResult(readLine(f.reader, f.activation, beyondLong)));
+        assertEquals("w", stringResult(readLine(f.reader, f.activation)));
+
+        Fixture multibyte = fixture("UTF8");
+        multibyte.source.bytes(0xc3, 0xa9, '\n');
+        ProtosFutureValue tooLong =
+                readLine(multibyte.reader, multibyte.activation, new ProtosIntegerValue(1L));
+        assertEquals(ProtosFutureValue.State.FAILED, tooLong.state());
+        assertErrorParent(multibyte.prelude, tooLong.failedError().orElseThrow(), "LineTooLong");
+    }
+
+    @Test
+    void nonPositiveAndNonIntegerLimitsAreInvalidWithoutReading() throws Exception {
+        Fixture f = fixture("UTF8");
+        f.source.bytes('a', '\n');
+        Object largeNegative =
+                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64).negate(), f.prelude);
+        for (Object limit : List.of(
+                new ProtosIntegerValue(0L), new ProtosIntegerValue(-1L),
+                new ProtosIntegerValue(Long.MIN_VALUE), largeNegative, new ProtosFloatValue(1.0))) {
+            assertInvalid(f, readLine(f.reader, f.activation, limit));
+        }
+        assertEquals(0, f.source.reads);
+        assertEquals("a", stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(1L))));
+    }
+
+    @Test
+    void cancelledBoundedReadPreservesInputForTheNextRead() throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+        Object beyondLong =
+                ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(70), f.prelude);
+        ProtosFutureValue cancelled = readLine(f.reader, f.activation, beyondLong);
+        assertTrue(cancelled.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        pending.resolve(bytes(f.prelude, 0xc3, 0xa9, '\n'), f.activation);
+        assertEquals("\u00e9",
+                stringResult(readLine(f.reader, f.activation, new ProtosIntegerValue(2L))));
+    }
+
     private static ProtosFutureValue observedDepth(
             ProtosFutureValue future, long[] depths, int index) {
         assertEquals(ProtosFutureValue.State.PENDING, future.state());

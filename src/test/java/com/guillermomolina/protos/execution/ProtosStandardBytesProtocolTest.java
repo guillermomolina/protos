@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -158,6 +159,66 @@ class ProtosStandardBytesProtocolTest {
         assertDirectError(fixture, () -> fixture.send(copied, "add", integer(1)));
 
         assertDirectError(fixture, () -> fixture.send(bytes, "each", integer(1)));
+    }
+
+    @Test
+    void indicesAndOctetsAreRangeCheckedBeforeAnyNarrowing() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        ProtosIntegerValue zero = integer(0);
+        ProtosIntegerValue max = integer(255);
+        assertSame(zero, fixture.add(bytes, zero));
+        assertSame(max, fixture.add(bytes, max));
+        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63), fixture.prelude);
+        Object largeNegative =
+                ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate(), fixture.prelude);
+
+        for (Object index : List.of(
+                integer(Integer.MAX_VALUE), integer(Integer.MIN_VALUE),
+                integer(Long.MAX_VALUE), integer(-1), integer(2),
+                twoPow63, largeNegative, new ProtosFloatValue(0.0))) {
+            assertDirectError(fixture, () -> fixture.send(bytes, "at", index));
+            assertDirectError(fixture, () -> fixture.send(bytes, "atPut", index, integer(1)));
+            assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", index));
+        }
+        for (Object octet : List.of(
+                integer(-1), integer(256), integer(Long.MIN_VALUE), twoPow63, largeNegative,
+                new ProtosFloatValue(1.0), new ProtosFloatValue(0.0))) {
+            assertDirectError(fixture, () -> fixture.send(bytes, "add", octet));
+            assertDirectError(fixture, () -> fixture.send(bytes, "atPut", integer(0), octet));
+        }
+
+        // No failed operation changed the content, which still holds the exact objects given.
+        assertEquals(2, bytes.indexedSize());
+        assertSame(zero, fixture.send(bytes, "at", integer(0)));
+        assertSame(max, fixture.send(bytes, "at", integer(1)));
+        assertEquals(List.of((byte) 0, (byte) 0xff),
+                List.of(bytes.octetSnapshot()[0], bytes.octetSnapshot()[1]));
+
+        ProtosIntegerValue one = integer(1);
+        assertSame(one, fixture.send(bytes, "atPut", integer(1), one));
+        assertSame(one, fixture.send(bytes, "at", integer(1)));
+    }
+
+    @Test
+    void eachObservesTheExactStoredOctetsThroughTheCallback() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        List<Object> stored = List.of(integer(0), integer(128), integer(255));
+        for (Object octet : stored) {
+            fixture.add(bytes, octet);
+        }
+        java.util.ArrayList<Object> observed = new java.util.ArrayList<>();
+        Object result = fixture.send(bytes, "each", ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> {
+                    observed.add(supplied.get(0));
+                    return supplied.get(0);
+                }));
+        assertSame(bytes, result);
+        assertEquals(stored.size(), observed.size());
+        for (int index = 0; index < stored.size(); index++) {
+            assertSame(stored.get(index), observed.get(index));
+        }
     }
 
     private static ProtosIntegerValue integer(long value) {

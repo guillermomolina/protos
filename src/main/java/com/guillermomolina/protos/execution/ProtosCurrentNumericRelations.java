@@ -17,12 +17,11 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import java.math.BigInteger;
 import com.guillermomolina.protos.execution.ProtosStandardNumberOrderingProtocol.Comparison;
 
 /**
@@ -116,7 +115,8 @@ final class ProtosCurrentNumericRelations {
         if (integer instanceof ProtosIntegerValue small) {
             return compareFloatToLong(floating, small.longValue());
         }
-        return compareFloatToBigInteger(floating, integer);
+        return reverse(fromSign(
+                ProtosBinary64Rounding.compareLargeIntegerToBinary64(integer, floating)));
     }
 
     /*
@@ -140,35 +140,6 @@ final class ProtosCurrentNumericRelations {
         return compareFloats(floating, (double) truncated);
     }
 
-    /*
-     * A big Integer lies outside the signed-long range, so a finite Float inside [-2^63, 2^63)
-     * is decided by the Integer's sign alone; a Float outside that range is integral and is
-     * compared exactly as the Integer it denotes.
-     */
-    private static Comparison compareFloatToBigInteger(
-            double floating,
-            Object integer) {
-        if (floating == Double.POSITIVE_INFINITY) {
-            return Comparison.GREATER;
-        }
-        if (floating == Double.NEGATIVE_INFINITY) {
-            return Comparison.LESS;
-        }
-        if (floating >= -0x1p63 && floating < 0x1p63) {
-            return ProtosNumericValueSupport.integerSignum(integer) > 0
-                    ? Comparison.LESS
-                    : Comparison.GREATER;
-        }
-        return fromSign(compareExact(
-                ProtosStandardNumericConversionProtocol.largeIntegralBinary64(floating),
-                ProtosNumericValueSupport.exactBigInteger(integer)));
-    }
-
-    @TruffleBoundary
-    private static int compareExact(BigInteger left, BigInteger right) {
-        return left.compareTo(right);
-    }
-
     private static Comparison fromSign(int sign) {
         if (sign < 0) return Comparison.LESS;
         if (sign > 0) return Comparison.GREATER;
@@ -185,7 +156,7 @@ final class ProtosCurrentNumericRelations {
     }
 
 
-    private static final ProtosIntegerValue NAN_NORMAL_HASH = new ProtosIntegerValue(2146959360L);
+    private static final Object NAN_NORMAL_HASH = ProtosNumericValueSupport.integer(2146959360L);
 
     /** {@code prelude} owns a hash outside the signed-64 range. */
     static Object normalHash(Object value, ProtosPrelude prelude) {
@@ -202,14 +173,12 @@ final class ProtosCurrentNumericRelations {
             }
 
             Object integral =
-                    ProtosStandardNumericConversionProtocol
-                            .exactIntegralBinary64(number, prelude);
+                    ProtosBinary64Rounding.integralBinary64(number, prelude);
 
             return integral != null
                     ? integral
-                    : new ProtosIntegerValue(
-                            Double.hashCode(
-                                    number == 0.0 ? 0.0 : number));
+                    : ProtosNumericValueSupport.integer(
+                            Double.hashCode(number == 0.0 ? 0.0 : number));
         }
 
         throw new IllegalArgumentException(

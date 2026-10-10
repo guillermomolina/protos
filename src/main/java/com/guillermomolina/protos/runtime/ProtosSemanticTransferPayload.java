@@ -60,4 +60,74 @@ public final class ProtosSemanticTransferPayload {
     public Object get(int index) {
         return elements.get(index);
     }
+
+    /*
+     * Exact Integer leaves. The leaf encoding stays private to the payload: families build and
+     * read Integer leaves through these operations, never through the host representation.
+     */
+
+    /** The Integer leaf denoting {@code value}. */
+    public static Object integer(long value) {
+        return BigInteger.valueOf(value);
+    }
+
+    /** The Integer leaf denoting the semantic Integer {@code integer}. */
+    public static Object integer(Object integer) {
+        return ProtosNumericValueSupport.exactBigInteger(integer);
+    }
+
+    /** Whether the element at {@code index} is an Integer leaf. */
+    public boolean isInteger(int index) {
+        return elements.get(index) instanceof BigInteger;
+    }
+
+    /**
+     * The value of the Integer leaf at {@code index} when it lies in [0, Integer.MAX_VALUE], or
+     * -1 for any other leaf value or element.
+     */
+    public int nonNegativeInt(int index) {
+        return elements.get(index) instanceof BigInteger exact
+                        && exact.signum() >= 0
+                        && exact.bitLength() < Integer.SIZE
+                ? exact.intValue()
+                : -1;
+    }
+
+    /** The sign of the Integer leaf at {@code index}. */
+    public int integerSignum(int index) {
+        return leaf(index).signum();
+    }
+
+    /**
+     * Whether the Integer leaves at {@code minuend} and {@code subtrahend} differ by exactly
+     * {@code difference}.
+     */
+    public boolean integersDifferBy(int minuend, int subtrahend, long difference) {
+        BigInteger left = leaf(minuend);
+        BigInteger right = leaf(subtrahend);
+        if (left.bitLength() < Long.SIZE && right.bitLength() < Long.SIZE) {
+            long x = left.longValue();
+            long y = right.longValue();
+            long exact = x - y;
+            if (((x ^ y) & (x ^ exact)) >= 0L) {
+                return exact == difference;
+            }
+        }
+        return left.subtract(right).equals(BigInteger.valueOf(difference));
+    }
+
+    /**
+     * The semantic Integer denoted by the Integer leaf at {@code index}; {@code prelude} is
+     * consulted only for a value outside the signed-64 range.
+     */
+    public Object semanticInteger(int index, ProtosPrelude prelude) {
+        return ProtosNumericValueSupport.integer(leaf(index), prelude);
+    }
+
+    private BigInteger leaf(int index) {
+        if (!(elements.get(index) instanceof BigInteger exact)) {
+            throw new IllegalArgumentException("payload element is not an Integer leaf");
+        }
+        return exact;
+    }
 }

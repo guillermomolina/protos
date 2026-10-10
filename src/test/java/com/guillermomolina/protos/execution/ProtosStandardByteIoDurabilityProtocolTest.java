@@ -84,11 +84,11 @@ class ProtosStandardByteIoDurabilityProtocolTest {
         void writeNow(byte[]x){int end=position+x.length;if(end>data.length)data=Arrays.copyOf(data,end);System.arraycopy(x,0,data,position,x.length);position=end;}
         public ProtosByteIoFlow.Cancellation flush(ProtosByteIoFlow.ReceiverCompletion c){c.succeeded();return()->{};}
         public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation seek(Object p,ProtosByteIoFlow.IntegerCompletion c){position=((ProtosIntegerValue)p).intValueExactForRuntime();c.succeeded(p);return()->{};}
-        public ProtosByteIoFlow.Cancellation seekBy(Object o,ProtosByteIoFlow.IntegerCompletion c){var p=new ProtosIntegerValue(Math.addExact(position,((ProtosIntegerValue)o).longValue()));if(p.signumForRuntime()<0)c.failed();else{position=p.intValueExactForRuntime();c.succeeded(p);}return()->{};}
+        public ProtosByteIoFlow.Cancellation seek(Object p,ProtosByteIoFlow.IntegerCompletion c){position=ProtosNumericValueSupport.exactInt(p);c.succeeded(p);return()->{};}
+        public ProtosByteIoFlow.Cancellation seekBy(Object o,ProtosByteIoFlow.IntegerCompletion c){var p=new ProtosIntegerValue(Math.addExact(position,((ProtosIntegerValue)o).longValue()));if(p.longValue()<0)c.failed();else{position=ProtosNumericValueSupport.exactInt(p);c.succeeded(p);}return()->{};}
         public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(new ProtosIntegerValue(position));return()->{};}
         public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(data.length));return()->{};}
-        public ProtosByteIoFlow.Cancellation truncate(Object n,ProtosByteIoFlow.ReceiverCompletion c){int x=((ProtosIntegerValue)n).intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
+        public ProtosByteIoFlow.Cancellation truncate(Object n,ProtosByteIoFlow.ReceiverCompletion c){int x=ProtosNumericValueSupport.exactInt(n);if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
     }
 
     private static final class SyncMemoryBackend extends ExtendedMemoryBackend implements ProtosByteIoFlow.SyncBackend{

@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.331-SNAPSHOT
+
+- `I091` (#869): contain exact Integer handling at host boundaries and keep large positions,
+  hashes and indices exact.
+  - Route host-boundary Integer checks through `ProtosNumericValueSupport` range and exact
+    conversion helpers instead of `ProtosIntegerValue` type tests; move
+    `ProtosBinary64Rounding` into `runtime` and simplify numeric conversion, relations and
+    literals.
+  - `ProtosNumericHashKey` keeps the exact payload of a large Integer hash, so Map keys
+    beyond the signed-64 range are never truncated to their low bits.
+  - `ProtosFileFlow` requires its owning Core Prelude at construction and hands its
+    backend only host-representable positions and sizes; Polyglot array indices outside
+    the non-negative signed-64 domain are rejected before the foreign value is touched.
+  - Extend focal coverage for large Map hashes, exact file positions and exact Polyglot
+    arguments and indices.
+
 ## 0.3.330-SNAPSHOT
 
 - `I092` (#870): execute canonical `Boolean.ifTrue` natively without lookup or

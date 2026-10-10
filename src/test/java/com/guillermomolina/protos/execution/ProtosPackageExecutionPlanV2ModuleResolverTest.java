@@ -424,6 +424,50 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
         return ProtosCapturedFilesystemCustody.captureSelectedRoot(source);
     }
 
+    @Test
+    void releaseVersionComponentsAreExactCanonicalDecimalsOfAnyMagnitude() {
+        String huge = BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(5L)).toString();
+        String beyondLong = BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE).toString();
+        var numeric = new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(true, huge);
+        var version = new ProtosPackageExecutionPlanV2.ReleaseVersion(
+                huge, beyondLong, "0", List.of(numeric), huge + "." + beyondLong + ".0-" + huge);
+        var same = new ProtosPackageExecutionPlanV2.ReleaseVersion(
+                new BigInteger(huge).toString(), beyondLong, "0",
+                List.of(new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(true, huge)),
+                huge + "." + beyondLong + ".0-" + huge);
+        assertEquals(version, same);
+        assertEquals(version.hashCode(), same.hashCode());
+        assertEquals(huge, version.major());
+        assertEquals(new BigInteger(beyondLong), new BigInteger(version.minor()));
+
+        var ref = new ProtosPackageExecutionPlanV2.RegistryRef("pkg", version);
+        assertEquals(ref, new ProtosPackageExecutionPlanV2.RegistryRef("pkg", same));
+        assertNotEquals(ref, new ProtosPackageExecutionPlanV2.RegistryRef("other", same));
+        // Differing in one unit beyond signed-64 is a different version, never a truncated alias.
+        String hugePlusOne = new BigInteger(huge).add(BigInteger.ONE).toString();
+        assertNotEquals(ref, new ProtosPackageExecutionPlanV2.RegistryRef("pkg",
+                new ProtosPackageExecutionPlanV2.ReleaseVersion(
+                        hugePlusOne, beyondLong, "0", List.of(numeric),
+                        hugePlusOne + "." + beyondLong + ".0-" + huge)));
+        assertNotEquals(
+                new ProtosPackageExecutionPlanV2.ReleaseVersion("10", "0", "0", List.of(), "10.0.0"),
+                new ProtosPackageExecutionPlanV2.ReleaseVersion("2", "0", "0", List.of(), "2.0.0"));
+
+        for (String malformed : new String[] {"", "01", "00", "-1", "+1", "1.0", " 1", "1e3", "١"}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ProtosPackageExecutionPlanV2.ReleaseVersion(
+                            malformed, "0", "0", List.of(), malformed + ".0.0"), malformed);
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(true, malformed),
+                    malformed);
+        }
+        assertThrows(NullPointerException.class,
+                () -> new ProtosPackageExecutionPlanV2.ReleaseVersion(
+                        null, "0", "0", List.of(), "0.0.0"));
+        assertEquals("rc", new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(false, "rc").text());
+        assertEquals("0", new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(true, "0").text());
+    }
+
     private static void writeTree(Path root, Map<String, String> files) throws IOException {
         Files.createDirectories(root);
         for (Map.Entry<String, String> file : files.entrySet()) {
@@ -487,9 +531,9 @@ final class ProtosPackageExecutionPlanV2ModuleResolverTest {
                 new ProtosPackageExecutionPlanV2.RegistryRef(
                         packageId,
                         new ProtosPackageExecutionPlanV2.ReleaseVersion(
-                                BigInteger.valueOf(major),
-                                BigInteger.ZERO,
-                                BigInteger.ZERO,
+                                String.valueOf(major),
+                                "0",
+                                "0",
                                 List.of(),
                                 major + ".0.0")),
                 content(hex),

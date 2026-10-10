@@ -16,8 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import java.math.BigInteger;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.util.EnumSet;
 import java.util.Objects;
 import java.util.Set;
@@ -69,12 +68,9 @@ record ProtosForeignAdmissionDescriptor(
                     case BOOLEAN -> scalar instanceof Boolean;
                     case NULL, RAW -> scalar == null;
                     case STRING -> scalar instanceof String;
-                    // I091: a signed-64 Integer, or a host BigInteger only beyond that range,
-                    // which admission mints with the admitting domain's Prelude.
-                    case INTEGER ->
-                            scalar instanceof ProtosIntegerValue
-                                    || (scalar instanceof BigInteger large
-                                            && large.bitLength() >= Long.SIZE);
+                    // I091: the normalized host Integer scalar, which admission mints with the
+                    // admitting domain's Prelude.
+                    case INTEGER -> ProtosNumericValueSupport.isNormalizedHostInteger(scalar);
                     case BINARY64 -> scalar instanceof Double;
                 };
         if (!validScalar) {
@@ -99,18 +95,13 @@ record ProtosForeignAdmissionDescriptor(
         return new ProtosForeignAdmissionDescriptor(Kind.STRING, value, null, Set.of());
     }
 
-    static ProtosForeignAdmissionDescriptor integral(BigInteger value) {
-        Objects.requireNonNull(value, "value");
-        return new ProtosForeignAdmissionDescriptor(
-                Kind.INTEGER,
-                value.bitLength() < Long.SIZE ? new ProtosIntegerValue(value.longValue()) : value,
-                null,
-                Set.of());
-    }
-
-    static ProtosForeignAdmissionDescriptor integral(long value) {
-        return new ProtosForeignAdmissionDescriptor(
-                Kind.INTEGER, new ProtosIntegerValue(value), null, Set.of());
+    /** A host integral value: Byte, Short, Integer, Long, or BigInteger. */
+    static ProtosForeignAdmissionDescriptor integral(Number value) {
+        Object scalar = ProtosNumericValueSupport.normalizedHostInteger(value);
+        if (scalar == null) {
+            throw new IllegalArgumentException("not a host integral value");
+        }
+        return new ProtosForeignAdmissionDescriptor(Kind.INTEGER, scalar, null, Set.of());
     }
 
     /** A source binary floating value exactly representable as binary64. */

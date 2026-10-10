@@ -166,9 +166,9 @@ public final class ProtosByteIoFlow {
             if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN)return lifecycleFailedFuture(activation);
             if(readState!=DirectionState.OPEN)return resolvedNullFuture(activation);
         }
-        if(!(maxBytesValue instanceof ProtosIntegerValue n)||!n.fitsInIntForRuntime()||n.signumForRuntime()<=0)
+        if(!ProtosNumericValueSupport.isIntegerInIntRange(maxBytesValue)||ProtosNumericValueSupport.integerSignum(maxBytesValue)<=0)
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
-        return enqueue(new Request(Kind.READ,begin(activation),n,null,null));
+        return enqueue(new Request(Kind.READ,begin(activation),maxBytesValue,null,null));
     }
 
     public ProtosFutureValue write(ProtosActivation activation,Object value){
@@ -334,14 +334,14 @@ public final class ProtosByteIoFlow {
         byte[] buffered=null;
         synchronized(this){
             if(!unread.isEmpty()){
-                int n=Math.min(((ProtosIntegerValue) r.number).intValueExactForRuntime(),unread.size());
+                int n=Math.min(ProtosNumericValueSupport.exactInt(r.number),unread.size());
                 buffered=new byte[n];
                 for(int i=0;i<n;i++)buffered[i]=unread.removeFirst();
             }
         }
         if(buffered!=null){completeReadData(r,buffered);return;}
         try{
-            setCancellation(r,backend.read(((ProtosIntegerValue) r.number).intValueExactForRuntime(),new ReadCompletion(){
+            setCancellation(r,backend.read(ProtosNumericValueSupport.exactInt(r.number),new ReadCompletion(){
                 public void data(byte[] b){completeReadData(r,b);}
                 public void eof(){if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);}
                 public void failed(){failIo(r);finish(r);}
@@ -351,7 +351,7 @@ public final class ProtosByteIoFlow {
 
     private void completeReadData(Request r,byte[] bytes){
         Objects.requireNonNull(bytes);
-        if(bytes.length==0||bytes.length>((ProtosIntegerValue) r.number).intValueExactForRuntime()){failIo(r);finish(r);return;}
+        if(bytes.length==0||bytes.length>ProtosNumericValueSupport.exactInt(r.number)){failIo(r);finish(r);return;}
         if(!r.op.commit()){
             synchronized(this){if(!r.shutdownDiscard)for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
             finish(r);return;

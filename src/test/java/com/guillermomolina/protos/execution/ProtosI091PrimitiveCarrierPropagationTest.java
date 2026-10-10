@@ -27,6 +27,8 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Source;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -113,6 +115,92 @@ final class ProtosI091PrimitiveCarrierPropagationTest {
             assertTrue(eval(context, "a: 1 + 2\nb: 3\na === b").asBoolean());
             assertTrue(eval(context, "a: 1.5 + 1.5\na == 3").asBoolean());
             assertFalse(eval(context, "a: 0.0 * (0.0 - 1.0)\nb: 0.0\na === b").asBoolean());
+        }
+    }
+
+    private static final BigInteger TWO_POW_63 = BigInteger.ONE.shiftLeft(63);
+
+    @Test
+    void largeResultsCrossCallsCapturesAndLocalsExactly() {
+        try (Context context = context()) {
+            // Overflow in the callee, returned to an accepting caller operand.
+            assertEquals(TWO_POW_63.add(BigInteger.ONE), eval(context,
+                    "o: { inc: x => x + 1 }\no.inc(9223372036854775807) + 1").asBigInteger());
+            // A large callee result brought back into the signed-64 range by the caller.
+            assertEquals(Long.MAX_VALUE, eval(context,
+                    "o: { inc: x => x + 1 }\no.inc(9223372036854775807) - 1").asLong());
+            // A captured large Integer, then arithmetic in the closure.
+            assertEquals(TWO_POW_63.shiftLeft(1), eval(context,
+                    "a: 9223372036854775807 + 1\nf: () => a + a\nf()").asBigInteger());
+            // Assignment of an overflowing carrier chain to a local, then arithmetic.
+            assertEquals(TWO_POW_63.negate().subtract(BigInteger.ONE), eval(context,
+                    "a: 0 - 9223372036854775807\na = a - 1\na = a - 1\na").asBigInteger());
+            assertEquals(Long.MIN_VALUE, eval(context,
+                    "a: 0 - 9223372036854775807\na = a - 1\na = a - 1\na + 1").asLong());
+            // An escaping closure keeps observing the large guest value it captured.
+            assertEquals(TWO_POW_63.multiply(BigInteger.valueOf(3)), eval(context,
+                    "make: () => {\n    big: 9223372036854775807 + 1\n    () => big * 3\n}\n"
+                            + "g: make()\ng()").asBigInteger());
+            assertTrue(eval(context,
+                    "make: () => {\n    big: 9223372036854775807 + 1\n    () => big\n}\n"
+                            + "make()().parent() === Integer").asBoolean());
+        }
+    }
+
+    @Test
+    void directAndLaterMaterializedResultsAreIndistinguishable() {
+        try (Context context = context()) {
+            assertTrue(eval(context,
+                    "o: { inc: x => x + 1 }\n"
+                            + "viaCarrier: o.inc(9223372036854775806)\n"
+                            + "direct: 9223372036854775807\n"
+                            + "(viaCarrier === direct) && (viaCarrier.hash() == direct.hash())")
+                    .asBoolean());
+            assertTrue(eval(context,
+                    "o: { inc: x => x + 1 }\n"
+                            + "viaCarrier: o.inc(9223372036854775807)\n"
+                            + "direct: 9223372036854775808\n"
+                            + "(viaCarrier === direct) && (viaCarrier.hash() == direct.hash())")
+                    .asBoolean());
+        }
+    }
+
+    @Test
+    void largeResultsAreRematerializedByEachExecutingDomain() {
+        String core = Path.of("protos", "lib", "core").toAbsolutePath().toString();
+        Source source = Source.create(ProtosLanguage.ID,
+                "o: { inc: x => x + 1 }\n"
+                        + "big: o.inc(9223372036854775807)\n"
+                        + "(big.parent() === Integer) && (big - 1 == 9223372036854775807)");
+        try (Engine engine = Engine.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot", core)
+                        .option("engine.WarnInterpreterOnly", "false")
+                        .build();
+                Context left = Context.newBuilder(ProtosLanguage.ID).engine(engine).build();
+                Context right = Context.newBuilder(ProtosLanguage.ID).engine(engine).build()) {
+            for (int round = 0; round < 3; round++) {
+                assertTrue(left.eval(source).asBoolean());
+                assertTrue(right.eval(source).asBoolean());
+            }
+        }
+    }
+
+    @Test
+    void warmedPrimitiveSiteSurvivesARejectedIntegerOverride() {
+        try (Context context = context()) {
+            // D049: the Integer prototype is frozen, so the selection a warmed primitive site
+            // relies on cannot be replaced; the rejected attempt leaves the site canonical.
+            assertTrue(eval(context,
+                    "add: (x, y) => x + y\n"
+                            + "i: 0\n"
+                            + "(() => i < 50).whileTrue(() => { i = add(i, 1) })\n"
+                            + "rejected: false\n"
+                            + "Error.handle(() => { Integer.removeSlot(\"+\") }, error => {\n"
+                            + "    rejected = true\n"
+                            + "})\n"
+                            + "rejected && (add(i, 1) == 51)"
+                            + " && (add(9223372036854775807, 1) == 9223372036854775808)")
+                    .asBoolean());
         }
     }
 

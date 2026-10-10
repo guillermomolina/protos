@@ -218,7 +218,7 @@ public final class ProtosStandardObjectProtocol {
                     supplied,
                     activation);
         }
-        if (!(receiver instanceof ProtosObjectValue prototype)) {
+        if (!(receiver instanceof ProtosObjectValue prototype) || !ordinaryReceiver(receiver)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
         }
@@ -234,8 +234,9 @@ public final class ProtosStandardObjectProtocol {
 
     /*
      * I091 / PLAT056 Candidate C: a large Integer is physically a frozen ordinary object, but it
-     * is a semantic Integer, so the reflective object primitives treat it exactly as they treat
-     * every other Integer representation: as a value with no slots that cannot be mutated.
+     * is a semantic Integer, so the reflective and instantiating object primitives treat it
+     * exactly as they treat every other Integer representation: as a value with no slots that
+     * cannot be mutated or instantiated as a prototype.
      */
     private static boolean ordinaryReceiver(Object receiver) {
         return !ProtosNumericValueSupport.isLargeInteger(receiver);

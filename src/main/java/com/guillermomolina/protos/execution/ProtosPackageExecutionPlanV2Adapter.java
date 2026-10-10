@@ -34,7 +34,6 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -215,9 +214,9 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         ProtosObjectValue version = requireObject(value, "ReleaseVersion");
         requireExactFields(version, VERSION_FIELDS, "ReleaseVersion");
 
-        BigInteger major = requireNonNegative(version, "major");
-        BigInteger minor = requireNonNegative(version, "minor");
-        BigInteger patch = requireNonNegative(version, "patch");
+        String major = requireNonNegative(version, "major");
+        String minor = requireNonNegative(version, "minor");
+        String patch = requireNonNegative(version, "patch");
         String text = requireNonEmptyString(requireField(version, "text"), "ReleaseVersion text");
 
         ArrayList<ProtosPackageExecutionPlanV2.PrereleaseIdentifier> prerelease =
@@ -282,13 +281,14 @@ public final class ProtosPackageExecutionPlanV2Adapter {
                 requireNonEmptyString(requireField(content, "hex"), "ContentIdentity hex"));
     }
 
-    private static BigInteger requireNonNegative(ProtosObjectValue object, String name)
+    /** The canonical decimal text of a non-negative Integer field. */
+    private static String requireNonNegative(ProtosObjectValue object, String name)
             throws IOException {
         Object value = requireInteger(object, name);
         if (ProtosNumericValueSupport.integerSignum(value) < 0) {
             throw new IOException(name + " is negative");
         }
-        return ProtosNumericValueSupport.exactBigInteger(value);
+        return ProtosNumericValueSupport.integerDecimalText(value);
     }
 
     private static String requireNonEmptyString(Object value, String label) throws IOException {

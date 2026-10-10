@@ -138,6 +138,12 @@ public final class ProtosFileFlow {
     private final ProtosObjectValue receiver;
     private final ProtosObjectValue bytesPrototype;
     private final ProtosActivation constructionActivation;
+    /*
+     * Owner of a position beyond the signed-64 range: the File's own domain Prelude. The exact
+     * Integer service answers null for an unowned large result, which must never become a
+     * logical position or a resolved guest value, so the Prelude is required at construction.
+     */
+    private final ProtosPrelude owningPrelude;
     private final ProtosActorExecutionDomain domain;
     private final Resource resource;
     private final Capabilities capabilities;
@@ -175,6 +181,9 @@ public final class ProtosFileFlow {
         this.bytesPrototype = Objects.requireNonNull(bytesPrototype, "bytesPrototype");
         this.constructionActivation =
                 Objects.requireNonNull(constructionActivation, "constructionActivation");
+        this.owningPrelude =
+                constructionActivation.prelude().orElseThrow(
+                        () -> new IllegalStateException("File flow requires the Core prelude"));
         this.domain = constructionActivation.executionDomain();
         this.resource = Objects.requireNonNull(resource, "resource");
         this.capabilities = Objects.requireNonNull(capabilities, "capabilities");
@@ -186,7 +195,7 @@ public final class ProtosFileFlow {
         this.lifecycle =
                 new ProtosIoLifecycle(
                         receiver,
-                        constructionActivation.prelude().orElseThrow().futurePrototype(),
+                        owningPrelude.futurePrototype(),
                         domain,
                         this::startResourceClose);
     }
@@ -200,12 +209,11 @@ public final class ProtosFileFlow {
         if (!capabilities.readable()) {
             return ioFailedFuture(activation);
         }
-        if (!(maxBytesValue instanceof ProtosIntegerValue maxBytes)
-                || !maxBytes.fitsInIntForRuntime()
-                || maxBytes.signumForRuntime() <= 0) {
+        if (!ProtosNumericValueSupport.isIntegerInIntRange(maxBytesValue)
+                || ProtosNumericValueSupport.integerSignum(maxBytesValue) <= 0) {
             return invalidFuture(activation);
         }
-        return enqueue(new Request(Kind.READ, begin(activation), maxBytes, null));
+        return enqueue(new Request(Kind.READ, begin(activation), maxBytesValue, null));
     }
 
     public ProtosFutureValue write(ProtosActivation activation, Object value) {
@@ -362,7 +370,7 @@ public final class ProtosFileFlow {
     private void startRead(Request request) {
         Object start = currentPosition();
         request.startPosition = start;
-        if (!(start instanceof ProtosIntegerValue hostStart)) {
+        if (!ProtosNumericValueSupport.isIntegerInLongRange(start)) {
             // No host file has a byte at a position beyond the signed-64 range.
             failIo(request);
             finish(request);
@@ -373,8 +381,8 @@ public final class ProtosFileFlow {
                     request,
                     ((ReadableResource) resource)
                             .readAt(
-                                    hostStart.longValue(),
-                                    ((ProtosIntegerValue) request.number).intValueExactForRuntime(),
+                                    ProtosNumericValueSupport.exactLong(start),
+                                    ProtosNumericValueSupport.exactInt(request.number),
                                     new ReadCompletion() {
                                         @Override
                                         public void data(byte[] bytes) {
@@ -403,7 +411,7 @@ public final class ProtosFileFlow {
 
     private void completeReadData(Request request, byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
-        if (bytes.length == 0 || bytes.length > ((ProtosIntegerValue) request.number).intValueExactForRuntime()) {
+        if (bytes.length == 0 || bytes.length > ProtosNumericValueSupport.exactInt(request.number)) {
             failIo(request);
             finish(request);
             return;
@@ -435,7 +443,7 @@ public final class ProtosFileFlow {
             return;
         }
 
-        if (!(start instanceof ProtosIntegerValue hostStart)) {
+        if (!ProtosNumericValueSupport.isIntegerInLongRange(start)) {
             // No contribution is possible beyond the signed-64 host range.
             failIo(request);
             finish(request);
@@ -446,7 +454,7 @@ public final class ProtosFileFlow {
                     request,
                     ((WritableResource) resource)
                             .writeAt(
-                                    hostStart.longValue(),
+                                    ProtosNumericValueSupport.exactLong(start),
                                     request.bytes.clone(),
                                     new WriteCompletion() {
                                         @Override
@@ -525,7 +533,7 @@ public final class ProtosFileFlow {
     private void completeSeekBy(Request request) {
         Object target =
                 ProtosNumericValueSupport.addIntegers(
-                        currentPosition(), request.number, owningPrelude());
+                        currentPosition(), request.number, owningPrelude);
         if (ProtosNumericValueSupport.integerSignum(target) < 0) {
             failIo(request);
             finish(request);
@@ -616,8 +624,8 @@ public final class ProtosFileFlow {
                     request,
                     ((TruncatableResource) resource)
                             .truncate(
-                                    request.number instanceof ProtosIntegerValue size
-                                            ? size.longValue()
+                                    ProtosNumericValueSupport.isIntegerInLongRange(request.number)
+                                            ? ProtosNumericValueSupport.exactLong(request.number)
                                             : Long.MAX_VALUE,
                                     new ChangeCompletion() {
                                         @Override
@@ -824,12 +832,7 @@ public final class ProtosFileFlow {
 
     private Object advanced(Object start, int octets) {
         return ProtosNumericValueSupport.addIntegers(
-                start, ProtosNumericValueSupport.integer(octets), owningPrelude());
-    }
-
-    /* Owner of a position beyond the signed-64 range: the File's own domain Prelude. */
-    private ProtosPrelude owningPrelude() {
-        return constructionActivation.prelude().orElse(null);
+                start, ProtosNumericValueSupport.integer(octets), owningPrelude);
     }
 
     private static final class Request {

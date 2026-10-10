@@ -46,15 +46,15 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
         return value;
     }
 
-    public int signumForRuntime() {
+    int signumForRuntime() {
         return Long.signum(value);
     }
 
-    public boolean fitsInIntForRuntime() {
+    boolean fitsInIntForRuntime() {
         return value >= Integer.MIN_VALUE && value <= Integer.MAX_VALUE;
     }
 
-    public int intValueExactForRuntime() {
+    int intValueExactForRuntime() {
         if (!fitsInIntForRuntime()) {
             throw new ArithmeticException("Integer does not fit in int");
         }
@@ -62,7 +62,7 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     /** Exact unsigned-width check for bounded host protocols. */
-    public boolean fitsUnsignedBitsForRuntime(int bits) {
+    boolean fitsUnsignedBitsForRuntime(int bits) {
         if (bits < 0) {
             throw new IllegalArgumentException("negative unsigned width");
         }
@@ -76,8 +76,9 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
      * Unsigned big-endian encoding of exactly {@code width} octets. The value must be
      * non-negative and fit {@code width * 8} bits; the encoding never truncates.
      */
-    public byte[] toUnsignedBigEndianForRuntime(int width) {
-        if (width < 0 || !fitsUnsignedBitsForRuntime(width * Byte.SIZE)) {
+    byte[] toUnsignedBigEndianForRuntime(int width) {
+        if (width < 0 || !fitsUnsignedBitsForRuntime(
+                ProtosNumericValueSupport.unsignedBitsOfOctets(width))) {
             throw new ArithmeticException("Integer does not fit the unsigned width");
         }
         byte[] result = new byte[width];
@@ -93,7 +94,7 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
      * Hash of the exact value, identical to the canonical arbitrary-precision host hash of the
      * same value, so the observable identity hash never depends on the representation.
      */
-    public int exactHashCodeForRuntime() {
+    int exactHashCodeForRuntime() {
         if (value == 0L) {
             return 0;
         }
@@ -105,7 +106,7 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     /** Canonical decimal spelling of the exact value. */
-    public String decimalTextForRuntime() {
+    String decimalTextForRuntime() {
         return Long.toString(value);
     }
 

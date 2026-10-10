@@ -28,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import com.guillermomolina.protos.cli.ProtosCli;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -219,6 +220,44 @@ class ProtosExternalForeignProviderTest {
     }
 
     @Test
+    void everyIntegerReachesThePluginAsABigIntegerAndRoundTripsExactly() throws Exception {
+        BigInteger twoPow63 = BigInteger.ONE.shiftLeft(63);
+        try (Fixture fixture = new Fixture(invented)) {
+            // The plugin is not entered before its first use.
+            assertEquals(0, counter(fixture, "invented.Invented", "SESSIONS"));
+            String[] spellings = {
+                "7", "9223372036854775807", "-9223372036854775808",
+                "9223372036854775808", "-9223372036854775809", "0x1" + "0".repeat(25)};
+            BigInteger[] values = {
+                BigInteger.valueOf(7), BigInteger.valueOf(Long.MAX_VALUE),
+                BigInteger.valueOf(Long.MIN_VALUE), twoPow63,
+                twoPow63.negate().subtract(BigInteger.ONE), BigInteger.ONE.shiftLeft(100)};
+            for (int index = 0; index < spellings.length; index++) {
+                // The plugin rejects any non-BigInteger Integer argument, so success proves it.
+                assertEquals(values[index],
+                        integer(fixture.eval(DEMO + "lib.echo(" + spellings[index] + ")")),
+                        spellings[index]);
+                assertEquals(values[index],
+                        integer(fixture.eval(
+                                DEMO + "lib.echo(lib.echo(" + spellings[index] + "))")),
+                        spellings[index]);
+            }
+            assertSame(ProtosBooleanValue.TRUE, fixture.eval(
+                    DEMO + "lib.echo(9223372036854775808).parent() === Integer"));
+            assertEquals(1, counter(fixture, "invented.Invented", "SESSIONS"));
+
+            // An independent session (another Actor) has the same exact contract.
+            ProtosActivation other = fixture.newActorActivation();
+            assertEquals(twoPow63, integer(fixture.eval(
+                    other, "import(\"inventado:demo\").echo(9223372036854775808)")));
+            assertEquals(BigInteger.valueOf(-2), integer(fixture.eval(
+                    other, "import(\"inventado:demo\").double(0 - 1)")));
+            assertEquals(2, counter(fixture, "invented.Invented", "SESSIONS"));
+            assertEquals(2, fixture.context.foreignProviderSessionCountForTesting());
+        }
+    }
+
+    @Test
     void secondExternalSchemeRegistersAndUnusedProvidersStayUninitialized() throws Exception {
         try (Fixture fixture = new Fixture(invented, second)) {
             assertEquals(2, fixture.host.foreignProvidersForRuntime().size());
@@ -328,6 +367,9 @@ class ProtosExternalForeignProviderTest {
                     /** The {@code double} member bound to its exact receiver. */
                     record Bound(Demo receiver) {}
 
+                    /** The {@code echo} member: answers its D188 Integer argument unchanged. */
+                    record Echo() {}
+
                     public String providerId() { return "%3$s"; }
 
                     public String scheme() { return "%4$s"; }
@@ -362,7 +404,10 @@ class ProtosExternalForeignProviderTest {
                                     return ProtosForeignValueClass.integral(
                                             BigInteger.valueOf(number));
                                 }
-                                if (handle instanceof Bound) {
+                                if (handle instanceof BigInteger exact) {
+                                    return ProtosForeignValueClass.integral(exact);
+                                }
+                                if (handle instanceof Bound || handle instanceof Echo) {
                                     return ProtosForeignValueClass.handle(null,
                                             Set.of(ProtosForeignValueClass.Capability.EXECUTABLE));
                                 }
@@ -376,20 +421,28 @@ class ProtosExternalForeignProviderTest {
 
                             public boolean canFaithfullyReadMember(
                                     ProtosForeignPluginSession session, Object handle, String name) {
-                                return handle instanceof Demo && name.equals("double");
+                                return handle instanceof Demo
+                                        && (name.equals("double") || name.equals("echo"));
                             }
 
                             public Object readMember(
                                     ProtosForeignPluginSession session, Object handle, String name) {
-                                return new Bound((Demo) handle);
+                                return name.equals("echo") ? new Echo() : new Bound((Demo) handle);
                             }
 
                             public Object execute(
                                     ProtosForeignPluginSession session,
                                     Object handle,
                                     List<ProtosForeignArgumentValue> arguments) {
-                                long value = ((BigInteger) arguments.get(0).value()).longValueExact();
-                                return ((Bound) handle).receiver().twice(value);
+                                Object argument = arguments.get(0).value();
+                                if (!(argument instanceof BigInteger exact)) {
+                                    throw new IllegalStateException(
+                                            "D188 Integer argument is not a BigInteger");
+                                }
+                                if (handle instanceof Echo) {
+                                    return exact;
+                                }
+                                return ((Bound) handle).receiver().twice(exact.longValueExact());
                             }
                         };
                     }

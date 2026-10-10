@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -190,8 +191,8 @@ final class ProtosLoggingFacilityTest {
                         .toString());
         assertEquals(
                 exponent,
-                assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(1))
-                        .intValueExactForRuntime());
+                ProtosNumericValueSupport.exactInt(
+                        assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(1))));
     }
 
     private static ProtosObjectValue eventFacility(ProtosPrelude prelude) {

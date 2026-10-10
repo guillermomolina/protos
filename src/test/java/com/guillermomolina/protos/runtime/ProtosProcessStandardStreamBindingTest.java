@@ -237,6 +237,59 @@ final class ProtosProcessStandardStreamBindingTest {
                 rejected.failedError().orElseThrow().parent().orElseThrow());
     }
 
+    // I091: the read limit is an exact positive Integer in the int range, checked before any read.
+    @Test
+    void invalidReadLimitsConsumeNothingAndAValidReadFollowsExactly() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosProcessRuntime process =
+                new ProtosProcessRuntime(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze());
+        ControlledReadBackend stdin = new ControlledReadBackend();
+        process.establishStandardStreamsForRuntime(
+                ProtosStandardProcessStreamProtocol.createReadablePrototype(),
+                ProtosStandardProcessStreamProtocol.createWritablePrototype(),
+                bytesPrototype(),
+                stdin,
+                null,
+                null);
+        ProtosProcessStandardStreamValue stream = process.stdinForRuntime().orElseThrow();
+        Object[] invalid = {
+            new ProtosIntegerValue(0L),
+            new ProtosIntegerValue(-1L),
+            new ProtosIntegerValue(Integer.MAX_VALUE + 1L),
+            new ProtosIntegerValue((1L << 32) + 1),
+            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude),
+            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
+            new ProtosFloatValue(1.0d),
+            Long.valueOf(1L),
+        };
+        for (Object limit : invalid) {
+            ProtosFutureValue rejected = stream.readForRuntime(activation, limit);
+            assertEquals(ProtosFutureValue.State.FAILED, rejected.state(), String.valueOf(limit));
+            assertSame(
+                    prelude.bindings().readLocalSlot("InvalidIOArgument").orElseThrow(),
+                    rejected.failedError().orElseThrow().parent().orElseThrow());
+        }
+        assertEquals(0, stdin.started.get());
+
+        ProtosFutureValue read =
+                stream.readForRuntime(activation, new ProtosIntegerValue(Integer.MAX_VALUE));
+        assertEquals(1, stdin.started.get());
+        assertEquals(Integer.MAX_VALUE, stdin.lastMaxBytes);
+        stdin.completeNext(new byte[] {0, (byte) 0xff});
+
+        ProtosBytesValue result = (ProtosBytesValue) read.resolvedValue().orElseThrow();
+        assertEquals(BigInteger.ZERO, ProtosTestIntegers.exact(result.indexedAt(0)));
+        assertEquals(BigInteger.valueOf(255), ProtosTestIntegers.exact(result.indexedAt(1)));
+
+        assertTrue(process.requestTerminationForRuntime());
+        ProtosFutureValue afterTermination =
+                stream.readForRuntime(activation, new ProtosIntegerValue(1L));
+        assertEquals(ProtosFutureValue.State.FAILED, afterTermination.state());
+        assertEquals(1, stdin.started.get());
+    }
+
     private static ProtosObjectValue bytesPrototype() {
         ProtosObjectValue prototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -258,11 +311,13 @@ final class ProtosProcessStandardStreamBindingTest {
                 new ArrayDeque<>();
         private final AtomicInteger started = new AtomicInteger();
         private final AtomicInteger cancelled = new AtomicInteger();
+        private int lastMaxBytes;
 
         @Override
         public ProtosByteIoFlow.Cancellation read(
                 int maxBytes, ProtosByteIoFlow.ReadCompletion completion) {
             started.incrementAndGet();
+            lastMaxBytes = maxBytes;
             pending.addLast(completion);
             return cancelled::incrementAndGet;
         }

@@ -37,6 +37,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedLocal
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -2319,14 +2320,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * ordinary guest object owned by the executing Prelude, so it is minted on evaluation with
      * that Prelude's Integer prototype rather than embedded as a constant shared by every
      * execution domain that runs this code. Signed-64 literals remain primitive constants.
+     *
+     * <p>{@code value} is the literal's lowering-time exact descriptor, never a guest value. Each
+     * evaluation mints a fresh Integer, so no domain shares the object of another. A caller
+     * without a Prelude cannot own the value; that is an internal failure, never a guest null.
      */
     @Operation
     public static final class LargeIntegerLiteral {
         @Specialization
         @TruffleBoundary
         public static Object perform(Object caller, java.math.BigInteger value) {
-            return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integer(
-                    value, TryDirectSendOne.callerPrelude(caller));
+            ProtosPrelude prelude = TryDirectSendOne.callerPrelude(caller);
+            if (prelude == null) {
+                throw new IllegalStateException(
+                        "a large Integer literal requires the executing Core prelude");
+            }
+            return ProtosNumericValueSupport.integerFromHost(value, prelude);
         }
     }
 
@@ -6490,7 +6499,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     case MULTIPLY -> Math.multiplyExact(left, right);
                     // D196: Integer / Integer is the correctly rounded exact quotient (Float).
                     case FLOAT_DIVIDE ->
-                            ProtosBinary64Rounding.primitiveQuotientAdmitted(left, right)
+                            right != 0L
                                     ? (Object) ProtosBinary64Rounding.dividePrimitiveIntegers(
                                             left, right)
                                     : MISS;

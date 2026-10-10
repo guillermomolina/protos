@@ -16,19 +16,21 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import java.util.Arrays;
+import java.math.BigInteger;
 import java.util.Objects;
 
 /**
  * Internal exact numeric hash key, not a guest Number or an identity.
- * Small hashes remain signed longs; large hashes use canonical two's
- * complement bytes. No numeric narrowing or collision-based equality.
+ * Small hashes remain signed longs; a hash outside the signed-64 range keeps
+ * the exact immutable payload of its large Integer, which is host data shared
+ * by no guest object and therefore safe in keys copied across domains. No
+ * numeric narrowing or collision-based equality.
  */
 public final class ProtosNumericHashKey {
     private final long small;
-    private final byte[] large;
+    private final BigInteger large;
 
-    private ProtosNumericHashKey(long small, byte[] large) {
+    private ProtosNumericHashKey(long small, BigInteger large) {
         this.small = small;
         this.large = large;
     }
@@ -43,41 +45,14 @@ public final class ProtosNumericHashKey {
         if (value instanceof ProtosIntegerValue small) {
             return ofLong(small.longValue());
         }
-        return fromCanonicalTwosComplement(
-                ProtosNumericValueSupport.exactBigInteger(value).toByteArray());
+        if (value instanceof ProtosLargeIntegerValue large) {
+            return new ProtosNumericHashKey(0L, large.exactValue());
+        }
+        throw new IllegalArgumentException("value is not a current exact-integer family");
     }
 
     public static ProtosNumericHashKey fromIdentity(Object value) {
         return ofLong(ProtosIdentity.identityHash(value));
-    }
-
-    public static ProtosNumericHashKey fromCanonicalTwosComplement(
-            byte[] encoded) {
-        Objects.requireNonNull(encoded, "encoded");
-        if (encoded.length == 0) {
-            throw new IllegalArgumentException("empty signed integer");
-        }
-        int offset = 0;
-        while (offset + 1 < encoded.length) {
-            int first = encoded[offset] & 255;
-            int next = encoded[offset + 1] & 255;
-            boolean redundantPositive = first == 0 && next < 128;
-            boolean redundantNegative = first == 255 && next >= 128;
-            if (!redundantPositive && !redundantNegative) {
-                break;
-            }
-            offset++;
-        }
-        int length = encoded.length - offset;
-        if (length <= Long.BYTES) {
-            long value = encoded[offset] < 0 ? -1L : 0L;
-            for (int i = offset; i < encoded.length; i++) {
-                value = (value << 8) | (encoded[i] & 255L);
-            }
-            return ofLong(value);
-        }
-        return new ProtosNumericHashKey(
-                0L, Arrays.copyOfRange(encoded, offset, encoded.length));
     }
 
     @Override
@@ -92,13 +67,13 @@ public final class ProtosNumericHashKey {
             return large == null && key.large == null
                     && small == key.small;
         }
-        return Arrays.equals(large, key.large);
+        return large.equals(key.large);
     }
 
     @Override
     public int hashCode() {
         return large == null
                 ? Long.hashCode(small)
-                : Arrays.hashCode(large);
+                : large.hashCode();
     }
 }

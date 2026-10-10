@@ -164,10 +164,10 @@ fixture.prelude().newModuleActivation());
     }
 
     private static int integerLikeAt(ProtosArrayValue array, int index) {
-        return assertInstanceOf(
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport.exactInt(
+                assertInstanceOf(
                         com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
-                        array.indexedAt(index))
-                .intValueExactForRuntime();
+                        array.indexedAt(index)));
     }
 
     private record Fixture(ProtosPrelude prelude) {}

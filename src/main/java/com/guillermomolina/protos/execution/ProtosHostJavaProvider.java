@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Executable;
 import java.lang.reflect.InvocationTargetException;
@@ -152,14 +153,8 @@ final class ProtosHostJavaProvider
         if (value instanceof String text) {
             return ProtosForeignAdmissionDescriptor.text(text);
         }
-        if (value instanceof Byte
-                || value instanceof Short
-                || value instanceof Integer
-                || value instanceof Long) {
-            return ProtosForeignAdmissionDescriptor.integral(((Number) value).longValue());
-        }
-        if (value instanceof BigInteger integer) {
-            return ProtosForeignAdmissionDescriptor.integral(integer);
+        if (ProtosNumericValueSupport.normalizedHostInteger(value) instanceof Number integral) {
+            return ProtosForeignAdmissionDescriptor.integral(integral);
         }
         if (value instanceof Double || value instanceof Float) {
             // binary32 widens to binary64 exactly.

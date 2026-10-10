@@ -168,7 +168,7 @@ public final class ProtosStandardIpEndpointProtocol {
 
         ProtosObjectValue endpoint =
                 (ProtosObjectValue) activation.receiver();
-        ProtosPrelude prelude = activation.prelude().orElse(null);
+        ProtosPrelude prelude = ProtosStandardIpAddressProtocol.owningPrelude(activation);
         Object addressHash =
                 ProtosStandardIpAddressProtocol.canonicalHash(
                         addressSlot(endpoint), prelude);

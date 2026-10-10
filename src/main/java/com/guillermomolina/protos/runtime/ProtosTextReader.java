@@ -28,6 +28,13 @@ import java.util.Objects;
 
 /** One ordered transactional decoder/input/lifecycle domain for a standard TextReader. */
 public final class ProtosTextReader {
+    /**
+     * The line byte limit of an absent limit. Line byte accounting is bounded by retained host
+     * memory and so never exceeds {@code Long.MAX_VALUE}; an absent limit is therefore exactly
+     * equivalent to it, and so is any Integer limit beyond the signed-64 range.
+     */
+    public static final long UNBOUNDED_LINE = Long.MAX_VALUE;
+
     private static final int SOURCE_READ_AHEAD = 8192;
 
     private final ProtosObjectValue receiver;
@@ -73,7 +80,7 @@ public final class ProtosTextReader {
         return enqueue(
                 Objects.requireNonNull(activation, "activation"),
                 RequestKind.READ_TEXT,
-                null,
+                UNBOUNDED_LINE,
                 null);
     }
 
@@ -83,13 +90,14 @@ public final class ProtosTextReader {
         return enqueue(
                 Objects.requireNonNull(activation, "activation"),
                 RequestKind.READ_TEXT,
-                null,
+                UNBOUNDED_LINE,
                 Objects.requireNonNull(plan, "plan"));
     }
 
-    public ProtosFutureValue readLine(ProtosActivation activation, ProtosIntegerValue maxBytes) {
+    /** {@code maxBytes} is a positive line byte limit; see {@link #UNBOUNDED_LINE}. */
+    public ProtosFutureValue readLine(ProtosActivation activation, long maxBytes) {
         Objects.requireNonNull(activation, "activation");
-        if (maxBytes != null && maxBytes.signumForRuntime() <= 0) {
+        if (maxBytes <= 0L) {
             throw new IllegalArgumentException("readLine maxBytes must be positive");
         }
         return enqueue(activation, RequestKind.READ_LINE, maxBytes, null);
@@ -97,10 +105,10 @@ public final class ProtosTextReader {
 
     public ProtosFutureValue readLineForCPrimeRuntime(
             ProtosActivation activation,
-            ProtosIntegerValue maxBytes,
+            long maxBytes,
             ProtosTextReaderCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
-        if (maxBytes != null && maxBytes.signumForRuntime() <= 0) {
+        if (maxBytes <= 0L) {
             throw new IllegalArgumentException("readLine maxBytes must be positive");
         }
         return enqueue(
@@ -113,14 +121,14 @@ public final class ProtosTextReader {
     private ProtosFutureValue enqueue(
             ProtosActivation activation,
             RequestKind kind,
-            ProtosIntegerValue maxBytes,
+            long maxBytes,
             ProtosTextReaderCPrimeExecution.Plan cPrimePlan) {
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         ProtosFutureValue future = operation.future();
         if (operation.terminal()) return future;
 
         Request request =
-                new Request(activation, operation, kind, lineByteLimit(maxBytes), cPrimePlan);
+                new Request(activation, operation, kind, maxBytes, cPrimePlan);
         operation.onCancellation(() -> cancel(request));
         synchronized (this) {
             queue.addLast(request);
@@ -550,16 +558,6 @@ public final class ProtosTextReader {
     @TruffleBoundary
     private static void appendLineText(StringBuilder line, String text) {
         line.append(text);
-    }
-
-    /**
-     * Line byte accounting is bounded by retained host memory and so never exceeds
-     * {@code Long.MAX_VALUE}; an absent limit is therefore exactly equivalent to
-     * {@code Long.MAX_VALUE}, and so is any Integer limit beyond that range, which callers pass
-     * as {@code Long.MAX_VALUE}.
-     */
-    private static long lineByteLimit(ProtosIntegerValue maxBytes) {
-        return maxBytes == null ? Long.MAX_VALUE : maxBytes.longValue();
     }
 
     private void completeText(Request request, ReadResult result) {

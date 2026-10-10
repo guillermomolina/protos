@@ -17,22 +17,17 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.util.Objects;
 
 public final class ProtosStandardNumericConversionProtocol {
-    private static final long FRACTION_MASK = 0x000fffffffffffffL;
-    private static final long EXPONENT_MASK = 0x7ffL;
-    private static final long HIDDEN_BIT = 1L << 52;
-
     private ProtosStandardNumericConversionProtocol() {}
 
     public static void install(
@@ -53,7 +48,7 @@ public final class ProtosStandardNumericConversionProtocol {
         installFactory(floatPrototype, FactoryKind.FLOAT);
     }
 
-    private enum FactoryKind {
+    enum FactoryKind {
         INTEGER,
         FLOAT
     }
@@ -86,7 +81,11 @@ public final class ProtosStandardNumericConversionProtocol {
     }
 
 
-    private static Object convert(
+    /*
+     * The D196 factory conversion; null selects the guest Error. Package-private for tests. Only
+     * an integral Float outside the signed-64 range consults prelude, which mints the result.
+     */
+    static Object convert(
             FactoryKind factoryKind, Object value, ProtosPrelude prelude) {
         return switch (factoryKind) {
             case INTEGER -> {
@@ -94,7 +93,7 @@ public final class ProtosStandardNumericConversionProtocol {
                     yield value;
                 }
                 if (value instanceof ProtosFloatValue floating) {
-                    yield exactIntegralBinary64(floating.value(), prelude);
+                    yield ProtosBinary64Rounding.integralBinary64(floating.value(), prelude);
                 }
                 yield null;
             }
@@ -103,47 +102,10 @@ public final class ProtosStandardNumericConversionProtocol {
                     yield floating;
                 }
                 if (ProtosNumericValueSupport.isCurrentInteger(value)) {
-                    yield new ProtosFloatValue(integerToBinary64(value));
+                    yield new ProtosFloatValue(ProtosBinary64Rounding.roundExactInteger(value));
                 }
                 yield null;
             }
         };
-    }
-
-    /**
-     * D196 operand-first conversion shared by explicit Float(Integer)
-     * and standard mixed arithmetic. Small Integers never require
-     * BigInteger materialization for this conversion.
-     */
-    static double integerToBinary64(Object integer) {
-        return ProtosBinary64Rounding.roundExactInteger(integer);
-    }
-
-    /**
-     * The exact Integer denoted by an integral finite binary64 value, or null. Values below
-     * 2^63 in magnitude are extracted as signed longs; only larger values need exact
-     * arbitrary-precision scaling of the significand.
-     */
-    static Object exactIntegralBinary64(double value, ProtosPrelude prelude) {
-        if (!Double.isFinite(value) || Math.rint(value) != value) {
-            return null;
-        }
-        if (value >= -0x1p63 && value < 0x1p63) {
-            return ProtosNumericValueSupport.integer((long) value);
-        }
-        return ProtosNumericValueSupport.integer(largeIntegralBinary64(value), prelude);
-    }
-
-    /**
-     * The exact value of a finite binary64 at or beyond 2^63 in magnitude, which is always
-     * integral; the result lies outside the signed-64 range.
-     */
-    @TruffleBoundary
-    static BigInteger largeIntegralBinary64(double value) {
-        long rawBits = Double.doubleToRawLongBits(value);
-        int binaryShift = (int) ((rawBits >>> 52) & EXPONENT_MASK) - 1075;
-        BigInteger magnitude =
-                BigInteger.valueOf(HIDDEN_BIT | (rawBits & FRACTION_MASK)).shiftLeft(binaryShift);
-        return rawBits < 0 ? magnitude.negate() : magnitude;
     }
 }

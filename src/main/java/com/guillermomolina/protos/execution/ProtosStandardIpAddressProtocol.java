@@ -126,7 +126,7 @@ public final class ProtosStandardIpAddressProtocol {
             throw invalid(activation);
         }
         ProtosObjectValue address = (ProtosObjectValue) activation.receiver();
-        return canonicalHash(address, activation.prelude().orElse(null));
+        return canonicalHash(address, owningPrelude(activation));
     }
 
     static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
@@ -172,8 +172,13 @@ public final class ProtosStandardIpAddressProtocol {
                         integerSlot(left, "bits"), integerSlot(right, "bits"));
     }
 
-    /** {@code prelude} owns a hash beyond the signed-64 range (IPv6 bits). */
+    /**
+     * The exact hash {@code bits * 31 + version}. {@code prelude} owns a hash beyond the
+     * signed-64 range (IPv6 bits); it is required, because the exact Integer service answers
+     * null for an unowned large result and a hash must never be a guest null.
+     */
     static Object canonicalHash(ProtosObjectValue address, ProtosPrelude prelude) {
+        Objects.requireNonNull(prelude, "prelude");
         Object version = integerSlot(address, "version");
         Object bits = integerSlot(address, "bits");
         return ProtosNumericValueSupport.addIntegers(
@@ -181,6 +186,12 @@ public final class ProtosStandardIpAddressProtocol {
                         bits, ProtosNumericValueSupport.integer(31L), prelude),
                 version,
                 prelude);
+    }
+
+    /* The Prelude of the executing domain, which owns every large hash it computes. */
+    static ProtosPrelude owningPrelude(ProtosActivation activation) {
+        return activation.prelude().orElseThrow(
+                () -> new IllegalStateException("IP hashing requires the Core prelude"));
     }
 
     private static Object integerSlot(ProtosObjectValue address, String name) {

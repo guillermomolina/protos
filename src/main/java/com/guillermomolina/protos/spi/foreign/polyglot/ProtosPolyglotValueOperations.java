@@ -223,11 +223,20 @@ public final class ProtosPolyglotValueOperations implements ProtosForeignValueOp
         return value;
     }
 
+    /**
+     * The Polyglot array index denoted by an exact Integer argument. Polyglot array elements are
+     * addressed by non-negative signed-64 indices, so any other Integer is rejected exactly here,
+     * before the foreign value is touched, and never truncated or wrapped into that domain.
+     */
     private static long index(ProtosForeignArgumentValue index) {
         if (!(index.value() instanceof BigInteger integer)) {
             throw new IllegalArgumentException("foreign element index is not an Integer");
         }
-        return integer.longValueExact();
+        if (integer.signum() < 0 || integer.bitLength() >= Long.SIZE) {
+            throw new IllegalArgumentException(
+                    "foreign element index is outside the Polyglot array index domain");
+        }
+        return integer.longValue();
     }
 
     /** An invocable member bound to its exact receiver; never guest-visible except as a handle. */

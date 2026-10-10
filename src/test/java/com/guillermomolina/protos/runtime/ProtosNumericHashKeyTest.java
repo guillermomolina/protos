@@ -18,6 +18,9 @@ package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
@@ -30,50 +33,99 @@ final class ProtosNumericHashKeyTest {
         }) {
             assertEquals(
                     ProtosNumericHashKey.ofLong(value),
-                    ProtosNumericHashKey.fromCanonicalTwosComplement(
-                            BigInteger.valueOf(value).toByteArray()));
+                    ProtosNumericHashKey.fromSemanticInteger(new ProtosIntegerValue(value)));
+            assertEquals(
+                    ProtosNumericHashKey.ofLong(value),
+                    ProtosNumericHashKey.fromSemanticInteger(
+                            ProtosTestIntegers.integer(BigInteger.valueOf(value))));
         }
     }
 
     @Test
     void arbitraryPrecisionHashesDoNotTruncateOrCollideByLowWord() {
         BigInteger huge = BigInteger.ONE.shiftLeft(200).add(BigInteger.valueOf(7));
-        BigInteger negative = huge.negate();
 
         ProtosNumericHashKey positive =
-                ProtosNumericHashKey.fromSemanticInteger(
-                        ProtosTestIntegers.integer(huge));
+                ProtosNumericHashKey.fromSemanticInteger(ProtosTestIntegers.integer(huge));
+        // A separately minted large Integer of the same value yields an equal key.
         ProtosNumericHashKey same =
-                ProtosNumericHashKey.fromCanonicalTwosComplement(
-                        huge.toByteArray());
+                ProtosNumericHashKey.fromSemanticInteger(
+                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(200).add(
+                                BigInteger.valueOf(7))));
         ProtosNumericHashKey opposite =
-                ProtosNumericHashKey.fromCanonicalTwosComplement(
-                        negative.toByteArray());
+                ProtosNumericHashKey.fromSemanticInteger(
+                        ProtosTestIntegers.integer(huge.negate()));
 
         assertEquals(positive, same);
         assertEquals(positive.hashCode(), same.hashCode());
         assertNotEquals(positive, opposite);
         assertNotEquals(positive, ProtosNumericHashKey.ofLong(7));
+        assertNotEquals(ProtosNumericHashKey.ofLong(7), positive);
+        assertNotEquals(
+                ProtosNumericHashKey.fromSemanticInteger(
+                        ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63))),
+                ProtosNumericHashKey.ofLong(Long.MIN_VALUE));
     }
 
     @Test
-    void canonicalEncodingAndDefensiveCopyPreserveIdentity() {
-        byte[] encoded = BigInteger.ONE.shiftLeft(160).toByteArray();
-        ProtosNumericHashKey key =
-                ProtosNumericHashKey.fromCanonicalTwosComplement(encoded);
-        ProtosNumericHashKey equivalent =
-                ProtosNumericHashKey.fromCanonicalTwosComplement(encoded);
+    void onlySemanticIntegersHaveIntegerKeys() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosNumericHashKey.fromSemanticInteger(new ProtosFloatValue(1.0)));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosNumericHashKey.fromSemanticInteger(BigInteger.ONE.shiftLeft(80)));
+    }
 
-        encoded[0] ^= 1;
-        assertEquals(key, equivalent);
+    @Test
+    void largeKeysAreValueKeysIndependentOfTheMintingPrototype() {
+        BigInteger value = BigInteger.ONE.shiftLeft(130).negate().add(BigInteger.valueOf(5L));
+        ProtosObjectValue otherPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosNumericHashKey first = ProtosNumericHashKey.fromSemanticInteger(
+                ProtosNumericValueSupport.integerWithPrototype(value, ProtosObjectValue.rootObject()));
+        ProtosNumericHashKey rematerialized = ProtosNumericHashKey.fromSemanticInteger(
+                ProtosNumericValueSupport.integerWithPrototype(value, otherPrototype));
+        assertEquals(first, rematerialized);
+        assertEquals(first.hashCode(), rematerialized.hashCode());
+        assertEquals(value.hashCode(), first.hashCode());
+    }
 
-        assertEquals(
-                ProtosNumericHashKey.ofLong(1),
-                ProtosNumericHashKey.fromCanonicalTwosComplement(
-                        new byte[] {0, 0, 1}));
-        assertEquals(
-                ProtosNumericHashKey.ofLong(-1),
-                ProtosNumericHashKey.fromCanonicalTwosComplement(
-                        new byte[] {-1, -1}));
+    @Test
+    void equalLowBitsWithDifferentMagnitudesStayDistinct() {
+        BigInteger low = BigInteger.valueOf(0x1234_5678_9abc_def0L);
+        ProtosNumericHashKey small = ProtosNumericHashKey.ofLong(low.longValueExact());
+        for (int shift : new int[] {64, 65, 128, 1000}) {
+            BigInteger high = BigInteger.ONE.shiftLeft(shift);
+            ProtosNumericHashKey above = ProtosNumericHashKey.fromSemanticInteger(
+                    ProtosTestIntegers.integer(high.add(low)));
+            ProtosNumericHashKey below = ProtosNumericHashKey.fromSemanticInteger(
+                    ProtosTestIntegers.integer(high.negate().add(low)));
+            assertNotEquals(small, above);
+            assertNotEquals(above, small);
+            assertNotEquals(small, below);
+            assertNotEquals(above, below);
+        }
+    }
+
+    @Test
+    void keysRetainNoGuestObjectAndStaySeparateFromIdentityKeys() throws Exception {
+        for (java.lang.reflect.Field field : ProtosNumericHashKey.class.getDeclaredFields()) {
+            if (!java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                assertTrue(java.lang.reflect.Modifier.isFinal(field.getModifiers()), field.getName());
+                assertFalse(ProtosObjectValue.class.isAssignableFrom(field.getType()),
+                        field.getName());
+                assertTrue(field.getType() == long.class || field.getType() == BigInteger.class,
+                        field.getName());
+            }
+        }
+        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(90));
+        ProtosNumericHashKey byValue = ProtosNumericHashKey.fromSemanticInteger(large);
+        ProtosNumericHashKey byIdentity = ProtosNumericHashKey.fromIdentity(large);
+        assertNotEquals(byValue, byIdentity);
+        assertEquals(ProtosNumericHashKey.ofLong(ProtosIdentity.identityHash(large)), byIdentity);
+        ProtosObjectValue mutable = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosNumericHashKey identityKey = ProtosNumericHashKey.fromIdentity(mutable);
+        mutable.createLocalSlot("changed", ProtosNullValue.INSTANCE);
+        assertEquals(identityKey, ProtosNumericHashKey.fromIdentity(mutable));
     }
 }

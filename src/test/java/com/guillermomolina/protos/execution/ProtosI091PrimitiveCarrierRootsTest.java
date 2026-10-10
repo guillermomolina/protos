@@ -24,8 +24,14 @@ import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
+import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
+import java.math.BigInteger;
+import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
+import org.graalvm.polyglot.Source;
+import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -78,6 +84,91 @@ final class ProtosI091PrimitiveCarrierRootsTest {
                 }
             } finally {
                 context.leave();
+            }
+        }
+    }
+
+    @Test
+    void parsedLiteralDescriptorsAreTheCarriersBothRootsTransport() {
+        try (Context context =
+                Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE.get(null);
+                // Lowering stages these descriptors directly; no guest wrapper classifies them.
+                for (String spelling : List.of(
+                        "0", "9223372036854775807", "0x7fff_ffff_ffff_ffff",
+                        "0b" + "1".repeat(63), "0o777777777777777777777",
+                        "0.0", "1.5e3", "4.9e-324")) {
+                    Object descriptor = ProtosNumberLiteral.parse(spelling);
+                    assertTrue(descriptor instanceof Long || descriptor instanceof Double,
+                            spelling);
+                    assertSameValue(descriptor, runSemantic(language, descriptor, true));
+                    assertSameValue(descriptor, runStructured(language, descriptor, true));
+                }
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void literalsReachGuestCodeExactlyAtEveryMagnitude() {
+        String core = Path.of("protos", "lib", "core").toAbsolutePath().toString();
+        try (Context context = Context.newBuilder(ProtosLanguage.ID)
+                .option("protos.CoreRoot", core).build()) {
+            assertEquals(Long.MAX_VALUE,
+                    context.eval(ProtosLanguage.ID, "9223372036854775807").asLong());
+            assertEquals(Long.MIN_VALUE,
+                    context.eval(ProtosLanguage.ID, "-9223372036854775808").asLong());
+            assertEquals(Long.MAX_VALUE,
+                    context.eval(ProtosLanguage.ID, "9223372036854775806 + 1").asLong());
+            assertEquals(BigInteger.ONE.shiftLeft(64),
+                    context.eval(ProtosLanguage.ID, "18446744073709551616").asBigInteger());
+            assertEquals(BigInteger.ONE.shiftLeft(64).negate(),
+                    context.eval(ProtosLanguage.ID, "-0x1_0000_0000_0000_0000")
+                            .asBigInteger());
+            assertEquals(BigInteger.ONE.shiftLeft(100).add(BigInteger.ONE),
+                    context.eval(ProtosLanguage.ID,
+                                    "0b1" + "0".repeat(99) + "1").asBigInteger());
+            assertTrue(context.eval(ProtosLanguage.ID,
+                    "(18446744073709551616).parent() === Integer").asBoolean());
+
+            Value negativeZero = context.eval(ProtosLanguage.ID, "-0.0");
+            assertEquals(Double.doubleToRawLongBits(-0.0d),
+                    Double.doubleToRawLongBits(negativeZero.asDouble()));
+            assertEquals(Double.NEGATIVE_INFINITY,
+                    context.eval(ProtosLanguage.ID, "1.0 / -0.0").asDouble());
+
+            // Captured and returned literals keep their exact value at either magnitude.
+            assertEquals(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE),
+                    context.eval(ProtosLanguage.ID,
+                            "x: 18446744073709551616\ng: () => x + 1\ng()").asBigInteger());
+            assertEquals(BigInteger.ONE.shiftLeft(63),
+                    context.eval(ProtosLanguage.ID,
+                            "h: () => { 9223372036854775807 }\nh() + 1").asBigInteger());
+            assertEquals(Long.MAX_VALUE,
+                    context.eval(ProtosLanguage.ID,
+                            "k: () => { 9223372036854775808 }\nk() - 1").asLong());
+        }
+    }
+
+    @Test
+    void oneCompiledLargeLiteralIsMintedByEachExecutingDomain() {
+        String core = Path.of("protos", "lib", "core").toAbsolutePath().toString();
+        Source source = Source.create(ProtosLanguage.ID,
+                "n: 18446744073709551616\n"
+                        + "(n.parent() === Integer).ifTrue() { n + 0.0 == 18446744073709551616.0 }");
+        try (Engine engine = Engine.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot", core)
+                        .option("engine.WarnInterpreterOnly", "false")
+                        .build();
+                Context left = Context.newBuilder(ProtosLanguage.ID).engine(engine).build();
+                Context right = Context.newBuilder(ProtosLanguage.ID).engine(engine).build()) {
+            for (int round = 0; round < 3; round++) {
+                assertTrue(left.eval(source).asBoolean());
+                assertTrue(right.eval(source).asBoolean());
             }
         }
     }

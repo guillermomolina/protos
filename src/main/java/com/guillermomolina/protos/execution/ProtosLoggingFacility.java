@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
@@ -202,8 +201,7 @@ public final class ProtosLoggingFacility {
         if (value == ProtosNullValue.INSTANCE
                 || value instanceof ProtosBooleanValue
                 || value instanceof ProtosStringValue
-                || ProtosNumericValueSupport.isCurrentInteger(value)
-                || value instanceof ProtosFloatValue) {
+                || ProtosNumericValueSupport.isCurrentNumber(value)) {
             return true;
         }
         if (value instanceof ProtosArrayValue array) {
@@ -253,16 +251,19 @@ public final class ProtosLoggingFacility {
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Object shortestDecimal(ProtosActivation activation, List<?> supplied) {
         if (supplied.size() != 1
-                || !(supplied.get(0) instanceof ProtosFloatValue floatValue)
-                || !Double.isFinite(floatValue.value())
-                || floatValue.value() == 0.0) {
+                || !ProtosNumericValueSupport.isCurrentFloat(supplied.get(0))) {
             throw invalid(activation);
         }
-        BigDecimal decimal = shortestDecimal(Math.abs(floatValue.value())).stripTrailingZeros();
+        double value = ProtosNumericValueSupport.currentFloatValue(supplied.get(0));
+        if (!Double.isFinite(value) || value == 0.0) {
+            throw invalid(activation);
+        }
+        BigDecimal decimal = shortestDecimal(Math.abs(value)).stripTrailingZeros();
         ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
+        // At most MAX_DOUBLE_DIGITS significant digits, so the coefficient is a signed-64 value.
         return prelude.newFrozenArray(
                 List.of(
-                        ProtosNumericValueSupport.integer(decimal.unscaledValue(), prelude),
+                        ProtosNumericValueSupport.integer(decimal.unscaledValue().longValueExact()),
                         ProtosNumericValueSupport.integer(-(long) decimal.scale())));
     }
 

@@ -18,7 +18,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.*;
 public final class ProtosStandardHashSupport {
  private ProtosStandardHashSupport(){}
- public static void installObjectHash(){var o=ProtosObjectValue.rootObject();if(!o.hasLocalSlot("hash"))o.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty())throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(ProtosIdentity.identityHash(a.receiver()));}));}
+ public static void installObjectHash(){var o=ProtosObjectValue.rootObject();if(!o.hasLocalSlot("hash"))o.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty())throw new ProtosSignalException(ProtosCoreErrors.newError(a));return ProtosNumericValueSupport.integer(ProtosIdentity.identityHash(a.receiver()));}));}
  public static void installNumberHash(ProtosObjectValue numberPrototype) {
     if (!numberPrototype.hasLocalSlot("hash")) {
         numberPrototype.createLocalSlot(
@@ -37,5 +37,5 @@ public final class ProtosStandardHashSupport {
                         }));
     }
  }
- public static void installStringHash(ProtosObjectValue s){if(!s.hasLocalSlot("hash"))s.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty()||!(a.receiver() instanceof ProtosStringValue v))throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(v.value().hashCode());}));}
+ public static void installStringHash(ProtosObjectValue s){if(!s.hasLocalSlot("hash"))s.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty()||!(a.receiver() instanceof ProtosStringValue v))throw new ProtosSignalException(ProtosCoreErrors.newError(a));return ProtosNumericValueSupport.integer(v.value().hashCode());}));}
 }

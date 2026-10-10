@@ -367,7 +367,7 @@ public final class ProtosValueLookup {
     public static GuardedLookup lookupGuardedFloat(
             Object receiver, String name, ProtosPrelude prelude) {
         CompilerAsserts.neverPartOfCompilation();
-        if (!(receiver instanceof ProtosFloatValue)
+        if (!ProtosNumericValueSupport.isCurrentFloat(receiver)
                 || prelude == null
                 || delegationParent(receiver, prelude).orElse(null)
                         != prelude.floatPrototype()) {

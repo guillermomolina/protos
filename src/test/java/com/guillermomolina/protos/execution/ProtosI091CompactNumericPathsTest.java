@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -33,6 +34,7 @@ import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -85,27 +87,61 @@ final class ProtosI091CompactNumericPathsTest {
     }
 
     @Test
+    void largeIntegerOrderingAgainstFloatsIsExactWithoutFloatMaterialization() {
+        BigInteger twoPow64 = BigInteger.ONE.shiftLeft(64);
+        BigInteger[] integers = {
+            twoPow64, twoPow64.add(BigInteger.ONE), twoPow64.subtract(BigInteger.ONE),
+            twoPow64.add(BigInteger.ONE.shiftLeft(11)), twoPow64.add(BigInteger.ONE.shiftLeft(12)),
+            BigInteger.ONE.shiftLeft(63), BigInteger.ONE.shiftLeft(70),
+            BigInteger.ONE.shiftLeft(1100), BigInteger.ONE.shiftLeft(63).negate().subtract(
+                    BigInteger.ONE)
+        };
+        double[] floats = {
+            0x1p63, 0x1p64, -0x1p64, 0x1p64 + 0x1p12, 0x1.fffffffffffffp63, 0x1p70, -0x1p70,
+            0x1p1023, -0x1p63, Double.MAX_VALUE, 1.5, -1.5
+        };
+        for (BigInteger exact : integers) {
+            Object integer = ProtosTestIntegers.integer(exact);
+            for (double floating : floats) {
+                // Every Integer here is at least 2^63 in magnitude, so truncating a fractional
+                // Float cannot turn an inequality into equality.
+                int expected = exact.compareTo(new BigDecimal(floating).toBigInteger());
+                Comparison actual = compare(integer, floating);
+                assertEquals(
+                        expected < 0 ? Comparison.LESS
+                                : expected > 0 ? Comparison.GREATER : Comparison.EQUAL,
+                        actual,
+                        exact + " <=> " + floating);
+                assertEquals(
+                        expected == 0,
+                        ProtosCurrentNumericRelations.numericEquals(
+                                integer, new ProtosFloatValue(floating)));
+            }
+        }
+    }
+
+    @Test
     void integralBinary64ExtractionSplitsAtTheSignedLongRange() throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
         ProtosIntegerValue minimum = assertInstanceOf(
                 ProtosIntegerValue.class,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0x1p63, prelude));
+                ProtosBinary64Rounding.integralBinary64(-0x1p63, prelude));
         assertEquals(Long.MIN_VALUE, minimum.longValue());
 
         ProtosLargeIntegerValue twoPow63 = assertInstanceOf(
                 ProtosLargeIntegerValue.class,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0x1p63, prelude));
+                ProtosBinary64Rounding.integralBinary64(0x1p63, prelude));
         assertSame(prelude.integerPrototype(), twoPow63.parent().orElseThrow());
         assertEquals(BigInteger.ONE.shiftLeft(63), ProtosTestIntegers.exact(twoPow63));
         assertEquals(
                 BigInteger.ONE.shiftLeft(70).negate(),
                 ProtosTestIntegers.exact(
-                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                        ProtosBinary64Rounding.integralBinary64(
                                 -0x1p70, prelude)));
-        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+        assertNull(ProtosBinary64Rounding.integralBinary64(
                 0x1p-1074, prelude));
-        assertNull(ProtosStandardNumericConversionProtocol.exactIntegralBinary64(0.5, prelude));
+        assertNull(ProtosBinary64Rounding.integralBinary64(0.5, prelude));
     }
 
     @Test

@@ -17,14 +17,25 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardArrayFactoryTest {
@@ -54,6 +65,97 @@ class ProtosStandardArrayFactoryTest {
         assertSame(
                 prelude.arrayPrototype(),
                 prelude.bindings().readLocalSlot("Array").orElseThrow());
+    }
+
+    // I091: indices are exact signed-64 Integers within the array; nothing is truncated.
+    @Test
+    void indexedAccessAdmitsOnlyExactInRangeIntegerIndices() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
+        ProtosArrayValue array =
+                prelude.newArray(
+                        List.of(
+                                new ProtosStringValue("first"),
+                                ProtosTestIntegers.integer(huge, prelude),
+                                new ProtosStringValue("last")));
+
+        assertEquals("first", string(ProtosInvocation.invokeMessage(array, "at", List.of(index(0)), a)));
+        assertEquals("last", string(ProtosInvocation.invokeMessage(array, "at", List.of(index(2)), a)));
+        assertEquals(
+                huge,
+                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(array, "at", List.of(index(1)), a)));
+
+        Object twoTo64 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude);
+        // 2^32 + 1 truncates to int 1, and 2^64 + 1 truncates to long 1: neither may alias index 1.
+        Object[] invalid = {
+            index(-1),
+            index(3),
+            index(Integer.MAX_VALUE),
+            new ProtosIntegerValue((1L << 32) + 1),
+            twoTo64,
+            ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), prelude),
+            new ProtosFloatValue(1.0d),
+            BigInteger.ONE,
+            Long.valueOf(1L),
+        };
+        for (Object bad : invalid) {
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> ProtosInvocation.invokeMessage(array, "at", List.of(bad), a),
+                    String.valueOf(bad));
+            assertThrows(
+                    ProtosSignalException.class,
+                    () ->
+                            ProtosInvocation.invokeMessage(
+                                    array, "atPut", List.of(bad, new ProtosStringValue("x")), a),
+                    String.valueOf(bad));
+        }
+        assertEquals("first", string(array.indexedAt(0)));
+        assertEquals(huge, ProtosTestIntegers.exact(array.indexedAt(1)));
+        assertEquals("last", string(array.indexedAt(2)));
+        assertEquals(3, array.indexedSize());
+    }
+
+    @Test
+    void largeIntegerElementsRoundTripAndSizeIsASigned64Integer() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        BigInteger negative = BigInteger.ONE.shiftLeft(64).negate();
+        ProtosArrayValue array = prelude.newArray(List.of(new ProtosIntegerValue(0)));
+
+        ProtosInvocation.invokeMessage(
+                array, "atPut", List.of(index(0), ProtosTestIntegers.integer(negative, prelude)), a);
+
+        assertEquals(
+                negative,
+                ProtosTestIntegers.exact(ProtosInvocation.invokeMessage(array, "at", List.of(index(0)), a)));
+        Object size = ProtosInvocation.invokeMessage(array, "size", List.of(), a);
+        assertTrue(ProtosNumericValueSupport.isIntegerInLongRange(size));
+        assertEquals(BigInteger.ONE, ProtosTestIntegers.exact(size));
+    }
+
+    @Test
+    void frozenArrayRejectsMutationWithoutChange() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosArrayValue array = prelude.newArray(List.of(new ProtosStringValue("kept")));
+        array.freeze();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosInvocation.invokeMessage(
+                                array, "atPut", List.of(index(0), new ProtosStringValue("lost")), a));
+        assertEquals("kept", string(array.indexedAt(0)));
+    }
+
+    private static Object index(long value) {
+        return new ProtosIntegerValue(value);
+    }
+
+    private static String string(Object value) {
+        return ((ProtosStringValue) value).value();
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

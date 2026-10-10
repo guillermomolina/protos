@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -112,8 +111,8 @@ final class ProtosDiagnosticInspector {
             state.append(ProtosNumericValueSupport.integerDecimalText(value));
             return;
         }
-        if (value instanceof ProtosFloatValue floating) {
-            state.append(Double.toString(floating.value()));
+        if (ProtosNumericValueSupport.isCurrentFloat(value)) {
+            state.append(Double.toString(ProtosNumericValueSupport.currentFloatValue(value)));
             return;
         }
         if (value instanceof ProtosStringValue string) {

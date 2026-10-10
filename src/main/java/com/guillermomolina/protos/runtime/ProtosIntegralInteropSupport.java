@@ -17,12 +17,9 @@
 
 package com.guillermomolina.protos.runtime;
 
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-
-import java.math.BigInteger;
-
 /**
- * Exact binary32/binary64 projection helpers for integral Protos interop values.
+ * Exact binary32/binary64 projection helpers for signed-64 and unsigned 64-bit integral
+ * interop values. A large Integer measures its own magnitude ({@link ProtosLargeIntegerValue}).
  *
  * <p>An integer is exactly representable in a binary floating format when its magnitude is
  * finite in that format and its significant bits (from the highest set bit down to the lowest
@@ -31,9 +28,7 @@ import java.math.BigInteger;
  */
 final class ProtosIntegralInteropSupport {
     private static final int FLOAT_PRECISION = 24;
-    private static final int FLOAT_MAX_BITS = 128;
     private static final int DOUBLE_PRECISION = 53;
-    private static final int DOUBLE_MAX_BITS = 1024;
 
     private ProtosIntegralInteropSupport() {}
 
@@ -64,28 +59,6 @@ final class ProtosIntegralInteropSupport {
         return bits >= 0L ? (double) bits : (double) (bits >>> 1) * 2.0;
     }
 
-    static boolean fitsInFloat(BigInteger value) {
-        return exactBig(value, FLOAT_PRECISION, FLOAT_MAX_BITS);
-    }
-
-    static boolean fitsInDouble(BigInteger value) {
-        return exactBig(value, DOUBLE_PRECISION, DOUBLE_MAX_BITS);
-    }
-
-    static float asFloat(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInFloat(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.floatValue();
-    }
-
-    static double asDouble(BigInteger value) throws UnsupportedMessageException {
-        if (!fitsInDouble(value)) {
-            throw UnsupportedMessageException.create();
-        }
-        return value.doubleValue();
-    }
-
     /* Long.MIN_VALUE negates to itself; as unsigned bits it is 2^63, a single significant bit. */
     private static boolean exactSigned(long value, int precision) {
         return significantBits(value < 0L ? -value : value) <= precision;
@@ -98,14 +71,5 @@ final class ProtosIntegralInteropSupport {
         return Long.SIZE
                 - Long.numberOfLeadingZeros(unsignedMagnitude)
                 - Long.numberOfTrailingZeros(unsignedMagnitude);
-    }
-
-    private static boolean exactBig(BigInteger value, int precision, int maxBits) {
-        if (value.signum() == 0) {
-            return true;
-        }
-        BigInteger magnitude = value.abs();
-        int bits = magnitude.bitLength();
-        return bits <= maxBits && bits - magnitude.getLowestSetBit() <= precision;
     }
 }

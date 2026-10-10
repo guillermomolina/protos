@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.math.BigInteger;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -478,9 +477,9 @@ final class ProtosExternalPackageResourceScopeTest {
                 new ProtosPackageExecutionPlanV2.RegistryRef(
                         packageId,
                         new ProtosPackageExecutionPlanV2.ReleaseVersion(
-                                BigInteger.valueOf(major),
-                                BigInteger.ZERO,
-                                BigInteger.ZERO,
+                                String.valueOf(major),
+                                "0",
+                                "0",
                                 List.of(),
                                 text)),
                 content(hex),

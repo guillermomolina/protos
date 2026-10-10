@@ -20,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -30,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosSemanticTransferPayload;
 import com.guillermomolina.protos.runtime.ProtosSemanticTransferValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -187,17 +185,19 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                             : ProtosSemanticTransferPayload.of(
                                     Boolean.TRUE,
                                     string(text),
-                                    integer(bounds.get(2 * group)),
-                                    integer(bounds.get(2 * group + 1)));
+                                    ProtosSemanticTransferPayload.integer(bounds.get(2 * group)),
+                                    ProtosSemanticTransferPayload.integer(
+                                            bounds.get(2 * group + 1)));
             if (groupNames.get(group) != ProtosNullValue.INSTANCE) {
                 names.add(
                         ProtosSemanticTransferPayload.of(
-                                string(groupNames.get(group)), BigInteger.valueOf(group)));
+                                string(groupNames.get(group)),
+                                ProtosSemanticTransferPayload.integer(group)));
             }
         }
         return ProtosSemanticTransferPayload.of(
                 MATCH,
-                BigInteger.valueOf(captureCount),
+                ProtosSemanticTransferPayload.integer(captureCount),
                 ProtosSemanticTransferPayload.of(groups),
                 ProtosSemanticTransferPayload.of(names.toArray()));
     }
@@ -217,15 +217,14 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
         }
         if (payload.size() != 4
                 || !MATCH.equals(payload.get(0))
-                || !(payload.get(1) instanceof BigInteger count)
-                || count.signum() < 0
-                || count.bitLength() > 30
                 || !(payload.get(2) instanceof ProtosSemanticTransferPayload groups)
-                || !(payload.get(3) instanceof ProtosSemanticTransferPayload names)
-                || groups.size() != count.intValue() + 1) {
+                || !(payload.get(3) instanceof ProtosSemanticTransferPayload names)) {
             return false;
         }
-        int captureCount = count.intValue();
+        int captureCount = payload.nonNegativeInt(1);
+        if (captureCount < 0 || captureCount >= 1 << 30 || groups.size() != captureCount + 1) {
+            return false;
+        }
         for (int group = 0; group < groups.size(); group++) {
             if (!(groups.get(group) instanceof ProtosSemanticTransferPayload entry)
                     || !acceptsGroup(entry, group)) {
@@ -237,15 +236,14 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
         for (int index = 0; index < names.size(); index++) {
             if (!(names.get(index) instanceof ProtosSemanticTransferPayload pair)
                     || pair.size() != 2
-                    || !(pair.get(0) instanceof String name)
-                    || !(pair.get(1) instanceof BigInteger group)
-                    || group.signum() <= 0
-                    || group.compareTo(count) > 0
-                    || !seenNames.add(name)
-                    || namedGroups[group.intValue()]) {
+                    || !(pair.get(0) instanceof String name)) {
                 return false;
             }
-            namedGroups[group.intValue()] = true;
+            int group = pair.nonNegativeInt(1);
+            if (group <= 0 || group > captureCount || !seenNames.add(name) || namedGroups[group]) {
+                return false;
+            }
+            namedGroups[group] = true;
         }
         return true;
     }
@@ -257,22 +255,11 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
         return entry.size() == 4
                 && Boolean.TRUE.equals(entry.get(0))
                 && entry.get(1) instanceof String text
-                && entry.get(2) instanceof BigInteger start
-                && entry.get(3) instanceof BigInteger end
-                && start.signum() >= 0
-                && start.compareTo(end) <= 0
-                && spansCodePoints(start, end, text.codePointCount(0, text.length()));
-    }
-
-    /*
-     * PLAT051 carries bounds as exact Integers. Non-negative bounds within the signed-long range
-     * subtract exactly as longs; only larger bounds need arbitrary-precision subtraction.
-     */
-    private static boolean spansCodePoints(BigInteger start, BigInteger end, int length) {
-        if (end.bitLength() < Long.SIZE) {
-            return end.longValue() - start.longValue() == length;
-        }
-        return end.subtract(start).equals(BigInteger.valueOf(length));
+                && entry.isInteger(2)
+                && entry.isInteger(3)
+                && entry.integerSignum(2) >= 0
+                // A span of exactly the text's length also orders start <= end.
+                && entry.integersDifferBy(3, 2, text.codePointCount(0, text.length()));
     }
 
     @Override
@@ -305,18 +292,18 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
                                 : ProtosNullValue.INSTANCE);
                 bounds.add(
                         participates
-                                ? ProtosNumericValueSupport.integer((BigInteger) entry.get(2), prelude)
+                                ? entry.semanticInteger(2, prelude)
                                 : ProtosNullValue.INSTANCE);
                 bounds.add(
                         participates
-                                ? ProtosNumericValueSupport.integer((BigInteger) entry.get(3), prelude)
+                                ? entry.semanticInteger(3, prelude)
                                 : ProtosNullValue.INSTANCE);
                 groupNames.add(ProtosNullValue.INSTANCE);
             }
             for (int index = 0; index < names.size(); index++) {
                 ProtosSemanticTransferPayload pair = (ProtosSemanticTransferPayload) names.get(index);
                 groupNames.set(
-                        ((BigInteger) pair.get(1)).intValue(),
+                        pair.nonNegativeInt(1),
                         new ProtosStringValue((String) pair.get(0)));
             }
             built =
@@ -348,10 +335,6 @@ public final class ProtosRegexSemanticTransferFamily extends ProtosSemanticTrans
 
     private static String string(Object value) {
         return ((ProtosStringValue) value).value();
-    }
-
-    private static BigInteger integer(Object value) {
-        return ProtosNumericValueSupport.exactBigInteger(value);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

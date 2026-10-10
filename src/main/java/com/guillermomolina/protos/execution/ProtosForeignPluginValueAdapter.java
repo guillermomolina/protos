@@ -78,6 +78,7 @@ final class ProtosForeignPluginValueAdapter implements ProtosForeignValueAdapter
                     ProtosForeignAdmissionDescriptor.booleanValue((Boolean) declared.scalar());
             case NULL -> ProtosForeignAdmissionDescriptor.absent();
             case STRING -> ProtosForeignAdmissionDescriptor.text((String) declared.scalar());
+            // D188: the public SPI declares every exact Integer as a host BigInteger.
             case INTEGER ->
                     ProtosForeignAdmissionDescriptor.integral(
                             (java.math.BigInteger) declared.scalar());

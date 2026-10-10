@@ -17,8 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -60,11 +58,8 @@ final class ProtosForeignValueAdmission {
             case BOOLEAN -> ProtosBooleanValue.of((Boolean) descriptor.scalar());
             case NULL -> ProtosNullValue.INSTANCE;
             case STRING -> unicodeOrRaw(session, adapter, foreign, (String) descriptor.scalar());
-            case INTEGER ->
-                    descriptor.scalar() instanceof java.math.BigInteger large
-                            ? ProtosNumericValueSupport.integer(large, prelude)
-                            : descriptor.scalar();
-            case BINARY64 -> new ProtosFloatValue((Double) descriptor.scalar());
+            case INTEGER -> ProtosNumericValueSupport.integerFromHost(descriptor.scalar(), prelude);
+            case BINARY64 -> ProtosNumericValueSupport.floating((Double) descriptor.scalar());
             case RAW ->
                     new ProtosRawForeignValue(
                             new ProtosForeignHandle(session, adapter, foreign, descriptor));
@@ -104,17 +99,15 @@ final class ProtosForeignValueAdmission {
                     new ProtosForeignArgument(
                             ProtosForeignAdmissionDescriptor.Kind.STRING, string.value());
         } else if (ProtosNumericValueSupport.isCurrentInteger(value)) {
-            // I091: an exact Integer within the signed-long range crosses as a Long.
             argument =
                     new ProtosForeignArgument(
                             ProtosForeignAdmissionDescriptor.Kind.INTEGER,
-                            value instanceof ProtosIntegerValue integer
-                                    ? (Object) integer.longValue()
-                                    : ProtosNumericValueSupport.exactBigInteger(value));
-        } else if (value instanceof ProtosFloatValue floating) {
+                            ProtosNumericValueSupport.hostInteger(value));
+        } else if (ProtosNumericValueSupport.isCurrentFloat(value)) {
             argument =
                     new ProtosForeignArgument(
-                            ProtosForeignAdmissionDescriptor.Kind.BINARY64, floating.value());
+                            ProtosForeignAdmissionDescriptor.Kind.BINARY64,
+                            ProtosNumericValueSupport.currentFloatValue(value));
         } else if (value instanceof ProtosRawForeignValue raw
                 && raw.handleForRuntime() instanceof ProtosForeignHandle handle
                 && handle.session() == origin.session()

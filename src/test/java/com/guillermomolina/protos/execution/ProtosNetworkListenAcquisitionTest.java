@@ -54,6 +54,30 @@ final class ProtosNetworkListenAcquisitionTest {
         assertEquals(0,x.backend.invocations.size());
     }
 
+    // I091: bounded fields admit only exact Integers in their domain; nothing truncates into it.
+    @Test void numericFieldsOutsideTheirExactDomainFailBeforeBackendEffect() throws Exception {
+        Fixture x=fixture(); Object nul=ProtosNullValue.INSTANCE;
+        Object twoTo64Plus4=ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(4)),x.prelude);
+        Object twoTo64Plus80=ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)),x.prelude);
+        Object[] badVersions={integer(-1),integer((1L<<32)+4),twoTo64Plus4,new ProtosFloatValue(4.0d),Long.valueOf(4L),nul};
+        for(Object version:badVersions) assertFailedAs(listen(x,request(version,nul,nul)),x.prelude,"InvalidIOArgument");
+        Object[] badPorts={integer(-1),integer(65536),integer((1L<<32)+80),twoTo64Plus80,new ProtosFloatValue(80.0d),new ProtosStringValue("80")};
+        for(Object port:badPorts) assertFailedAs(listen(x,request(integer(6),nul,port)),x.prelude,"InvalidIOArgument");
+        assertEquals(0,x.backend.invocations.size());
+    }
+
+    @Test void portBoundsAndAnIpv6AddressWithBit127AreCapturedExactly() throws Exception {
+        Fixture x=fixture(); BigInteger high=BigInteger.ONE.shiftLeft(127).add(BigInteger.ONE);
+        ProtosObjectValue address=ipAddress(x,6,high);
+        listen(x,request(integer(6),address,integer(1))); listen(x,request(integer(4),ProtosNullValue.INSTANCE,integer(65535)));
+        assertEquals(2,x.backend.invocations.size());
+        ProtosNetworkListenFlow.ListenRequest first=x.backend.invocations.get(0).request;
+        assertEquals(6,first.ipVersion()); assertEquals(1,first.portConstraint()); assertSame(address,first.addressConstraint());
+        assertEquals(high,ProtosTestIntegers.exact(first.addressConstraint().readLocalSlot("bits").orElseThrow()));
+        ProtosNetworkListenFlow.ListenRequest second=x.backend.invocations.get(1).request;
+        assertEquals(4,second.ipVersion()); assertEquals(65535,second.portConstraint());
+    }
+
     @Test void wrongArityOrNonAuthorityReceiverFailsBeforeBackendEffect() throws Exception {
         Fixture x=fixture();
         assertFailedAs(future(x.network,"listenTcp",List.of(),x.activation),x.prelude,"InvalidIOArgument");

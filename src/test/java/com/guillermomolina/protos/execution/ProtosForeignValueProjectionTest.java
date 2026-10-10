@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosForeignAdmissionDescriptor.Capability;
@@ -237,6 +238,136 @@ class ProtosForeignValueProjectionTest {
             fixture.provider.modules.put("boom", new TestForeignFailure("no module"));
             ProtosObjectValue importFailure = fixture.failure("import(\"test:boom\")");
             assertEquals("import", text(importFailure, "operation"));
+        }
+    }
+
+    private static final BigInteger TWO_POW_63 = BigInteger.ONE.shiftLeft(63);
+
+    /** Echoes its first argument back as the provider's own source-classified Integer. */
+    private static Fake echo() {
+        Fake fn = new Fake(false, Capability.EXECUTABLE);
+        fn.body = arguments ->
+                new Integral((BigInteger) ProtosForeignValueFixture.scalar(arguments.get(0)));
+        return fn;
+    }
+
+    @Test
+    void exactIntegersCrossAsLongOrBigIntegerOnlyAndAdmitExactly() throws Exception {
+        Fake root = new Fake(false);
+        try (ProtosForeignValueFixture fixture = fixture(root)) {
+            root.member("echo", echo());
+            String[] spellings = {
+                "0", "-9223372036854775808", "9223372036854775807",
+                "9223372036854775808", "-9223372036854775809"};
+            BigInteger[] values = {
+                BigInteger.ZERO, BigInteger.valueOf(Long.MIN_VALUE),
+                BigInteger.valueOf(Long.MAX_VALUE), TWO_POW_63,
+                TWO_POW_63.negate().subtract(BigInteger.ONE)};
+            for (int index = 0; index < spellings.length; index++) {
+                Object admitted = fixture.eval(M + "m.echo(" + spellings[index] + ")");
+                assertEquals(values[index], ProtosTestIntegers.exact(admitted), spellings[index]);
+                Object outbound = fixture.provider.executions.get(index).get(0).value();
+                // Outbound: signed-64 as a Long, a BigInteger only beyond that range.
+                if (values[index].bitLength() < Long.SIZE) {
+                    assertEquals(values[index].longValueExact(),
+                            assertInstanceOf(Long.class, outbound), spellings[index]);
+                    assertInstanceOf(ProtosIntegerValue.class, admitted, spellings[index]);
+                } else {
+                    assertEquals(values[index],
+                            assertInstanceOf(BigInteger.class, outbound), spellings[index]);
+                }
+            }
+            // A provider-returned large Integer is owned by the admitting Prelude.
+            assertSame(ProtosBooleanValue.TRUE,
+                    fixture.eval(M + "m.echo(9223372036854775808).parent() === Integer"));
+            assertSame(ProtosBooleanValue.TRUE,
+                    fixture.eval(M + "m.echo(9223372036854775808) - 1 === 9223372036854775807"));
+        }
+    }
+
+    @Test
+    void integerDescriptorsHoldOnlyNormalizedHostScalars() {
+        assertInstanceOf(Long.class,
+                ProtosForeignAdmissionDescriptor.integral(BigInteger.valueOf(Long.MIN_VALUE))
+                        .scalar());
+        assertInstanceOf(Long.class,
+                ProtosForeignAdmissionDescriptor.integral(BigInteger.valueOf(Long.MAX_VALUE))
+                        .scalar());
+        assertEquals(TWO_POW_63, ProtosForeignAdmissionDescriptor.integral(TWO_POW_63).scalar());
+        assertEquals(5L, ProtosForeignAdmissionDescriptor.integral(5).scalar());
+        // A forged guest Integer or an unnormalized host scalar is never an Integer descriptor.
+        for (Object forged : new Object[] {
+                new ProtosIntegerValue(1L), BigInteger.ONE, 1, 1.0d, "1"}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ProtosForeignAdmissionDescriptor(
+                            ProtosForeignAdmissionDescriptor.Kind.INTEGER,
+                            forged,
+                            null,
+                            Set.of()),
+                    String.valueOf(forged));
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> ProtosForeignAdmissionDescriptor.integral(1.5d));
+    }
+
+    @Test
+    void rawHandlesCallbacksAndClosedSessionsKeepTheirIntegerContract() throws Exception {
+        Fake root = new Fake(false);
+        try (ProtosForeignValueFixture fixture = fixture(root)) {
+            Fake viaCallback = new Fake(false, Capability.EXECUTABLE);
+            viaCallback.body = arguments -> {
+                try {
+                    ProtosForeignArgument result = arguments.get(0).callback()
+                            .invoke(List.of(new Integral(TWO_POW_63)));
+                    return new Integral(
+                            (BigInteger) ProtosForeignValueFixture.scalar(result));
+                } catch (Exception failure) {
+                    throw new IllegalStateException(failure);
+                }
+            };
+            root.member("echo", echo())
+                    .member("fn", adder(fixture.provider))
+                    .member("viaCallback", viaCallback)
+                    .member("other", new Fake(false));
+            // The callback receives the admitted large Integer and returns a large one.
+            assertEquals(TWO_POW_63.add(BigInteger.ONE), ProtosTestIntegers.exact(
+                    fixture.eval(M + "m.viaCallback((x) => x + 1)")));
+            assertSame(ProtosBooleanValue.TRUE, fixture.eval(
+                    M + "m.viaCallback((x) => (x.parent() === Integer).ifTrue() { x })"
+                            + ".parent() === Integer"));
+            // A RAW handle keeps its exact identity next to Integer arguments.
+            fixture.eval(M + "m.fn(m.other, 9223372036854775808)");
+            ProtosForeignArgument raw =
+                    fixture.provider.executions.get(fixture.provider.executions.size() - 1).get(0);
+            assertEquals(ProtosForeignAdmissionDescriptor.Kind.RAW, raw.kind());
+            assertSame(root.faithful.get("other"), raw.value());
+
+            ProtosRawForeignValue echo =
+                    assertInstanceOf(ProtosRawForeignValue.class, fixture.eval(M + "m.saved: m.echo"));
+            fixture.facade("root").attachmentForRuntime().orElseThrow().session().closeForRuntime();
+            int executions = fixture.provider.executions.size();
+            assertOrdinary(fixture, fixture.failure(M + "m.saved(9223372036854775808)"));
+            assertEquals(executions, fixture.provider.executions.size());
+            assertSame(echo, fixture.eval(M + "m.saved"));
+        }
+    }
+
+    @Test
+    void largeIntegersAreAdmittedByEachIndependentDomain() throws Exception {
+        Fake leftRoot = new Fake(false);
+        Fake rightRoot = new Fake(false);
+        try (ProtosForeignValueFixture left = fixture(leftRoot);
+                ProtosForeignValueFixture right = fixture(rightRoot)) {
+            leftRoot.member("echo", echo());
+            rightRoot.member("echo", echo());
+            Object fromLeft = left.eval(M + "m.echo(9223372036854775808)");
+            Object fromRight = right.eval(M + "m.echo(9223372036854775808)");
+            assertNotSame(fromLeft, fromRight);
+            assertSame(left.prelude.integerPrototype(),
+                    ((ProtosObjectValue) fromLeft).parent().orElseThrow());
+            assertSame(right.prelude.integerPrototype(),
+                    ((ProtosObjectValue) fromRight).parent().orElseThrow());
+            assertEquals(ProtosTestIntegers.exact(fromLeft), ProtosTestIntegers.exact(fromRight));
         }
     }
 

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
@@ -65,24 +66,39 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
             return signed;
         }
 
-        public BigInteger minimum() {
-            return BigInteger.valueOf(signed ? -1L << (width - 1) : 0L);
+        /** The family minimum; every family minimum lies within the signed-64 range. */
+        public long minimum() {
+            return signed ? -1L << (width - 1) : 0L;
         }
 
-        public BigInteger maximum() {
-            if (!signed && width == Long.SIZE) {
-                return unsigned(-1L);
-            }
-            return BigInteger.valueOf(signed ? ~(-1L << (width - 1)) : ~(-1L << width));
-        }
-
-        /** A signed n-bit value has bit length at most n - 1; an unsigned one is non-negative. */
-        public boolean contains(BigInteger value) {
-            Objects.requireNonNull(value, "value");
+        /**
+         * The two's-complement bits of the family maximum. They read as signed for every family
+         * except UINT64, whose maximum 2^64 - 1 is the unsigned pattern of {@code -1L}.
+         */
+        public long maximumBits() {
             if (signed) {
-                return value.bitLength() <= width - 1;
+                return ~minimum();
             }
-            return value.signum() >= 0 && value.bitLength() <= width;
+            return width == Long.SIZE ? -1L : ~(-1L << width);
+        }
+
+        /** Whether the exact current Integer {@code integer}, of any magnitude, is in range. */
+        public boolean containsInteger(Object integer) {
+            if (ProtosNumericValueSupport.isIntegerInLongRange(integer)) {
+                return contains(ProtosNumericValueSupport.exactLong(integer));
+            }
+            ProtosNumericValueSupport.requireCurrentInteger(integer);
+            // Outside the signed-64 range only UINT64 holds values, those below 2^64.
+            return this == UINT64 && ProtosNumericValueSupport.isUnsignedIntegerWithin(integer, width);
+        }
+
+        /** Whether the exact signed-64 {@code value} lies in this family's range. */
+        public boolean contains(long value) {
+            if (signed) {
+                return width == Long.SIZE
+                        || (value >= minimum() && value <= ~minimum());
+            }
+            return value >= 0L && (width == Long.SIZE || (value >>> width) == 0L);
         }
     }
 
@@ -90,27 +106,67 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
     /** Two's-complement bits of the value; unsigned for UINT64 values at or above 2^63. */
     private final long bits;
 
-    public ProtosFixedIntegerInteropValue(Kind kind, BigInteger value) {
-        this.kind = Objects.requireNonNull(kind, "kind");
-        Objects.requireNonNull(value, "value");
+    private ProtosFixedIntegerInteropValue(Kind kind, long bits) {
+        this.kind = kind;
+        this.bits = bits;
+    }
+
+    /** The value of {@code kind} denoting the exact signed-64 {@code value}. */
+    public static ProtosFixedIntegerInteropValue ofLong(Kind kind, long value) {
+        Objects.requireNonNull(kind, "kind");
         if (!kind.contains(value)) {
             throw new IllegalArgumentException(value + " is outside " + kind + " range");
         }
-        this.bits = value.longValue();
+        return new ProtosFixedIntegerInteropValue(kind, value);
+    }
+
+    /** The UINT64 value whose unsigned 64-bit pattern is {@code bits}; every pattern is valid. */
+    public static ProtosFixedIntegerInteropValue ofUnsignedBits(long bits) {
+        return new ProtosFixedIntegerInteropValue(Kind.UINT64, bits);
+    }
+
+    /** The value of {@code kind} denoting the exact current Integer {@code integer}. */
+    public static ProtosFixedIntegerInteropValue ofInteger(Kind kind, Object integer) {
+        Objects.requireNonNull(kind, "kind");
+        if (!kind.containsInteger(integer)) {
+            throw new IllegalArgumentException("Integer is outside " + kind + " range");
+        }
+        if (ProtosNumericValueSupport.isIntegerInLongRange(integer)) {
+            return new ProtosFixedIntegerInteropValue(
+                    kind, ProtosNumericValueSupport.exactLong(integer));
+        }
+        byte[] octets = ProtosNumericValueSupport.unsignedBigEndianOrNull(integer, Long.BYTES);
+        long unsignedBits = 0L;
+        for (byte octet : octets) {
+            unsignedBits = (unsignedBits << Byte.SIZE) | (octet & 0xffL);
+        }
+        return ofUnsignedBits(unsignedBits);
     }
 
     public Kind kind() {
         return kind;
     }
 
-    public BigInteger value() {
-        return beyondSignedLong() ? unsigned(bits) : BigInteger.valueOf(bits);
+    /** Two's-complement bits of the value; unsigned for UINT64 values at or above 2^63. */
+    public long bits() {
+        return bits;
     }
 
-    /** The exact unsigned 64-bit integer denoted by {@code bits}. */
-    private static BigInteger unsigned(long bits) {
-        BigInteger high = BigInteger.valueOf(bits >>> 1).shiftLeft(1);
-        return (bits & 1L) == 0L ? high : high.setBit(0);
+    /**
+     * The exact current Integer this value denotes. Only a UINT64 value at or above 2^63 needs
+     * {@code prelude}, which mints the large Integer.
+     */
+    public Object integer(ProtosPrelude prelude) {
+        if (!beyondSignedLong()) {
+            return ProtosNumericValueSupport.integer(bits);
+        }
+        byte[] octets = new byte[Long.BYTES];
+        long remaining = bits;
+        for (int index = Long.BYTES - 1; index >= 0; index--) {
+            octets[index] = (byte) remaining;
+            remaining >>>= Byte.SIZE;
+        }
+        return ProtosNumericValueSupport.integerFromUnsignedBigEndian(octets, prelude);
     }
 
     private boolean beyondSignedLong() {
@@ -193,9 +249,12 @@ final class ProtosFixedIntegerInteropValue implements TruffleObject {
         return bits;
     }
 
+    /* Truffle interop contract: the only arbitrary-precision projection of a fixed value. */
     @ExportMessage
+    @TruffleBoundary
     BigInteger asBigInteger() {
-        return value();
+        BigInteger exact = BigInteger.valueOf(bits);
+        return beyondSignedLong() ? exact.add(BigInteger.ONE.shiftLeft(Long.SIZE)) : exact;
     }
 
     @ExportMessage

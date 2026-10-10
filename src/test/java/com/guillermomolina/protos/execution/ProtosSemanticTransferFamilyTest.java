@@ -188,6 +188,52 @@ final class ProtosSemanticTransferFamilyTest {
         assertEquals(ProtosNumericHashKey.fromIdentity(copiedKey), entry.recordedHash());
     }
 
+    /*
+     * Root-parented graph only: materialization into a distinct Prelude shares only that
+     * Prelude's standard objects, so a source-Prelude Map/Array prototype is not portable there.
+     */
+    @Test
+    void largeIntegersInADetachedSnapshotRematerializeInTheDestinationPrelude() throws Exception {
+        ProtosPrelude destinationPrelude =
+                ProtosCoreBootstrap.withSemanticTransferFamiliesForTesting(List.of(PORTABLE))
+                        .bootstrap(CORE);
+        BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
+        Object shared = ProtosTestIntegers.integer(huge, prelude);
+        Object twin = ProtosTestIntegers.integer(huge, prelude);
+        Object negative = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64).negate(), prelude);
+        ProtosObjectValue graph = surroundingGraph(PORTABLE.mint("a+b"), PORTABLE.mint("a+b"));
+        graph.createLocalSlot("large", shared);
+        graph.createLocalSlot("largeAgain", shared);
+        graph.createLocalSlot("largeTwin", twin);
+        graph.createLocalSlot("negative", negative);
+
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(graph, shared), prelude.newModuleActivation());
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(
+                        snapshot, destinationPrelude.newModuleActivation());
+
+        ProtosObjectValue copiedGraph = assertInstanceOf(ProtosObjectValue.class, delivered.get(0));
+        Object copiedLarge = copiedGraph.readLocalSlot("large").orElseThrow();
+        Object copiedTwin = copiedGraph.readLocalSlot("largeTwin").orElseThrow();
+        Object copiedNegative = copiedGraph.readLocalSlot("negative").orElseThrow();
+        for (Object copied : List.of(copiedLarge, copiedTwin, copiedNegative)) {
+            ProtosObjectValue large = assertInstanceOf(ProtosObjectValue.class, copied);
+            assertTrue(ProtosNumericValueSupport.isLargeInteger(large));
+            assertTrue(large.isFrozen());
+            assertSame(destinationPrelude.integerPrototype(), large.parent().orElseThrow());
+        }
+        assertEquals(huge, ProtosTestIntegers.exact(copiedLarge));
+        assertEquals(BigInteger.ONE.shiftLeft(64).negate(), ProtosTestIntegers.exact(copiedNegative));
+        assertSame(copiedLarge, delivered.get(1));
+        assertSame(copiedLarge, copiedGraph.readLocalSlot("largeAgain").orElseThrow());
+        assertNotSame(copiedLarge, copiedTwin);
+        assertTrue(ProtosIdentity.identical(copiedLarge, copiedTwin));
+        assertEquals(ProtosIdentity.identityHash(shared), ProtosIdentity.identityHash(copiedTwin));
+    }
+
     @Test
     void ordinaryObjectCannotForgeFamilyThroughNamesSlotsShapeOrDelegation() {
         ProtosSemanticTransferValue genuine = PORTABLE.mint("x");

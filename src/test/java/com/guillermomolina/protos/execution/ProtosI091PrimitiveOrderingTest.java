@@ -72,6 +72,87 @@ final class ProtosI091PrimitiveOrderingTest {
     }
 
     @Test
+    void removedRetainedLocalFollowsD179FallbackAndNeverItsStaleCarrier() {
+        try (Context context = context()) {
+            // The removed value is observed as a guest Integer, not a frame carrier.
+            assertTrue(eval(context,
+                    "x: 100\n"
+                            + "f: () => {\n"
+                            + "    x: 1 + 2\n"
+                            + "    y: x + 1\n"
+                            + "    removed: context.removeSlot(\"x\")\n"
+                            + "    (removed.parent() === Integer) && (removed == 3) && (x + y == 104)\n"
+                            + "}\n"
+                            + "f()"));
+            // A captured read taken before and after the removal.
+            assertTrue(eval(context,
+                    "x: 100\n"
+                            + "f: () => {\n"
+                            + "    x: 9223372036854775806 + 1\n"
+                            + "    g: () => x + 0\n"
+                            + "    first: g()\n"
+                            + "    context.removeSlot(\"x\")\n"
+                            + "    (first == 9223372036854775807) && (g() == 100)\n"
+                            + "}\n"
+                            + "f()"));
+            // Without any fallback binding the read is an ordinary lookup Error.
+            assertTrue(eval(context,
+                    "f: () => {\n"
+                            + "    lonely: 1 + 2\n"
+                            + "    context.removeSlot(\"lonely\")\n"
+                            + "    failed: false\n"
+                            + "    Error.handle(() => { lonely + 1 }, error => { failed = true })\n"
+                            + "    failed\n"
+                            + "}\n"
+                            + "f()"));
+        }
+    }
+
+    @Test
+    void extremeAndSpecialOperandsOrderExactlyOverCarriers() {
+        try (Context context = context()) {
+            assertTrue(eval(context,
+                    "low: 0 - 9223372036854775807 - 1\n"
+                            + "high: 9223372036854775806 + 1\n"
+                            + "(low < high) && (low <= low) && (high >= high) && !(high < low)"));
+            assertTrue(eval(context,
+                    "high: 9223372036854775806 + 1\n(high < (high + 1)) && ((high + 1) > high)"));
+            assertTrue(eval(context,
+                    "n: 0.0 / 0.0\n!(n < n) && !(n <= n) && !(n > 1) && !(1 >= n)"));
+            assertTrue(eval(context,
+                    "z: 0.0 * (0.0 - 1.0)\n"
+                            + "!(z < 0.0) && (z <= 0.0) && (z >= 0.0) && !(z < 0)"
+                            + " && ((1.0 / z) < (0.0 - 1.0e308))"));
+        }
+    }
+
+    @Test
+    void carrierAndGuestOperandsCompareAlike() {
+        try (Context context = context()) {
+            assertTrue(eval(context,
+                    "a: 1 + 2\n(a == 3) && (3 == a) && (a === 3) && (a.parent() === Integer)"));
+            assertTrue(eval(context,
+                    "a: 0.5 + 1\n(a == 1.5) && (1.5 == a) && (a.parent() === Float)"));
+            assertTrue(eval(context,
+                    "a: 2 + 1\nb: 2.5 + 0.5\n(a <= b) && (b <= a) && !(a < b)"));
+        }
+    }
+
+    @Test
+    void nonNumericOperandLeavesTheCarrierChainForOrdinaryDispatch() {
+        try (Context context = context()) {
+            assertTrue(eval(context,
+                    "a: 1 + 2\n"
+                            + "failed: false\n"
+                            + "Error.handle(() => { a < \"text\" }, error => { failed = true })\n"
+                            + "failed && (a < 4)"));
+            assertTrue(eval(context,
+                    "o: { less: (x, y) => x < y }\n"
+                            + "(o.less(1, 2) && !o.less(2.5, 2) && o.less(1, 9223372036854775808))"));
+        }
+    }
+
+    @Test
     void exactCanonicalOrderingClosureIsNotAnAliasOrCopiedNativeBody()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(

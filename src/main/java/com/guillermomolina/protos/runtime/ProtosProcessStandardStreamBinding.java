@@ -140,8 +140,12 @@ public final class ProtosProcessStandardStreamBinding {
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        if (!ProtosNumericValueSupport.isIntegerInIntRange(maxBytesValue)
-                || ProtosNumericValueSupport.exactInt(maxBytesValue) <= 0) {
+        // A non-Integer or an Integer outside the int range, including a large one, maps to 0.
+        int maxBytes =
+                ProtosNumericValueSupport.isIntegerInIntRange(maxBytesValue)
+                        ? ProtosNumericValueSupport.exactInt(maxBytesValue)
+                        : 0;
+        if (maxBytes <= 0) {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -151,7 +155,7 @@ public final class ProtosProcessStandardStreamBinding {
             return operation.future();
         }
 
-        Request request = new Request(Kind.READ, receiver, operation, ProtosNumericValueSupport.exactInt(maxBytesValue), null);
+        Request request = new Request(Kind.READ, receiver, operation, maxBytes, null);
         enqueue(request);
         return operation.future();
     }

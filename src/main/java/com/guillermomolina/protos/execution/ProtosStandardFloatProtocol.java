@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -161,8 +162,7 @@ public final class ProtosStandardFloatProtocol {
             if (argument instanceof ProtosFloatValue floating) {
                 right = floating.value();
             } else if (ProtosNumericValueSupport.isCurrentInteger(argument)) {
-                right = ProtosStandardNumericConversionProtocol
-                        .integerToBinary64(argument);
+                right = ProtosBinary64Rounding.roundExactInteger(argument);
             } else {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));

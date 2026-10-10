@@ -129,6 +129,51 @@ final class ProtosCurrentNumericRelationsTest {
                 new ProtosFloatValue(Double.NaN), twoPow63);
     }
 
+    @Test
+    void signed64EdgesAndOneHundredThirtyBitIntegersOrderExactly() {
+        var less = ProtosStandardNumberOrderingProtocol.Comparison.LESS;
+        var greater = ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
+        var equal = ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
+        Object twoPow63 = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(63));
+        ProtosIntegerValue max = new ProtosIntegerValue(Long.MAX_VALUE);
+        ProtosIntegerValue min = new ProtosIntegerValue(Long.MIN_VALUE);
+        assertEquals(less, ProtosCurrentNumericRelations.compare(max, twoPow63));
+        assertEquals(greater, ProtosCurrentNumericRelations.compare(twoPow63, max));
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(max, twoPow63));
+
+        assertTrue(ProtosCurrentNumericRelations.numericEquals(min, new ProtosFloatValue(-0x1p63)));
+        assertEquals(equal, ProtosCurrentNumericRelations.compare(min, new ProtosFloatValue(-0x1p63)));
+        assertEquals(less, ProtosCurrentNumericRelations.compare(
+                min, new ProtosFloatValue(-0x1.fffffffffffffp62)));
+        assertEquals(greater, ProtosCurrentNumericRelations.compare(
+                min, new ProtosFloatValue(-0x1.0000000000001p63)));
+
+        BigInteger magnitude = BigInteger.ONE.shiftLeft(129).add(BigInteger.ONE);
+        Object positive = ProtosTestIntegers.integer(magnitude);
+        Object negative = ProtosTestIntegers.integer(magnitude.negate());
+        assertComparison(less, new ProtosFloatValue(0x1p129), positive);
+        assertComparison(greater, new ProtosFloatValue(0x1.0000000000001p129), positive);
+        assertComparison(greater, new ProtosFloatValue(-0x1p129), negative);
+        assertComparison(less, new ProtosFloatValue(-0x1.0000000000001p129), negative);
+        assertComparison(less, new ProtosFloatValue(Double.NEGATIVE_INFINITY), negative);
+        assertComparison(greater, new ProtosFloatValue(Double.POSITIVE_INFINITY), negative);
+        assertComparison(less, new ProtosFloatValue(Double.NEGATIVE_INFINITY), positive);
+        assertComparison(
+                ProtosStandardNumberOrderingProtocol.Comparison.UNORDERED,
+                new ProtosFloatValue(Double.NaN),
+                negative);
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(
+                negative, new ProtosFloatValue(Double.NaN)));
+
+        Object exactNegative = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(129).negate());
+        assertTrue(ProtosCurrentNumericRelations.numericEquals(
+                exactNegative, new ProtosFloatValue(-0x1p129)));
+        assertTrue(ProtosCurrentNumericRelations.numericEquals(
+                new ProtosIntegerValue(1L << 53), new ProtosFloatValue(0x1p53)));
+        assertFalse(ProtosCurrentNumericRelations.numericEquals(
+                new ProtosIntegerValue((1L << 53) + 1L), new ProtosFloatValue(0x1p53)));
+    }
+
     private static void assertComparison(
             ProtosStandardNumberOrderingProtocol.Comparison expected,
             ProtosFloatValue floating,

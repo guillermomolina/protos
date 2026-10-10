@@ -20,17 +20,22 @@ import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
+import java.io.IOException;
 import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -271,6 +276,109 @@ final class ProtosNioNetworkBackendConnectTest {
                 accepted.close();
             }
         }
+    }
+
+    private static final BigInteger IPV6_TOP_BIT = BigInteger.ONE.shiftLeft(127);
+    private static final BigInteger IPV6_ALL_ONES =
+            BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE);
+
+    @Test
+    void ipv6BitsReachTheHostAddressUnsignedAndUnchanged() throws Exception {
+        try (ProtosNioHostIoPoller poller =
+                new ProtosNioHostIoPoller("protos-test-nio-connect-v6-exact")) {
+            AtomicReference<byte[]> seen = new AtomicReference<>();
+            Fixture x =
+                    fixture(
+                            poller,
+                            bytes -> {
+                                seen.set(bytes.clone());
+                                // Stop before any socket work: only the decoded bits matter.
+                                throw new IOException("probe");
+                            });
+            for (BigInteger bits : List.of(
+                    BigInteger.ZERO, BigInteger.ONE, IPV6_TOP_BIT, IPV6_ALL_ONES,
+                    new BigInteger("fe800000000000000000000000000001", 16),
+                    BigInteger.ONE.shiftLeft(63), BigInteger.ONE.shiftLeft(64))) {
+                seen.set(null);
+                ProtosFutureValue result =
+                        connect(x, endpoint(x.prelude, x.activation, 6, bits, 443));
+                awaitTerminal(result);
+                assertFailedAs(result, x.prelude, "IOError");
+                assertArrayEquals(unsignedOctets(bits, 16), seen.get(), bits.toString(16));
+            }
+        }
+    }
+
+    @Test
+    void endpointConstructionEnforcesWidthsVersionsAndPorts() throws Exception {
+        try (ProtosNioHostIoPoller poller =
+                new ProtosNioHostIoPoller("protos-test-nio-connect-contract")) {
+            Fixture x = fixture(poller, bytes -> Inet6Address.getByAddress(null, bytes, -1));
+            BigInteger ipv4AllOnes = BigInteger.valueOf(0xffffffffL);
+            endpoint(x.prelude, x.activation, 4, ipv4AllOnes, 1);
+            endpoint(x.prelude, x.activation, 4, BigInteger.ZERO, 65535);
+            endpoint(x.prelude, x.activation, 6, IPV6_ALL_ONES, 65535);
+            for (int port : new int[] {0, -1, 65536}) {
+                assertThrows(ProtosSignalException.class,
+                        () -> endpoint(x.prelude, x.activation, 4, ipv4AllOnes, port));
+            }
+            assertThrows(ProtosSignalException.class,
+                    () -> endpoint(x.prelude, x.activation, 4, BigInteger.ONE.shiftLeft(32), 1));
+            assertThrows(ProtosSignalException.class,
+                    () -> endpoint(x.prelude, x.activation, 4, BigInteger.ONE.negate(), 1));
+            assertThrows(ProtosSignalException.class,
+                    () -> endpoint(x.prelude, x.activation, 6, IPV6_ALL_ONES.add(BigInteger.ONE), 1));
+            assertThrows(ProtosSignalException.class,
+                    () -> endpoint(x.prelude, x.activation, 5, BigInteger.ONE, 1));
+            // A large guest Integer is never a port.
+            Object address = ProtosInvocation.invoke(
+                    x.prelude.ipAddressPrototypeForRuntime(),
+                    List.of(new ProtosIntegerValue(4), new ProtosIntegerValue(1)),
+                    x.activation);
+            assertThrows(ProtosSignalException.class,
+                    () -> ProtosInvocation.invoke(
+                            x.prelude.ipEndpointPrototypeForRuntime(),
+                            List.of(address,
+                                    ProtosTestIntegers.integer(
+                                            BigInteger.ONE.shiftLeft(64).add(BigInteger.valueOf(80)),
+                                            x.prelude)),
+                            x.activation));
+        }
+    }
+
+    @Test
+    void hostGuestHostAddressConversionIsExactForBothWidths() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        for (BigInteger bits : List.of(
+                BigInteger.ZERO, BigInteger.valueOf(0x7f000001L), BigInteger.valueOf(0xffffffffL))) {
+            assertRoundTrip(prelude, bits, 4);
+        }
+        for (BigInteger bits : List.of(
+                BigInteger.ONE, IPV6_TOP_BIT, IPV6_ALL_ONES, BigInteger.ONE.shiftLeft(63),
+                new BigInteger("fe800000000000000000000000000001", 16))) {
+            assertRoundTrip(prelude, bits, 16);
+        }
+    }
+
+    private static void assertRoundTrip(ProtosPrelude prelude, BigInteger bits, int width)
+            throws Exception {
+        byte[] octets = unsignedOctets(bits, width);
+        byte[] host = InetAddress.getByAddress(octets).getAddress();
+        Object guest = ProtosNumericValueSupport.integerFromUnsignedBigEndian(host, prelude);
+        assertEquals(bits, ProtosTestIntegers.exact(guest), bits.toString(16));
+        assertArrayEquals(octets, ProtosNumericValueSupport.unsignedBigEndianOrNull(guest, width));
+        if (bits.bitLength() > Long.SIZE - 1) {
+            assertSame(prelude.integerPrototype(),
+                    ((ProtosObjectValue) guest).parent().orElseThrow());
+        }
+    }
+
+    private static byte[] unsignedOctets(BigInteger value, int width) {
+        byte[] magnitude = value.toByteArray();
+        byte[] octets = new byte[width];
+        int copied = Math.min(magnitude.length, width);
+        System.arraycopy(magnitude, magnitude.length - copied, octets, width - copied, copied);
+        return octets;
     }
 
     private static Fixture fixture(

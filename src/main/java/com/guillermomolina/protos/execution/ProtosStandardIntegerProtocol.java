@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -72,29 +73,19 @@ public final class ProtosStandardIntegerProtocol {
      * prototype home and the current Prelude.
      */
     enum CanonicalIntegerOperation {
-        ADD("+", false, ProtosNumericValueSupport.Operation.ADD),
-        SUBTRACT("-", false, ProtosNumericValueSupport.Operation.SUBTRACT),
-        MULTIPLY("*", false, ProtosNumericValueSupport.Operation.MULTIPLY),
-        FLOAT_DIVIDE("/", true, null),
-        QUOTIENT("div", true, ProtosNumericValueSupport.Operation.QUOTIENT),
-        REMAINDER("mod", true, ProtosNumericValueSupport.Operation.REMAINDER);
+        ADD("+", false),
+        SUBTRACT("-", false),
+        MULTIPLY("*", false),
+        FLOAT_DIVIDE("/", true),
+        QUOTIENT("div", true),
+        REMAINDER("mod", true);
 
         private final String selector;
         private final boolean requiresNonZeroDivisor;
-        private final ProtosNumericValueSupport.Operation exactOperation;
 
-        CanonicalIntegerOperation(
-                String selector,
-                boolean requiresNonZeroDivisor,
-                ProtosNumericValueSupport.Operation exactOperation) {
+        CanonicalIntegerOperation(String selector, boolean requiresNonZeroDivisor) {
             this.selector = selector;
             this.requiresNonZeroDivisor = requiresNonZeroDivisor;
-            this.exactOperation = exactOperation;
-        }
-
-        /** The exact Integer operation, or null for the Float-valued quotient. */
-        ProtosNumericValueSupport.Operation exactOperation() {
-            return exactOperation;
         }
 
         String selector() {
@@ -231,12 +222,6 @@ public final class ProtosStandardIntegerProtocol {
                         && ProtosNumericValueSupport.integerSignum(supplied0) == 0)) {
             return null;
         }
-        if (prelude == null && operation.exactOperation() != null
-                && ProtosNumericValueSupport.needsPreludeForResult(
-                        operation.exactOperation(), receiver, supplied0)) {
-            return null;
-        }
-
         return executeValidCanonicalOperation(
                 operation, receiver, supplied0, prelude);
     }
@@ -287,8 +272,7 @@ public final class ProtosStandardIntegerProtocol {
             CanonicalIntegerOperation operation,
             Object receiver,
             ProtosFloatValue argument) {
-        double left = ProtosStandardNumericConversionProtocol
-                .integerToBinary64(receiver);
+        double left = ProtosBinary64Rounding.roundExactInteger(receiver);
         double right = argument.value();
         double result = switch (operation) {
             case ADD -> left + right;

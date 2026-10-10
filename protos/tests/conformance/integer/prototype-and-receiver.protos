@@ -48,6 +48,29 @@ tests: [
             numeric.parent() === Integer
         }
         Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("integer receivers are not instantiable prototypes at any magnitude", () => {
+        Assertions.signals(Error, () => (7).call())
+        Assertions.signals(Error, () => (100000000000000000000).call())
+        Assertions.signals(Error, () => ((100000000000000000000).call)())
+        Assertions.signals(Error, () => {
+            child: (100000000000000000000) {}
+            child.call()
+        })
+    }),
+    Test("integer reflection does not depend on magnitude", () => {
+        small: 7
+        large: 100000000000000000000
+        Assertions.require(small.hasSlot("parent") === false)
+        Assertions.require(large.hasSlot("parent") === false)
+        Assertions.require(small.slotNames().size() == 0)
+        Assertions.require(large.slotNames().size() == 0)
+        Assertions.require(small.parent() === Integer)
+        Assertions.require(large.parent() === Integer)
+        Assertions.signals(Error, () => small.slotValue("parent"))
+        Assertions.signals(Error, () => large.slotValue("parent"))
+        Assertions.signals(Error, () => small.removeSlot("parent"))
+        Assertions.signals(Error, () => large.removeSlot("parent"))
     })
 ]
 tests.freeze()

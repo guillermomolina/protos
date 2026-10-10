@@ -34,10 +34,19 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosRawForeignValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.spi.foreign.ProtosForeignArgumentValue;
+import com.guillermomolina.protos.spi.foreign.ProtosForeignValueClass;
+import com.guillermomolina.protos.spi.foreign.polyglot.ProtosForeignScalarFamily;
+import com.guillermomolina.protos.spi.foreign.polyglot.ProtosPolyglotValueOperations;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
+import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Value;
+import org.graalvm.polyglot.proxy.ProxyArray;
+import org.graalvm.polyglot.proxy.ProxyExecutable;
 import org.junit.jupiter.api.Test;
 
 /** LIB021-A {@code std:interop} explicit operations over the shared D188/D189 substrate. */
@@ -410,6 +419,129 @@ class ProtosForeignInteropTest {
             assertNull(retained.callback().callableOrNullForRuntime());
             assertTrue(fixture.provider.leaks.isEmpty());
         }
+    }
+
+    private static final BigInteger TWO_POW_63 = BigInteger.ONE.shiftLeft(63);
+
+    @Test
+    void foreignIndicesReachTheProviderExactlyAndAreNeverTruncated() throws Exception {
+        Fake array = new Fake(false, Capability.INDEXED_READ);
+        array.elements.add("zero");
+        Fake root = new Fake(false).member("array", array);
+        try (ProtosForeignValueFixture fixture = fixture(root)) {
+            ProtosForeignValueFixture.TestProvider provider = fixture.provider;
+            assertEquals("zero", text(fixture.eval(M + "m.array[0]")));
+            for (String index : List.of(
+                    "9223372036854775807", "9223372036854775808", "0 - 1",
+                    "18446744073709551616")) {
+                // The fake container has one element; the index it receives is the exact one.
+                fixture.failure(M + "m.array[" + index + "]");
+            }
+            assertEquals(1, provider.count("at:9223372036854775807"));
+            assertEquals(1, provider.count("at:9223372036854775808"));
+            assertEquals(1, provider.count("at:-1"));
+            assertEquals(1, provider.count("at:18446744073709551616"));
+            assertEquals(1, provider.count("at:0"));
+        }
+    }
+
+    @Test
+    void polyglotOperationsClassifyIntegralsBySourceFamilyOnly() {
+        BigInteger huge = BigInteger.ONE.shiftLeft(100).negate();
+        ProtosPolyglotValueOperations integral =
+                new ProtosPolyglotValueOperations("test", value -> ProtosForeignScalarFamily.INTEGRAL);
+        ProtosForeignValueClass large = integral.classify(null, Value.asValue(huge));
+        assertEquals(ProtosForeignValueClass.Kind.INTEGER, large.kind());
+        assertEquals(huge, large.scalar());
+        assertEquals(BigInteger.valueOf(Long.MIN_VALUE),
+                integral.classify(null, Value.asValue(Long.MIN_VALUE)).scalar());
+        // A declared integral family must actually be integral; a Float is never converted.
+        assertThrows(IllegalStateException.class,
+                () -> integral.classify(null, Value.asValue(1.5d)));
+
+        ProtosPolyglotValueOperations unspecified = new ProtosPolyglotValueOperations(
+                "test", value -> ProtosForeignScalarFamily.UNSPECIFIED);
+        assertEquals(ProtosForeignValueClass.Kind.HANDLE,
+                unspecified.classify(null, Value.asValue(7L)).kind());
+        assertEquals(ProtosForeignValueClass.Kind.HANDLE,
+                unspecified.classify(null, Value.asValue(huge)).kind());
+
+        ProtosPolyglotValueOperations floating = new ProtosPolyglotValueOperations(
+                "test", value -> ProtosForeignScalarFamily.BINARY_FLOATING);
+        assertEquals(ProtosForeignValueClass.Kind.BINARY64,
+                floating.classify(null, Value.asValue(7L)).kind());
+    }
+
+    @Test
+    void polyglotIndicesAreValidatedExactlyBeforeTheForeignArrayIsTouched() {
+        List<Long> requested = new ArrayList<>();
+        try (Context context = Context.create()) {
+            Value array = context.asValue(new ProxyArray() {
+                @Override
+                public Object get(long index) {
+                    requested.add(index);
+                    return "element";
+                }
+
+                @Override
+                public void set(long index, Value value) {
+                    requested.add(index);
+                }
+
+                @Override
+                public long getSize() {
+                    return Long.MAX_VALUE;
+                }
+            });
+            ProtosPolyglotValueOperations operations =
+                    new ProtosPolyglotValueOperations("test", value -> ProtosForeignScalarFamily.INTEGRAL);
+            operations.readElement(null, array, integerArgument(BigInteger.ZERO));
+            operations.readElement(null, array, integerArgument(BigInteger.valueOf(Long.MAX_VALUE)));
+            assertEquals(List.of(0L, Long.MAX_VALUE), requested);
+
+            for (BigInteger invalid : List.of(
+                    TWO_POW_63, BigInteger.ONE.negate(), BigInteger.valueOf(Long.MIN_VALUE),
+                    BigInteger.ONE.shiftLeft(64))) {
+                assertThrows(IllegalArgumentException.class,
+                        () -> operations.readElement(null, array, integerArgument(invalid)),
+                        invalid.toString());
+                assertThrows(IllegalArgumentException.class,
+                        () -> operations.writeElement(
+                                null, array, integerArgument(invalid), integerArgument(BigInteger.ONE)),
+                        invalid.toString());
+            }
+            assertThrows(IllegalArgumentException.class,
+                    () -> operations.readElement(null, array, new ProtosForeignArgumentValue(
+                            ProtosForeignValueClass.Kind.BINARY64, 0.0d)));
+            assertEquals(List.of(0L, Long.MAX_VALUE), requested);
+        }
+    }
+
+    @Test
+    void polyglotArgumentsStayExactAtEveryMagnitude() {
+        List<Value> received = new ArrayList<>();
+        try (Context context = Context.create()) {
+            Value executable = context.asValue((ProxyExecutable) arguments -> {
+                received.addAll(List.of(arguments));
+                return null;
+            });
+            ProtosPolyglotValueOperations operations =
+                    new ProtosPolyglotValueOperations("test", value -> ProtosForeignScalarFamily.INTEGRAL);
+            BigInteger huge = BigInteger.ONE.shiftLeft(80);
+            operations.execute(null, executable, List.of(
+                    integerArgument(BigInteger.valueOf(Long.MAX_VALUE)),
+                    integerArgument(TWO_POW_63),
+                    integerArgument(huge.negate())));
+            assertTrue(received.get(0).fitsInLong());
+            assertEquals(Long.MAX_VALUE, received.get(0).asLong());
+            assertTrue(!received.get(1).fitsInLong() && received.get(1).fitsInBigInteger());
+            assertEquals(TWO_POW_63, received.get(1).asBigInteger());
+            assertEquals(huge.negate(), received.get(2).asBigInteger());
+        }
+    }
+
+    private static ProtosForeignArgumentValue integerArgument(BigInteger value) {
+        return new ProtosForeignArgumentValue(ProtosForeignValueClass.Kind.INTEGER, value);
     }
 
     /** Provider-side callback invocation; provider failures and carriers propagate unchanged. */

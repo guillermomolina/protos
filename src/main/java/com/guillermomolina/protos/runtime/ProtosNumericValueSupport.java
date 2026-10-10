@@ -88,31 +88,33 @@ public final class ProtosNumericValueSupport {
      * collections), so they need not depend on the physical Integer class.
      */
 
-    /*
-     * Integer identity, equality and hashing are by value, so the octet
-     * Integers that byte-oriented I/O produces per byte can be shared.
-     */
-    private static final ProtosIntegerValue[] OCTETS = new ProtosIntegerValue[256];
-
-    static {
-        for (int octet = 0; octet < OCTETS.length; octet++) {
-            OCTETS[octet] = new ProtosIntegerValue(octet);
-        }
-    }
-
     /** The guest Integer denoting {@code value}. */
     public static Object integer(long value) {
-        return value >= 0 && value < OCTETS.length
-                ? OCTETS[(int) value]
-                : new ProtosIntegerValue(value);
+        // A fresh carrier keeps ordinary results eligible for escape analysis.
+        return new ProtosIntegerValue(value);
     }
 
     /** The guest Integer of an unsigned octet {@code 0..255}. */
     public static Object octet(int value) {
-        if (value < 0 || value >= OCTETS.length) {
+        if (value < 0 || value >= Octets.VALUES.length) {
             throw new IllegalArgumentException("octet out of range: " + value);
         }
-        return OCTETS[value];
+        return Octets.VALUES[value];
+    }
+
+    /*
+     * Integer identity, equality and hashing are by value, so the octet Integers that
+     * byte-oriented I/O produces per byte can be shared. The holder is initialized, once and
+     * safely, only when byte I/O first asks for an octet.
+     */
+    private static final class Octets {
+        static final ProtosIntegerValue[] VALUES = new ProtosIntegerValue[256];
+
+        static {
+            for (int octet = 0; octet < VALUES.length; octet++) {
+                VALUES[octet] = new ProtosIntegerValue(octet);
+            }
+        }
     }
 
     /** Whether {@code value} is a current Integer within the Java {@code int} range. */
@@ -146,8 +148,7 @@ public final class ProtosNumericValueSupport {
         if (value instanceof ProtosIntegerValue integer) {
             return integer.fitsUnsignedBitsForRuntime(bits);
         }
-        return value instanceof ProtosLargeIntegerValue large
-                && bigFitsUnsignedBits(large.exactValue(), bits);
+        return value instanceof ProtosLargeIntegerValue large && large.fitsUnsignedBits(bits);
     }
 
     /**
@@ -155,13 +156,25 @@ public final class ProtosNumericValueSupport {
      * {@code width} octets, or {@code null} when {@code value} is not such an Integer.
      */
     public static byte[] unsignedBigEndianOrNull(Object value, int width) {
-        if (width < 0 || !isUnsignedIntegerWithin(value, width * Byte.SIZE)) {
+        if (width < 0 || !isUnsignedIntegerWithin(value, unsignedBitsOfOctets(width))) {
             return null;
         }
         if (value instanceof ProtosIntegerValue integer) {
             return integer.toUnsignedBigEndianForRuntime(width);
         }
-        return bigToUnsignedBigEndian(((ProtosLargeIntegerValue) value).exactValue(), width);
+        return ((ProtosLargeIntegerValue) value).toUnsignedBigEndian(width);
+    }
+
+    /**
+     * The bit width of {@code width} octets, saturated at {@link Integer#MAX_VALUE} so that an
+     * octet width beyond {@code Integer.MAX_VALUE / 8} never wraps into a different, smaller
+     * bit width. Every current Integer that can exist fits the saturated width.
+     */
+    static int unsignedBitsOfOctets(int width) {
+        if (width < 0) {
+            throw new IllegalArgumentException("negative unsigned width");
+        }
+        return width > Integer.MAX_VALUE / Byte.SIZE ? Integer.MAX_VALUE : width * Byte.SIZE;
     }
 
     /**
@@ -185,8 +198,10 @@ public final class ProtosNumericValueSupport {
             first++;
         }
         int significant = octets.length - first;
+        // The unsigned sign of the leading significant octet decides the signed-64 fit: Java's
+        // signed byte comparison would misread 0x80..0xFF as negative and wrap 2^63..2^64-1.
         if (significant < Long.BYTES
-                || (significant == Long.BYTES && octets[first] > 0)) {
+                || (significant == Long.BYTES && (octets[first] & 0x80) == 0)) {
             long value = 0L;
             for (int index = first; index < octets.length; index++) {
                 value = (value << Byte.SIZE) | (octets[index] & 0xffL);
@@ -209,13 +224,15 @@ public final class ProtosNumericValueSupport {
      * I091 / PLAT056 Candidate C exact Integer service. Every exact Integer result is
      * normalized: a value within the signed-64 range is a ProtosIntegerValue, every other value
      * a ProtosLargeIntegerValue minted with the Integer prototype of the supplied Prelude.
+     * Without a Prelude, an arithmetic result outside the signed-64 range answers null, so a
+     * primitive fast path falls back to its ordinary path, which always supplies one.
      */
 
     /**
      * The normalized semantic Integer denoting {@code value}. {@code prelude} is consulted only
      * for a value outside the signed-64 range.
      */
-    public static Object integer(BigInteger value, ProtosPrelude prelude) {
+    static Object integer(BigInteger value, ProtosPrelude prelude) {
         Objects.requireNonNull(value, "value");
         if (value.bitLength() < Long.SIZE) {
             return integer(value.longValue());
@@ -224,13 +241,11 @@ public final class ProtosNumericValueSupport {
         return new ProtosLargeIntegerValue(prelude.integerPrototype(), value);
     }
 
-    /**
+    /*
      * The normalized semantic Integer denoting {@code value}, minting a large value with the
-     * explicit Integer prototype {@code integerPrototype}. Used where the prototype, rather than a
-     * whole Prelude, is the available owner (for example a destination prototype during
-     * rematerialization).
+     * explicit Integer prototype {@code integerPrototype}.
      */
-    public static Object integerWithPrototype(
+    static Object integerWithPrototype(
             BigInteger value, ProtosObjectValue integerPrototype) {
         Objects.requireNonNull(value, "value");
         if (value.bitLength() < Long.SIZE) {
@@ -241,8 +256,11 @@ public final class ProtosNumericValueSupport {
         return new ProtosLargeIntegerValue(integerPrototype, value);
     }
 
-    /** The exact value of a semantic Integer as a temporary host BigInteger. */
-    public static BigInteger exactBigInteger(Object integer) {
+    /**
+     * The exact value of a semantic Integer as a temporary host BigInteger. Package-private: only
+     * the exact numeric boundary reads a large Integer's payload; clients use capabilities.
+     */
+    static BigInteger exactBigInteger(Object integer) {
         if (integer instanceof ProtosIntegerValue small) {
             return BigInteger.valueOf(small.longValue());
         }
@@ -252,11 +270,62 @@ public final class ProtosNumericValueSupport {
         throw new IllegalArgumentException("value is not a current exact-integer family");
     }
 
+    /*
+     * I091 host exact-Integer scalar convention, shared by the foreign boundary and literal
+     * lowering: a semantic Integer crosses as a Long within the signed-64 range and as a host
+     * BigInteger only beyond it. Clients pass such scalars through without inspecting them.
+     */
+
+    /** The normalized host scalar of a semantic Integer: a Long, or a BigInteger beyond. */
+    public static Object hostInteger(Object integer) {
+        if (integer instanceof ProtosIntegerValue small) {
+            return small.longValue();
+        }
+        return large(integer).exactValue();
+    }
+
+    /**
+     * The normalized host scalar of a host integral {@code scalar} (Byte, Short, Integer, Long,
+     * or BigInteger), or {@code null} when {@code scalar} is not host integral.
+     */
+    public static Object normalizedHostInteger(Object scalar) {
+        if (scalar instanceof Long) {
+            return scalar;
+        }
+        if (scalar instanceof Integer || scalar instanceof Short || scalar instanceof Byte) {
+            return ((Number) scalar).longValue();
+        }
+        if (scalar instanceof BigInteger exact) {
+            return exact.bitLength() < Long.SIZE ? (Object) exact.longValue() : exact;
+        }
+        return null;
+    }
+
+    /** Whether {@code scalar} is already a normalized host scalar. */
+    public static boolean isNormalizedHostInteger(Object scalar) {
+        return scalar != null && normalizedHostInteger(scalar) == scalar;
+    }
+
+    /**
+     * The semantic Integer denoted by a host integral {@code scalar}; {@code prelude} is
+     * consulted only for a value outside the signed-64 range.
+     */
+    public static Object integerFromHost(Object scalar, ProtosPrelude prelude) {
+        Object normalized = normalizedHostInteger(scalar);
+        if (normalized instanceof Long small) {
+            return integer(small.longValue());
+        }
+        if (normalized == null) {
+            throw new IllegalArgumentException("value is not a host integral scalar");
+        }
+        return integer((BigInteger) normalized, prelude);
+    }
+
     public static int integerSignum(Object integer) {
         if (integer instanceof ProtosIntegerValue small) {
             return small.signumForRuntime();
         }
-        return largeValue(integer).signum();
+        return large(integer).signum();
     }
 
     /** Canonical decimal spelling of a semantic Integer. */
@@ -264,7 +333,7 @@ public final class ProtosNumericValueSupport {
         if (integer instanceof ProtosIntegerValue small) {
             return small.decimalTextForRuntime();
         }
-        return bigDecimalText(largeValue(integer));
+        return large(integer).decimalText();
     }
 
     /** Exact mathematical order of two semantic Integers. */
@@ -274,12 +343,12 @@ public final class ProtosNumericValueSupport {
         }
         /* A large Integer lies beyond every signed-64 value, on the side of its sign. */
         if (left instanceof ProtosIntegerValue) {
-            return -largeValue(right).signum();
+            return -large(right).signum();
         }
         if (right instanceof ProtosIntegerValue) {
-            return largeValue(left).signum();
+            return large(left).signum();
         }
-        return bigCompare(largeValue(left), largeValue(right));
+        return large(left).compareTo(large(right));
     }
 
     /** Whether two semantic Integers denote the same value. */
@@ -289,7 +358,7 @@ public final class ProtosNumericValueSupport {
         }
         if (left instanceof ProtosLargeIntegerValue a
                 && right instanceof ProtosLargeIntegerValue b) {
-            return bigEquals(a.exactValue(), b.exactValue());
+            return a.sameValue(b);
         }
         return false;
     }
@@ -299,7 +368,7 @@ public final class ProtosNumericValueSupport {
         if (integer instanceof ProtosIntegerValue small) {
             return small.exactHashCodeForRuntime();
         }
-        return bigHashCode(largeValue(integer));
+        return large(integer).exactHashCode();
     }
 
     public static Object addIntegers(Object left, Object right, ProtosPrelude prelude) {
@@ -351,7 +420,7 @@ public final class ProtosNumericValueSupport {
                 return integer(x / y);
             }
         } else if (left instanceof ProtosIntegerValue a) {
-            return integer(divisionByLargeIsMinusOne(a.longValue(), largeValue(right)) ? -1L : 0L);
+            return integer(divisionByLargeIsMinusOne(a.longValue(), large(right)) ? -1L : 0L);
         }
         return bigResult(Operation.QUOTIENT, left, right, prelude);
     }
@@ -366,42 +435,12 @@ public final class ProtosNumericValueSupport {
             return integer(a.longValue() % y);
         }
         if (left instanceof ProtosIntegerValue a) {
-            return divisionByLargeIsMinusOne(a.longValue(), largeValue(right)) ? integer(0L) : a;
+            return divisionByLargeIsMinusOne(a.longValue(), large(right)) ? integer(0L) : a;
         }
         return bigResult(Operation.REMAINDER, left, right, prelude);
     }
 
-    /**
-     * Whether a result of {@code operation} needs a Prelude to be represented: true exactly when
-     * the exact result lies outside the signed-64 range. Primitive fast paths without a Prelude
-     * use this to fall back to the ordinary path, which always has one.
-     */
-    public static boolean needsPreludeForResult(
-            Operation operation, Object left, Object right) {
-        if (left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b) {
-            long x = a.longValue();
-            long y = b.longValue();
-            return switch (operation) {
-                case ADD -> ((x ^ (x + y)) & (y ^ (x + y))) < 0L;
-                case SUBTRACT -> ((x ^ y) & (x ^ (x - y))) < 0L;
-                case MULTIPLY -> {
-                    long high = Math.multiplyHigh(x, y);
-                    long low = x * y;
-                    yield !((high == 0L && low >= 0L) || (high == -1L && low < 0L));
-                }
-                case QUOTIENT -> x == Long.MIN_VALUE && y == -1L;
-                case REMAINDER -> false;
-            };
-        }
-        if (left instanceof ProtosIntegerValue
-                && (operation == Operation.QUOTIENT || operation == Operation.REMAINDER)) {
-            return false;
-        }
-        return true;
-    }
-
-    /** Exact Integer operations of {@link #needsPreludeForResult}. */
-    public enum Operation {
+    private enum Operation {
         ADD,
         SUBTRACT,
         MULTIPLY,
@@ -415,11 +454,13 @@ public final class ProtosNumericValueSupport {
      * exception is Long.MIN_VALUE divided by +2^63, whose quotient is -1 with remainder 0.
      */
     @TruffleBoundary
-    private static boolean divisionByLargeIsMinusOne(long dividend, BigInteger divisor) {
+    private static boolean divisionByLargeIsMinusOne(
+            long dividend, ProtosLargeIntegerValue divisor) {
+        BigInteger exact = divisor.exactValue();
         return dividend == Long.MIN_VALUE
-                && divisor.signum() > 0
-                && divisor.bitLength() == Long.SIZE
-                && divisor.getLowestSetBit() == Long.SIZE - 1;
+                && exact.signum() > 0
+                && exact.bitLength() == Long.SIZE
+                && exact.getLowestSetBit() == Long.SIZE - 1;
     }
 
     /*
@@ -429,6 +470,22 @@ public final class ProtosNumericValueSupport {
     @TruffleBoundary
     private static Object bigResult(
             Operation operation, Object left, Object right, ProtosPrelude prelude) {
+        Object identity = mixedIdentityResult(operation, left, right);
+        if (identity != null) {
+            return identity;
+        }
+        if (operation == Operation.REMAINDER && right instanceof ProtosIntegerValue divisor) {
+            // |remainder| < |divisor| <= 2^63, so the result is always a signed-64 Integer.
+            return integer(large(left).exactValue()
+                    .remainder(BigInteger.valueOf(divisor.longValue()))
+                    .longValue());
+        }
+        if (prelude == null
+                && left instanceof ProtosIntegerValue
+                && right instanceof ProtosIntegerValue) {
+            // Signed-64 overflow always lies outside the signed-64 range.
+            return null;
+        }
         BigInteger x = exactBigInteger(left);
         BigInteger y = exactBigInteger(right);
         BigInteger result = switch (operation) {
@@ -438,57 +495,56 @@ public final class ProtosNumericValueSupport {
             case QUOTIENT -> x.divide(y);
             case REMAINDER -> x.remainder(y);
         };
-        return integer(result, prelude);
+        return prelude == null && result.bitLength() >= Long.SIZE
+                ? null
+                : integer(result, prelude);
     }
 
-    private static BigInteger largeValue(Object integer) {
+    /*
+     * Mixed signed-64 / large operations whose result is an operand or a signed-64 constant: an
+     * additive or multiplicative identity, a zero factor, or a unit divisor. The large operand
+     * is already normalized, so returning it unchanged preserves normalization and its owning
+     * prototype. Answers null when arbitrary-precision arithmetic is required.
+     */
+    private static Object mixedIdentityResult(Operation operation, Object left, Object right) {
+        long small;
+        boolean smallOnRight;
+        if (right instanceof ProtosIntegerValue b && left instanceof ProtosLargeIntegerValue) {
+            small = b.longValue();
+            smallOnRight = true;
+        } else if (left instanceof ProtosIntegerValue a
+                && right instanceof ProtosLargeIntegerValue) {
+            small = a.longValue();
+            smallOnRight = false;
+        } else {
+            return null;
+        }
+        Object large = smallOnRight ? left : right;
+        return switch (operation) {
+            case ADD -> small == 0L ? large : null;
+            case SUBTRACT -> small == 0L && smallOnRight ? large : null;
+            case MULTIPLY -> small == 0L ? integer(0L) : small == 1L ? large : null;
+            case QUOTIENT -> small == 1L && smallOnRight ? large : null;
+            case REMAINDER ->
+                    smallOnRight && (small == 1L || small == -1L) ? integer(0L) : null;
+        };
+    }
+
+    private static ProtosLargeIntegerValue large(Object integer) {
         if (integer instanceof ProtosLargeIntegerValue large) {
-            return large.exactValue();
+            return large;
         }
         throw new IllegalArgumentException("value is not a current exact-integer family");
     }
 
     @TruffleBoundary
-    private static int bigCompare(BigInteger left, BigInteger right) {
-        return left.compareTo(right);
-    }
-
-    @TruffleBoundary
-    private static boolean bigEquals(BigInteger left, BigInteger right) {
-        return left.equals(right);
-    }
-
-    @TruffleBoundary
-    private static int bigHashCode(BigInteger value) {
-        return value.hashCode();
-    }
-
-    @TruffleBoundary
-    private static String bigDecimalText(BigInteger value) {
-        return value.toString();
-    }
-
-    @TruffleBoundary
-    private static boolean bigFitsUnsignedBits(BigInteger value, int bits) {
-        if (bits < 0) {
-            throw new IllegalArgumentException("negative unsigned width");
-        }
-        return value.signum() >= 0 && value.bitLength() <= bits;
-    }
-
-    @TruffleBoundary
-    private static byte[] bigToUnsignedBigEndian(BigInteger value, int width) {
-        byte[] raw = value.toByteArray();
-        int offset = raw.length > 1 && raw[0] == 0 ? 1 : 0;
-        int length = raw.length - offset;
-        byte[] result = new byte[width];
-        System.arraycopy(raw, offset, result, width - length, length);
-        return result;
-    }
-
-    @TruffleBoundary
     private static BigInteger unsignedBig(byte[] octets) {
         return new BigInteger(1, octets);
+    }
+
+    /** The guest Float denoting {@code value}. */
+    public static Object floating(double value) {
+        return new ProtosFloatValue(value);
     }
 
     public static double currentFloatValue(Object value) {

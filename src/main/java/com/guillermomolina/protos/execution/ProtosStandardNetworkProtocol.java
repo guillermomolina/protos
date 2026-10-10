@@ -144,13 +144,10 @@ public final class ProtosStandardNetworkProtocol {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        Object versionValue = slots.ipVersion();
-        if (!ProtosNumericValueSupport.isIntegerInIntRange(versionValue)
-                || (ProtosNumericValueSupport.exactInt(versionValue) != 4
-                        && ProtosNumericValueSupport.exactInt(versionValue) != 6)) {
+        int ipVersion = boundedFieldOrInvalid(slots.ipVersion());
+        if (ipVersion != 4 && ipVersion != 6) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
-        int ipVersion = ProtosNumericValueSupport.exactInt(versionValue);
 
         ProtosObjectValue addressConstraint = null;
         Object addressValue = slots.address();
@@ -160,9 +157,7 @@ public final class ProtosStandardNetworkProtocol {
                             address, prelude.ipAddressPrototypeForRuntime())) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
-            Object addressVersionValue = address.readLocalSlot("version").orElse(null);
-            if (!ProtosNumericValueSupport.isIntegerInIntRange(addressVersionValue)
-                    || ProtosNumericValueSupport.exactInt(addressVersionValue) != ipVersion) {
+            if (boundedFieldOrInvalid(address.readLocalSlot("version").orElse(null)) != ipVersion) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
             addressConstraint = address;
@@ -171,12 +166,11 @@ public final class ProtosStandardNetworkProtocol {
         Integer portConstraint = null;
         Object portValue = slots.port();
         if (portValue != ProtosNullValue.INSTANCE) {
-            if (!ProtosNumericValueSupport.isIntegerInIntRange(portValue)
-                    || ProtosNumericValueSupport.exactInt(portValue) < 1
-                    || ProtosNumericValueSupport.exactInt(portValue) > 65535) {
+            int port = boundedFieldOrInvalid(portValue);
+            if (port < 1 || port > 65535) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
-            portConstraint = ProtosNumericValueSupport.exactInt(portValue);
+            portConstraint = port;
         }
 
         ProtosNetworkListenFlow.ListenRequest captured =
@@ -188,6 +182,17 @@ public final class ProtosStandardNetworkProtocol {
         ProtosNetworkListenFlow flow =
                 new ProtosNetworkListenFlow(network, activation, backend, ProtosStandardNetworkProtocol::materializeListener);
         return flow.listen(activation, captured);
+    }
+
+    /*
+     * The exact value of a bounded listen-request field, read once. Every admitted field domain
+     * (version 4 or 6, port 1..65535) excludes -1, so -1 stands for any non-Integer or any Integer
+     * outside the int range, including a large Integer; nothing is truncated.
+     */
+    private static int boundedFieldOrInvalid(Object value) {
+        return ProtosNumericValueSupport.isIntegerInIntRange(value)
+                ? ProtosNumericValueSupport.exactInt(value)
+                : -1;
     }
 
     private static ProtosTcpListenerValue materializeListener(

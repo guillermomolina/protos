@@ -17,7 +17,16 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosBinary64Rounding;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLargeIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTestIntegers;
 import java.math.BigInteger;
 import org.junit.jupiter.api.Test;
@@ -30,27 +39,89 @@ class ProtosStandardNumericConversionTest {
         assertEquals(
                 new BigInteger("99999999999999991611392"),
                 ProtosTestIntegers.exact(
-                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                        ProtosBinary64Rounding.integralBinary64(
                                 1e23,
                                 new ProtosCoreBootstrap()
                                         .bootstrap(java.nio.file.Path.of("protos", "lib", "core")))));
         assertEquals(
                 BigInteger.ZERO,
                 ProtosTestIntegers.exact(
-                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0.0d, null)));
+                        ProtosBinary64Rounding.integralBinary64(-0.0d, null)));
         assertEquals(
                 BigInteger.ONE,
                 ProtosTestIntegers.exact(
-                        ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.0d, null)));
+                        ProtosBinary64Rounding.integralBinary64(1.0d, null)));
         assertEquals(
                 null,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.5d, null));
+                ProtosBinary64Rounding.integralBinary64(1.5d, null));
         assertEquals(
                 null,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(
+                ProtosBinary64Rounding.integralBinary64(
                         Double.POSITIVE_INFINITY, null));
         assertEquals(
                 null,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(Double.NaN, null));
+                ProtosBinary64Rounding.integralBinary64(Double.NaN, null));
+    }
+
+    @Test
+    void factoriesNormalizeIntegersAndRoundFloatsExactlyOnce() throws java.io.IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap()
+                .bootstrap(java.nio.file.Path.of("protos", "lib", "core"));
+        var toInteger = ProtosStandardNumericConversionProtocol.FactoryKind.INTEGER;
+        var toFloat = ProtosStandardNumericConversionProtocol.FactoryKind.FLOAT;
+
+        assertEquals(Long.MIN_VALUE, assertInstanceOf(ProtosIntegerValue.class,
+                ProtosStandardNumericConversionProtocol.convert(
+                        toInteger, new ProtosFloatValue(-0x1p63), prelude)).longValue());
+        assertEquals(1L << 62, assertInstanceOf(ProtosIntegerValue.class,
+                ProtosStandardNumericConversionProtocol.convert(
+                        toInteger, new ProtosFloatValue(0x1p62), null)).longValue());
+        assertEquals(0L, assertInstanceOf(ProtosIntegerValue.class,
+                ProtosStandardNumericConversionProtocol.convert(
+                        toInteger, new ProtosFloatValue(-0.0d), null)).longValue());
+        for (double value : new double[] {0x1p63, -0x1.0000000000001p63, 0x1p1023}) {
+            ProtosLargeIntegerValue large = assertInstanceOf(ProtosLargeIntegerValue.class,
+                    ProtosStandardNumericConversionProtocol.convert(
+                            toInteger, new ProtosFloatValue(value), prelude));
+            assertSame(prelude.integerPrototype(), large.parent().orElseThrow());
+            assertEquals(new java.math.BigDecimal(value).toBigIntegerExact(),
+                    ProtosTestIntegers.exact(large));
+        }
+        // A large result never degrades into a missing value: without a Prelude it fails.
+        assertThrows(NullPointerException.class,
+                () -> ProtosStandardNumericConversionProtocol.convert(
+                        toInteger, new ProtosFloatValue(0x1p63), null));
+        for (double value : new double[] {
+                0.5d, -1.5d, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY}) {
+            assertNull(ProtosStandardNumericConversionProtocol.convert(
+                    toInteger, new ProtosFloatValue(value), prelude));
+        }
+        Object integer = new ProtosIntegerValue(7L);
+        assertSame(integer,
+                ProtosStandardNumericConversionProtocol.convert(toInteger, integer, prelude));
+        assertNull(ProtosStandardNumericConversionProtocol.convert(toInteger, "7", prelude));
+        assertNull(ProtosStandardNumericConversionProtocol.convert(
+                toInteger, Long.valueOf(7L), prelude));
+
+        // Integer -> Float rounds the exact value once, ties to even, at and beyond signed-64.
+        BigInteger[] exact = {
+            BigInteger.valueOf(Long.MAX_VALUE),
+            BigInteger.ONE.shiftLeft(53).add(BigInteger.ONE),
+            BigInteger.ONE.shiftLeft(53).add(BigInteger.valueOf(3L)),
+            BigInteger.ONE.shiftLeft(100).add(BigInteger.ONE.shiftLeft(47)),
+            BigInteger.ONE.shiftLeft(100).add(BigInteger.ONE.shiftLeft(47)).add(BigInteger.ONE),
+            BigInteger.ONE.shiftLeft(1024).negate(),
+        };
+        for (BigInteger value : exact) {
+            ProtosFloatValue floating = assertInstanceOf(ProtosFloatValue.class,
+                    ProtosStandardNumericConversionProtocol.convert(
+                            toFloat, ProtosTestIntegers.integer(value, prelude), prelude));
+            assertEquals(new java.math.BigDecimal(value).doubleValue(), floating.value(),
+                    value.toString());
+        }
+        ProtosFloatValue negativeZero = new ProtosFloatValue(-0.0d);
+        assertSame(negativeZero,
+                ProtosStandardNumericConversionProtocol.convert(toFloat, negativeZero, prelude));
+        assertNull(ProtosStandardNumericConversionProtocol.convert(toFloat, "1.0", prelude));
     }
 }

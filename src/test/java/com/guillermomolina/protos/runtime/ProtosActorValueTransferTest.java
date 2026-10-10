@@ -22,6 +22,7 @@ import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -464,6 +465,133 @@ final class ProtosActorValueTransferTest {
         assertTrue(ProtosObjectValue.rootObject().isFrozen());
         assertTrue(prelude.arrayPrototype().isFrozen());
         assertTrue(prelude.bindings().isFrozen());
+    }
+
+    @Test
+    void largeIntegersRematerializeExactlyWithoutSlotCopyAndKeepSnapshotAliasing()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        BigInteger twoTo64 = BigInteger.ONE.shiftLeft(64);
+        BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
+        Object positive = ProtosTestIntegers.integer(twoTo64, prelude);
+        Object negative = ProtosTestIntegers.integer(twoTo64.negate(), prelude);
+        Object shared = ProtosTestIntegers.integer(huge, prelude);
+        Object twin = ProtosTestIntegers.integer(huge, prelude);
+        ProtosObjectValue nested = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        nested.createLocalSlot("shared", shared);
+        nested.createLocalSlot("again", shared);
+        nested.createLocalSlot("twin", twin);
+        ProtosArrayValue array =
+                prelude.newArray(List.of(positive, negative, shared, nested));
+
+        List<Object> result =
+                ProtosActorValueTransfer.snapshotArguments(List.of(array, shared), source);
+
+        ProtosArrayValue copiedArray = assertInstanceOf(ProtosArrayValue.class, result.get(0));
+        ProtosLargeIntegerValue copiedPositive =
+                assertInstanceOf(ProtosLargeIntegerValue.class, copiedArray.indexedAt(0));
+        ProtosLargeIntegerValue copiedNegative =
+                assertInstanceOf(ProtosLargeIntegerValue.class, copiedArray.indexedAt(1));
+        ProtosLargeIntegerValue copiedShared =
+                assertInstanceOf(ProtosLargeIntegerValue.class, copiedArray.indexedAt(2));
+        ProtosObjectValue copiedNested =
+                assertInstanceOf(ProtosObjectValue.class, copiedArray.indexedAt(3));
+        Object copiedTwin = copiedNested.readLocalSlot("twin").orElseThrow();
+
+        assertNotSame(positive, copiedPositive);
+        assertEquals(twoTo64, ProtosTestIntegers.exact(copiedPositive));
+        assertEquals(twoTo64.negate(), ProtosTestIntegers.exact(copiedNegative));
+        assertEquals(huge, ProtosTestIntegers.exact(copiedShared));
+        // Rematerialized whole: frozen, slotless, and owned by the Integer prototype.
+        for (ProtosLargeIntegerValue copied :
+                List.of(copiedPositive, copiedNegative, copiedShared)) {
+            assertTrue(copied.isFrozen());
+            assertSame(prelude.integerPrototype(), copied.parent().orElseThrow());
+            ArrayList<String> names = new ArrayList<>();
+            copied.appendLocalBindingsTo(names, new ArrayList<>());
+            assertTrue(names.isEmpty());
+        }
+        // One source identity is one copy across roots and slots; a distinct twin stays distinct.
+        assertSame(copiedShared, result.get(1));
+        assertSame(copiedShared, copiedNested.readLocalSlot("shared").orElseThrow());
+        assertSame(copiedShared, copiedNested.readLocalSlot("again").orElseThrow());
+        assertNotSame(copiedShared, copiedTwin);
+        assertTrue(ProtosIdentity.identical(copiedShared, copiedTwin));
+        assertTrue(ProtosIdentity.identical(shared, copiedTwin));
+        assertEquals(ProtosIdentity.identityHash(shared), ProtosIdentity.identityHash(copiedTwin));
+    }
+
+    @Test
+    void largeIntegerMapAndIdentityMapKeysKeepExactRecordedHashesAcrossTransfer()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        BigInteger huge = BigInteger.ONE.shiftLeft(1000).add(BigInteger.ONE);
+        Object key = ProtosTestIntegers.integer(huge, prelude);
+        ProtosMapValue map = prelude.newMap();
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosStringValue value = new ProtosStringValue("large");
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(key, value), source);
+        ProtosInvocation.invokeMessage(identityMap, "atPut", List.of(key, value), source);
+        ProtosNumericHashKey sourceHash = map.keyedSnapshot().get(0).recordedHash();
+
+        List<Object> result =
+                ProtosActorValueTransfer.snapshotArguments(List.of(map, identityMap), source);
+
+        ProtosMapValue copiedMap = assertInstanceOf(ProtosMapValue.class, result.get(0));
+        ProtosMapValue.Entry entry = copiedMap.keyedSnapshot().get(0);
+        assertInstanceOf(ProtosLargeIntegerValue.class, entry.key());
+        // Number.hash is an override, so the exact recorded hash is kept, never Object.hash.
+        assertEquals(sourceHash, entry.recordedHash());
+        assertNotEquals(ProtosNumericHashKey.fromIdentity(entry.key()), entry.recordedHash());
+
+        ProtosIdentityMapValue copiedIdentityMap =
+                assertInstanceOf(ProtosIdentityMapValue.class, result.get(1));
+        ProtosIdentityMapValue.Entry identityEntry = copiedIdentityMap.keyedSnapshot().get(0);
+        assertEquals(
+                ProtosNumericHashKey.fromIdentity(key), identityEntry.recordedIdentityHash());
+        assertEquals(
+                ProtosNumericHashKey.fromIdentity(identityEntry.key()),
+                identityEntry.recordedIdentityHash());
+
+        Object probe = ProtosTestIntegers.integer(huge, prelude);
+        ProtosStringValue fromMap =
+                assertInstanceOf(
+                        ProtosStringValue.class,
+                        ProtosInvocation.invokeMessage(copiedMap, "at", List.of(probe), source));
+        ProtosStringValue fromIdentityMap =
+                assertInstanceOf(
+                        ProtosStringValue.class,
+                        ProtosInvocation.invokeMessage(
+                                copiedIdentityMap, "at", List.of(probe), source));
+        assertEquals("large", fromMap.value());
+        assertEquals("large", fromIdentityMap.value());
+    }
+
+    @Test
+    void hostNumericCarriersAndNonTransferableNeighboursOfLargeIntegersFailAtomically()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        Object large = ProtosTestIntegers.integer(BigInteger.ONE.shiftLeft(64), prelude);
+
+        assertNonTransferable(
+                source,
+                () -> ProtosActorValueTransfer.snapshotValue(BigInteger.ONE.shiftLeft(64), source));
+        assertNonTransferable(
+                source, () -> ProtosActorValueTransfer.snapshotValue(Long.valueOf(7L), source));
+        assertNonTransferable(
+                source, () -> ProtosActorValueTransfer.snapshotValue(Double.valueOf(1.0d), source));
+
+        ProtosArrayValue array =
+                prelude.newArray(
+                        List.of(large, ProtosClosureValue.nativeClosure((a, x) -> large)));
+        assertNonTransferable(
+                source, () -> ProtosActorValueTransfer.snapshotArguments(List.of(array), source));
+        assertSame(large, array.indexedAt(0));
+        assertFalse(array.isFrozen());
     }
 
     private static ProtosPrelude core() throws Exception {

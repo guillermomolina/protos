@@ -29,11 +29,13 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -233,6 +235,90 @@ final class ProtosStandardIpFamilyPlacementTest {
             assertEquals(loads, resolver.loadSourceCount.get());
             assertCanonicalCopy(prelude, endpoint, transferred);
         }
+    }
+
+    private static final String IP_ADDRESS =
+            "IpAddress: import(\"std:network/IpAddresses\").IpAddress\n";
+    private static final BigInteger THIRTY_ONE = BigInteger.valueOf(31);
+
+    private static BigInteger expectedHash(BigInteger bits, int version) {
+        return bits.multiply(THIRTY_ONE).add(BigInteger.valueOf(version));
+    }
+
+    private static Object guestHash(ProtosPrelude prelude, int version, BigInteger bits) {
+        return ProtosTestExecutionSupport.evaluate(
+                IP_ADDRESS + "IpAddress(" + version + ", " + bits + ").hash()",
+                prelude.newModuleActivation());
+    }
+
+    @Test
+    void addressHashIsTheExactUnboundedValueForBothVersions() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        BigInteger ipv6Max = BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE);
+        for (BigInteger bits : java.util.List.of(
+                BigInteger.ZERO, BigInteger.valueOf(0x7f000001L), BigInteger.valueOf(0xffffffffL))) {
+            assertEquals(expectedHash(bits, 4), ProtosTestIntegers.exact(guestHash(prelude, 4, bits)));
+        }
+        for (BigInteger bits : java.util.List.of(
+                BigInteger.ONE,
+                // bits * 31 leaves the signed-64 range although bits itself does not.
+                BigInteger.ONE.shiftLeft(62),
+                BigInteger.valueOf(Long.MAX_VALUE),
+                BigInteger.ONE.shiftLeft(127),
+                ipv6Max)) {
+            Object hash = guestHash(prelude, 6, bits);
+            assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash), bits.toString(16));
+            if (expectedHash(bits, 6).bitLength() >= Long.SIZE) {
+                assertSame(prelude.integerPrototype(),
+                        ((ProtosObjectValue) hash).parent().orElseThrow(), bits.toString(16));
+            }
+        }
+    }
+
+    @Test
+    void addressesSharingLowBitsAreDistinctAndRematerializedCopiesAreEqual() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        assertSame(ProtosBooleanValue.TRUE, ProtosTestExecutionSupport.evaluate(
+                IP_ADDRESS
+                        + "low: IpAddress(6, 1)\n"
+                        + "wide: IpAddress(6, 18446744073709551617)\n"
+                        + "same: IpAddress(6, 18446744073709551616 + 1)\n"
+                        + "!(low == wide) && !(low.hash() == wide.hash()) &&\n"
+                        + "    (wide == same) && (wide.hash() == same.hash())",
+                prelude.newModuleActivation()));
+
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue address = (ProtosObjectValue) ProtosTestExecutionSupport.evaluate(
+                IP_ADDRESS + "IpAddress(6, 170141183460469231731687303715884105728)", activation);
+        ProtosObjectValue copy = (ProtosObjectValue)
+                ProtosActorValueTransfer.snapshotValue(address, activation);
+        assertNotSame(address, copy);
+        assertSame(ProtosBooleanValue.TRUE,
+                ProtosInvocation.invokeMessage(address, "==", java.util.List.of(copy), activation));
+        assertTrue(ProtosNumericValueSupport.sameInteger(
+                ProtosInvocation.invokeMessage(address, "hash", java.util.List.of(), activation),
+                ProtosInvocation.invokeMessage(copy, "hash", java.util.List.of(), activation)));
+    }
+
+    @Test
+    void eachPreludeOwnsTheLargeHashesItComputes() throws Exception {
+        ProtosPrelude left = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        ProtosPrelude right = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        BigInteger bits = BigInteger.ONE.shiftLeft(127);
+        Object leftHash = guestHash(left, 6, bits);
+        Object rightHash = guestHash(right, 6, bits);
+        assertSame(left.integerPrototype(), ((ProtosObjectValue) leftHash).parent().orElseThrow());
+        assertSame(right.integerPrototype(), ((ProtosObjectValue) rightHash).parent().orElseThrow());
+        assertEquals(ProtosTestIntegers.exact(leftHash), ProtosTestIntegers.exact(rightHash));
+    }
+
+    @Test
+    void largeHashWithoutAPreludeFailsInsteadOfAnsweringNull() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        ProtosObjectValue address = (ProtosObjectValue) ProtosTestExecutionSupport.evaluate(
+                IP_ADDRESS + "IpAddress(6, 4611686018427387904)", prelude.newModuleActivation());
+        assertThrows(NullPointerException.class,
+                () -> ProtosStandardIpAddressProtocol.canonicalHash(address, null));
     }
 
     private static void assertCanonicalCopy(

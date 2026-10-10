@@ -92,8 +92,12 @@ public final class ProtosBufferedByteIo {
             Object maximum,
             ProtosBufferedByteReaderCPrimeExecution.Plan cPrimePlan) {
         check(activation);
-        if (!ProtosNumericValueSupport.isIntegerInIntRange(maximum)
-                || ProtosNumericValueSupport.exactInt(maximum) <= 0) {
+        // A non-Integer or an Integer outside the int range, including a large one, maps to 0.
+        int limit =
+                ProtosNumericValueSupport.isIntegerInIntRange(maximum)
+                        ? ProtosNumericValueSupport.exactInt(maximum)
+                        : 0;
+        if (limit <= 0) {
             return failed(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -106,7 +110,7 @@ public final class ProtosBufferedByteIo {
                         activation,
                         operation,
                         Kind.READ,
-                        ProtosNumericValueSupport.exactInt(maximum),
+                        limit,
                         null,
                         cPrimePlan));
     }

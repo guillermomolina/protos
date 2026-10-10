@@ -99,10 +99,7 @@ final class ProtosIntegralInteropTest {
     void fixedInteropCarrierUsesSameExactProjectionWithoutGuestNumericSemantics()
             throws Exception {
         BigInteger uint64Max = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE);
-        ProtosFixedIntegerInteropValue value =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.UINT64,
-                        uint64Max);
+        ProtosFixedIntegerInteropValue value = ProtosFixedIntegerInteropValue.ofUnsignedBits(-1L);
 
         assertTrue(interop.isNumber(value));
         assertTrue(interop.fitsInBigInteger(value));
@@ -113,73 +110,111 @@ final class ProtosIntegralInteropTest {
                 UnsupportedMessageException.class,
                 () -> interop.asLong(value));
         assertSame(ProtosFixedIntegerInteropValue.Kind.UINT64, value.kind());
-        assertEquals(uint64Max, value.value());
 
         ProtosFixedIntegerInteropValue min =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.INT64,
-                        BigInteger.valueOf(Long.MIN_VALUE));
+                ProtosFixedIntegerInteropValue.ofLong(
+                        ProtosFixedIntegerInteropValue.Kind.INT64, Long.MIN_VALUE);
         assertTrue(interop.fitsInLong(min));
         assertEquals(Long.MIN_VALUE, interop.asLong(min));
 
         ProtosFixedIntegerInteropValue exactAboveLong =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.UINT64,
-                        BigInteger.ONE.shiftLeft(63));
+                ProtosFixedIntegerInteropValue.ofUnsignedBits(Long.MIN_VALUE);
         assertFalse(interop.fitsInLong(exactAboveLong));
         assertTrue(interop.fitsInDouble(exactAboveLong));
         assertEquals(Math.scalb(1.0, 63), interop.asDouble(exactAboveLong));
     }
 
     @Test
+    void largeNegativeMagnitudesAreMeasuredExactly() throws Exception {
+        BigInteger one = BigInteger.ONE;
+        // -2^1023 is finite in binary64; -2^1024 is not, although its two's-complement bit
+        // length is 1024.
+        assertTrue(interop.fitsInDouble(large(one.shiftLeft(1023).negate())));
+        assertFalse(interop.fitsInDouble(large(one.shiftLeft(1024).negate())));
+        assertTrue(interop.fitsInFloat(large(one.shiftLeft(127).negate())));
+        assertFalse(interop.fitsInFloat(large(one.shiftLeft(128).negate())));
+        // 53 versus 54 significant bits, negative.
+        BigInteger fits = one.shiftLeft(53).subtract(one).shiftLeft(20).negate();
+        BigInteger tooWide = one.shiftLeft(53).add(one).shiftLeft(20).negate();
+        assertTrue(interop.fitsInDouble(large(fits)));
+        assertFalse(interop.fitsInDouble(large(tooWide)));
+        assertEquals(fits.doubleValue(), interop.asDouble(large(fits)));
+    }
+
+    private static Object large(BigInteger value) {
+        return ProtosTestIntegers.integer(value);
+    }
+
+    @Test
+    void primitiveFixedInteropConstructionMatchesExactFamilyRanges() throws Exception {
+        for (ProtosFixedIntegerInteropValue.Kind family
+                : ProtosFixedIntegerInteropValue.Kind.values()) {
+            long minimum = minimum(family).longValueExact();
+            assertTrue(family.contains(minimum), family.name());
+            assertEquals(
+                    minimum(family),
+                    interop.asBigInteger(ProtosFixedIntegerInteropValue.ofLong(family, minimum)));
+            if (maximum(family).bitLength() < Long.SIZE) {
+                long maximum = maximum(family).longValueExact();
+                assertTrue(family.contains(maximum), family.name());
+                assertEquals(
+                        maximum(family),
+                        interop.asBigInteger(
+                                ProtosFixedIntegerInteropValue.ofLong(family, maximum)));
+                if (maximum != Long.MAX_VALUE) {
+                    assertFalse(family.contains(maximum + 1L), family.name());
+                    assertThrows(
+                            IllegalArgumentException.class,
+                            () -> ProtosFixedIntegerInteropValue.ofLong(family, maximum + 1L));
+                }
+            }
+            if (minimum != Long.MIN_VALUE) {
+                assertFalse(family.contains(minimum - 1L), family.name());
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> ProtosFixedIntegerInteropValue.ofLong(family, minimum - 1L));
+            }
+        }
+        ProtosFixedIntegerInteropValue uint64Max =
+                ProtosFixedIntegerInteropValue.ofUnsignedBits(-1L);
+        assertEquals(
+                BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE),
+                interop.asBigInteger(uint64Max));
+        assertFalse(interop.fitsInLong(uint64Max));
+        assertTrue(ProtosFixedIntegerInteropValue.Kind.UINT64.contains(Long.MAX_VALUE));
+        assertFalse(ProtosFixedIntegerInteropValue.Kind.UINT64.contains(-1L));
+    }
+
+    @Test
     void allFixedInteropKindsRemainExactBigIntegerInteropNumbers() throws Exception {
         for (ProtosFixedIntegerInteropValue.Kind family
                 : ProtosFixedIntegerInteropValue.Kind.values()) {
-            ProtosFixedIntegerInteropValue minimum =
-                    new ProtosFixedIntegerInteropValue(family, family.minimum());
-            ProtosFixedIntegerInteropValue maximum =
-                    new ProtosFixedIntegerInteropValue(family, family.maximum());
+            ProtosFixedIntegerInteropValue minimum = fixed(family, minimum(family));
+            ProtosFixedIntegerInteropValue maximum = fixed(family, maximum(family));
 
             assertTrue(interop.isNumber(minimum));
             assertTrue(interop.isNumber(maximum));
             assertTrue(interop.fitsInBigInteger(minimum));
             assertTrue(interop.fitsInBigInteger(maximum));
-            assertEquals(family.minimum(), interop.asBigInteger(minimum));
-            assertEquals(family.maximum(), interop.asBigInteger(maximum));
+            assertEquals(minimum(family), interop.asBigInteger(minimum));
+            assertEquals(maximum(family), interop.asBigInteger(maximum));
             assertSame(family, minimum.kind());
             assertSame(family, maximum.kind());
-        }
-    }
 
-    @Test
-    void fixedInteropKindRangesAreExactFromWidthAndSignedness() throws Exception {
-        for (ProtosFixedIntegerInteropValue.Kind family
-                : ProtosFixedIntegerInteropValue.Kind.values()) {
-            int width = family.width();
-            BigInteger minimum = family.signed()
-                    ? BigInteger.ONE.shiftLeft(width - 1).negate()
-                    : BigInteger.ZERO;
-            BigInteger maximum = family.signed()
-                    ? BigInteger.ONE.shiftLeft(width - 1).subtract(BigInteger.ONE)
-                    : BigInteger.ONE.shiftLeft(width).subtract(BigInteger.ONE);
-            assertEquals(minimum, family.minimum(), family.name());
-            assertEquals(maximum, family.maximum(), family.name());
-            assertTrue(family.contains(minimum), family.name());
-            assertTrue(family.contains(maximum), family.name());
-            assertFalse(family.contains(minimum.subtract(BigInteger.ONE)), family.name());
-            assertFalse(family.contains(maximum.add(BigInteger.ONE)), family.name());
-            assertThrows(IllegalArgumentException.class,
-                    () -> new ProtosFixedIntegerInteropValue(family, maximum.add(BigInteger.ONE)));
-
-            ProtosFixedIntegerInteropValue top = new ProtosFixedIntegerInteropValue(family, maximum);
-            ProtosFixedIntegerInteropValue bottom =
-                    new ProtosFixedIntegerInteropValue(family, minimum);
-            assertEquals(maximum, top.value(), family.name());
-            assertEquals(minimum, bottom.value(), family.name());
-            assertEquals(maximum.toString(), interop.toDisplayString(top, false), family.name());
-            assertEquals(maximum.bitLength() < Long.SIZE, interop.fitsInLong(top), family.name());
-            assertEquals(maximum.bitLength() < Integer.SIZE, interop.fitsInInt(top), family.name());
-            assertEquals(maximum.bitLength() < Byte.SIZE, interop.fitsInByte(top), family.name());
+            BigInteger maximumValue = maximum(family);
+            assertEquals(maximumValue.toString(), interop.toDisplayString(maximum, false));
+            assertEquals(
+                    maximumValue.bitLength() < Long.SIZE,
+                    interop.fitsInLong(maximum),
+                    family.name());
+            assertEquals(
+                    maximumValue.bitLength() < Integer.SIZE,
+                    interop.fitsInInt(maximum),
+                    family.name());
+            assertEquals(
+                    maximumValue.bitLength() < Byte.SIZE,
+                    interop.fitsInByte(maximum),
+                    family.name());
         }
     }
 
@@ -187,8 +222,7 @@ final class ProtosIntegralInteropTest {
     void fixedUnsigned64ProjectsExactlyAboveTheSignedLongRange() throws Exception {
         BigInteger exactDouble = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE.shiftLeft(11));
         ProtosFixedIntegerInteropValue high =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.UINT64, exactDouble);
+                fixed(ProtosFixedIntegerInteropValue.Kind.UINT64, exactDouble);
         assertTrue(interop.fitsInDouble(high));
         assertEquals(exactDouble.doubleValue(), interop.asDouble(high));
         assertFalse(interop.fitsInFloat(high));
@@ -198,24 +232,46 @@ final class ProtosIntegralInteropTest {
 
         BigInteger exactFloat = BigInteger.ONE.shiftLeft(64).subtract(BigInteger.ONE.shiftLeft(40));
         ProtosFixedIntegerInteropValue floatHigh =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.UINT64, exactFloat);
+                fixed(ProtosFixedIntegerInteropValue.Kind.UINT64, exactFloat);
         assertTrue(interop.fitsInFloat(floatHigh));
         assertEquals(exactFloat.floatValue(), interop.asFloat(floatHigh));
 
         BigInteger odd = BigInteger.ONE.shiftLeft(63).add(BigInteger.ONE);
         ProtosFixedIntegerInteropValue oddHigh =
-                new ProtosFixedIntegerInteropValue(ProtosFixedIntegerInteropValue.Kind.UINT64, odd);
+                fixed(ProtosFixedIntegerInteropValue.Kind.UINT64, odd);
         assertFalse(interop.fitsInDouble(oddHigh));
         assertThrows(UnsupportedMessageException.class, () -> interop.asDouble(oddHigh));
-        assertEquals(odd, oddHigh.value());
+        assertEquals(odd, interop.asBigInteger(oddHigh));
         assertEquals(odd.toString(), interop.toDisplayString(oddHigh, false));
 
         ProtosFixedIntegerInteropValue negative =
-                new ProtosFixedIntegerInteropValue(
-                        ProtosFixedIntegerInteropValue.Kind.INT8, BigInteger.valueOf(-128));
+                ProtosFixedIntegerInteropValue.ofLong(
+                        ProtosFixedIntegerInteropValue.Kind.INT8, -128L);
         assertEquals((byte) -128, interop.asByte(negative));
         assertEquals(-128.0f, interop.asFloat(negative));
+    }
+
+    /* Exact family ranges, derived independently from width and signedness. */
+    private static BigInteger minimum(ProtosFixedIntegerInteropValue.Kind family) {
+        return family.signed()
+                ? BigInteger.ONE.shiftLeft(family.width() - 1).negate()
+                : BigInteger.ZERO;
+    }
+
+    private static BigInteger maximum(ProtosFixedIntegerInteropValue.Kind family) {
+        return family.signed()
+                ? BigInteger.ONE.shiftLeft(family.width() - 1).subtract(BigInteger.ONE)
+                : BigInteger.ONE.shiftLeft(family.width()).subtract(BigInteger.ONE);
+    }
+
+    /* A fixed value of an exact in-range integer: a signed-64 value, or a UINT64 bit pattern. */
+    private static ProtosFixedIntegerInteropValue fixed(
+            ProtosFixedIntegerInteropValue.Kind family, BigInteger value) {
+        if (value.bitLength() < Long.SIZE) {
+            return ProtosFixedIntegerInteropValue.ofLong(family, value.longValue());
+        }
+        assertSame(ProtosFixedIntegerInteropValue.Kind.UINT64, family);
+        return ProtosFixedIntegerInteropValue.ofUnsignedBits(value.longValue());
     }
 
     @Test
@@ -267,5 +323,43 @@ final class ProtosIntegralInteropTest {
         assertSame(integer, read);
         assertTrue(interop.isNumber(read));
         assertEquals(ProtosTestIntegers.exact(integer), interop.asBigInteger(read));
+    }
+
+    @Test
+    void negativePowersOfTwoAndExactNeighboursAreDecidedOnTheMagnitude() throws Exception {
+        ProtosIntegerValue minimum = new ProtosIntegerValue(Long.MIN_VALUE);
+        assertTrue(interop.fitsInFloat(minimum));
+        assertTrue(interop.fitsInDouble(minimum));
+        assertEquals(-0x1p63, interop.asDouble(minimum));
+        assertEquals(-0x1p63f, interop.asFloat(minimum));
+        assertFalse(interop.fitsInDouble(new ProtosIntegerValue(Long.MIN_VALUE + 1L)));
+        assertFalse(interop.fitsInDouble(new ProtosIntegerValue(Long.MAX_VALUE)));
+
+        for (int exponent = 0; exponent < 63; exponent++) {
+            ProtosIntegerValue negative = new ProtosIntegerValue(-(1L << exponent));
+            assertTrue(interop.fitsInFloat(negative));
+            assertEquals(-Math.scalb(1.0d, exponent), interop.asDouble(negative));
+        }
+
+        BigInteger one = BigInteger.ONE;
+        BigInteger[] exact = {
+            one.shiftLeft(64), one.shiftLeft(64).negate(), one.shiftLeft(200).negate(),
+            one.shiftLeft(53).subtract(one).shiftLeft(100),
+            one.shiftLeft(53).subtract(one).shiftLeft(100).negate()
+        };
+        for (BigInteger value : exact) {
+            assertTrue(interop.fitsInDouble(large(value)), value.toString());
+            assertEquals(value.doubleValue(), interop.asDouble(large(value)));
+            assertFalse(interop.fitsInDouble(large(value.add(one))), value + " + 1");
+            assertFalse(interop.fitsInDouble(large(value.subtract(one))), value + " - 1");
+        }
+
+        BigInteger floatMax = one.shiftLeft(24).subtract(one).shiftLeft(104);
+        assertFalse(interop.fitsInFloat(large(floatMax.add(one))));
+        assertFalse(interop.fitsInFloat(large(floatMax.add(one.shiftLeft(104)))));
+        assertTrue(interop.fitsInFloat(large(one.shiftLeft(127).negate())));
+        BigInteger doubleMax = one.shiftLeft(53).subtract(one).shiftLeft(971);
+        assertFalse(interop.fitsInDouble(large(doubleMax.add(one.shiftLeft(971)))));
+        assertFalse(interop.fitsInDouble(large(doubleMax.negate().subtract(one))));
     }
 }

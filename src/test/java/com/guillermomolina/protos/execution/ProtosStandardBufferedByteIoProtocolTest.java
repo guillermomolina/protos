@@ -287,6 +287,84 @@ class ProtosStandardBufferedByteIoProtocolTest {
         assertEquals(ProtosFutureValue.State.FAILED, future.state());
     }
 
+    // I091: read maximum is an exact positive Integer in the int range, checked before any effect.
+    @Test
+    void readMaximumOutsideItsExactDomainFailsWithoutTouchingTheSource() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue source = source(activation);
+        Counter counter = (Counter) source.readLocalSlot("counter").orElseThrow();
+        ProtosObjectValue reader =
+                (ProtosObjectValue)
+                        call(
+                                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
+                                "call",
+                                List.of(source),
+                                activation);
+        Object[] invalid = {
+            i(-1),
+            i(0),
+            i((1L << 32) + 1),
+            i(Long.MIN_VALUE),
+            ProtosTestIntegers.integer(java.math.BigInteger.ONE.shiftLeft(64), prelude),
+            ProtosTestIntegers.integer(
+                    java.math.BigInteger.ONE.shiftLeft(64).add(java.math.BigInteger.ONE), prelude),
+            new ProtosFloatValue(2.0d),
+            Long.valueOf(2L),
+        };
+        for (Object maximum : invalid) {
+            ProtosFutureValue future =
+                    (ProtosFutureValue) call(reader, "read", List.of(maximum), activation);
+            assertEquals(ProtosFutureValue.State.FAILED, future.state(), String.valueOf(maximum));
+            assertSame(
+                    prelude.bindings().readLocalSlot("InvalidIOArgument").orElseThrow(),
+                    future.failedError().orElseThrow().parent().orElseThrow());
+        }
+        assertEquals(0, counter.reads);
+
+        ProtosFutureValue one = (ProtosFutureValue) call(reader, "read", List.of(i(1)), activation);
+        ProtosFutureValue rest =
+                (ProtosFutureValue) call(reader, "read", List.of(i(Integer.MAX_VALUE)), activation);
+
+        assertEquals(List.of(1), ints((ProtosBytesValue) one.resolvedValue().orElseThrow()));
+        // The int maximum is a bound, not an allocation: only the three buffered octets return.
+        assertEquals(List.of(2, 3, 4), ints((ProtosBytesValue) rest.resolvedValue().orElseThrow()));
+        assertEquals(1, counter.reads);
+    }
+
+    @Test
+    void readReturnsExtremeOctetsExactly() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue source = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        source.createLocalSlot(
+                "read",
+                ProtosClosureValue.nativeClosure(
+                        (x, args) -> {
+                            ProtosFutureValue future =
+                                    new ProtosFutureValue(
+                                            x.prelude().orElseThrow().futurePrototype(),
+                                            x.executionDomain());
+                            future.resolve(
+                                    bytes(new ProtosObjectValue(ProtosObjectValue.rootObject()), 0, 255),
+                                    x);
+                            return future;
+                        }));
+        ProtosObjectValue reader =
+                (ProtosObjectValue)
+                        call(
+                                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
+                                "call",
+                                List.of(source),
+                                activation);
+
+        ProtosFutureValue read = (ProtosFutureValue) call(reader, "read", List.of(i(2)), activation);
+
+        ProtosBytesValue result = (ProtosBytesValue) read.resolvedValue().orElseThrow();
+        assertEquals(List.of(0, 255), ints(result));
+        assertTrue(ProtosNumericValueSupport.isIntegerInLongRange(result.indexedAt(1)));
+    }
+
     @Test
     void closeCutoverTerminatesUncommittedReadsWithoutWaitingForDiscardedLowerAftermath()
             throws Exception {

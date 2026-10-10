@@ -209,4 +209,48 @@ final class ProtosFloatInteropTest {
                 Double.doubleToRawLongBits(-0.0d),
                 Double.doubleToRawLongBits(interop.asDouble(read)));
     }
+
+    @Test
+    void integralProjectionIsExactAtEveryBinary64Boundary() throws Exception {
+        double[] integral = {
+            0.0d, 1.0d, -1.0d, 0x1p53, -0x1p53, 0x1p53 + 2.0d, 0x1p63, -0x1p63, 0x1p64,
+            -0x1p64, 0x1.fffffffffffffp1023, 0x1p1023, -0x1p1023
+        };
+        for (double value : integral) {
+            ProtosFloatValue floating = new ProtosFloatValue(value);
+            assertTrue(interop.fitsInBigInteger(floating), Double.toHexString(value));
+            BigInteger exact = interop.asBigInteger(floating);
+            assertEquals(new java.math.BigDecimal(value).toBigIntegerExact(), exact);
+            assertEquals(value, exact.doubleValue());
+            boolean inLong = value >= -0x1p63 && value < 0x1p63;
+            assertEquals(inLong, interop.fitsInLong(floating), Double.toHexString(value));
+            if (inLong) {
+                assertEquals(exact.longValueExact(), interop.asLong(floating));
+            }
+        }
+        assertEquals(BigInteger.ONE.shiftLeft(1023), interop.asBigInteger(new ProtosFloatValue(0x1p1023)));
+        assertEquals(Long.MIN_VALUE, interop.asLong(new ProtosFloatValue(-0x1p63)));
+
+        double[] notIntegral = {
+            -0.0d, Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, 0.5d,
+            -0x1.8p0, 0x1.0000000000001p51, Double.MIN_VALUE
+        };
+        for (double value : notIntegral) {
+            ProtosFloatValue floating = new ProtosFloatValue(value);
+            assertFalse(interop.fitsInBigInteger(floating), Double.toHexString(value));
+            assertFalse(interop.fitsInLong(floating), Double.toHexString(value));
+            assertThrows(UnsupportedMessageException.class, () -> interop.asBigInteger(floating));
+            assertThrows(UnsupportedMessageException.class, () -> interop.asLong(floating));
+            assertTrue(interop.fitsInDouble(floating));
+            assertEquals(
+                    Double.doubleToRawLongBits(value),
+                    Double.doubleToRawLongBits(interop.asDouble(floating)));
+        }
+        ProtosFloatValue positiveZero = new ProtosFloatValue(0.0d);
+        assertTrue(interop.fitsInLong(positiveZero));
+        assertEquals(BigInteger.ZERO, interop.asBigInteger(positiveZero));
+        assertTrue(interop.fitsInFloat(new ProtosFloatValue(0x1p63)));
+        assertFalse(interop.fitsInFloat(new ProtosFloatValue(0x1p1023)));
+        assertTrue(interop.fitsInFloat(new ProtosFloatValue(Double.POSITIVE_INFINITY)));
+    }
 }

@@ -205,6 +205,82 @@ class ProtosForeignValueAdmissionTest {
         }
     }
 
+    @Test
+    void hostIntegralDescriptorsNormalizeToLongOrBeyondRangeBigInteger() {
+        BigInteger beyond = BigInteger.ONE.shiftLeft(63);
+        Object[][] cases = {
+            {Byte.valueOf((byte) -128), -128L},
+            {Short.valueOf((short) 32767), 32767L},
+            {Integer.valueOf(Integer.MIN_VALUE), (long) Integer.MIN_VALUE},
+            {Long.valueOf(Long.MAX_VALUE), Long.MAX_VALUE},
+            {BigInteger.valueOf(Long.MIN_VALUE), Long.MIN_VALUE},
+            {BigInteger.valueOf(42L), 42L},
+            {beyond, beyond},
+            {beyond.negate().subtract(BigInteger.ONE), beyond.negate().subtract(BigInteger.ONE)},
+        };
+        for (Object[] host : cases) {
+            ProtosForeignAdmissionDescriptor descriptor =
+                    ProtosForeignAdmissionDescriptor.integral((Number) host[0]);
+            assertSame(ProtosForeignAdmissionDescriptor.Kind.INTEGER, descriptor.kind());
+            assertEquals(host[1], descriptor.scalar(), String.valueOf(host[0]));
+            assertEquals(host[1].getClass(), descriptor.scalar().getClass());
+        }
+        // A beyond-range host BigInteger is carried as-is: no host -> guest -> host round trip.
+        assertSame(beyond, ProtosForeignAdmissionDescriptor.integral(beyond).scalar());
+
+        // Only normalized scalars are valid INTEGER descriptors.
+        for (Object invalid : new Object[] {
+                BigInteger.ONE, Integer.valueOf(1), 1.0d, "1", null,
+                new com.guillermomolina.protos.runtime.ProtosIntegerValue(1L)}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ProtosForeignAdmissionDescriptor(
+                            ProtosForeignAdmissionDescriptor.Kind.INTEGER, invalid, null,
+                            java.util.Set.of()),
+                    String.valueOf(invalid));
+        }
+        for (Number notIntegral : new Number[] {1.0d, 1.0f, BigDecimal.ONE}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> ProtosForeignAdmissionDescriptor.integral(notIntegral));
+        }
+        // An opaque value never carries a scalar that could become an Integer.
+        assertThrows(IllegalArgumentException.class,
+                () -> new ProtosForeignAdmissionDescriptor(
+                        ProtosForeignAdmissionDescriptor.Kind.RAW, 1L, null, java.util.Set.of()));
+        assertEquals(null, ProtosForeignAdmissionDescriptor.opaque().scalar());
+    }
+
+    @Test
+    void admittedIntegersMintInTheAdmittingDomainAndRematerializeAcrossActorAndP()
+            throws Exception {
+        BigInteger huge = BigInteger.ONE.shiftLeft(64).negate();
+        Fake root =
+                new Fake(false)
+                        .member("smallBig", new Integral(BigInteger.valueOf(-7L)))
+                        .member("edge", new Integral(BigInteger.valueOf(Long.MIN_VALUE)))
+                        .member("huge", new Integral(huge));
+        try (ProtosForeignValueFixture fixture = fixture(root)) {
+            assertEquals(-7L, assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
+                    fixture.eval(M + "m.smallBig")).longValue());
+            assertEquals(Long.MIN_VALUE, assertInstanceOf(
+                    com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
+                    fixture.eval(M + "m.edge")).longValue());
+            Object large = fixture.eval(M + "m.huge");
+            assertInstanceOf(com.guillermomolina.protos.runtime.ProtosLargeIntegerValue.class, large);
+            assertSame(fixture.prelude.integerPrototype(),
+                    ((ProtosObjectValue) large).parent().orElseThrow());
+            assertEquals(huge, ProtosTestIntegers.exact(large));
+
+            Object actorCopy = ProtosActorValueTransfer.snapshotValue(large, fixture.activation());
+            assertNotSame(large, actorCopy);
+            assertEquals(huge, ProtosTestIntegers.exact(actorCopy));
+            assertSame(Boolean.TRUE, ProtosIdentity.identical(large, actorCopy));
+            Object parallel = parallelCopy(large, fixture);
+            assertNotSame(large, parallel);
+            assertEquals(huge, ProtosTestIntegers.exact(parallel));
+        }
+    }
+
     private static Object parallelCopy(Object value, ProtosForeignValueFixture fixture)
             throws Exception {
         Class<?> transfer =

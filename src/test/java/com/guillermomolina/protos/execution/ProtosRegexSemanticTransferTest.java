@@ -299,7 +299,54 @@ final class ProtosRegexSemanticTransferTest {
                             true, "ab", BigInteger.ZERO, BigInteger.ONE)),
                     ProtosSemanticTransferPayload.of())), "bounds must cover the captured scalars");
             assertFalse(family.acceptsPayload(ProtosSemanticTransferPayload.of("Other", "a", "")));
+
+            // Bounds beyond signed-64 stay exact guest Integers; only their difference is checked.
+            BigInteger beyond = BigInteger.ONE.shiftLeft(70);
+            assertTrue(family.acceptsPayload(match(group0("ab", beyond, beyond.add(BigInteger.TWO)))));
+            assertFalse(family.acceptsPayload(match(group0("ab", beyond, beyond.add(BigInteger.ONE)))));
+            assertFalse(family.acceptsPayload(match(group0("", BigInteger.ONE.negate(),
+                    BigInteger.ONE.negate()))), "negative start");
+            // A non-BMP scalar is one position, not two UTF-16 units.
+            assertTrue(family.acceptsPayload(match(group0("😀é", BigInteger.TEN, BigInteger.valueOf(12)))));
+            assertFalse(family.acceptsPayload(match(group0("😀é", BigInteger.TEN, BigInteger.valueOf(13)))));
+            assertFalse(family.acceptsPayload(ProtosSemanticTransferPayload.of("Match", BigInteger.ZERO,
+                    ProtosSemanticTransferPayload.of(ProtosSemanticTransferPayload.of(
+                            true, "a", 0.0d, BigInteger.ONE)),
+                    ProtosSemanticTransferPayload.of())), "a Float bound is not an Integer leaf");
+
+            ProtosSemanticTransferPayload twoGroups = ProtosSemanticTransferPayload.of(
+                    ProtosSemanticTransferPayload.of(true, "a", BigInteger.ZERO, BigInteger.ONE),
+                    ProtosSemanticTransferPayload.of(false));
+            assertTrue(family.acceptsPayload(ProtosSemanticTransferPayload.of("Match", BigInteger.ONE,
+                    twoGroups, ProtosSemanticTransferPayload.of(
+                            ProtosSemanticTransferPayload.of("w", BigInteger.ONE)))));
+            for (BigInteger badGroup : new BigInteger[] {
+                    BigInteger.ZERO, BigInteger.TWO, BigInteger.ONE.shiftLeft(32).add(BigInteger.ONE),
+                    BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE), BigInteger.ONE.negate()}) {
+                assertFalse(family.acceptsPayload(ProtosSemanticTransferPayload.of("Match",
+                        BigInteger.ONE, twoGroups, ProtosSemanticTransferPayload.of(
+                                ProtosSemanticTransferPayload.of("w", badGroup)))), badGroup.toString());
+            }
+            assertFalse(family.acceptsPayload(ProtosSemanticTransferPayload.of("Match", BigInteger.ONE,
+                    twoGroups, ProtosSemanticTransferPayload.of(
+                            ProtosSemanticTransferPayload.of("w", BigInteger.ONE),
+                            ProtosSemanticTransferPayload.of("v", BigInteger.ONE)))), "one name per group");
+            for (BigInteger badCount : new BigInteger[] {
+                    BigInteger.TWO, BigInteger.ONE.shiftLeft(30), BigInteger.ONE.shiftLeft(64).add(BigInteger.ONE),
+                    BigInteger.ONE.negate()}) {
+                assertFalse(family.acceptsPayload(ProtosSemanticTransferPayload.of("Match", badCount,
+                        twoGroups, ProtosSemanticTransferPayload.of())), badCount.toString());
+            }
         }
+    }
+
+    private static ProtosSemanticTransferPayload group0(String text, BigInteger start, BigInteger end) {
+        return ProtosSemanticTransferPayload.of(true, text, start, end);
+    }
+
+    private static ProtosSemanticTransferPayload match(ProtosSemanticTransferPayload group0) {
+        return ProtosSemanticTransferPayload.of("Match", BigInteger.ZERO,
+                ProtosSemanticTransferPayload.of(group0), ProtosSemanticTransferPayload.of());
     }
 
     @Test

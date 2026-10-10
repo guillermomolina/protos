@@ -27,6 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -207,7 +208,8 @@ final class ProtosRegexUnicodeFacilityTest {
     }
 
     private static int bound(Object value) {
-        return assertInstanceOf(ProtosIntegerValue.class, value).intValueExactForRuntime();
+        return ProtosNumericValueSupport.exactInt(
+                assertInstanceOf(ProtosIntegerValue.class, value));
     }
 
     private static boolean contains(List<int[]> ranges, int scalar) {

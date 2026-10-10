@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -89,18 +88,20 @@ public record ProtosPackageExecutionPlanV2(
 
     /**
      * Detached exact ReleaseVersion. {@code text} is the canonical spelling; an empty
-     * {@code prerelease} list represents the Protos {@code null} of a stable release.
+     * {@code prerelease} list represents the Protos {@code null} of a stable release. Like a
+     * numeric prerelease identifier, each core component is exactly its canonical decimal text:
+     * the detached plan compares and renders versions but never computes with them.
      */
     public record ReleaseVersion(
-            BigInteger major,
-            BigInteger minor,
-            BigInteger patch,
+            String major,
+            String minor,
+            String patch,
             List<PrereleaseIdentifier> prerelease,
             String text) {
         public ReleaseVersion {
-            Objects.requireNonNull(major, "major");
-            Objects.requireNonNull(minor, "minor");
-            Objects.requireNonNull(patch, "patch");
+            requireCanonicalDecimal(major, "major");
+            requireCanonicalDecimal(minor, "minor");
+            requireCanonicalDecimal(patch, "patch");
             prerelease = List.copyOf(Objects.requireNonNull(prerelease, "prerelease"));
             Objects.requireNonNull(text, "text");
         }
@@ -109,7 +110,29 @@ public record ProtosPackageExecutionPlanV2(
     /** One prerelease identifier; a numeric identifier's number is exactly its decimal text. */
     public record PrereleaseIdentifier(boolean numeric, String text) {
         public PrereleaseIdentifier {
-            Objects.requireNonNull(text, "text");
+            if (numeric) {
+                requireCanonicalDecimal(text, "numeric prerelease identifier");
+            } else {
+                Objects.requireNonNull(text, "text");
+            }
+        }
+    }
+
+    /*
+     * A canonical non-negative decimal of any magnitude: ASCII digits with no sign and no leading
+     * zero except the single digit 0. Equal values therefore have equal texts, so record equality
+     * is numeric equality. The text carries no order: precedence compares numerically, never
+     * lexicographically ("10" follows "2").
+     */
+    private static void requireCanonicalDecimal(String text, String label) {
+        Objects.requireNonNull(text, label);
+        boolean canonical = !text.isEmpty() && (text.length() == 1 || text.charAt(0) != '0');
+        for (int index = 0; canonical && index < text.length(); index++) {
+            char digit = text.charAt(index);
+            canonical = digit >= '0' && digit <= '9';
+        }
+        if (!canonical) {
+            throw new IllegalArgumentException(label + " is not a canonical non-negative decimal");
         }
     }
 

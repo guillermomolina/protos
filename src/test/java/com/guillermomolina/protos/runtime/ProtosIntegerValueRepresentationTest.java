@@ -182,6 +182,68 @@ final class ProtosIntegerValueRepresentationTest {
         assertFalse(ProtosNumericValueSupport.isIntegerInLongRange(huge));
     }
 
+    @Test
+    void largeConstructionRejectsEverySigned64Value() {
+        ProtosObjectValue prototype = prelude.integerPrototype();
+        for (BigInteger value : new BigInteger[] {BigInteger.ZERO, LONG_MAX, LONG_MIN}) {
+            assertThrows(IllegalArgumentException.class,
+                    () -> new ProtosLargeIntegerValue(prototype, value));
+        }
+        assertEquals(ABOVE_LONG, new ProtosLargeIntegerValue(prototype, ABOVE_LONG).exactValue());
+        assertEquals(BELOW_LONG, new ProtosLargeIntegerValue(prototype, BELOW_LONG).exactValue());
+    }
+
+    @Test
+    void overflowAndReturnPreserveSignAndMagnitudeAtBothBoundaries() {
+        ProtosIntegerValue maximum = new ProtosIntegerValue(Long.MAX_VALUE);
+        ProtosIntegerValue minimum = new ProtosIntegerValue(Long.MIN_VALUE);
+        ProtosIntegerValue one = new ProtosIntegerValue(1L);
+
+        Object above = ProtosNumericValueSupport.addIntegers(maximum, one, prelude);
+        assertLarge(ABOVE_LONG, above);
+        Object below = ProtosNumericValueSupport.subtractIntegers(minimum, one, prelude);
+        assertLarge(BELOW_LONG, below);
+
+        assertSmall(Long.MAX_VALUE, ProtosNumericValueSupport.subtractIntegers(above, one, prelude));
+        assertSmall(Long.MIN_VALUE, ProtosNumericValueSupport.addIntegers(below, one, prelude));
+
+        BigInteger hugePositive = BigInteger.ONE.shiftLeft(1000);
+        BigInteger hugeNegative = hugePositive.negate();
+        Object positive = ProtosNumericValueSupport.integer(hugePositive, prelude);
+        Object negative = ProtosNumericValueSupport.integer(hugeNegative, prelude);
+        assertLarge(hugePositive, positive);
+        assertLarge(hugeNegative, negative);
+        assertEquals(-1, ProtosNumericValueSupport.integerSignum(negative));
+        assertSmall(0L, ProtosNumericValueSupport.addIntegers(positive, negative, prelude));
+        assertSmall(-1L, ProtosNumericValueSupport.quotientIntegers(negative, positive, prelude));
+        assertEquals(hugeNegative.toString(),
+                ProtosNumericValueSupport.integerDecimalText(negative));
+        assertTrue(ProtosValueLookup.isInteger(negative));
+    }
+
+    @Test
+    void equalLargeCopiesShareValueIdentityAndRematerializeInAnotherPrelude() throws IOException {
+        BigInteger value = BigInteger.ONE.shiftLeft(80).negate().subtract(BigInteger.TEN);
+        Object first = ProtosNumericValueSupport.integer(value, prelude);
+        Object second = ProtosNumericValueSupport.integer(value, prelude);
+        assertFalse(first == second);
+        assertTrue(ProtosIdentity.identical(first, second));
+        assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(second));
+        assertEquals(ProtosNumericValueSupport.integerHashCode(first), value.hashCode());
+
+        ProtosPrelude other =
+                new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        ProtosLargeIntegerValue copy = assertInstanceOf(
+                ProtosLargeIntegerValue.class,
+                ProtosNumericValueSupport.copyCurrentNumberOrNull(first, other));
+        assertSame(other.integerPrototype(), copy.parent().orElseThrow());
+        assertFalse(copy.parent().orElseThrow() == prelude.integerPrototype());
+        assertTrue(copy.isFrozen());
+        assertEquals(value, ProtosTestIntegers.exact(copy));
+        assertTrue(ProtosIdentity.identical(first, copy));
+        assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(copy));
+    }
+
     private static Object quotient(long left, long right) {
         return ProtosNumericValueSupport.quotientIntegers(
                 new ProtosIntegerValue(left), new ProtosIntegerValue(right), null);
