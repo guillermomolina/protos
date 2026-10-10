@@ -860,11 +860,10 @@ final class CanonicalToBytecodeLowerer {
                             builder, (CanonicalLookup) last, null);
                 } else if (closureTerminal) {
                     builder.beginReturn();
-                    builder.beginMaterializeClosure();
-                    emitCurrentActivation(builder);
+                    beginClosureCapture(builder);
                     builder.emitLoadConstant((CanonicalClosure) last);
                     builder.emitLoadConstant(terminalClosurePlan);
-                    builder.endMaterializeClosure();
+                    endClosureCapture(builder);
                     builder.endReturn();
                 } else {
                     builder.beginReturn();
@@ -2567,11 +2566,10 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlanCell plan =
                         bytecodeClosurePlan(builder, closure);
                 builder.beginDiscardValue();
-                builder.beginMaterializeClosure();
-                emitCurrentActivation(builder);
+                beginClosureCapture(builder);
                 builder.emitLoadConstant(closure);
                 builder.emitLoadConstant(plan);
-                builder.endMaterializeClosure();
+                endClosureCapture(builder);
                 builder.endDiscardValue();
                 endStatement(builder);
             } else {
@@ -5750,6 +5748,30 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+    private boolean useCompactClosureCapture() {
+        return currentActivationLocal == null && currentRootFrameLocals.isEmpty();
+    }
+
+    private void beginClosureCapture(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+        if (useCompactClosureCapture()) {
+            builder.beginMaterializeCurrentClosure();
+            builder.emitCurrentCallerReference();
+        } else {
+            builder.beginMaterializeClosure();
+            emitCurrentActivation(builder);
+        }
+    }
+
+    private void endClosureCapture(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+        if (useCompactClosureCapture()) {
+            builder.endMaterializeCurrentClosure();
+        } else {
+            builder.endMaterializeClosure();
+        }
+    }
+
     private void emitExpression(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
@@ -5767,11 +5789,10 @@ final class CanonicalToBytecodeLowerer {
              * own argument evaluation.
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
-            builder.beginMaterializeClosure();
-            emitCurrentActivation(builder);
+            beginClosureCapture(builder);
             builder.emitLoadConstant(closure);
             builder.emitLoadConstant(cell);
-            builder.endMaterializeClosure();
+            endClosureCapture(builder);
             return;
         }
         if (expression instanceof CanonicalLookup lookup) {
@@ -6131,6 +6152,14 @@ final class CanonicalToBytecodeLowerer {
                 spreadArguments
                         ? java.util.List.of()
                         : inlineLiteralCallbackCandidates(send.arguments());
+        boolean tryCompactCanonicalIfTrue =
+                "ifTrue".equals(send.message())
+                        && !spreadArguments
+                        && send.arguments().size() == 1
+                        && inlineCallbackPositions.size() == 1
+                        && inlineCallbackPositions.get(0) == 0
+                        && currentActivationLocal == null
+                        && !currentInlineCallbackFrameNative;
         boolean inlineIndexedEachCandidate =
                 !spreadArguments
                         && isInlineLiteralIndexedEachCandidate(send.arguments());
@@ -6233,6 +6262,38 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
+        /*
+         * I092: receiver and callback-producing expression have already
+         * been evaluated once, in source order. Selection comes afterward.
+         * The entire original pipeline remains on the miss branch.
+         */
+        BytecodeLocal compactBooleanResult = null;
+        CanonicalClosure compactBooleanDefinition = null;
+
+        if (tryCompactCanonicalIfTrue) {
+            compactBooleanDefinition =
+                    (CanonicalClosure) send.arguments().get(0);
+            compactBooleanResult =
+                    builder.createLocal("compactCanonicalBoolean", null);
+
+            builder.beginStoreLocal(compactBooleanResult);
+            builder.beginTryCompactCanonicalBooleanOne();
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(send.message());
+            emitSendCallerOperand(builder);
+            builder.emitLoadLocal(argumentValues.get(0));
+            builder.emitLoadConstant(
+                    bytecodeClosurePlans.get(compactBooleanDefinition));
+            builder.endTryCompactCanonicalBooleanOne();
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginIsCompactCanonicalBooleanMiss();
+            builder.emitLoadLocal(compactBooleanResult);
+            builder.endIsCompactCanonicalBooleanMiss();
+            builder.beginBlock();
+        }
+
         BytecodeLocal directSendResult = null;
         if (tryDirectSendZero || tryDirectSendOne) {
             directSendResult =
@@ -6300,6 +6361,19 @@ final class CanonicalToBytecodeLowerer {
             endPrepareSend(builder, send.arguments().size());
         }
         builder.endStoreLocal();
+
+        if (tryCompactCanonicalIfTrue) {
+            // Join the canonical hit and ordinary fallback before B-prime.
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(preparedCall);
+            builder.emitLoadLocal(compactBooleanResult);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+        }
 
         java.util.List<InlineLiteralCallback> inlineCallbacks =
                 new java.util.ArrayList<>(inlineCallbackPositions.size());

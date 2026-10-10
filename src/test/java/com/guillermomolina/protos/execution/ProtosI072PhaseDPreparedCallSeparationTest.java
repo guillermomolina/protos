@@ -96,17 +96,24 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                     receivers.contains(ProtosBytecodeRootNode.PreparedClosureCall.class),
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
+            Set<Class<?>> expectedReceivers =
+                    new java.util.HashSet<>(representations);
+            if (operation == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class) {
+                expectedReceivers.add(
+                        ProtosBytecodeRootNode.CompactCanonicalBooleanCall.class);
+            }
+
             int expectedCount =
-                    operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
-                                    || operation
-                                            == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class
-                            ? representations.size() + 1
-                            : representations.size();
+                    operation == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class
+                            ? representations.size() + 2
+                            : operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
+                                    ? representations.size() + 1
+                                    : representations.size();
             assertEquals(
                     expectedCount,
                     receivers.size(),
                     operation.getName() + " specializations: " + receivers);
-            assertEquals(representations, Set.copyOf(receivers), operation.getName());
+            assertEquals(expectedReceivers, Set.copyOf(receivers), operation.getName());
         }
     }
 
@@ -256,7 +263,17 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                 "RequiresStructuredDispatch|IsStructured\\w+"
                                         + "|PrepareStructured\\w+|AdmitsInlineLiteral\\w+")
                         && receivers.stream().anyMatch(representations::contains)) {
-                    assertEquals(representations, receivers, operation.getName());
+                    Set<Class<?>> expectedReceivers =
+                            new java.util.HashSet<>(representations);
+                    if (root == ProtosSemanticBytecodeRootNode.class
+                            && Set.of(
+                                            "IsStructuredBooleanCall",
+                                            "PrepareStructuredBooleanCall")
+                                    .contains(operation.getSimpleName())) {
+                        expectedReceivers.add(
+                                ProtosBytecodeRootNode.CompactCanonicalBooleanCall.class);
+                    }
+                    assertEquals(expectedReceivers, receivers, operation.getName());
                     structuredFamily.add(operation.getSimpleName());
                 }
             }

@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.326-SNAPSHOT
+
+- `I092` (#870): implement compact canonical Boolean control.
+  - Defer rich activation materialization when creating eligible Closure literals.
+  - Introduce guarded canonical `ifTrue` selection without mandatory generic outer NativeCall preparation.
+  - Prepare admitted inline callbacks through compact state while preserving ordinary fallback semantics.
+  - Preserve a single PLAT044 B-prime inline region and source instrumentation.
+  - Extend Boolean and structural regression coverage, including deferred lexical-capture compatibility.
+
 ## 0.3.325-SNAPSHOT
 
 - `I089-A` (#867): implement D196 B1 mixed Integer/Float arithmetic.

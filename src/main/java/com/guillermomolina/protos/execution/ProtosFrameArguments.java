@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.Frame;
 import java.util.List;
@@ -84,6 +85,9 @@ final class ProtosFrameArguments {
 
     /** Private kind marker; never a guest value, so never a method receiver. */
     private static final Object DIRECT_CLOSURE_CALL = new Object();
+
+    private static final java.util.function.Function<Object[], ProtosActivation>
+            COMPACT_CAPTURE_OWNER = ProtosFrameArguments::activation;
 
     private ProtosFrameArguments() {}
 
@@ -487,6 +491,39 @@ final class ProtosFrameArguments {
          */
         arguments[CLOSURE_INDEX] = materialized;
         return materialized;
+    }
+
+    /**
+     * I092: capture one ordinary Closure without materializing a compact
+     * root's activation. The lowerer admits this only in a genuine root
+     * that declares no frame-owned lexical bindings; every other root
+     * retains MaterializeClosure's exact activation-based path.
+     */
+    static ProtosClosureValue materializeCompactClosure(
+            Object[] arguments,
+            CanonicalClosure definition,
+            ProtosClosureExecutionPlanCell executionPlanCell) {
+        ProtosClosureValue currentClosure = compactClosure(arguments);
+        boolean direct = isDirectClosureCall(arguments);
+        Object receiver = direct
+                ? currentClosure.capturedReceiver()
+                : arguments[RECEIVER_INDEX];
+        ProtosObjectValue methodHome = direct
+                ? currentClosure.methodHome().orElse(null)
+                : (ProtosObjectValue) arguments[METHOD_HOME_INDEX];
+        ProtosLexicalEnvironment environment =
+                ProtosLexicalEnvironment.deferredCompactOwner(
+                        arguments,
+                        COMPACT_CAPTURE_OWNER,
+                        currentClosure.capturedLexicalEnvironmentForRuntime());
+        return new ProtosClosureValue(
+                definition,
+                environment,
+                receiver,
+                methodHome,
+                compactReturnHome(arguments),
+                preludeOrNull(arguments),
+                executionPlanCell.plan());
     }
 
     /** PERF032-G7 materialization of a minimal direct header (zero supplied). */

@@ -29,6 +29,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedSendTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedStructuredSend;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CompactCanonicalBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
@@ -2312,6 +2313,27 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosClosureExecutionPlanCell executionPlanCell) {
             return ProtosBytecodeRootNode.MaterializeClosure.perform(
                     activation, definition, executionPlanCell);
+        }
+    }
+
+    @Operation
+    public static final class MaterializeCurrentClosure {
+        @Specialization
+        public static ProtosClosureValue rich(
+                ProtosActivation activation,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell) {
+            return ProtosBytecodeRootNode.MaterializeClosure.perform(
+                    activation, definition, executionPlanCell);
+        }
+
+        @Specialization
+        public static ProtosClosureValue compact(
+                Object[] caller,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell) {
+            return ProtosFrameArguments.materializeCompactClosure(
+                    caller, definition, executionPlanCell);
         }
     }
 
@@ -5405,6 +5427,81 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     // already-selected prepared call, never from the selector spelling; the
     // finite state machine stays owned by ProtosBytecodeRootNode.PreparedBooleanCall.
 
+    /**
+     * I092: canonical Boolean candidate, before generic send preparation.
+     * The cache holds D013 selection assumptions, not a selector-only proof.
+     */
+    @Operation
+    public static final class TryCompactCanonicalBooleanOne {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedSelection != null"
+                },
+                assumptions = {
+                    "cachedSelection.booleanSelection()",
+                    "cachedSelection.callbackCallSelection()"
+                },
+                limit = "3")
+        public static Object canonical(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied,
+                ProtosClosureExecutionPlanCell literalPlan,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedCompactIfTrue(receiver, selector, prelude)")
+                        ProtosBytecodeRootNode.GuardedCompactIfTrue cachedSelection) {
+            return ProtosBytecodeRootNode.compactCanonicalIfTrue(
+                    receiver, caller, supplied, literalPlan, enteredContext);
+        }
+
+        @Specialization(replaces = "canonical")
+        public static Object fallback(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object supplied,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return null;
+        }
+
+        static ProtosBytecodeRootNode.GuardedCompactIfTrue createGuardedCompactIfTrue(
+                Object receiver, String selector, ProtosPrelude prelude) {
+            return ProtosBytecodeRootNode.createGuardedCompactIfTrue(
+                    receiver, selector, prelude);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return caller instanceof ProtosActivation activation
+                    ? activation.preludeOrNullForRuntime()
+                    : ProtosFrameArguments.preludeOrNull((Object[]) caller);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    @Operation
+    public static final class IsCompactCanonicalBooleanMiss {
+        @Specialization
+        public static boolean perform(Object value) {
+            return value == null;
+        }
+    }
+
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
@@ -5426,6 +5523,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return ProtosBytecodeRootNode.IsStructuredBooleanCall.moduleInitialization(prepared);
         }
+        @Specialization
+        public static boolean compact(CompactCanonicalBooleanCall prepared) {
+            return true;
+        }
+
     }
 
     @Operation
@@ -5450,6 +5552,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.PrepareStructuredBooleanCall
                     .moduleInitialization(prepared);
         }
+        @Specialization
+        public static PreparedBooleanCall compact(CompactCanonicalBooleanCall prepared) {
+            return prepared.prepareStructuredBoolean();
+        }
+
     }
 
     @Operation
@@ -5896,6 +6003,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
         public static void ordinary(OrdinarySourceCall prepared) {
             ProtosBytecodeRootNode.CompleteClosureCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static void compact(CompactCanonicalBooleanCall prepared) {
+            prepared.complete();
         }
 
         @Specialization

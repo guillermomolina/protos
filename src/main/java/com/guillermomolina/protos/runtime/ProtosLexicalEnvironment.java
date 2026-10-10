@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 
 /**
  * PERF025 internal representation of one captured genuine lexical execution
@@ -49,6 +50,8 @@ import java.util.Optional;
  */
 public final class ProtosLexicalEnvironment {
     private ProtosActivation deferredOwner;
+    private Object[] deferredOwnerArguments;
+    private Function<Object[], ProtosActivation> deferredOwnerResolver;
     private ProtosObjectValue context;
     private final ProtosLexicalEnvironment outer;
 
@@ -59,6 +62,35 @@ public final class ProtosLexicalEnvironment {
         this.deferredOwner = deferredOwner;
         this.context = context;
         this.outer = outer;
+    }
+
+    /**
+     * I092: compact root capture retains its frame argument authority without
+     * constructing a rich activation merely to create a Closure literal.
+     * Every later observer resolves the same activation published in argument 0.
+     * This form is used only for roots with no frame-owned lexical slots.
+     */
+    public static ProtosLexicalEnvironment deferredCompactOwner(
+            Object[] arguments,
+            Function<Object[], ProtosActivation> resolver,
+            ProtosLexicalEnvironment outer) {
+        ProtosLexicalEnvironment environment =
+                new ProtosLexicalEnvironment(null, null, outer);
+        environment.deferredOwnerArguments = Objects.requireNonNull(arguments, "arguments");
+        environment.deferredOwnerResolver = Objects.requireNonNull(resolver, "resolver");
+        return environment;
+    }
+
+    private ProtosActivation resolveDeferredOwner() {
+        ProtosActivation owner = deferredOwner;
+        if (owner == null) {
+            owner = Objects.requireNonNull(deferredOwnerResolver, "deferred owner")
+                    .apply(deferredOwnerArguments);
+            deferredOwner = Objects.requireNonNull(owner, "resolved owner");
+            deferredOwnerArguments = null;
+            deferredOwnerResolver = null;
+        }
+        return owner;
     }
 
     /** A node whose context object already exists. */
@@ -129,9 +161,11 @@ public final class ProtosLexicalEnvironment {
         if (existing != null) {
             return existing;
         }
-        ProtosObjectValue materialized = deferredOwner.context();
+        ProtosObjectValue materialized = resolveDeferredOwner().context();
         context = materialized;
         deferredOwner = null;
+        deferredOwnerArguments = null;
+        deferredOwnerResolver = null;
         return materialized;
     }
 
@@ -149,7 +183,7 @@ public final class ProtosLexicalEnvironment {
      * {@code null}.
      */
     public ProtosActivation deferredOwnerForRuntime() {
-        return deferredOwner;
+        return resolveDeferredOwner();
     }
 
     /** True while the guest context object has not been created yet. */
@@ -162,7 +196,7 @@ public final class ProtosLexicalEnvironment {
         if (existing != null) {
             return existing.hasLocalSlot(name);
         }
-        return deferredOwner.currentContextHasLocalSlotForRuntime(name);
+        return resolveDeferredOwner().currentContextHasLocalSlotForRuntime(name);
     }
 
     public Optional<Object> readLocalSlotForRuntime(String name) {
@@ -170,7 +204,7 @@ public final class ProtosLexicalEnvironment {
         if (existing != null) {
             return existing.readLocalSlot(name);
         }
-        return deferredOwner.readCurrentLocalSlotForRuntime(name);
+        return resolveDeferredOwner().readCurrentLocalSlotForRuntime(name);
     }
 
     /** An unmaterialized execution context cannot have been frozen by guest code. */
@@ -191,6 +225,6 @@ public final class ProtosLexicalEnvironment {
                     ? executionContext.lexicalBindingAuthorityForRuntime()
                     : null;
         }
-        return deferredOwner.deferredContextAuthorityForRuntime();
+        return resolveDeferredOwner().deferredContextAuthorityForRuntime();
     }
 }

@@ -68,9 +68,11 @@ final class ProtosPerf025LazyLexicalCaptureTest {
             ProtosClosureValue trivial =
                     assertInstanceOf(ProtosClosureValue.class, outer.result());
 
-            assertNull(
-                    privateField(outer.callee(), "context"),
-                    "creating a Closure must not materialize the outer guest Context");
+            if (outer.callee() != null) {
+                assertNull(
+                        privateField(outer.callee(), "context"),
+                        "creating a Closure must not materialize the outer guest Context");
+            }
             ProtosLexicalEnvironment captured =
                     trivial.capturedLexicalEnvironmentForRuntime();
             assertTrue(captured.isDeferredForRuntime());
@@ -80,7 +82,12 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                     "the outer chain is shared by reference, not copied");
 
             assertEquals(BigInteger.ONE, integerValue(invokeDirect(trivial, module).result()));
-            assertNull(privateField(outer.callee(), "context"));
+            if (outer.callee() != null) {
+                assertNull(privateField(outer.callee(), "context"));
+            }
+            assertNull(
+                    captured.materializedContextOrNullForRuntime(),
+                    "trivial closure invocation must not observe the outer context");
             assertTrue(captured.isDeferredForRuntime());
         });
         System.out.println("TRIVIAL_CLOSURE_DOES_NOT_FORCE_OUTER_CONTEXT=PASS");
