@@ -59,6 +59,9 @@ final class ProtosSemanticTransferFamilyTest {
     private static final FixtureFamily IMPOSTOR =
             new FixtureFamily("std:plat051-fixture/Portable", Mode.PORTABLE);
 
+    private static final NumericCandidateFamily NUMERIC_CANDIDATE =
+            new NumericCandidateFamily();
+
     private static ProtosPrelude prelude;
 
     @BeforeAll
@@ -72,7 +75,8 @@ final class ProtosSemanticTransferFamilyTest {
                                         CLOSURE_PAYLOAD,
                                         THROWING,
                                         OPEN_RESULT,
-                                        FOREIGN_RESULT))
+                                        FOREIGN_RESULT,
+                                        NUMERIC_CANDIDATE))
                         .bootstrap(CORE);
     }
 
@@ -456,6 +460,179 @@ final class ProtosSemanticTransferFamilyTest {
                                 ProtosParallelRuntime.captureValuesForTesting(
                                         List.of(value), owner.newModuleActivation(), new boolean[1]));
         assertEquals("NonParallel", failure.getClass().getSimpleName());
+    }
+
+
+    @Test
+    void numericCandidatePreservesPrivateExactStateAndSignedZeroThroughActorAndP() {
+        NumericCandidateState state =
+                new NumericCandidateState(
+                        BigInteger.ONE.shiftLeft(130).add(BigInteger.valueOf(7)),
+                        BigInteger.valueOf(3),
+                        -0.0d);
+
+        ProtosSemanticTransferValue original =
+                NUMERIC_CANDIDATE.mint(state, prelude);
+
+        assertTrue(original.isFrozen());
+        assertTrue(ProtosValueLookup.isProtosValue(original));
+        assertSame(
+                prelude.numberPrototype(),
+                ProtosValueLookup.delegationParent(original, prelude)
+                        .orElseThrow());
+        assertFalse(original.hasLocalSlot("numerator"));
+        assertFalse(original.hasLocalSlot("denominator"));
+        assertFalse(original.hasLocalSlot("imaginaryZero"));
+
+        List<Object> actorSnapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(original), prelude.newModuleActivation());
+
+        assertTrue(
+                ProtosActorValueTransfer.requiresMaterialization(actorSnapshot));
+
+        ProtosSemanticTransferValue actorCopy =
+                assertInstanceOf(
+                        ProtosSemanticTransferValue.class,
+                        ProtosActorValueTransfer.materializeArguments(
+                                actorSnapshot,
+                                prelude.newModuleActivation()).get(0));
+
+        boolean[] hasRecords = new boolean[1];
+        List<Object> detached =
+                ProtosParallelRuntime.captureValuesForTesting(
+                        List.of(original),
+                        prelude.newModuleActivation(),
+                        hasRecords);
+
+        assertTrue(hasRecords[0]);
+
+        ProtosSemanticTransferValue parallelCopy =
+                assertInstanceOf(
+                        ProtosSemanticTransferValue.class,
+                        ProtosParallelRuntime.materializeValuesForTesting(
+                                detached,
+                                prelude.newModuleActivation()).get(0));
+
+        for (ProtosSemanticTransferValue copy :
+                List.of(actorCopy, parallelCopy)) {
+            assertNotSame(original, copy);
+            assertTrue(copy.isFrozen());
+            assertSame(NUMERIC_CANDIDATE, copy.family());
+            assertSame(
+                    prelude.numberPrototype(),
+                    ProtosValueLookup.delegationParent(copy, prelude)
+                            .orElseThrow());
+
+            NumericCandidateState content =
+                    NUMERIC_CANDIDATE.content(copy);
+
+            assertEquals(state.numerator(), content.numerator());
+            assertEquals(state.denominator(), content.denominator());
+            assertEquals(
+                    Double.doubleToRawLongBits(state.imaginaryZero()),
+                    Double.doubleToRawLongBits(content.imaginaryZero()));
+        }
+
+        assertNotSame(actorCopy, parallelCopy);
+    }
+
+    @Test
+    void numericCandidateExposesTheExistingValueIdentityIntegrationGap() {
+        NumericCandidateState state =
+                new NumericCandidateState(
+                        BigInteger.ONE.shiftLeft(130),
+                        BigInteger.valueOf(3),
+                        -0.0d);
+
+        ProtosSemanticTransferValue first =
+                NUMERIC_CANDIDATE.mint(state, prelude);
+        ProtosSemanticTransferValue second =
+                NUMERIC_CANDIDATE.mint(state, prelude);
+
+        assertNotSame(first, second);
+        assertEquals(
+                NUMERIC_CANDIDATE.content(first),
+                NUMERIC_CANDIDATE.content(second));
+
+        // This is an expected existing limitation, not Candidate C acceptance:
+        // the standard identity machinery still treats rich objects by reference.
+        assertFalse(ProtosIdentity.identical(first, second));
+        assertFalse(ProtosValueLookup.isInteger(first));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosStandardNumberEqualityProtocol.numericEquals(
+                        first, second));
+
+        // Hash currently takes the generic object-identity path. Do not
+        // assume two distinct identity hashes must differ: collisions exist.
+        assertEquals(
+                BigInteger.valueOf(
+                        Integer.toUnsignedLong(
+                                System.identityHashCode(first))),
+                ProtosIdentity.identityHash(first));
+    }
+
+    private record NumericCandidateState(
+            BigInteger numerator,
+            BigInteger denominator,
+            double imaginaryZero) {
+    }
+
+    /**
+     * Test-only numeric feasibility fixture. It is intentionally not a
+     * guest-visible D197 numeric family and defines no new public selectors.
+     */
+    private static final class NumericCandidateFamily
+            extends ProtosSemanticTransferFamily {
+
+        NumericCandidateFamily() {
+            super(new ProtosModuleKey("std:i091-feasibility/Numeric"));
+        }
+
+        ProtosSemanticTransferValue mint(
+                NumericCandidateState state, ProtosPrelude owner) {
+            ProtosSemanticTransferValue value =
+                    newValue(owner.numberPrototype(), state);
+            value.freeze();
+            return value;
+        }
+
+        NumericCandidateState content(ProtosSemanticTransferValue value) {
+            return (NumericCandidateState) familyState(value);
+        }
+
+        @Override
+        protected ProtosSemanticTransferPayload extract(
+                ProtosSemanticTransferValue value) {
+            NumericCandidateState content = content(value);
+            return ProtosSemanticTransferPayload.of(
+                    content.numerator(),
+                    content.denominator(),
+                    content.imaginaryZero());
+        }
+
+        @Override
+        protected boolean acceptsPayload(
+                ProtosSemanticTransferPayload payload) {
+            return payload.size() == 3
+                    && payload.get(0) instanceof BigInteger
+                    && payload.get(1) instanceof BigInteger denominator
+                    && denominator.signum() > 0
+                    && payload.get(2) instanceof Double;
+        }
+
+        @Override
+        protected ProtosSemanticTransferValue materialize(
+                ProtosSemanticTransferPayload payload,
+                ProtosSemanticTransferDestination destination) {
+            NumericCandidateState state =
+                    new NumericCandidateState(
+                            (BigInteger) payload.get(0),
+                            (BigInteger) payload.get(1),
+                            (Double) payload.get(2));
+            return mint(state, destination.prelude());
+        }
     }
 
     private enum Mode {
