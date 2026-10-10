@@ -648,6 +648,21 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "init");
         validateContextLocalRootExecutionProjection(object, "==");
         validateContextLocalRootExecutionProjection(object, "match");
+        /*
+         * I092 lowers canonical-Boolean ifTrue natively after publication and
+         * relies on these frozen selections; never publish another behavior.
+         */
+        if (ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
+                        object.readLocalSlot("ifTrue").orElse(null), object)
+                != ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE) {
+            throw new IllegalStateException(
+                    "standard Object root must publish the standard ifTrue behavior");
+        }
+        if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                object.readLocalSlot("call").orElse(null), object)) {
+            throw new IllegalStateException(
+                    "standard Object root must publish the standard call behavior");
+        }
         for (Object value : object.localSlotsSnapshot().values()) {
             if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {
                 throw new IllegalStateException(

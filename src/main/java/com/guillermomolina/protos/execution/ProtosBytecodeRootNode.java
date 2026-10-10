@@ -4106,7 +4106,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object receiver;
         private final List<?> supplied;
         private final ProtosActivation activation;
-        private final PreparedInlineLiteralCall compactInlineChild;
 
         PreparedBooleanCall(
                 ProtosStandardBooleanProtocol.StructuredCallbackKind kind,
@@ -4119,7 +4118,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             // construction site); re-copying it only re-enters List.copyOf's erased fallback in PE.
             this.supplied = java.util.Objects.requireNonNull(supplied, "supplied");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
-            this.compactInlineChild = null;
             if (receiver != ProtosBooleanValue.TRUE
                     && receiver != ProtosBooleanValue.FALSE) {
                 throw ProtosCoreErrors.signal(
@@ -4131,23 +4129,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-        }
-
-        private PreparedBooleanCall(
-                Object receiver, Object supplied,
-                PreparedInlineLiteralCall child) {
-            this.kind =
-                    ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE;
-            this.receiver = java.util.Objects.requireNonNull(receiver);
-            this.supplied = List.of(java.util.Objects.requireNonNull(supplied));
-            this.activation = null;
-            this.compactInlineChild = child;
-        }
-
-        static PreparedBooleanCall compactIfTrue(
-                Object receiver, Object supplied,
-                PreparedInlineLiteralCall child) {
-            return new PreparedBooleanCall(receiver, supplied, child);
         }
 
         boolean hasCallback() {
@@ -4175,9 +4156,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (!hasCallback()) {
                 throw new IllegalStateException(
                         "short-circuited Boolean operation has no selected callback");
-            }
-            if (compactInlineChild != null) {
-                return compactInlineChild;
             }
             return prepareInlineLiteralCall(
                     supplied.get(selectedIndex()),
@@ -7719,23 +7697,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             "supplied argument"));
         }
 
-        void appendSpread(
-                Object value,
-                ProtosActivation caller) {
+        void appendSpread(Object value, ProtosActivation caller) {
+            if (!appendSpreadArrayOrFalse(value)) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+            }
+        }
+
+        /**
+         * Expands a valid Array without requiring caller activation.
+         * Invalid spread is reported by the caller with its exact authority.
+         */
+        boolean appendSpreadArrayOrFalse(Object value) {
             if (!(value instanceof ProtosArrayValue array)) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(caller));
+                return false;
             }
 
-            /*
-             * CALLABLES requires the shallow Array snapshot at the spread
-             * item's own left-to-right evaluation position, before any later
-             * argument expression can mutate the source Array.
-             */
+            // Snapshot at this argument's own evaluation position.
             List<Object> spread = array.indexedSnapshot();
             for (int index = 0; index < spread.size(); index++) {
                 values.add(spread.get(index));
             }
+            return true;
+        }
+
+        Object soleValueOrNull() {
+            return values.size() == 1 ? values.get(0) : null;
         }
 
         List<Object> snapshot() {
@@ -9601,125 +9587,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I092: two independently protected D013 selections:
-     * canonical Boolean.ifTrue and canonical Object.call.
+     * I092: the selected true callback of a native canonical Boolean.ifTrue.
+     *
+     * <p>The callback is prepared exactly as the standard behavior prepares it
+     * (ordinary D013 call selection on the supplied value, Error authority from
+     * the caller's prelude), but with the send's own caller as invocation
+     * caller. The standard ifTrue activation is not constructed: it is native,
+     * creates no Closure, and only copies the caller's prelude, module, Actor
+     * state, execution domain and Task/dynamic control, plus a fresh ReturnHome
+     * nothing can target, so the callback cannot observe its absence.
+     * An admitted immediate literal becomes the direct B-prime child; any other
+     * value keeps the ordinary call protocol, including overrides and Errors.
      */
-    /** I092: canonical Boolean call without an outer native activation. */
-    static final class CompactCanonicalBooleanCall extends ReturnHomeOwningCall {
-        private final Object receiver;
-        private final Object supplied;
-        private final PreparedInlineLiteralCall child;
-
-        CompactCanonicalBooleanCall(
-                Object receiver, Object supplied, PreparedInlineLiteralCall child) {
-            super(ProtosReturnHome.unobservable(), false);
-            this.receiver = java.util.Objects.requireNonNull(receiver);
-            this.supplied = java.util.Objects.requireNonNull(supplied);
-            this.child = child;
+    static PreparedInlineLiteralCall nativeIfTrueCallback(
+            Object caller,
+            Object supplied,
+            Object literalPlan,
+            ProtosLanguageContext enteredContext) {
+        if (literalPlan instanceof ProtosClosureExecutionPlanCell plan) {
+            PreparedInlineLiteralCall inline =
+                    compactCanonicalIfTrue(caller, supplied, plan, enteredContext);
+            if (inline != null) {
+                return inline;
+            }
         }
-
-        @Override public RootCallTarget bodyTarget() {
-            throw new IllegalStateException("compact Boolean has no body target");
-        }
-
-        @Override public ProtosActivation activation() {
-            throw new IllegalStateException("compact Boolean has no rich activation");
-        }
-
-        @Override public Object[] targetArguments() {
-            throw new IllegalStateException("compact Boolean has no target arguments");
-        }
-
-        @Override public ProtosTask taskForRuntime() {
-            return null;
-        }
-
-        @Override public boolean isStructuredBoolean() {
-            return true;
-        }
-
-        @Override public PreparedBooleanCall prepareStructuredBoolean() {
-            return PreparedBooleanCall.compactIfTrue(receiver, supplied, child);
-        }
-    }
-
-    static record GuardedCompactIfTrue(
-            Assumption booleanSelection,
-            Assumption callbackCallSelection) {}
-
-    /**
-     * Selection happens while installing the specialization.
-     * Both selected behavior identity and method home must be canonical.
-     */
-    static GuardedCompactIfTrue createGuardedCompactIfTrue(
-            Object receiver, String selector, ProtosPrelude prelude) {
-        if (!"ifTrue".equals(selector)
-                || !ProtosValueLookup.isCanonicalBoolean(receiver)
-                || prelude == null) {
-            return null;
-        }
-
-        ProtosValueLookup.GuardedLookup booleanLookup =
-                ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                        receiver, selector, prelude);
-        if (booleanLookup == null) {
-            return null;
-        }
-
-        ProtosSlotLookupResult booleanSelected = booleanLookup.selected();
-        if (ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
-                        booleanSelected.value(), booleanSelected.home())
-                != ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE) {
-            booleanLookup.stability().invalidate();
-            return null;
-        }
-
-        ProtosValueLookup.GuardedLookup callLookup =
-                ProtosValueLookup.lookupGuarded(
-                        ProtosObjectValue.rootObject(), "call", prelude);
-        if (callLookup == null) {
-            booleanLookup.stability().invalidate();
-            return null;
-        }
-
-        ProtosSlotLookupResult callSelected = callLookup.selected();
-        if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                        callSelected.value(), callSelected.home())
-                || !booleanLookup.stability().isValid()
-                || !callLookup.stability().isValid()) {
-            booleanLookup.stability().invalidate();
-            callLookup.stability().invalidate();
-            return null;
-        }
-
-        return new GuardedCompactIfTrue(
-                booleanLookup.stability(), callLookup.stability());
+        return prepareInlineLiteralCall(
+                supplied,
+                List.of(),
+                ProtosSemanticBytecodeRootNode.PrepareSendArguments.exactCaller(caller));
     }
 
     /**
-     * A valid guarded ifTrue selection.
+     * B-prime admission of an immediate literal true callback, or null.
      *
-     * null: exact generic fallback
-     * NullValue: canonical false short circuit
-     * PreparedInlineLiteralCall: selected true callback, directly in B-prime
-     *
-     * Neither an outer NativeCall nor its rich activation is constructed.
-     * The child's direct compact arguments borrow provenance only when
-     * the compact caller is proven equivalent to its own caller.
+     * <p>A Closure delegating directly to the published frozen root Object
+     * (D049) without a local call slot selects the canonical Object.call by
+     * D013, so no call lookup is needed. Neither an outer NativeCall nor a rich
+     * activation is constructed. The child's direct compact arguments borrow
+     * provenance only when the compact caller is proven equivalent to its own
+     * caller.
      */
-    static Object compactCanonicalIfTrue(
-            Object receiver,
+    private static PreparedInlineLiteralCall compactCanonicalIfTrue(
             Object caller,
             Object supplied,
             ProtosClosureExecutionPlanCell literalPlan,
             ProtosLanguageContext enteredContext) {
-
-        if (receiver == ProtosBooleanValue.FALSE) {
-            return new CompactCanonicalBooleanCall(receiver, supplied, null);
-        }
-
-        if (receiver != ProtosBooleanValue.TRUE
-                || !(supplied instanceof ProtosClosureValue closure)
+        if (!(supplied instanceof ProtosClosureValue closure)
                 || closure.nativeBody().isPresent()
                 || closure.returnHome().isEmpty()
                 || closure.requiresContextLocalExecutionProjectionForRuntime()
@@ -9746,7 +9659,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         ProtosClosureExecutionPlan plan =
                 taskOwnedBytecodePlan(closure, enteredContext);
-
         if (plan == null
                 || plan.bytecodeActivationTargetForComposition()
                         != literalPlan.plan().bytecodeActivationTargetForComposition()) {
@@ -9761,9 +9673,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 provenance,
                                 closure.returnHome().orElseThrow()));
 
-        return child.admits(literalPlan)
-                ? new CompactCanonicalBooleanCall(receiver, supplied, child)
-                : null;
+        return child.admits(literalPlan) ? child : null;
     }
 
     @Operation

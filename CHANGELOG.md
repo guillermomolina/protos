@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.330-SNAPSHOT
+
+- `I092` (#870): execute canonical `Boolean.ifTrue` natively without lookup or
+  intermediate activation.
+  - Lower an ordinary `ifTrue` send natively only after the standard root `Object` is
+    published frozen (D049); the canonical `true`/`false` selection is then fixed, so the
+    native candidate is two identity tests in cached and uncached execution, with no
+    lookup, `Assumption` or selection cache. Publication now validates the root's
+    `ifTrue` and `call` behaviors.
+  - Invoke the selected callback from the send's own caller instead of a synthetic
+    standard `ifTrue` activation, which was unobservable; dynamic callbacks keep ordinary
+    D013 `call` selection, overrides and Errors, admitted literals keep the single B-prime
+    region, and `false` still evaluates its argument but neither invokes the callback
+    nor validates its `call`.
+  - Remove the native carrier, its completion `TryFinally` and the guarded selection
+    record, share candidate emission across composed, default-parameter, spread and
+    frame-native sites, and extend focal coverage.
+
 ## 0.3.329-SNAPSHOT
 
 - `I091` (#869): complete PLAT056 Candidate C Integer representation and `BigInteger` containment.

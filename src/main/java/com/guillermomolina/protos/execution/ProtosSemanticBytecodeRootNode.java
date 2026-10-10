@@ -29,7 +29,6 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedSendTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedStructuredSend;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CompactCanonicalBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
@@ -44,6 +43,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -2512,8 +2512,40 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static void perform(
                 PreparedArgumentVector vector,
                 Object value,
-                ProtosActivation caller) {
-            ProtosBytecodeRootNode.AppendSpreadSuppliedArgument.perform(vector, value, caller);
+                Object caller) {
+            if (!vector.appendSpreadArrayOrFalse(value)) {
+                ProtosActivation exactCaller =
+                        PrepareSendArguments.exactCaller(caller);
+                throw new com.guillermomolina.protos.runtime.ProtosSignalException(
+                        com.guillermomolina.protos.runtime.ProtosCoreErrors
+                                .newError(exactCaller));
+            }
+        }
+    }
+
+
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
+    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
+    public static final class AppendInlineSpreadSuppliedArgument {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedArgumentVector vector,
+                Object value,
+                PreparedInlineLiteralCall child,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            if (!vector.appendSpreadArrayOrFalse(value)) {
+                ProtosActivation exactCaller =
+                        ProtosInlineCallbackFrameBindings.durableActivation(
+                                child, frameBackedLocals, frameBackedLayout,
+                                bytecodeNode, frame);
+                throw new com.guillermomolina.protos.runtime.ProtosSignalException(
+                        com.guillermomolina.protos.runtime.ProtosCoreErrors
+                                .newError(exactCaller));
+            }
         }
     }
 
@@ -5459,64 +5491,90 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     // finite state machine stays owned by ProtosBytecodeRootNode.PreparedBooleanCall.
 
     /**
-     * I092: canonical Boolean candidate, before generic send preparation.
-     * The cache holds D013 selection assumptions, not a selector-only proof.
+     * I092: native canonical Boolean.ifTrue, before generic send preparation.
+     *
+     * <p>The lowerer emits these candidates only for an ordinary {@code ifTrue}
+     * send compiled after the standard root Object was published FROZEN (D049).
+     * Canonical true/false own no slots and delegate to that root by
+     * representation, and publication validates its ifTrue as the standard
+     * behavior, so D013 selection for those two receivers is fixed for the life
+     * of the site: no lookup, Assumption or cache is needed, and the cached and
+     * uncached interpreters execute the same two identity tests.
+     *
+     * <p>Result: null for any other receiver (ordinary dispatch), ProtosNullValue
+     * for false, otherwise the selected callback as a PreparedInlineLiteralCall
+     * invoked from the send's own caller. No standard ifTrue activation exists.
      */
     @Operation
     public static final class TryCompactCanonicalBooleanOne {
-        @Specialization(
-                guards = {
-                    "receiver == cachedReceiver",
-                    "selector.equals(cachedSelector)",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "prelude == cachedPrelude",
-                    "cachedSelection != null"
-                },
-                assumptions = {
-                    "cachedSelection.booleanSelection()",
-                    "cachedSelection.callbackCallSelection()"
-                },
-                limit = "3")
-        public static Object canonical(
+        @Specialization
+        public static Object perform(
                 Object receiver,
-                String selector,
                 Object caller,
                 Object supplied,
-                ProtosClosureExecutionPlanCell literalPlan,
+                Object literalPlan,
                 @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("selector") String cachedSelector,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedCompactIfTrue(receiver, selector, prelude)")
-                        ProtosBytecodeRootNode.GuardedCompactIfTrue cachedSelection) {
-            return ProtosBytecodeRootNode.compactCanonicalIfTrue(
-                    receiver, caller, supplied, literalPlan, enteredContext);
+                        ProtosLanguageContext enteredContext) {
+            if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                return null;
+            }
+            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
+                return ProtosNullValue.INSTANCE;
+            }
+            return ProtosBytecodeRootNode.nativeIfTrueCallback(
+                    caller, supplied, literalPlan, enteredContext);
         }
 
-        @Specialization(replaces = "canonical")
-        public static Object fallback(
-                Object receiver,
-                String selector,
-                Object caller,
-                Object supplied,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return null;
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
+    }
 
-        static ProtosBytecodeRootNode.GuardedCompactIfTrue createGuardedCompactIfTrue(
-                Object receiver, String selector, ProtosPrelude prelude) {
-            return ProtosBytecodeRootNode.createGuardedCompactIfTrue(
-                    receiver, selector, prelude);
+    /** Spread form: native only for exactly one supplied argument. */
+    @Operation
+    public static final class TryCompactCanonicalBooleanVector {
+        @Specialization
+        public static Object perform(
+                Object receiver, Object caller, PreparedArgumentVector vector) {
+            Object supplied = vector.soleValueOrNull();
+            if (supplied == null || !ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                return null;
+            }
+            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
+                return ProtosNullValue.INSTANCE;
+            }
+            // No literal plan: the callback keeps ordinary call selection.
+            return ProtosBytecodeRootNode.nativeIfTrueCallback(
+                    caller, supplied, null, null);
         }
+    }
 
-        static ProtosPrelude callerPrelude(Object caller) {
-            return caller instanceof ProtosActivation activation
-                    ? activation.preludeOrNullForRuntime()
-                    : ProtosFrameArguments.preludeOrNull((Object[]) caller);
+    /** Frame-native inline-callback form of TryCompactCanonicalBooleanOne. */
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
+    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
+    public static final class TryCompactCanonicalBooleanInlineOne {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver, PreparedInlineLiteralCall child,
+                Object supplied, Object literalPlan,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
+                @Bind("currentEnteredContext($node)") ProtosLanguageContext context) {
+            if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                return null;
+            }
+            if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
+                return ProtosNullValue.INSTANCE;
+            }
+            // Deferred activation: the inline frame's exact invocation caller.
+            ProtosActivation caller = ProtosInlineCallbackFrameBindings.invocationCaller(
+                    child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
+            return ProtosBytecodeRootNode.nativeIfTrueCallback(
+                    caller, supplied, literalPlan, context);
         }
 
         @NonIdempotent
@@ -5526,10 +5584,98 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
+    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
+    public static final class TryCompactCanonicalBooleanInlineVector {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals, ProtosFrameLexicalLayout frameBackedLayout,
+                Object receiver, PreparedInlineLiteralCall child,
+                PreparedArgumentVector vector,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            if (vector.soleValueOrNull() == null) {
+                return null;
+            }
+            return TryCompactCanonicalBooleanInlineOne.perform(
+                    frameBackedLocals, frameBackedLayout, receiver, child,
+                    vector.soleValueOrNull(), null, bytecodeNode, frame, null);
+        }
+    }
+
+    @Operation
     public static final class IsCompactCanonicalBooleanMiss {
         @Specialization
         public static boolean perform(Object value) {
             return value == null;
+        }
+    }
+
+    @Operation
+    public static final class IsCompactCanonicalBooleanNoCallback {
+        @Specialization
+        public static boolean perform(Object value) {
+            return value == ProtosNullValue.INSTANCE;
+        }
+    }
+
+    @Operation
+    public static final class IsNativeIfTrueInlineCallback {
+        @Specialization
+        public static boolean perform(Object value) {
+            return value instanceof PreparedInlineLiteralCall;
+        }
+    }
+
+    /**
+     * I092: completes the outer call of an ifTrue literal site exactly once,
+     * after its callback, on every exit. ProtosNullValue means no outer call:
+     * the native path (which owns no ifTrue activation or ReturnHome), a
+     * non-Boolean generic selection (completed by its own dispatch) or an exit
+     * before any outer call was recorded.
+     */
+    @Operation
+    public static final class CompleteIfTrueSiteOuter {
+        @Specialization
+        public static void none(ProtosNullValue outer) {
+            // No outer call owned by this site.
+        }
+
+        @Specialization(guards = "!prepared.hasReturnHomeLifecycle()")
+        public static void ordinaryWithoutHomeLifecycle(
+                OrdinarySourceCall prepared) {
+            // No owned materialized ReturnHome to complete.
+        }
+
+        @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
+        public static void ordinary(OrdinarySourceCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static void nativeCall(NativeCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static void immediate(ImmediateResultCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static void moduleInitialization(ModuleInitializationCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.moduleInitialization(prepared);
+        }
+    }
+
+    /** I092: B-prime admission of the native path's prepared callback. */
+    @Operation
+    public static final class AdmitsNativeIfTrueInline {
+        @Specialization
+        public static boolean perform(
+                PreparedInlineLiteralCall child,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return child.admits(literalPlan);
         }
     }
 
@@ -5553,10 +5699,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return ProtosBytecodeRootNode.IsStructuredBooleanCall.moduleInitialization(prepared);
-        }
-        @Specialization
-        public static boolean compact(CompactCanonicalBooleanCall prepared) {
-            return true;
         }
 
     }
@@ -5582,10 +5724,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static PreparedBooleanCall moduleInitialization(ModuleInitializationCall prepared) {
             return ProtosBytecodeRootNode.PrepareStructuredBooleanCall
                     .moduleInitialization(prepared);
-        }
-        @Specialization
-        public static PreparedBooleanCall compact(CompactCanonicalBooleanCall prepared) {
-            return prepared.prepareStructuredBoolean();
         }
 
     }
@@ -6036,10 +6174,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             ProtosBytecodeRootNode.CompleteClosureCall.ordinary(prepared);
         }
 
-        @Specialization
-        public static void compact(CompactCanonicalBooleanCall prepared) {
-            prepared.complete();
-        }
 
         @Specialization
         public static void nativeCall(NativeCall prepared) {

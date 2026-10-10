@@ -98,17 +98,11 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                             + " must not specialize on the PreparedClosureCall interface");
             Set<Class<?>> expectedReceivers =
                     new java.util.HashSet<>(representations);
-            if (operation == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class) {
-                expectedReceivers.add(
-                        ProtosBytecodeRootNode.CompactCanonicalBooleanCall.class);
-            }
-
             int expectedCount =
                     operation == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class
-                            ? representations.size() + 2
-                            : operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
-                                    ? representations.size() + 1
-                                    : representations.size();
+                                    || operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
+                            ? representations.size() + 1
+                            : representations.size();
             assertEquals(
                     expectedCount,
                     receivers.size(),
@@ -265,14 +259,6 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                         && receivers.stream().anyMatch(representations::contains)) {
                     Set<Class<?>> expectedReceivers =
                             new java.util.HashSet<>(representations);
-                    if (root == ProtosSemanticBytecodeRootNode.class
-                            && Set.of(
-                                            "IsStructuredBooleanCall",
-                                            "PrepareStructuredBooleanCall")
-                                    .contains(operation.getSimpleName())) {
-                        expectedReceivers.add(
-                                ProtosBytecodeRootNode.CompactCanonicalBooleanCall.class);
-                    }
                     assertEquals(expectedReceivers, receivers, operation.getName());
                     structuredFamily.add(operation.getSimpleName());
                 }

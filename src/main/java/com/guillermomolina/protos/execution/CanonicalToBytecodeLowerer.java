@@ -2732,11 +2732,21 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
 
             if (argument instanceof CanonicalSpread) {
-                builder.beginAppendSpreadSuppliedArgument();
+                if (currentInlineCallbackFrameNative) {
+                    builder.beginAppendInlineSpreadSuppliedArgument(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                } else {
+                    builder.beginAppendSpreadSuppliedArgument();
+                }
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
-                emitCurrentActivation(builder);
-                builder.endAppendSpreadSuppliedArgument();
+                emitSendCallerOperand(builder);
+                if (currentInlineCallbackFrameNative) {
+                    builder.endAppendInlineSpreadSuppliedArgument();
+                } else {
+                    builder.endAppendSpreadSuppliedArgument();
+                }
             } else {
                 builder.beginAppendSuppliedArgument();
                 builder.emitLoadLocal(suppliedVector);
@@ -2775,11 +2785,21 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
 
             if (argument instanceof CanonicalSpread) {
-                builder.beginAppendSpreadSuppliedArgument();
+                if (currentInlineCallbackFrameNative) {
+                    builder.beginAppendInlineSpreadSuppliedArgument(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                } else {
+                    builder.beginAppendSpreadSuppliedArgument();
+                }
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
-                emitCurrentActivation(builder);
-                builder.endAppendSpreadSuppliedArgument();
+                emitSendCallerOperand(builder);
+                if (currentInlineCallbackFrameNative) {
+                    builder.endAppendInlineSpreadSuppliedArgument();
+                } else {
+                    builder.endAppendSpreadSuppliedArgument();
+                }
             } else {
                 builder.beginAppendSuppliedArgument();
                 builder.emitLoadLocal(suppliedVector);
@@ -4601,10 +4621,10 @@ final class CanonicalToBytecodeLowerer {
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
                 hasSpreadArgument(send.arguments());
+        boolean tryNativeIfTrue = admitsNativeIfTrue(send, spreadArguments);
         boolean stageInputs =
-                stageReceiver
-                        || stageArguments
-                        || spreadArguments;
+                stageReceiver || stageArguments || spreadArguments
+                        || tryNativeIfTrue;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -4669,6 +4689,22 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
+        BytecodeLocal nativeIfTrue = null;
+        if (tryNativeIfTrue) {
+            nativeIfTrue = builder.createLocal("defaultNativeIfTrue", null);
+            builder.beginStoreLocal(nativeIfTrue);
+            emitNativeIfTrueCandidate(
+                    builder, receiverValue, spreadArguments, suppliedVector,
+                    spreadArguments ? null : argumentValues.get(0), null);
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginIsCompactCanonicalBooleanMiss();
+            builder.emitLoadLocal(nativeIfTrue);
+            builder.endIsCompactCanonicalBooleanMiss();
+            builder.beginBlock();
+        }
+
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
             builder.beginPrepareSendVector();
@@ -4706,6 +4742,15 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        if (tryNativeIfTrue) {
+            builder.endBlock();
+            builder.beginBlock();
+            emitCanonicalIfTrueNative(
+                    builder, nativeIfTrue, result,
+                    childResult, resumeValue);
+            builder.endBlock();
+            builder.endIfThenElse();
+        }
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
@@ -6349,6 +6394,316 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall, childResult, resumeValue);
     }
 
+    /**
+     * I092 / D049: an ordinary ifTrue send with one supplied position is lowered
+     * natively only once the standard root Object is published. FROZEN is
+     * irreversible and publication validates its ifTrue and call behaviors, so
+     * the canonical-Boolean selection proven here holds for every execution of
+     * the site. Sources lowered during unpublished bootstrap stay generic.
+     */
+    private static boolean admitsNativeIfTrue(
+            CanonicalSend send, boolean spreadArguments) {
+        return "ifTrue".equals(send.message())
+                && (spreadArguments || send.arguments().size() == 1)
+                && ProtosObjectValue.rootObject().isFrozen();
+    }
+
+    /** Emits the native ifTrue candidate; see TryCompactCanonicalBooleanOne. */
+    private void emitNativeIfTrueCandidate(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal receiverValue,
+            boolean spreadArguments,
+            BytecodeLocal suppliedVector,
+            BytecodeLocal argument,
+            ProtosClosureExecutionPlanCell literalPlan) {
+        if (spreadArguments) {
+            if (currentInlineCallbackFrameNative) {
+                builder.beginTryCompactCanonicalBooleanInlineVector(
+                        currentRootFrameNativeLocals, currentRootFrameNativeLayout);
+            } else {
+                builder.beginTryCompactCanonicalBooleanVector();
+            }
+            builder.emitLoadLocal(receiverValue);
+            emitSendCallerOperand(builder);
+            builder.emitLoadLocal(suppliedVector);
+            if (currentInlineCallbackFrameNative) {
+                builder.endTryCompactCanonicalBooleanInlineVector();
+            } else {
+                builder.endTryCompactCanonicalBooleanVector();
+            }
+            return;
+        }
+        if (currentInlineCallbackFrameNative) {
+            builder.beginTryCompactCanonicalBooleanInlineOne(
+                    currentRootFrameNativeLocals, currentRootFrameNativeLayout);
+        } else {
+            builder.beginTryCompactCanonicalBooleanOne();
+        }
+        builder.emitLoadLocal(receiverValue);
+        emitSendCallerOperand(builder);
+        builder.emitLoadLocal(argument);
+        builder.emitLoadConstant(
+                literalPlan == null ? ProtosNullValue.INSTANCE : literalPlan);
+        if (currentInlineCallbackFrameNative) {
+            builder.endTryCompactCanonicalBooleanInlineOne();
+        } else {
+            builder.endTryCompactCanonicalBooleanOne();
+        }
+    }
+
+    /** Native hit of an ifTrue site without an inline literal candidate. */
+    private void emitCanonicalIfTrueNative(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal candidate,
+            BytecodeLocal result,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginIfThenElse();
+        builder.beginIsCompactCanonicalBooleanNoCallback();
+        builder.emitLoadLocal(candidate);
+        builder.endIsCompactCanonicalBooleanNoCallback();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        // Selected callback, invoked from the send's caller: no ifTrue activation to complete.
+        builder.beginBlock();
+        emitInlineLiteralFallbackInvocation(
+                builder, result, candidate, childResult, resumeValue);
+        builder.endBlock();
+        builder.endIfThenElse();
+    }
+
+    private static void emitStoreConstant(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal target,
+            Object value) {
+        builder.beginStoreLocal(target);
+        builder.emitLoadConstant(value);
+        builder.endStoreLocal();
+    }
+
+    private static void emitCopyLocal(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal target,
+            BytecodeLocal source) {
+        builder.beginStoreLocal(target);
+        builder.emitLoadLocal(source);
+        builder.endStoreLocal();
+    }
+
+    /**
+     * I092 / PLAT044 B-prime: an ifTrue site whose sole argument is an
+     * immediate literal callback. The native hit and the generic selection
+     * converge on one inline region, so the site has one callback RootTag,
+     * source span and debugger scope.
+     *
+     * <p>Argument staging, the native attempt and generic PrepareSend stay
+     * outside the TryFinally. Inside it, the outer call is recorded before
+     * anything can exit (the generic structured Boolean call); the native
+     * path owns no ifTrue activation and records none. The
+     * finally completes it once, after the callback, on normal, Error,
+     * non-local-return and cancellation exits. A non-Boolean generic selection
+     * keeps the unchanged prepared-invocation dispatch and its own completion.
+     * The generic result still passes FinishStructuredBooleanCallback.
+     */
+    private void emitCanonicalIfTrueLiteralSite(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition,
+            BytecodeLocal compact,
+            BytecodeLocal receiverValue,
+            String selector,
+            BytecodeLocal literal,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        ProtosClosureExecutionPlanCell literalPlan =
+                bytecodeClosurePlans.get(definition);
+        BytecodeLocal outer = builder.createLocal("ifTrueSiteOuter", null);
+        BytecodeLocal inlineChild =
+                builder.createLocal("ifTrueSiteInlineChild", null);
+        BytecodeLocal structuredBoolean =
+                builder.createLocal("ifTrueSiteBoolean", null);
+        BytecodeLocal child = builder.createLocal("ifTrueSiteChild", null);
+
+        builder.beginBlock();
+        emitStoreConstant(builder, outer, ProtosNullValue.INSTANCE);
+        emitStoreConstant(builder, inlineChild, ProtosNullValue.INSTANCE);
+
+        // Generic selection: same lifecycle position as the ordinary send.
+        builder.beginIfThenElse();
+        builder.beginIsCompactCanonicalBooleanMiss();
+        builder.emitLoadLocal(compact);
+        builder.endIsCompactCanonicalBooleanMiss();
+        builder.beginBlock();
+        builder.beginStoreLocal(preparedCall);
+        beginPrepareSend(builder, 1);
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadConstant(selector);
+        emitSendCallerOperand(builder);
+        builder.emitLoadLocal(literal);
+        endPrepareSend(builder, 1);
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.beginBlock();
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteIfTrueSiteOuter();
+                    builder.emitLoadLocal(outer);
+                    builder.endCompleteIfTrueSiteOuter();
+                });
+        builder.beginBlock();
+
+        builder.beginIfThenElse();
+        builder.beginIsCompactCanonicalBooleanMiss();
+        builder.emitLoadLocal(compact);
+        builder.endIsCompactCanonicalBooleanMiss();
+
+        // Generic: emitLocalBooleanInvocation, with admission deferred.
+        builder.beginBlock();
+        builder.beginIfThenElse();
+        builder.beginIsStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredBooleanCall();
+
+        builder.beginBlock();
+        emitCopyLocal(builder, outer, preparedCall);
+        builder.beginStoreLocal(structuredBoolean);
+        builder.beginPrepareStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredBooleanCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginStructuredBooleanHasCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanHasCallback();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(child);
+        builder.beginPrepareInlineStructuredBooleanCallbackCall();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endPrepareInlineStructuredBooleanCallbackCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginAdmitsInlineLiteralCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.emitLoadLocal(child);
+        builder.emitLoadLocal(literal);
+        builder.emitLoadConstant(literalPlan);
+        builder.emitLoadConstant(0);
+        builder.endAdmitsInlineLiteralCallback();
+
+        builder.beginBlock();
+        emitCopyLocal(builder, inlineChild, child);
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitInlineLiteralFallbackInvocation(
+                builder, childResult, child, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredBooleanCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredBooleanCallback();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.beginStructuredBooleanImmediateResult();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanImmediateResult();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitPreparedInvocation(
+                builder, result, preparedCall, childResult, resumeValue);
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        // Native: no PreparedBooleanCall, PrepareSend or generic dispatch.
+        builder.beginBlock();
+        builder.beginIfThenElse();
+        builder.beginIsCompactCanonicalBooleanNoCallback();
+        builder.emitLoadLocal(compact);
+        builder.endIsCompactCanonicalBooleanNoCallback();
+
+        builder.beginBlock();
+        emitStoreConstant(builder, result, ProtosNullValue.INSTANCE);
+        builder.endBlock();
+
+        // The selected callback; outer stays null, no ifTrue activation exists.
+        builder.beginBlock();
+        builder.beginIfThenElse();
+        builder.beginAdmitsNativeIfTrueInline();
+        builder.emitLoadLocal(compact);
+        builder.emitLoadConstant(literalPlan);
+        builder.endAdmitsNativeIfTrueInline();
+
+        builder.beginBlock();
+        emitCopyLocal(builder, inlineChild, compact);
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitInlineLiteralFallbackInvocation(
+                builder, result, compact, childResult, resumeValue);
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        // The site's only inline callback region.
+        builder.beginIfThenElse();
+        builder.beginIsNativeIfTrueInlineCallback();
+        builder.emitLoadLocal(inlineChild);
+        builder.endIsNativeIfTrueInlineCallback();
+
+        builder.beginBlock();
+        emitInlineLiteralCallback(builder, definition, inlineChild, childResult);
+        builder.beginIfThenElse();
+        builder.beginIsCompactCanonicalBooleanMiss();
+        builder.emitLoadLocal(compact);
+        builder.endIsCompactCanonicalBooleanMiss();
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredBooleanCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredBooleanCallback();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.beginBlock();
+        emitCopyLocal(builder, result, childResult);
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+    }
+
     private void emitComposedSend(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -6388,13 +6743,7 @@ final class CanonicalToBytecodeLowerer {
                         ? java.util.List.of()
                         : inlineLiteralCallbackCandidates(send.arguments());
         boolean tryCompactCanonicalIfTrue =
-                "ifTrue".equals(send.message())
-                        && !spreadArguments
-                        && send.arguments().size() == 1
-                        && inlineCallbackPositions.size() == 1
-                        && inlineCallbackPositions.get(0) == 0
-                        && currentActivationLocal == null
-                        && !currentInlineCallbackFrameNative;
+                admitsNativeIfTrue(send, spreadArguments);
         boolean inlineIndexedEachCandidate =
                 !spreadArguments
                         && isInlineLiteralIndexedEachCandidate(send.arguments());
@@ -6436,7 +6785,8 @@ final class CanonicalToBytecodeLowerer {
                         || inlineTwoParameterEachCandidate
                         || tryDirectSendZero
                         || tryDirectSendOne
-                        || tryPrimitiveNumericSend;
+                        || tryPrimitiveNumericSend
+                        || tryCompactCanonicalIfTrue;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         boolean carrierDirectArgument = false;
@@ -6562,20 +6912,39 @@ final class CanonicalToBytecodeLowerer {
 
         if (tryCompactCanonicalIfTrue) {
             compactBooleanDefinition =
-                    (CanonicalClosure) send.arguments().get(0);
+                    inlineCallbackPositions.size() == 1
+                                    && inlineCallbackPositions.get(0) == 0
+                                    && !isInlineLiteralWhileCandidate(send)
+                            ? (CanonicalClosure) send.arguments().get(0)
+                            : null;
             compactBooleanResult =
                     builder.createLocal("compactCanonicalBoolean", null);
 
             builder.beginStoreLocal(compactBooleanResult);
-            builder.beginTryCompactCanonicalBooleanOne();
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-            builder.emitLoadLocal(argumentValues.get(0));
-            builder.emitLoadConstant(
-                    bytecodeClosurePlans.get(compactBooleanDefinition));
-            builder.endTryCompactCanonicalBooleanOne();
+            emitNativeIfTrueCandidate(
+                    builder, receiverValue, spreadArguments, suppliedVector,
+                    spreadArguments ? null : argumentValues.get(0),
+                    compactBooleanDefinition == null
+                            ? null
+                            : bytecodeClosurePlans.get(compactBooleanDefinition));
             builder.endStoreLocal();
+
+            if (compactBooleanDefinition != null) {
+                emitCanonicalIfTrueLiteralSite(
+                        builder,
+                        compactBooleanDefinition,
+                        compactBooleanResult,
+                        receiverValue,
+                        send.message(),
+                        argumentValues.get(0),
+                        result,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                builder.endBlock();
+                builder.endTag(StandardTags.CallTag.class);
+                return;
+            }
 
             builder.beginIfThenElse();
             builder.beginIsCompactCanonicalBooleanMiss();
@@ -6660,19 +7029,6 @@ final class CanonicalToBytecodeLowerer {
             endPrepareSend(builder, send.arguments().size());
         }
         builder.endStoreLocal();
-
-        if (tryCompactCanonicalIfTrue) {
-            // Join the canonical hit and ordinary fallback before B-prime.
-            builder.endBlock();
-
-            builder.beginBlock();
-            builder.beginStoreLocal(preparedCall);
-            builder.emitLoadLocal(compactBooleanResult);
-            builder.endStoreLocal();
-            builder.endBlock();
-
-            builder.endIfThenElse();
-        }
 
         java.util.List<InlineLiteralCallback> inlineCallbacks =
                 new java.util.ArrayList<>(inlineCallbackPositions.size());
@@ -6765,6 +7121,19 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             builder.endBlock();
 
+            builder.endIfThenElse();
+        }
+
+        if (tryCompactCanonicalIfTrue) {
+            builder.endBlock();
+            builder.beginBlock();
+            emitCanonicalIfTrueNative(
+                    builder,
+                    compactBooleanResult,
+                    result,
+                    childResult,
+                    resumeValue);
+            builder.endBlock();
             builder.endIfThenElse();
         }
 
