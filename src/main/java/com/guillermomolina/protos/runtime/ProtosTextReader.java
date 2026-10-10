@@ -21,7 +21,6 @@ import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosTextReaderCPrimeExecution;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
-import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.List;
@@ -88,9 +87,9 @@ public final class ProtosTextReader {
                 Objects.requireNonNull(plan, "plan"));
     }
 
-    public ProtosFutureValue readLine(ProtosActivation activation, BigInteger maxBytes) {
+    public ProtosFutureValue readLine(ProtosActivation activation, ProtosIntegerValue maxBytes) {
         Objects.requireNonNull(activation, "activation");
-        if (maxBytes != null && maxBytes.signum() <= 0) {
+        if (maxBytes != null && maxBytes.signumForRuntime() <= 0) {
             throw new IllegalArgumentException("readLine maxBytes must be positive");
         }
         return enqueue(activation, RequestKind.READ_LINE, maxBytes, null);
@@ -98,10 +97,10 @@ public final class ProtosTextReader {
 
     public ProtosFutureValue readLineForCPrimeRuntime(
             ProtosActivation activation,
-            BigInteger maxBytes,
+            ProtosIntegerValue maxBytes,
             ProtosTextReaderCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
-        if (maxBytes != null && maxBytes.signum() <= 0) {
+        if (maxBytes != null && maxBytes.signumForRuntime() <= 0) {
             throw new IllegalArgumentException("readLine maxBytes must be positive");
         }
         return enqueue(
@@ -114,13 +113,14 @@ public final class ProtosTextReader {
     private ProtosFutureValue enqueue(
             ProtosActivation activation,
             RequestKind kind,
-            BigInteger maxBytes,
+            ProtosIntegerValue maxBytes,
             ProtosTextReaderCPrimeExecution.Plan cPrimePlan) {
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         ProtosFutureValue future = operation.future();
         if (operation.terminal()) return future;
 
-        Request request = new Request(activation, operation, kind, maxBytes, cPrimePlan);
+        Request request =
+                new Request(activation, operation, kind, lineByteLimit(maxBytes), cPrimePlan);
         operation.onCancellation(() -> cancel(request));
         synchronized (this) {
             queue.addLast(request);
@@ -168,7 +168,7 @@ public final class ProtosTextReader {
         final ProtosActivation activation;
         final ProtosIoOperation operation;
         final RequestKind kind;
-        final BigInteger maxBytes;
+        final long maxBytes;
         final ProtosTextReaderCPrimeExecution.Plan cPrimePlan;
         ProtosFutureValue lower;
         ProtosFutureValue.Observer lowerObserver;
@@ -180,7 +180,7 @@ public final class ProtosTextReader {
                 ProtosActivation activation,
                 ProtosIoOperation operation,
                 RequestKind kind,
-                BigInteger maxBytes,
+                long maxBytes,
                 ProtosTextReaderCPrimeExecution.Plan cPrimePlan) {
             this.activation = activation;
             this.operation = operation;
@@ -461,9 +461,9 @@ public final class ProtosTextReader {
         };
     }
 
-    private LineResult scanLine(ProtosEncodingValue.DecodePreview preview, BigInteger maxBytes) {
+    private LineResult scanLine(ProtosEncodingValue.DecodePreview preview, long maxBytes) {
         int consumed = 0;
-        BigInteger lineBytes = BigInteger.ZERO;
+        long lineBytes = 0L;
         StringBuilder line = new StringBuilder();
         ProtosEncodingValue.StreamingDecoder next = decoder;
         List<ProtosEncodingValue.DecodedUnit> units = preview.units();
@@ -475,8 +475,8 @@ public final class ProtosTextReader {
                 consumed += unit.sourceBytes();
                 next = unit.nextDecoder();
                 if (!unit.initialSetup()) {
-                    lineBytes = lineBytes.add(BigInteger.valueOf(unit.sourceBytes()));
-                    if (tooLong(lineBytes, maxBytes)) {
+                    lineBytes += unit.sourceBytes();
+                    if (lineBytes > maxBytes) {
                         return new LineResult(LineKind.TOO_LONG, null, 0, decoder, false);
                     }
                 }
@@ -525,8 +525,8 @@ public final class ProtosTextReader {
 
             consumed += unit.sourceBytes();
             next = unit.nextDecoder();
-            lineBytes = lineBytes.add(BigInteger.valueOf(unit.sourceBytes()));
-            if (tooLong(lineBytes, maxBytes)) {
+            lineBytes += unit.sourceBytes();
+            if (lineBytes > maxBytes) {
                 return new LineResult(LineKind.TOO_LONG, null, 0, decoder, false);
             }
             appendLineText(line, unit.text());
@@ -552,8 +552,15 @@ public final class ProtosTextReader {
         line.append(text);
     }
 
-    private static boolean tooLong(BigInteger used, BigInteger maxBytes) {
-        return maxBytes != null && used.compareTo(maxBytes) > 0;
+    /**
+     * Line byte accounting is bounded by retained host memory and so never exceeds
+     * {@code Long.MAX_VALUE}; an absent limit or an Integer limit beyond that range is therefore
+     * exactly equivalent to {@code Long.MAX_VALUE}.
+     */
+    private static long lineByteLimit(ProtosIntegerValue maxBytes) {
+        return maxBytes == null || !maxBytes.isSmallForRuntime()
+                ? Long.MAX_VALUE
+                : maxBytes.smallValueForRuntime();
     }
 
     private void completeText(Request request, ReadResult result) {
@@ -634,7 +641,7 @@ public final class ProtosTextReader {
 
     /** PLAT029 leaf arguments for one source.read callback. */
     public List<?> sourceReadArgumentsForCPrimeRuntime() {
-        return List.of(new ProtosIntegerValue(BigInteger.valueOf(SOURCE_READ_AHEAD)));
+        return List.of(new ProtosIntegerValue(SOURCE_READ_AHEAD));
     }
 
     /**
@@ -888,7 +895,7 @@ public final class ProtosTextReader {
                     ProtosInvocation.invokeMessage(
                             source,
                             "read",
-                            List.of(new ProtosIntegerValue(BigInteger.valueOf(SOURCE_READ_AHEAD))),
+                            List.of(new ProtosIntegerValue(SOURCE_READ_AHEAD)),
                             request.activation);
         } catch (ProtosSignalException signaled) {
             synchronized (this) { request.lowerFailure = signaled.error(); }
@@ -1132,12 +1139,9 @@ public final class ProtosTextReader {
         List<Object> values = bytes.indexedSnapshot();
         byte[] result = new byte[values.size()];
         for (int index = 0; index < values.size(); index++) {
-            BigInteger value;
-            Object element = values.get(index);
-            if (element instanceof ProtosIntegerValue integer) value = integer.value();
-            else return null;
-            if (value.signum() < 0 || value.compareTo(BigInteger.valueOf(255)) > 0) return null;
-            result[index] = (byte) value.intValue();
+            if (!(values.get(index) instanceof ProtosIntegerValue octet)
+                    || !octet.fitsUnsignedBitsForRuntime(Byte.SIZE)) return null;
+            result[index] = (byte) octet.smallValueForRuntime();
         }
         return result;
     }

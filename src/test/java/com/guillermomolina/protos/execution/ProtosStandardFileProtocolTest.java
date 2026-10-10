@@ -88,7 +88,7 @@ class ProtosStandardFileProtocolTest {
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "position", List.of(), fixture.activation);
 
-        assertEquals(BigInteger.ZERO, fixture.resource.readPositions.remove());
+        assertEquals(BigInteger.ZERO, fixture.resource.readPositions.remove().value());
         assertEquals(ProtosFutureValue.State.PENDING, positionAfterRead.state());
 
         fixture.resource.readCompletions.remove().data(new byte[] {1, 2});
@@ -106,7 +106,7 @@ class ProtosStandardFileProtocolTest {
                                 "write",
                                 List.of(bytes(fixture.bytesPrototype, 7, 8, 9)),
                                 fixture.activation);
-        assertEquals(BigInteger.TWO, fixture.resource.writePositions.remove());
+        assertEquals(BigInteger.TWO, fixture.resource.writePositions.remove().value());
         ProtosFileFlow.WriteCompletion completion = fixture.resource.writeCompletions.remove();
         assertTrue(completion.commitFirstContribution());
         completion.succeeded();
@@ -184,7 +184,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "seekToEnd", List.of(), fixture.activation);
-        fixture.resource.endCompletions.remove().succeeded(BigInteger.valueOf(6));
+        fixture.resource.endCompletions.remove().succeeded(new ProtosIntegerValue(6));
         assertEquals(
                 BigInteger.valueOf(6),
                 ((ProtosIntegerValue) end.resolvedValue().orElseThrow()).value());
@@ -193,7 +193,7 @@ class ProtosStandardFileProtocolTest {
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
                                 fixture.file, "size", List.of(), fixture.activation);
-        fixture.resource.sizeCompletions.remove().succeeded(BigInteger.valueOf(20));
+        fixture.resource.sizeCompletions.remove().succeeded(new ProtosIntegerValue(20));
         assertEquals(
                 BigInteger.valueOf(20),
                 ((ProtosIntegerValue) size.resolvedValue().orElseThrow()).value());
@@ -244,13 +244,13 @@ class ProtosStandardFileProtocolTest {
                                 fixture.activation);
         assertTrue(fixture.resource.writePositions.isEmpty());
 
-        fixture.resource.endCompletions.remove().succeeded(BigInteger.valueOf(6));
+        fixture.resource.endCompletions.remove().succeeded(new ProtosIntegerValue(6));
         assertEquals(
                 BigInteger.valueOf(6),
                 ((ProtosIntegerValue) end.resolvedValue().orElseThrow()).value());
 
         // The write uses the File's own logical position; it does not re-select the end.
-        assertEquals(BigInteger.valueOf(6), fixture.resource.writePositions.remove());
+        assertEquals(BigInteger.valueOf(6), fixture.resource.writePositions.remove().value());
         ProtosFileFlow.WriteCompletion completion = fixture.resource.writeCompletions.remove();
         assertTrue(completion.commitFirstContribution());
         completion.succeeded();
@@ -342,10 +342,10 @@ class ProtosStandardFileProtocolTest {
                     ProtosFileFlow.SizedResource,
                     ProtosFileFlow.TruncatableResource,
                     ProtosFileFlow.SyncableResource {
-        private final ArrayDeque<BigInteger> readPositions = new ArrayDeque<>();
+        private final ArrayDeque<ProtosIntegerValue> readPositions = new ArrayDeque<>();
         private final ArrayDeque<ProtosFileFlow.ReadCompletion> readCompletions =
                 new ArrayDeque<>();
-        private final ArrayDeque<BigInteger> writePositions = new ArrayDeque<>();
+        private final ArrayDeque<ProtosIntegerValue> writePositions = new ArrayDeque<>();
         private final ArrayDeque<ProtosFileFlow.WriteCompletion> writeCompletions =
                 new ArrayDeque<>();
         private final ArrayDeque<ProtosFileFlow.IntegerCompletion> endCompletions =
@@ -362,7 +362,7 @@ class ProtosStandardFileProtocolTest {
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                BigInteger position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             readPositions.add(position);
             readCompletions.add(completion);
             return cancellations::incrementAndGet;
@@ -370,7 +370,7 @@ class ProtosStandardFileProtocolTest {
 
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                BigInteger position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             writePositions.add(position);
             writeCompletions.add(completion);
             return cancellations::incrementAndGet;
@@ -391,7 +391,7 @@ class ProtosStandardFileProtocolTest {
 
         @Override
         public ProtosFileFlow.Cancellation truncate(
-                BigInteger size, ProtosFileFlow.ChangeCompletion completion) {
+                ProtosIntegerValue size, ProtosFileFlow.ChangeCompletion completion) {
             truncateCompletions.add(completion);
             return cancellations::incrementAndGet;
         }

@@ -155,8 +155,8 @@ final class ProtosExternalPackagePlanningPreflightTest {
                     assertInstanceOf(
                             ProtosArrayValue.class,
                             plan.readLocalSlot("dependencies").orElseThrow());
-            assertEquals(4, packages.indexedSize().intValueExact());
-            assertEquals(3, dependencies.indexedSize().intValueExact());
+            assertEquals(4, packages.indexedSize());
+            assertEquals(3, dependencies.indexedSize());
 
             assertNoFilesystem(rawPlan, new IdentityHashMap<>());
 

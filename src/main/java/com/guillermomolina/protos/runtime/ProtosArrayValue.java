@@ -25,7 +25,6 @@ import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -77,40 +76,21 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         this.indexedGeneration = new IndexedGeneration(ownedElements);
     }
 
-    public BigInteger indexedSize() {
-        return BigInteger.valueOf(indexedGeneration.elements.size());
-    }
-
-    public int indexedSizeForRuntime() {
+    public int indexedSize() {
         return indexedGeneration.elements.size();
     }
 
-    public Object indexedAt(BigInteger index) {
+    public Object indexedAt(int index) {
         return indexedGeneration.elements.get(requireExistingIndex(index));
     }
 
-    public Object indexedAtForRuntime(int index) {
-        return indexedGeneration.elements.get(requireExistingIndexForRuntime(index));
-    }
-
-    public Object indexedPut(BigInteger index, Object value) {
+    public Object indexedPut(int index, Object value) {
         Objects.requireNonNull(value, "value");
         if (isFrozen()) {
             throw new IllegalStateException("array is frozen");
         }
 
         int existingIndex = requireExistingIndex(index);
-        writableIndexedGeneration().elements.set(existingIndex, value);
-        return value;
-    }
-
-    public Object indexedPutForRuntime(int index, Object value) {
-        Objects.requireNonNull(value, "value");
-        if (isFrozen()) {
-            throw new IllegalStateException("array is frozen");
-        }
-
-        int existingIndex = requireExistingIndexForRuntime(index);
         writableIndexedGeneration().elements.set(existingIndex, value);
         return value;
     }
@@ -126,19 +106,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         return indexedGeneration;
     }
 
-    private int requireExistingIndex(BigInteger index) {
-        Objects.requireNonNull(index, "index");
-        if (index.signum() < 0
-                || index.compareTo(
-                                BigInteger.valueOf(
-                                        indexedGeneration.elements.size()))
-                        >= 0) {
-            throw new IndexOutOfBoundsException("array index out of bounds: " + index);
-        }
-        return index.intValueExact();
-    }
-
-    private int requireExistingIndexForRuntime(int index) {
+    private int requireExistingIndex(int index) {
         if (index < 0 || index >= indexedGeneration.elements.size()) {
             throw new IndexOutOfBoundsException("array index out of bounds: " + index);
         }

@@ -30,11 +30,11 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -165,13 +165,13 @@ activation);
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                BigInteger position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             if (closed) {
                 completion.failed();
                 return () -> {};
             }
             try {
-                int start = position.intValueExact();
+                int start = position.intValueExactForRuntime();
                 if (start >= content.length) {
                     completion.eof();
                 } else {

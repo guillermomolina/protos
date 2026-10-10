@@ -91,7 +91,7 @@ final class ProtosActorValueTransferTest {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
         ProtosArrayValue array = prelude.newArray(List.of(ProtosNullValue.INSTANCE));
-        array.indexedPut(BigInteger.ZERO, array);
+        array.indexedPut(0, array);
         array.createLocalSlot("self", array);
 
         List<Object> result =
@@ -99,7 +99,7 @@ final class ProtosActorValueTransferTest {
         ProtosArrayValue copied = assertInstanceOf(ProtosArrayValue.class, result.get(0));
 
         assertSame(copied, result.get(1));
-        assertSame(copied, copied.indexedAt(BigInteger.ZERO));
+        assertSame(copied, copied.indexedAt(0));
         assertSame(copied, copied.readLocalSlot("self").orElseThrow());
         assertNotSame(array, copied);
     }
@@ -117,10 +117,10 @@ final class ProtosActorValueTransferTest {
                 assertInstanceOf(
                         ProtosBytesValue.class,
                         ProtosActorValueTransfer.snapshotValue(bytes, source));
-        bytes.indexedPut(BigInteger.ZERO, new ProtosIntegerValue(BigInteger.valueOf(9)));
+        bytes.indexedPut(0, new ProtosIntegerValue(BigInteger.valueOf(9)));
 
         assertNotSame(bytes, copied);
-        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) copied.indexedAt(BigInteger.ZERO)).value());
+        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) copied.indexedAt(0)).value());
         assertNotSame(metadata, copied.readLocalSlot("metadata").orElseThrow());
     }
 
@@ -224,7 +224,7 @@ final class ProtosActorValueTransferTest {
         assertSame(copiedShared, copied.readLocalSlot("alias").orElseThrow());
         assertSame(copied, copiedShared.readLocalSlot("owner").orElseThrow());
         assertSame(copied, entries.get(1).value());
-        assertEquals(ProtosIdentity.identityHash(copiedKey), entries.get(0).recordedHash());
+        assertEquals(ProtosNumericHashKey.fromIdentity(copiedKey), entries.get(0).recordedHash());
         assertSame(
                 copiedShared,
                 ProtosInvocation.invokeMessage(copied, "at", List.of(copiedKey), source));
@@ -253,10 +253,10 @@ final class ProtosActorValueTransferTest {
         assertNotSame(second, copiedSecond);
         assertFalse(ProtosIdentity.identical(copiedFirst, copiedSecond));
         assertEquals(
-                ProtosIdentity.identityHash(copiedFirst),
+                ProtosNumericHashKey.fromIdentity(copiedFirst),
                 entries.get(0).recordedIdentityHash());
         assertEquals(
-                ProtosIdentity.identityHash(copiedSecond),
+                ProtosNumericHashKey.fromIdentity(copiedSecond),
                 entries.get(1).recordedIdentityHash());
         assertSame(copied, entries.get(0).value());
         assertSame(copiedFirst, entries.get(1).value());

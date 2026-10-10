@@ -88,8 +88,7 @@ public final class ProtosStandardNumericConversionProtocol {
                     yield integer;
                 }
                 if (value instanceof ProtosFloatValue floating) {
-                    BigInteger exact = exactIntegralBinary64(floating.value());
-                    yield exact == null ? null : new ProtosIntegerValue(exact);
+                    yield exactIntegralBinary64(floating.value());
                 }
                 yield null;
             }
@@ -111,49 +110,29 @@ public final class ProtosStandardNumericConversionProtocol {
      * BigInteger materialization for this conversion.
      */
     static double integerToBinary64(ProtosIntegerValue integer) {
-        Objects.requireNonNull(integer, "integer");
-        if (integer.isSmallForRuntime()) {
-            return (double) integer.smallValueForRuntime();
-        }
-        return ProtosBinary64Rounding.divideExactIntegers(
-                integer.value(), BigInteger.ONE);
+        return ProtosBinary64Rounding.roundExactInteger(integer);
     }
 
-    static BigInteger exactIntegralBinary64(double value) {
-        if (!Double.isFinite(value)) {
+    /**
+     * The exact Integer denoted by an integral finite binary64 value, or null. Values below
+     * 2^63 in magnitude are extracted as signed longs; only larger values need exact
+     * arbitrary-precision scaling of the significand.
+     */
+    static ProtosIntegerValue exactIntegralBinary64(double value) {
+        if (!Double.isFinite(value) || Math.rint(value) != value) {
             return null;
         }
+        if (value >= -0x1p63 && value < 0x1p63) {
+            return new ProtosIntegerValue((long) value);
+        }
+        return largeIntegralBinary64(value);
+    }
 
+    private static ProtosIntegerValue largeIntegralBinary64(double value) {
         long rawBits = Double.doubleToRawLongBits(value);
-        boolean negative = rawBits < 0;
-        long magnitudeBits = rawBits & Long.MAX_VALUE;
-        if (magnitudeBits == 0L) {
-            return BigInteger.ZERO;
-        }
-
-        long exponentBits = (magnitudeBits >>> 52) & EXPONENT_MASK;
-        long fractionBits = magnitudeBits & FRACTION_MASK;
-
-        if (exponentBits == 0L) {
-            return null;
-        }
-
-        int exponent = (int) exponentBits - 1023;
-        BigInteger significand = BigInteger.valueOf(HIDDEN_BIT | fractionBits);
-        int binaryShift = exponent - 52;
-
-        BigInteger exactMagnitude;
-        if (binaryShift >= 0) {
-            exactMagnitude = significand.shiftLeft(binaryShift);
-        } else {
-            int discardedBits = -binaryShift;
-            if (discardedBits > 52
-                    || significand.getLowestSetBit() < discardedBits) {
-                return null;
-            }
-            exactMagnitude = significand.shiftRight(discardedBits);
-        }
-
-        return negative ? exactMagnitude.negate() : exactMagnitude;
+        int binaryShift = (int) ((rawBits >>> 52) & EXPONENT_MASK) - 1075;
+        BigInteger magnitude =
+                BigInteger.valueOf(HIDDEN_BIT | (rawBits & FRACTION_MASK)).shiftLeft(binaryShift);
+        return new ProtosIntegerValue(rawBits < 0 ? magnitude.negate() : magnitude);
     }
 }

@@ -134,13 +134,13 @@ final class ProtosExactExecutionFacilityTest {
                 evaluate(fixture, "execution(\"42\").stdout");
         ProtosBytesValue stdout =
                 assertInstanceOf(ProtosBytesValue.class, stdoutValue);
-        assertEquals(java.math.BigInteger.ZERO, stdout.indexedSize());
+        assertEquals(0, stdout.indexedSize());
 
         Object stderrValue =
                 evaluate(fixture, "execution(\"42\").stderr");
         ProtosBytesValue stderr =
                 assertInstanceOf(ProtosBytesValue.class, stderrValue);
-        assertEquals(java.math.BigInteger.ZERO, stderr.indexedSize());
+        assertEquals(0, stderr.indexedSize());
     }
 
     @Test

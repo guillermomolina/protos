@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -209,11 +208,10 @@ public final class ProtosActorValueTransfer {
                 memo.put(value, value);
                 return value;
             }
-            if (value instanceof ProtosIntegerValue integer) {
-                return remember(value, new ProtosIntegerValue(integer.value()));
-            }
-            if (value instanceof ProtosFloatValue floating) {
-                return remember(value, new ProtosFloatValue(floating.value()));
+            Object copiedNumber =
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value);
+            if (copiedNumber != null) {
+                return remember(value, copiedNumber);
             }
             if (value instanceof ProtosStringValue string) {
                 return remember(value, string.copyForRuntime());
@@ -310,7 +308,7 @@ public final class ProtosActorValueTransfer {
             } else if (object instanceof ProtosIdentityMapValue) {
                 shell = new ProtosIdentityMapValue(destinationParent);
             } else if (object instanceof ProtosArrayValue array) {
-                int size = array.indexedSize().intValueExact();
+                int size = array.indexedSize();
                 ArrayList<Object> placeholders = new ArrayList<>(size);
                 for (int index = 0; index < size; index++) {
                     placeholders.add(ProtosNullValue.INSTANCE);
@@ -351,9 +349,9 @@ public final class ProtosActorValueTransfer {
                     for (ProtosMapValue.Entry entry : sourceMap.keyedSnapshot()) {
                         Object copiedKey = copy(entry.key());
                         Object copiedValue = copy(entry.value());
-                        BigInteger recordedHash =
+                        ProtosNumericHashKey recordedHash =
                                 usesDefaultObjectHash(entry.key())
-                                        ? ProtosIdentity.identityHash(copiedKey)
+                                        ? ProtosNumericHashKey.fromIdentity(copiedKey)
                                         : entry.recordedHash();
                         destinationMap.append(copiedKey, recordedHash, copiedValue);
                     }
@@ -364,14 +362,14 @@ public final class ProtosActorValueTransfer {
                         Object copiedKey = copy(entry.key());
                         Object copiedValue = copy(entry.value());
                         destinationIdentityMap.append(
-                                copiedKey, ProtosIdentity.identityHash(copiedKey), copiedValue);
+                                copiedKey, ProtosNumericHashKey.fromIdentity(copiedKey), copiedValue);
                     }
                 } else if (sourceObject instanceof ProtosArrayValue sourceArray) {
                     ProtosArrayValue destinationArray = (ProtosArrayValue) destination;
                     List<Object> elements = sourceArray.indexedSnapshot();
                     for (int index = 0; index < elements.size(); index++) {
                         destinationArray.indexedPut(
-                                BigInteger.valueOf(index), copy(elements.get(index)));
+                                index, copy(elements.get(index)));
                     }
                 } else if (sourceObject instanceof ProtosBytesValue sourceBytes) {
                     ProtosBytesValue destinationBytes = (ProtosBytesValue) destination;

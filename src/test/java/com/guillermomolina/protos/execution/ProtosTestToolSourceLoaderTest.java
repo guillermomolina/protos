@@ -24,9 +24,9 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,10 +126,10 @@ final class ProtosTestToolSourceLoaderTest {
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                BigInteger position,
+                ProtosIntegerValue position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
-            int start = position.intValueExact();
+            int start = position.intValueExactForRuntime();
             if (start >= content.length) {
                 completion.eof();
                 return () -> {};

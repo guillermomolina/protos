@@ -931,7 +931,7 @@ public final class ProtosActivation {
             return deferredSuppliedArguments.values().size();
         }
         if (arguments != null) {
-            return arguments.indexedSizeForRuntime();
+            return arguments.indexedSize();
         }
         throw new IllegalStateException(
                 "parameter binding requires an invocation activation");

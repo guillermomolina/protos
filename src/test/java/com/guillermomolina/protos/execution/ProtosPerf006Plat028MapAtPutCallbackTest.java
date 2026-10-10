@@ -18,6 +18,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -112,7 +113,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
             assertEquals(1, map.keyedSize());
             ProtosMapValue.Entry inserted = map.keyedSnapshot().get(0);
             assertSame(query, inserted.key());
-            assertEquals(BigInteger.valueOf(7), inserted.recordedHash());
+            assertEquals(ProtosNumericHashKey.ofLong(7), inserted.recordedHash());
             assertSame(marker, inserted.value());
             assertFalse(map.comparisonActive());
         }
@@ -145,7 +146,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
                                 storedEqualityCalls.incrementAndGet();
                                 return ProtosBooleanValue.FALSE;
                             }));
-            map.append(stored, BigInteger.valueOf(7), oldValue);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), oldValue);
             map.close();
 
             module.context().createLocalSlot("map", map);
@@ -197,7 +198,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
             assertEquals(1, map.keyedSize());
             ProtosMapValue.Entry retained = map.keyedSnapshot().get(0);
             assertSame(stored, retained.key());
-            assertEquals(BigInteger.valueOf(7), retained.recordedHash());
+            assertEquals(ProtosNumericHashKey.ofLong(7), retained.recordedHash());
             assertSame(newValue, retained.value());
             assertEquals(1, queryEqualityCalls.get());
             assertEquals(0, storedEqualityCalls.get());
@@ -293,7 +294,7 @@ final class ProtosPerf006Plat028MapAtPutCallbackTest {
             ProtosObjectValue query = key();
             ProtosObjectValue oldValue = key();
             ProtosObjectValue newValue = key();
-            map.append(stored, BigInteger.valueOf(7), oldValue);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), oldValue);
 
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);

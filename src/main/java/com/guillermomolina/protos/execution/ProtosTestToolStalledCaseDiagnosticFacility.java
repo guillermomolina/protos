@@ -24,7 +24,6 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.PrintStream;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -180,14 +179,12 @@ public final class ProtosTestToolStalledCaseDiagnosticFacility implements AutoCl
     }
 
     private static long token(ProtosActivation caller, Object value) {
-        if (!(value instanceof ProtosIntegerValue integer)) {
+        if (!(value instanceof ProtosIntegerValue integer)
+                || !integer.isSmallForRuntime()
+                || integer.signumForRuntime() < 0) {
             throw toolError(caller);
         }
-        BigInteger token = integer.value();
-        if (token.signum() < 0 || token.bitLength() >= Long.SIZE) {
-            throw toolError(caller);
-        }
-        return token.longValueExact();
+        return integer.smallValueForRuntime();
     }
 
     private static ProtosSignalException toolError(ProtosActivation activation) {

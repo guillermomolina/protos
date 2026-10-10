@@ -22,8 +22,13 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.DoubleBinaryOperator;
 
@@ -48,13 +53,94 @@ public final class ProtosStandardFloatProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return ProtosBooleanValue.of(
-                                    supplied.get(0) instanceof ProtosFloatValue);
+                                    ProtosNumericValueSupport.isCurrentFloat(
+                                            supplied.get(0)));
                         }));
 
         installBinary(floatPrototype, "+", (left, right) -> left + right);
         installBinary(floatPrototype, "-", (left, right) -> left - right);
         installBinary(floatPrototype, "*", (left, right) -> left * right);
         installBinary(floatPrototype, "/", (left, right) -> left / right);
+    }
+
+    enum CanonicalFloatOperation {
+        ADD("+"), SUBTRACT("-"), MULTIPLY("*"), DIVIDE("/");
+
+        private final String selector;
+
+        CanonicalFloatOperation(String selector) {
+            this.selector = selector;
+        }
+
+        static CanonicalFloatOperation forSelector(String selector) {
+            for (CanonicalFloatOperation value : values()) {
+                if (value.selector.equals(selector)) {
+                    return value;
+                }
+            }
+            throw new IllegalArgumentException(
+                    "not a standard Float selector: " + selector);
+        }
+    }
+
+    private static final class CanonicalFloatBody implements ProtosNativeClosureBody {
+        private final ProtosObjectValue home;
+        private final CanonicalFloatOperation operation;
+        private final ProtosNativeClosureBody delegate;
+        private ProtosClosureValue owner;
+
+        CanonicalFloatBody(
+                ProtosObjectValue home,
+                String selector,
+                ProtosNativeClosureBody delegate) {
+            this.home = Objects.requireNonNull(home, "home");
+            this.operation = CanonicalFloatOperation.forSelector(selector);
+            this.delegate = Objects.requireNonNull(delegate, "delegate");
+        }
+
+        void bindOwner(ProtosClosureValue closure) {
+            if (owner != null) {
+                throw new IllegalStateException(
+                        "Float native closure owner already bound");
+            }
+            owner = Objects.requireNonNull(closure, "closure");
+        }
+
+        boolean isCanonicalSelection(
+                ProtosClosureValue selected,
+                ProtosObjectValue methodHome,
+                String selector,
+                ProtosPrelude prelude) {
+            return owner != null
+                    && selected == owner
+                    && methodHome == home
+                    && prelude != null
+                    && home == prelude.floatPrototype()
+                    && operation.selector.equals(selector);
+        }
+
+        @Override
+        public Object execute(ProtosActivation activation, List<?> supplied) {
+            return delegate.execute(activation, supplied);
+        }
+    }
+
+    static CanonicalFloatOperation canonicalOperationForSelection(
+            ProtosClosureValue selected,
+            ProtosObjectValue methodHome,
+            String selector,
+            ProtosPrelude prelude) {
+        Objects.requireNonNull(selected, "selected");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(selector, "selector");
+
+        ProtosNativeClosureBody body = selected.nativeBody().orElse(null);
+        if (!(body instanceof CanonicalFloatBody canonical)
+                || !canonical.isCanonicalSelection(
+                        selected, methodHome, selector, prelude)) {
+            return null;
+        }
+        return canonical.operation;
     }
 
     private static void installBinary(
@@ -65,29 +151,32 @@ public final class ProtosStandardFloatProtocol {
             throw new IllegalStateException(
                     "Core Float already defines a local " + selector + " slot");
         }
-        floatPrototype.createLocalSlot(
-                selector,
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosFloatValue receiver = requireFloatReceiver(activation);
-                            if (supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            Object argument = supplied.get(0);
-                            double right;
-                            if (argument instanceof ProtosFloatValue floating) {
-                                right = floating.value();
-                            } else if (argument instanceof ProtosIntegerValue integer) {
-                                right = ProtosStandardNumericConversionProtocol
-                                        .integerToBinary64(integer);
-                            } else {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosFloatValue(
-                                    operation.applyAsDouble(receiver.value(), right));
-                        }));
+        ProtosNativeClosureBody delegate = (activation, supplied) -> {
+            ProtosFloatValue receiver = requireFloatReceiver(activation);
+            if (supplied.size() != 1) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            Object argument = supplied.get(0);
+            double right;
+            if (argument instanceof ProtosFloatValue floating) {
+                right = floating.value();
+            } else if (argument instanceof ProtosIntegerValue integer) {
+                right = ProtosStandardNumericConversionProtocol
+                        .integerToBinary64(integer);
+            } else {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return new ProtosFloatValue(
+                    operation.applyAsDouble(receiver.value(), right));
+        };
+        CanonicalFloatBody canonical =
+                new CanonicalFloatBody(floatPrototype, selector, delegate);
+        ProtosClosureValue installed = ProtosClosureValue.nativeClosure(canonical);
+        canonical.bindOwner(installed);
+        floatPrototype.createLocalSlot(selector, installed);
+
     }
 
     private static void requireSourceBackedClosure(

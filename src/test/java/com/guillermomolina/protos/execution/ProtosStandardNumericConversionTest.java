@@ -28,13 +28,13 @@ class ProtosStandardNumericConversionTest {
     void exactIntegralBinary64ExtractionUsesActualBinaryValue() {
         assertEquals(
                 new BigInteger("99999999999999991611392"),
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1e23));
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1e23).value());
         assertEquals(
                 BigInteger.ZERO,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0.0d));
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(-0.0d).value());
         assertEquals(
                 BigInteger.ONE,
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.0d));
+                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.0d).value());
         assertEquals(
                 null,
                 ProtosStandardNumericConversionProtocol.exactIntegralBinary64(1.5d));

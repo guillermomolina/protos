@@ -27,10 +27,10 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -315,7 +315,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         AtomicReference<byte[]> bytes = new AtomicReference<>();
         ((ProtosFileFlow.ReadableResource) resource.get())
                 .readAt(
-                        BigInteger.ZERO,
+                        new ProtosIntegerValue(0),
                         64 * 1024,
                         new ProtosFileFlow.ReadCompletion() {
                             @Override
@@ -370,7 +370,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         assertFalse(failed.get());
 
         java.io.ByteArrayOutputStream bytes = new java.io.ByteArrayOutputStream();
-        BigInteger position = BigInteger.ZERO;
+        ProtosIntegerValue position = new ProtosIntegerValue(0);
         while (true) {
             AtomicReference<byte[]> chunk = new AtomicReference<>();
             AtomicBoolean eof = new AtomicBoolean();
@@ -400,7 +400,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
             }
             assertNotNull(chunk.get());
             bytes.writeBytes(chunk.get());
-            position = position.add(BigInteger.valueOf(chunk.get().length));
+            position = position.addForRuntime(new ProtosIntegerValue(chunk.get().length));
         }
         release.get().run();
         return bytes.toByteArray();

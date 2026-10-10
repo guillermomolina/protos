@@ -8,13 +8,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -102,13 +101,14 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                                 query,
                                 ProtosBooleanValue.FALSE);
 
-        BigInteger hash =
+        ProtosNumericHashKey hash =
                 ProtosStandardMapProtocol.queryHash(
                         map,
                         query,
                         activation);
 
-        prepared.acceptHash(new ProtosIntegerValue(hash));
+        prepared.acceptHash(ProtosInvocation.invokeMessage(
+                query, "hash", java.util.List.of(), activation));
 
         assertTrue(prepared.needsEquality());
 
@@ -150,13 +150,14 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                                 key,
                                 ProtosBooleanValue.TRUE);
 
-        BigInteger hash =
+        ProtosNumericHashKey hash =
                 ProtosStandardMapProtocol.queryHash(
                         map,
                         key,
                         activation);
 
-        prepared.acceptHash(new ProtosIntegerValue(hash));
+        prepared.acceptHash(ProtosInvocation.invokeMessage(
+                key, "hash", java.util.List.of(), activation));
         prepared.finish();
 
         assertEquals(1, map.keyedSize());

@@ -69,7 +69,7 @@ final class ProtosNetworkingFoundationFinalConformanceTest {
                                                             ProtosNullValue.INSTANCE,
                                                             ProtosNullValue.INSTANCE)),
                                             activation));
-            int port = listener.localPortForRuntime().intValueExact();
+            int port = listener.localPortForRuntime();
 
             ProtosFutureValue cancelledAccept = future(listener, "accept", List.of(), activation);
             cancelledAccept.cancelRequest();

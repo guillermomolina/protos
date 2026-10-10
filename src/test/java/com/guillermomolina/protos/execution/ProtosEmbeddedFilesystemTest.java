@@ -30,11 +30,11 @@ import static org.junit.jupiter.api.Assertions.fail;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -708,7 +708,7 @@ final class ProtosEmbeddedFilesystemTest {
 
             custody.close();
             RecordingRead read = new RecordingRead();
-            ((ProtosFileFlow.ReadableResource) first.resource).readAt(BigInteger.ZERO, 1, read);
+            ((ProtosFileFlow.ReadableResource) first.resource).readAt(new ProtosIntegerValue(0), 1, read);
             assertTrue(read.failed, "a revoked File never regains usability");
 
             RecordingOpen late = new RecordingOpen();

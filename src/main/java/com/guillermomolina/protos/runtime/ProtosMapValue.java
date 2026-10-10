@@ -15,28 +15,28 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.runtime;
-import java.math.BigInteger; import java.util.*;
+ import java.util.*;
 public final class ProtosMapValue extends ProtosObjectValue {
- public static final class Entry { private final Object key; private final BigInteger hash; private Object value;
-  Entry(Object k,BigInteger h,Object v){key=Objects.requireNonNull(k);hash=Objects.requireNonNull(h);value=Objects.requireNonNull(v);}
-  public Object key(){return key;} public BigInteger recordedHash(){return hash;} public Object value(){return value;} void value(Object v){value=Objects.requireNonNull(v);}
+ public static final class Entry { private final Object key; private final ProtosNumericHashKey hash; private Object value;
+  Entry(Object k,ProtosNumericHashKey h,Object v){key=Objects.requireNonNull(k);hash=Objects.requireNonNull(h);value=Objects.requireNonNull(v);}
+  public Object key(){return key;} public ProtosNumericHashKey recordedHash(){return hash;} public Object value(){return value;} void value(Object v){value=Objects.requireNonNull(v);}
  }
  private static final class Bucket {
   private final List<Entry> entries=new ArrayList<>();
   private final List<Entry> view=Collections.unmodifiableList(entries);
  }
  private final List<Entry> entries=new ArrayList<>();
- private final Map<BigInteger,Bucket> entriesByHash=new HashMap<>();
+ private final Map<ProtosNumericHashKey,Bucket> entriesByHash=new HashMap<>();
  private int comparisonDepth;
  public ProtosMapValue(Object parent){super(parent);} public int keyedSize(){return entries.size();}
  public List<Entry> keyedSnapshot(){return List.copyOf(entries);}
- public List<Entry> candidatesForRecordedHash(BigInteger hash){
+ public List<Entry> candidatesForRecordedHash(ProtosNumericHashKey hash){
   Bucket bucket=entriesByHash.get(Objects.requireNonNull(hash));
   return bucket==null?List.of():bucket.view;
  }
  public List<Map.Entry<Object,Object>> associationSnapshot(){ArrayList<Map.Entry<Object,Object>> snapshot=new ArrayList<>(entries.size());for(int index=0;index<entries.size();index++){Entry entry=entries.get(index);snapshot.add(Map.entry(entry.key(),entry.value()));}return List.copyOf(snapshot);} public boolean comparisonActive(){return comparisonDepth!=0;}
  public void enterComparison(){comparisonDepth++;} public void leaveComparison(){if(comparisonDepth<=0)throw new IllegalStateException("unbalanced Map comparison scope");comparisonDepth--;}
- public void append(Object k,BigInteger h,Object v){
+ public void append(Object k,ProtosNumericHashKey h,Object v){
   Entry entry=new Entry(k,h,v);
   entries.add(entry);
   entriesByHash.computeIfAbsent(entry.recordedHash(),ignored->new Bucket()).entries.add(entry);

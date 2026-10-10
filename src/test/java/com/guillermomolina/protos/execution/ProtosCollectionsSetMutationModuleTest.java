@@ -56,12 +56,12 @@ class ProtosCollectionsSetMutationModuleTest {
                             )
                             """);
 
-            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(BigInteger.ZERO), module);
-            assertInteger(BigInteger.ONE, allowed.indexedAt(BigInteger.ONE));
-            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(BigInteger.TWO), module);
+            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(0), module);
+            assertInteger(BigInteger.ONE, allowed.indexedAt(1));
+            assertSame(ProtosBooleanValue.TRUE, allowed.indexedAt(2), module);
             assertSame(
                     ProtosBooleanValue.TRUE,
-                    allowed.indexedAt(BigInteger.valueOf(3)),
+                    allowed.indexedAt(3),
                     module);
 
             assertStateSignals(module, false, "Collection.add(values, 2)");

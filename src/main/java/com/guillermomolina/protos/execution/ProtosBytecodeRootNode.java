@@ -39,6 +39,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -74,7 +75,6 @@ import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -99,7 +99,7 @@ import java.util.List;
         enableMaterializedLocalAccesses = true,
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {int.class},
+        boxingEliminationTypes = {int.class, long.class, double.class},
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
 
@@ -1824,7 +1824,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     static List<Object> multipleCreatePrefixOrNull(int required, Object source) {
         if (!(source instanceof ProtosArrayValue array)
-                || array.indexedSize().compareTo(BigInteger.valueOf(required)) < 0) {
+                || array.indexedSize() < required) {
             return null;
         }
 
@@ -1835,7 +1835,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         List<Object> observed = new ArrayList<>(required);
         for (int index = 0; index < required; index++) {
-            observed.add(array.indexedAt(BigInteger.valueOf(index)));
+            observed.add(array.indexedAt(index));
         }
         return observed;
     }
@@ -5731,7 +5731,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private int candidateIndex;
         private int childIndex;
 
-        private BigInteger queryHash;
+        private ProtosNumericHashKey queryHash;
         private ProtosStandardMapProtocol.StableAssociation selectedAssociation;
 
         private boolean hashAccepted;
@@ -6173,7 +6173,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object key;
         private final Object fallback;
         private final ProtosActivation activation;
-        private BigInteger queryHash;
+        private ProtosNumericHashKey queryHash;
         private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
@@ -6546,7 +6546,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object key;
         private final Object value;
         private final ProtosActivation activation;
-        private BigInteger queryHash;
+        private ProtosNumericHashKey queryHash;
         private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
@@ -6795,7 +6795,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object key;
         private final Object newValue;
         private final ProtosActivation activation;
-        private BigInteger queryHash;
+        private ProtosNumericHashKey queryHash;
         private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
@@ -7052,7 +7052,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosMapValue map;
         private final Object key;
         private final ProtosActivation activation;
-        private BigInteger queryHash;
+        private ProtosNumericHashKey queryHash;
         private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;

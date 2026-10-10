@@ -76,7 +76,7 @@ final class ProtosArrayInteropTest {
 
         assertSame(first, interop.readArrayElement(array, 0));
 
-        array.indexedPut(BigInteger.ZERO, replacement);
+        array.indexedPut(0, replacement);
 
         assertEquals(1L, interop.getArraySize(array));
         assertSame(replacement, interop.readArrayElement(array, 0));
@@ -89,7 +89,7 @@ final class ProtosArrayInteropTest {
                 new ProtosArrayValue(
                         ProtosObjectValue.rootObject(),
                         List.of(ProtosNullValue.INSTANCE));
-        array.indexedPut(BigInteger.ZERO, array);
+        array.indexedPut(0, array);
 
         Object read = interop.readArrayElement(array, 0);
 
@@ -116,7 +116,7 @@ final class ProtosArrayInteropTest {
                 UnsupportedMessageException.class,
                 () -> interop.removeArrayElement(array, 0));
 
-        assertSame(ProtosBooleanValue.TRUE, array.indexedAt(BigInteger.ZERO));
+        assertSame(ProtosBooleanValue.TRUE, array.indexedAt(0));
     }
 
     @Test
@@ -155,7 +155,7 @@ final class ProtosArrayInteropTest {
                 InvalidArrayIndexException.class,
                 () -> interop.readArrayElement(array, 0));
 
-        assertSame(hostOnly, array.indexedAt(BigInteger.ZERO));
+        assertSame(hostOnly, array.indexedAt(0));
     }
 
     @Test

@@ -353,13 +353,13 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
     private static void assertBytes(Object value, int... expected) {
         ProtosBytesValue bytes =
                 assertInstanceOf(ProtosBytesValue.class, value);
-        assertEquals(BigInteger.valueOf(expected.length), bytes.indexedSize());
+        assertEquals(expected.length, bytes.indexedSize());
         for (int index = 0; index < expected.length; index++) {
             assertEquals(
                     BigInteger.valueOf(expected[index]),
                     assertInstanceOf(
                                     ProtosIntegerValue.class,
-                                    bytes.indexedAt(BigInteger.valueOf(index)))
+                                    bytes.indexedAt(index))
                             .value());
         }
     }

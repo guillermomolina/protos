@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -31,7 +30,7 @@ import java.util.Objects;
 public final class ProtosTcpListenerValue extends ProtosObjectValue {
     private final Object resourceState;
     private final ProtosTcpListenerFlow flow;
-    private final BigInteger localPort;
+    private final Integer localPort;
 
     public ProtosTcpListenerValue(ProtosPrelude prelude, Object resourceState) {
         super(requirePrototype(prelude));
@@ -46,7 +45,7 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
             Object resourceState,
             ProtosActivation activation,
             ProtosTcpListenerFlow.Backend backend,
-            BigInteger localPort) {
+            int localPort) {
         super(requirePrototype(prelude));
         this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
         this.localPort = requireLocalPort(localPort);
@@ -59,7 +58,7 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
             Object resourceState,
             ProtosActivation activation,
             ProtosTcpListenerFlow.Backend backend,
-            BigInteger localPort,
+            int localPort,
             ProtosTcpListenerFlow.ResultMaterializer resultMaterializer) {
         super(requirePrototype(prelude));
         this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
@@ -80,7 +79,7 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
     public boolean hasProtocolFlowForRuntime() { return flow != null; }
     public boolean hasAcceptForRuntime() { return flow != null && flow.acceptsForRuntime(); }
 
-    public BigInteger localPortForRuntime() {
+    public int localPortForRuntime() {
         if (localPort == null) throw new IllegalStateException("TcpListener has no acquired local port");
         return localPort;
     }
@@ -100,9 +99,8 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
         return flow.lifecycleForRuntime();
     }
 
-    private static BigInteger requireLocalPort(BigInteger value) {
-        Objects.requireNonNull(value, "localPort");
-        if (value.signum() <= 0 || value.compareTo(BigInteger.valueOf(65535)) > 0) {
+    private static int requireLocalPort(int value) {
+        if (value < 1 || value > 65535) {
             throw new IllegalArgumentException("acquired TcpListener local port must be in 1..65535");
         }
         return value;

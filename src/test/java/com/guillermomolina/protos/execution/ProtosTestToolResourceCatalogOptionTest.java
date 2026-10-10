@@ -116,13 +116,13 @@ final class ProtosTestToolResourceCatalogOptionTest {
                 BigInteger.valueOf(3),
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
         assertEquals(
                 "catalog.toml",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
     }
 
@@ -146,13 +146,13 @@ final class ProtosTestToolResourceCatalogOptionTest {
                 BigInteger.ONE,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
         assertEquals(
                 "--jobs",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
     }
 
@@ -176,13 +176,13 @@ final class ProtosTestToolResourceCatalogOptionTest {
                 BigInteger.ONE,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
         assertEquals(
                 "--resource-catalog",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
     }
 

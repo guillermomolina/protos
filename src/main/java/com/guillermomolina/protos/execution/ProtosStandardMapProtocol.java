@@ -15,7 +15,7 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
-import com.guillermomolina.protos.runtime.*; import java.math.BigInteger; import java.util.*;
+import com.guillermomolina.protos.runtime.*;  import java.util.*;
 public final class ProtosStandardMapProtocol {
  enum StructuredReadLookupKind { AT, CONTAINS_KEY, AT_IF_ABSENT }
 
@@ -62,7 +62,7 @@ public final class ProtosStandardMapProtocol {
 
  static record StableAssociation(
          Object key,
-         BigInteger recordedHash,
+         ProtosNumericHashKey recordedHash,
          Object value) {
   StableAssociation {
    Objects.requireNonNull(key, "key");
@@ -87,7 +87,7 @@ public final class ProtosStandardMapProtocol {
   return List.copyOf(snapshot);
  }
 
- static BigInteger queryHash(
+ static ProtosNumericHashKey queryHash(
          ProtosMapValue map,
          Object queryKey,
          ProtosActivation activation) {
@@ -98,7 +98,7 @@ public final class ProtosStandardMapProtocol {
          ProtosMapValue map,
          List<StableAssociation> snapshot,
          Object queryKey,
-         BigInteger queryHash,
+         ProtosNumericHashKey queryHash,
          ProtosActivation activation) {
   for (int index = 0; index < snapshot.size(); index++) {
    StableAssociation association = snapshot.get(index);
@@ -224,7 +224,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
   p.createLocalSlot("atPut", STANDARD_AT_PUT);
   p.createLocalSlot("remove", STANDARD_REMOVE);
-  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
+  p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(m.keyedSize());}));
   p.createLocalSlot("each", STANDARD_EACH);
   p.createLocalSlot("match", STANDARD_MATCH);
  }
@@ -281,7 +281,7 @@ public final class ProtosStandardMapProtocol {
   if (!map.isOpen() || map.comparisonActive()) {
    throw err(caller);
   }
-  BigInteger recordedHash = hash(map, key, caller);
+  ProtosNumericHashKey recordedHash = hash(map, key, caller);
   if (find(map, key, recordedHash, caller) != null) {
    throw err(caller);
   }
@@ -321,7 +321,7 @@ public final class ProtosStandardMapProtocol {
   mutationEntry(m, a);
   Object k = x.get(0);
   Object v = x.get(1);
-  BigInteger h = hash(m, k, a);
+  ProtosNumericHashKey h = hash(m, k, a);
   ProtosMapValue.Entry e = find(m, k, h, a);
   if (e != null) {
    if (m.isFrozen()) throw err(a);
@@ -384,7 +384,7 @@ public final class ProtosStandardMapProtocol {
   List<Object> selectedValues = new ArrayList<>();
 
   for (StableAssociation requirement : matcherSnapshot) {
-   BigInteger queryHash = queryHash(subject, requirement.key(), a);
+   ProtosNumericHashKey queryHash = queryHash(subject, requirement.key(), a);
    int subjectIndex =
            findStableAssociationIndex(
                    subject,
@@ -446,7 +446,7 @@ public final class ProtosStandardMapProtocol {
  private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosActivation a){
   return find(m,k,hash(m,k,a),a);
  }
- private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,BigInteger h,ProtosActivation a){
+ private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosNumericHashKey h,ProtosActivation a){
   for(var e:m.candidatesForRecordedHash(h)){
    if(matchesStoredKey(m,k,h,e.key(),e.recordedHash(),a))return e;
   }
@@ -455,9 +455,9 @@ public final class ProtosStandardMapProtocol {
  private static boolean matchesStoredKey(
          ProtosMapValue map,
          Object queryKey,
-         BigInteger queryHash,
+         ProtosNumericHashKey queryHash,
          Object storedKey,
-         BigInteger recordedHash,
+         ProtosNumericHashKey recordedHash,
          ProtosActivation activation) {
   if(!recordedHash.equals(queryHash))return false;
   map.enterComparison();
@@ -473,10 +473,10 @@ public final class ProtosStandardMapProtocol {
   }
   return requireEqualityResultForStructured(comparison, activation);
  }
- private static BigInteger hash(ProtosMapValue m,Object k,ProtosActivation a){m.enterComparison();Object h;try{h=ProtosInvocation.invokeMessage(k,"hash",List.of(),a);}finally{m.leaveComparison();}return requireHashResultForStructured(h,a);}
- static BigInteger requireHashResultForStructured(Object h, ProtosActivation a) {
+ private static ProtosNumericHashKey hash(ProtosMapValue m,Object k,ProtosActivation a){m.enterComparison();Object h;try{h=ProtosInvocation.invokeMessage(k,"hash",List.of(),a);}finally{m.leaveComparison();}return requireHashResultForStructured(h,a);}
+ static ProtosNumericHashKey requireHashResultForStructured(Object h, ProtosActivation a) {
   if (h instanceof ProtosIntegerValue i) {
-   return i.value();
+   return ProtosNumericHashKey.fromSemanticInteger(i);
   }
   throw err(a);
  }

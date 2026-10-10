@@ -164,8 +164,8 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
             ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
             ProtosNetworkCapabilityValue network =
                     assertInstanceOf(
-                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
-            assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+                            ProtosNetworkCapabilityValue.class, result.indexedAt(0));
+            assertSame(result.indexedAt(1), network.representedDelegationParent(null));
             assertTrue(runtimeHost.networkHostInitializedForTesting());
         }
     }

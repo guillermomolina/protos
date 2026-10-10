@@ -20,11 +20,9 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.util.Objects;
 
 /** Standard exact cross-family Number ordering. */
@@ -52,8 +50,8 @@ public final class ProtosStandardNumberOrderingProtocol {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             if (supplied.size() != 1
-                                    || !isSemanticNumber(activation.receiver())
-                                    || !isSemanticNumber(supplied.get(0))) {
+                                    || !ProtosNumericValueSupport.isCurrentNumber(activation.receiver())
+                                    || !ProtosNumericValueSupport.isCurrentNumber(supplied.get(0))) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
@@ -73,92 +71,7 @@ public final class ProtosStandardNumberOrderingProtocol {
     }
 
     static Comparison compare(Object left, Object right) {
-        if (!isSemanticNumber(left) || !isSemanticNumber(right)) {
-            throw new IllegalArgumentException("numeric comparison requires Number values");
-        }
-
-        if (left instanceof ProtosIntegerValue leftInteger
-                && right instanceof ProtosIntegerValue rightInteger) {
-            return fromSign(leftInteger.compareToIntegerForRuntime(rightInteger));
-        }
-
-        if (left instanceof ProtosFloatValue leftFloat) {
-            if (right instanceof ProtosFloatValue rightFloat) {
-                return compareFloats(leftFloat.value(), rightFloat.value());
-            }
-            return compareFloatToInteger(leftFloat.value(), exactInteger(right));
-        }
-        if (right instanceof ProtosFloatValue rightFloat) {
-            return reverse(compareFloatToInteger(rightFloat.value(), exactInteger(left)));
-        }
-        return fromSign(exactInteger(left).compareTo(exactInteger(right)));
-    }
-
-    private static Comparison compareFloats(double left, double right) {
-        if (Double.isNaN(left) || Double.isNaN(right)) {
-            return Comparison.UNORDERED;
-        }
-        if (left < right) return Comparison.LESS;
-        if (left > right) return Comparison.GREATER;
-        return Comparison.EQUAL;
-    }
-
-    private static Comparison compareFloatToInteger(double floating, BigInteger integer) {
-        if (Double.isNaN(floating)) {
-            return Comparison.UNORDERED;
-        }
-        if (floating == Double.POSITIVE_INFINITY) {
-            return Comparison.GREATER;
-        }
-        if (floating == Double.NEGATIVE_INFINITY) {
-            return Comparison.LESS;
-        }
-
-        long bits = Double.doubleToRawLongBits(floating);
-        boolean negative = (bits & Long.MIN_VALUE) != 0;
-        int encodedExponent = (int) ((bits >>> 52) & 0x7ffL);
-        long fraction = bits & 0x000fffffffffffffL;
-
-        BigInteger significand;
-        int binaryShift;
-        if (encodedExponent == 0) {
-            significand = BigInteger.valueOf(fraction);
-            binaryShift = -1074;
-        } else {
-            significand = BigInteger.valueOf(fraction | (1L << 52));
-            binaryShift = encodedExponent - 1075;
-        }
-        if (negative) significand = significand.negate();
-
-        if (binaryShift >= 0) {
-            return fromSign(significand.shiftLeft(binaryShift).compareTo(integer));
-        }
-        return fromSign(significand.compareTo(integer.shiftLeft(-binaryShift)));
-    }
-
-    private static BigInteger exactInteger(Object value) {
-        if (value instanceof ProtosIntegerValue integer) return integer.value();
-        throw new IllegalArgumentException("value is not an exact-integer family");
-    }
-
-    private static boolean isSemanticNumber(Object value) {
-        return value instanceof ProtosIntegerValue
-                || value instanceof ProtosFloatValue;
-    }
-
-    private static Comparison fromSign(int sign) {
-        if (sign < 0) return Comparison.LESS;
-        if (sign > 0) return Comparison.GREATER;
-        return Comparison.EQUAL;
-    }
-
-    private static Comparison reverse(Comparison comparison) {
-        return switch (comparison) {
-            case LESS -> Comparison.GREATER;
-            case GREATER -> Comparison.LESS;
-            case EQUAL -> Comparison.EQUAL;
-            case UNORDERED -> Comparison.UNORDERED;
-        };
+        return ProtosCurrentNumericRelations.compare(left, right);
     }
 
     enum Comparison { LESS, EQUAL, GREATER, UNORDERED }

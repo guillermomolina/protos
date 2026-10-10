@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import java.math.BigInteger;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,7 +40,7 @@ final class ProtosTestResourceProviderRequest {
     record Binding(
             String resourceKey,
             String mode,
-            BigInteger units,
+            ProtosIntegerValue units,
             String scope,
             String provider,
             String profile) {

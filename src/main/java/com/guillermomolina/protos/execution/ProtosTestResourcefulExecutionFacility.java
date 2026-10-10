@@ -26,7 +26,6 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -351,7 +350,7 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
 
             String key = requireString(caller, fields.get(0));
             String mode = requireString(caller, fields.get(1));
-            BigInteger units = optionalInteger(caller, fields.get(2));
+            ProtosIntegerValue units = optionalInteger(caller, fields.get(2));
             String scope = requireString(caller, fields.get(3));
             String provider = requireString(caller, fields.get(4));
             String profile = optionalString(caller, fields.get(5));
@@ -386,14 +385,14 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         return requireString(caller, value);
     }
 
-    private static BigInteger optionalInteger(ProtosActivation caller, Object value) {
+    private static ProtosIntegerValue optionalInteger(ProtosActivation caller, Object value) {
         if (value == ProtosNullValue.INSTANCE) {
             return null;
         }
         if (!(value instanceof ProtosIntegerValue integer)) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
-        return integer.value();
+        return integer;
     }
 
     private static Throwable unwrapCompletionFailure(Throwable failure) {

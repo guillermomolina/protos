@@ -121,8 +121,8 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         backend.readCompletions.removeFirst().data(new byte[] {1, 2});
         assertEquals(2, backend.readStarts);
         ProtosBytesValue result = (ProtosBytesValue) read1.resolvedValue().orElseThrow();
-        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) result.indexedAt(BigInteger.ZERO)).value());
-        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result.indexedAt(BigInteger.ONE)).value());
+        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) result.indexedAt(0)).value());
+        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result.indexedAt(1)).value());
 
         backend.writeCompletions.removeFirst().succeeded();
         backend.readCompletions.removeFirst().eof();
@@ -139,7 +139,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
 
         ProtosBytesValue payload = bytes(prelude, 9, 8);
         ProtosFutureValue write = future(connection, "write", List.of(payload), activation);
-        payload.indexedPut(BigInteger.ZERO, integer(1));
+        payload.indexedPut(0, integer(1));
         assertArrayEquals(new byte[] {9, 8}, backend.writePayloads.get(0));
 
         ProtosFutureValue read = future(connection, "read", List.of(integer(2)), activation);
@@ -149,8 +149,8 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
 
         ProtosFutureValue replay = future(connection, "read", List.of(integer(2)), activation);
         ProtosBytesValue replayed = (ProtosBytesValue) replay.resolvedValue().orElseThrow();
-        assertEquals(BigInteger.valueOf(4), ((ProtosIntegerValue) replayed.indexedAt(BigInteger.ZERO)).value());
-        assertEquals(BigInteger.valueOf(5), ((ProtosIntegerValue) replayed.indexedAt(BigInteger.ONE)).value());
+        assertEquals(BigInteger.valueOf(4), ((ProtosIntegerValue) replayed.indexedAt(0)).value());
+        assertEquals(BigInteger.valueOf(5), ((ProtosIntegerValue) replayed.indexedAt(1)).value());
 
         backend.writeCompletions.removeFirst().succeeded();
         assertSame(connection, write.resolvedValue().orElseThrow());

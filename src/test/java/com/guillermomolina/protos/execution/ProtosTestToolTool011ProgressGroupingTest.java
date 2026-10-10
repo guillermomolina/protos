@@ -174,7 +174,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
-        assertEquals(25, pairs.indexedSize().intValueExact());
+        assertEquals(25, pairs.indexedSize());
         List<String> order = new ArrayList<>();
         for (int index = 0; index < 25; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
@@ -237,7 +237,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + SELECTOR
                                         + "\"))"));
 
-        assertEquals(paths.size(), names.indexedSize().intValueExact());
+        assertEquals(paths.size(), names.indexedSize());
         Set<String> observedGroups = new LinkedHashSet<>();
         for (int index = 0; index < paths.size(); index++) {
             String path = paths.get(index);
@@ -449,7 +449,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
     private static Map<String, List<String>> leafGroups(ProtosArrayValue pairs) {
         Map<String, List<String>> groups = new LinkedHashMap<>();
-        int size = pairs.indexedSize().intValueExact();
+        int size = pairs.indexedSize();
         for (int index = 0; index < size; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             groups.put(stringAt(pair, 0), strings(arrayAt(pair, 1)));
@@ -520,18 +520,18 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
-                ProtosArrayValue.class, array.indexedAt(BigInteger.valueOf(index)));
+                ProtosArrayValue.class, array.indexedAt(index));
     }
 
     private static String stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
-                        ProtosStringValue.class, array.indexedAt(BigInteger.valueOf(index)))
+                        ProtosStringValue.class, array.indexedAt(index))
                 .value();
     }
 
     private static List<String> strings(ProtosArrayValue array) {
         List<String> values = new ArrayList<>();
-        int size = array.indexedSize().intValueExact();
+        int size = array.indexedSize();
         for (int index = 0; index < size; index++) {
             values.add(stringAt(array, index));
         }

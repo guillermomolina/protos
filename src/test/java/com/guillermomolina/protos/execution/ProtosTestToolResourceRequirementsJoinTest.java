@@ -64,10 +64,10 @@ final class ProtosTestToolResourceRequirementsJoinTest {
         assertTrue(cases.isFrozen());
         assertEquals(2, integerLikeAt(observed, 2));
         assertEquals("a.protos", stringAt(observed, 3));
-        assertEquals(0, firstRequirements.indexedSize().intValueExact());
+        assertEquals(0, firstRequirements.indexedSize());
         assertTrue(firstRequirements.isFrozen());
         assertEquals("b.protos", stringAt(observed, 5));
-        assertEquals(2, secondRequirements.indexedSize().intValueExact());
+        assertEquals(2, secondRequirements.indexedSize());
         assertTrue(secondRequirements.isFrozen());
         assertEquals("gpu", stringAt(observed, 7));
         assertEquals("db/integration", stringAt(observed, 8));
@@ -153,20 +153,20 @@ fixture.prelude().newModuleActivation());
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
-                ProtosArrayValue.class, array.indexedAt(BigInteger.valueOf(index)));
+                ProtosArrayValue.class, array.indexedAt(index));
     }
 
     private static String stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         ProtosStringValue.class,
-                        array.indexedAt(BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value();
     }
 
     private static int integerLikeAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         com.guillermomolina.protos.runtime.ProtosIntegerValue.class,
-                        array.indexedAt(BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value()
                 .intValueExact();
     }

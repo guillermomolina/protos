@@ -77,7 +77,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
         ProtosArrayValue firstArray = resolvedArray(firstFuture);
         assertSame(x.prelude.arrayPrototype(), firstArray.parent().orElseThrow());
         assertFalse(firstArray.isFrozen());
-        assertEquals(BigInteger.valueOf(4), firstArray.indexedSize());
+        assertEquals(4, firstArray.indexedSize());
 
         Map<String, ProtosObjectValue> first = descriptorsByName(firstArray);
         assertEquals(Set.of("alpha", "nested", "shortcut", "special"), first.keySet());

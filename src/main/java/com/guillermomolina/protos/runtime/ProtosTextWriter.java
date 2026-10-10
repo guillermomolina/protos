@@ -20,7 +20,7 @@ package com.guillermomolina.protos.runtime;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosTextWriterCPrimeExecution;
-import java.math.BigInteger;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -666,7 +666,7 @@ public final class ProtosTextWriter {
                 new ProtosBytesValue(
                         activation.prelude().orElseThrow().bytesPrototypeForRuntime());
         for (byte value : encoded) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+            bytes.indexedAdd(new ProtosIntegerValue(value & 0xff));
         }
         return bytes;
     }

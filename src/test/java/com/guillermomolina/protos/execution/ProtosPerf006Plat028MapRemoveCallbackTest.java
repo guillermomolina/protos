@@ -18,6 +18,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -52,7 +53,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             ProtosObjectValue conflictingKey = key();
             AtomicInteger hashCalls = new AtomicInteger();
 
-            map.append(stored, BigInteger.valueOf(7), marker);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("query", query);
@@ -145,8 +146,8 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                                 storedEqualityCalls.incrementAndGet();
                                 return ProtosBooleanValue.FALSE;
                             }));
-            map.append(skipped, BigInteger.valueOf(8), skippedValue);
-            map.append(stored, BigInteger.valueOf(7), marker);
+            map.append(skipped, ProtosNumericHashKey.ofLong(8), skippedValue);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("stored", stored);
@@ -214,7 +215,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             ProtosObjectValue closedKey = key();
             ProtosObjectValue closedQuery = key();
             AtomicInteger closedHashCalls = new AtomicInteger();
-            closed.append(closedKey, BigInteger.ONE, key());
+            closed.append(closedKey, ProtosNumericHashKey.ofLong(1), key());
             closed.close();
             module.context().createLocalSlot("closed", closed);
             module.context().createLocalSlot("closedQuery", closedQuery);
@@ -243,7 +244,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             ProtosObjectValue frozenKey = key();
             ProtosObjectValue frozenQuery = key();
             AtomicInteger frozenHashCalls = new AtomicInteger();
-            frozen.append(frozenKey, BigInteger.ONE, key());
+            frozen.append(frozenKey, ProtosNumericHashKey.ofLong(1), key());
             frozen.freeze();
             module.context().createLocalSlot("frozen", frozen);
             module.context().createLocalSlot("frozenQuery", frozenQuery);
@@ -283,7 +284,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             ProtosObjectValue query = key();
             ProtosObjectValue marker = key();
             AtomicInteger equalityCalls = new AtomicInteger();
-            map.append(stored, BigInteger.valueOf(7), marker);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("query", query);
             query.createLocalSlot(
@@ -333,7 +334,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             ProtosObjectValue stored = key();
             ProtosObjectValue query = key();
             ProtosObjectValue marker = key();
-            map.append(stored, BigInteger.valueOf(7), marker);
+            map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("query", query);

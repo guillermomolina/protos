@@ -48,7 +48,7 @@ final class ProtosTestToolResourceAdmissionBindingTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosArrayValue bindings =
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
-        assertEquals(0, bindings.indexedSize().intValueExact());
+        assertEquals(0, bindings.indexedSize());
         assertTrue(bindings.isFrozen());
     }
 
@@ -103,7 +103,7 @@ final class ProtosTestToolResourceAdmissionBindingTest {
 
         ProtosArrayValue observed = completedArray(source);
         ProtosArrayValue bindings = arrayAt(observed, 0);
-        assertEquals(2, bindings.indexedSize().intValueExact());
+        assertEquals(2, bindings.indexedSize());
         assertTrue(bindings.isFrozen());
         assertTrue(arrayAt(bindings, 0).isFrozen());
         assertTrue(arrayAt(bindings, 1).isFrozen());
@@ -119,11 +119,11 @@ final class ProtosTestToolResourceAdmissionBindingTest {
 
         assertEquals("db/integration", stringAt(observed, 9).value());
         assertEquals("exclusive", stringAt(observed, 10).value());
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.valueOf(11)));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(11));
         assertEquals("db/integration", stringAt(observed, 12).value());
         assertEquals("run", stringAt(observed, 13).value());
         assertEquals("service/db", stringAt(observed, 14).value());
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.valueOf(15)));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(15));
     }
 
     @Test
@@ -151,8 +151,7 @@ final class ProtosTestToolResourceAdmissionBindingTest {
         assertEquals(
                 1,
                 assertInstanceOf(ProtosArrayValue.class, outcome.value())
-                        .indexedSize()
-                        .intValueExact());
+                        .indexedSize());
     }
 
     @Test
@@ -227,7 +226,7 @@ final class ProtosTestToolResourceAdmissionBindingTest {
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosArrayValue bindings =
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
-        assertEquals(1, bindings.indexedSize().intValueExact());
+        assertEquals(1, bindings.indexedSize());
         assertTrue(bindings.isFrozen());
     }
 
@@ -256,19 +255,19 @@ prelude.newModuleActivation());
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosArrayValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static ProtosIntegerValue integerAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosIntegerValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static ProtosStringValue stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosStringValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static String protosString(String value) {

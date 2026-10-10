@@ -52,10 +52,10 @@ final class ProtosTestToolResourceReservationKernelTest {
                                 + "released)\n");
 
         ProtosArrayValue held = arrayAt(observed, 0);
-        assertEquals(0, held.indexedSize().intValueExact());
+        assertEquals(0, held.indexedSize());
         assertTrue(held.isFrozen());
         assertEquals(BigInteger.ZERO, integerAt(observed, 1).value());
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(BigInteger.valueOf(2)));
+        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
     }
 
     @Test
@@ -81,13 +81,13 @@ final class ProtosTestToolResourceReservationKernelTest {
                         + "Reservation.activeReservationCount(state))\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(BigInteger.ZERO));
-        assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(BigInteger.ONE));
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.valueOf(2)));
+        assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(0));
+        assertInstanceOf(ProtosArrayValue.class, observed.indexedAt(1));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(2));
         assertEquals(BigInteger.valueOf(4), integerAt(observed, 3).value());
         assertEquals(BigInteger.valueOf(2), integerAt(observed, 4).value());
         assertInstanceOf(
-                ProtosArrayValue.class, observed.indexedAt(BigInteger.valueOf(5)));
+                ProtosArrayValue.class, observed.indexedAt(5));
         assertEquals(BigInteger.valueOf(3), integerAt(observed, 6).value());
         assertEquals(BigInteger.valueOf(2), integerAt(observed, 7).value());
     }
@@ -118,11 +118,11 @@ final class ProtosTestToolResourceReservationKernelTest {
                         + "Reservation.sharedUsed(state, \"db/integration\"))\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.ZERO));
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.ONE));
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(BigInteger.valueOf(2)));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(1));
+        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
         assertInstanceOf(
-                ProtosArrayValue.class, observed.indexedAt(BigInteger.valueOf(3)));
+                ProtosArrayValue.class, observed.indexedAt(3));
         assertEquals(BigInteger.ONE, integerAt(observed, 4).value());
     }
 
@@ -165,9 +165,9 @@ final class ProtosTestToolResourceReservationKernelTest {
                         + "Reservation.activeReservationCount(state))\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.ZERO));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(0));
         assertEquals(BigInteger.ZERO, integerAt(observed, 1).value());
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(BigInteger.valueOf(2)));
+        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(2));
         assertEquals(BigInteger.ONE, integerAt(observed, 3).value());
     }
 
@@ -197,11 +197,11 @@ final class ProtosTestToolResourceReservationKernelTest {
                         + "second)\n";
 
         ProtosArrayValue observed = completedArray(source);
-        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(BigInteger.ZERO));
+        assertSame(ProtosBooleanValue.TRUE, observed.indexedAt(0));
         assertEquals(BigInteger.valueOf(2), integerAt(observed, 1).value());
         assertEquals(BigInteger.ONE, integerAt(observed, 2).value());
         assertInstanceOf(
-                ProtosArrayValue.class, observed.indexedAt(BigInteger.valueOf(3)));
+                ProtosArrayValue.class, observed.indexedAt(3));
     }
 
     @Test
@@ -272,13 +272,13 @@ prelude.newModuleActivation());
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosArrayValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static ProtosIntegerValue integerAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosIntegerValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static String protosString(String value) {

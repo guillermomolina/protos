@@ -172,7 +172,7 @@ final class ProtosSemanticTransferFamilyTest {
     void semanticMapKeyKeepsAConsistentRecordedHashAfterMaterialization() {
         ProtosSemanticTransferValue key = PORTABLE.mint("k");
         ProtosMapValue map = prelude.newMap();
-        map.append(key, ProtosIdentity.identityHash(key), new ProtosIntegerValue(BigInteger.ONE));
+        map.append(key, ProtosNumericHashKey.fromIdentity(key), new ProtosIntegerValue(BigInteger.ONE));
 
         List<?> delivered =
                 ProtosActorValueTransfer.materializeArguments(
@@ -185,7 +185,7 @@ final class ProtosSemanticTransferFamilyTest {
         ProtosSemanticTransferValue copiedKey =
                 assertInstanceOf(ProtosSemanticTransferValue.class, entry.key());
         assertNotSame(key, copiedKey);
-        assertEquals(ProtosIdentity.identityHash(copiedKey), entry.recordedHash());
+        assertEquals(ProtosNumericHashKey.fromIdentity(copiedKey), entry.recordedHash());
     }
 
     @Test
@@ -567,9 +567,7 @@ final class ProtosSemanticTransferFamilyTest {
         // Hash currently takes the generic object-identity path. Do not
         // assume two distinct identity hashes must differ: collisions exist.
         assertEquals(
-                BigInteger.valueOf(
-                        Integer.toUnsignedLong(
-                                System.identityHashCode(first))),
+                Integer.toUnsignedLong(System.identityHashCode(first)),
                 ProtosIdentity.identityHash(first));
     }
 

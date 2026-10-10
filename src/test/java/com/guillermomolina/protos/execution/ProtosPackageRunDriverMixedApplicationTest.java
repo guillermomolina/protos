@@ -119,7 +119,7 @@ final class ProtosPackageRunDriverMixedApplicationTest extends ProtosPackageRunD
         ProtosArrayValue result = assertNetworkOfThisApplication(outcome);
         assertEquals(
                 BigInteger.valueOf(1026),
-                ((ProtosIntegerValue) result.indexedAtForRuntime(2)).value());
+                ((ProtosIntegerValue) result.indexedAt(2)).value());
         assertMixedLifecycleUnchanged(provider, stages);
     }
 

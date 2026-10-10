@@ -273,17 +273,17 @@ final class ProtosTestToolTool012TomlOfficialProgressGroupingTest {
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
-                ProtosArrayValue.class, array.indexedAt(BigInteger.valueOf(index)));
+                ProtosArrayValue.class, array.indexedAt(index));
     }
 
     private static List<String> strings(ProtosArrayValue array) {
         List<String> values = new ArrayList<>();
-        int size = array.indexedSize().intValueExact();
+        int size = array.indexedSize();
         for (int index = 0; index < size; index++) {
             values.add(
                     assertInstanceOf(
                                     ProtosStringValue.class,
-                                    array.indexedAt(BigInteger.valueOf(index)))
+                                    array.indexedAt(index))
                             .value());
         }
         return values;

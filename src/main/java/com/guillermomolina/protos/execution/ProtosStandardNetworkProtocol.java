@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerValue;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -40,8 +39,6 @@ import java.util.Objects;
 /** D047/PLAT002/PLAT003 standard Network acquisition bridge. */
 public final class ProtosStandardNetworkProtocol {
     private static final Set<String> LISTEN_REQUEST_SLOTS = Set.of("ipVersion", "address", "port");
-    private static final BigInteger MIN_PORT = BigInteger.ONE;
-    private static final BigInteger MAX_PORT = BigInteger.valueOf(65535);
 
     private ProtosStandardNetworkProtocol() {}
 
@@ -149,11 +146,12 @@ public final class ProtosStandardNetworkProtocol {
 
         Object versionValue = slots.ipVersion();
         if (!(versionValue instanceof ProtosIntegerValue version)
-                || !(version.value().equals(BigInteger.valueOf(4))
-                        || version.value().equals(BigInteger.valueOf(6)))) {
+                || !version.fitsInIntForRuntime()
+                || (version.intValueExactForRuntime() != 4
+                        && version.intValueExactForRuntime() != 6)) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
-        int ipVersion = version.value().intValueExact();
+        int ipVersion = version.intValueExactForRuntime();
 
         ProtosObjectValue addressConstraint = null;
         Object addressValue = slots.address();
@@ -165,21 +163,22 @@ public final class ProtosStandardNetworkProtocol {
             }
             Object addressVersionValue = address.readLocalSlot("version").orElse(null);
             if (!(addressVersionValue instanceof ProtosIntegerValue addressVersion)
-                    || !addressVersion.value().equals(version.value())) {
+                    || !addressVersion.sameIntegerForRuntime(version)) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
             addressConstraint = address;
         }
 
-        BigInteger portConstraint = null;
+        Integer portConstraint = null;
         Object portValue = slots.port();
         if (portValue != ProtosNullValue.INSTANCE) {
             if (!(portValue instanceof ProtosIntegerValue port)
-                    || port.value().compareTo(MIN_PORT) < 0
-                    || port.value().compareTo(MAX_PORT) > 0) {
+                    || !port.fitsInIntForRuntime()
+                    || port.intValueExactForRuntime() < 1
+                    || port.intValueExactForRuntime() > 65535) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
-            portConstraint = port.value();
+            portConstraint = port.intValueExactForRuntime();
         }
 
         ProtosNetworkListenFlow.ListenRequest captured =
@@ -197,9 +196,10 @@ public final class ProtosStandardNetworkProtocol {
             ProtosActivation activation,
             ProtosNetworkListenFlow.ListenRequest request,
             Object resourceState,
-            BigInteger localPort,
+            int localPort,
             ProtosTcpListenerFlow.Backend listenerBackend) {
-        if (request.portConstraint() != null && !request.portConstraint().equals(localPort)) {
+        if (request.portConstraint() != null
+                && (request.portConstraint() != localPort)) {
             throw new IllegalArgumentException("backend listener port does not match fixed listen request");
         }
         ProtosPrelude prelude = activation.prelude().orElseThrow();

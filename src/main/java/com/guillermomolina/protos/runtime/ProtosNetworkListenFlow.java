@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.Objects;
 
 /** D047/PLAT003 host-neutral asynchronous Network.listenTcp acquisition flow. */
@@ -25,14 +24,13 @@ public final class ProtosNetworkListenFlow {
     public interface Cancellation { void cancel(); }
 
     /** Immutable execution-time capture of the validated three-slot listen request. */
-    public record ListenRequest(int ipVersion, ProtosObjectValue addressConstraint, BigInteger portConstraint) {
+    public record ListenRequest(int ipVersion, ProtosObjectValue addressConstraint, Integer portConstraint) {
         public ListenRequest {
             if (ipVersion != 4 && ipVersion != 6) {
                 throw new IllegalArgumentException("listen ipVersion must be 4 or 6");
             }
             if (portConstraint != null
-                    && (portConstraint.signum() <= 0
-                            || portConstraint.compareTo(BigInteger.valueOf(65535)) > 0)) {
+                    && (portConstraint < 1 || portConstraint > 65535)) {
                 throw new IllegalArgumentException("listen port constraint must be in 1..65535");
             }
         }
@@ -43,7 +41,7 @@ public final class ProtosNetworkListenFlow {
     public interface ListenCompletion {
         void succeeded(
                 Object resourceState,
-                BigInteger localPort,
+                int localPort,
                 ProtosTcpListenerFlow.Backend listenerBackend,
                 Runnable releaseIfUntransferred);
         void failed();
@@ -61,7 +59,7 @@ public final class ProtosNetworkListenFlow {
                 ProtosActivation activation,
                 ListenRequest request,
                 Object resourceState,
-                BigInteger localPort,
+                int localPort,
                 ProtosTcpListenerFlow.Backend listenerBackend);
     }
 
@@ -102,7 +100,7 @@ public final class ProtosNetworkListenFlow {
             @Override
             public void succeeded(
                     Object resourceState,
-                    BigInteger localPort,
+                    int localPort,
                     ProtosTcpListenerFlow.Backend listenerBackend,
                     Runnable releaseIfUntransferred) {
                 Objects.requireNonNull(releaseIfUntransferred, "releaseIfUntransferred");
@@ -117,7 +115,7 @@ public final class ProtosNetworkListenFlow {
                                     activation,
                                     request,
                                     Objects.requireNonNull(resourceState, "resourceState"),
-                                    Objects.requireNonNull(localPort, "localPort"),
+                                    localPort,
                                     Objects.requireNonNull(listenerBackend, "listenerBackend")),
                             "materialized listener");
                 } catch (RuntimeException invalidBackendDescriptor) {

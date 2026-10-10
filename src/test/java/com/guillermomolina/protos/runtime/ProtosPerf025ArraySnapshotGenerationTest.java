@@ -60,7 +60,7 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
 
         assertSame(
                 replacement,
-                array.indexedPutForRuntime(0, replacement));
+                array.indexedPut(0, replacement));
         assertSame(
                 initialGeneration,
                 indexedGeneration(array),
@@ -91,7 +91,7 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
         List<Object> firstSnapshot = array.indexedSnapshot();
         Object firstGeneration = indexedGeneration(array);
 
-        assertSame(second, array.indexedPut(BigInteger.ZERO, second));
+        assertSame(second, array.indexedPut(0, second));
 
         Object secondGeneration = indexedGeneration(array);
         assertNotSame(
@@ -99,13 +99,13 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
                 secondGeneration,
                 "first write after publication must detach the live Array");
         assertSame(first, firstSnapshot.get(0));
-        assertSame(second, array.indexedAt(BigInteger.ZERO));
+        assertSame(second, array.indexedAt(0));
 
         List<Object> secondSnapshot = array.indexedSnapshot();
         assertSame(second, secondSnapshot.get(0));
         assertSame(secondSnapshot, array.indexedSnapshot());
 
-        assertSame(third, array.indexedPutForRuntime(0, third));
+        assertSame(third, array.indexedPut(0, third));
 
         Object thirdGeneration = indexedGeneration(array);
         assertNotSame(
@@ -136,9 +136,9 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
         closed.close();
         assertSame(
                 replacement,
-                closed.indexedPut(BigInteger.ZERO, replacement));
+                closed.indexedPut(0, replacement));
         assertSame(first, closedSnapshot.get(0));
-        assertSame(replacement, closed.indexedAt(BigInteger.ZERO));
+        assertSame(replacement, closed.indexedAt(0));
 
         ProtosArrayValue frozen =
                 new ProtosArrayValue(
@@ -152,7 +152,7 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
                 IllegalStateException.class,
                 () ->
                         frozen.indexedPut(
-                                BigInteger.valueOf(99),
+                                99,
                                 replacement));
 
         assertSame(
@@ -179,7 +179,7 @@ final class ProtosPerf025ArraySnapshotGenerationTest {
 
         supplied.set(0, externalReplacement);
 
-        assertSame(first, array.indexedAt(BigInteger.ZERO));
+        assertSame(first, array.indexedAt(0));
         assertSame(first, array.indexedSnapshot().get(0));
 
         String source = Files.readString(ARRAY_SOURCE);

@@ -37,9 +37,9 @@ class ProtosArrayValueTest {
                 new ProtosArrayValue(parent, List.of(first, second));
 
         assertSame(parent, array.parent().orElseThrow());
-        assertEquals(BigInteger.valueOf(2), array.indexedSize());
-        assertSame(first, array.indexedAt(BigInteger.ZERO));
-        assertSame(second, array.indexedAt(BigInteger.ONE));
+        assertEquals(2, array.indexedSize());
+        assertSame(first, array.indexedAt(0));
+        assertSame(second, array.indexedAt(1));
     }
 
     @Test
@@ -52,9 +52,9 @@ class ProtosArrayValueTest {
 
         assertSame(
                 replacement,
-                array.indexedPut(BigInteger.ZERO, replacement));
-        assertSame(replacement, array.indexedAt(BigInteger.ZERO));
-        assertEquals(BigInteger.ONE, array.indexedSize());
+                array.indexedPut(0, replacement));
+        assertSame(replacement, array.indexedAt(0));
+        assertEquals(1, array.indexedSize());
     }
 
     @Test
@@ -64,10 +64,10 @@ class ProtosArrayValueTest {
                         ProtosObjectValue.rootObject(),
                         List.of(ProtosBooleanValue.TRUE));
         closed.close();
-        closed.indexedPut(BigInteger.ZERO, ProtosBooleanValue.FALSE);
+        closed.indexedPut(0, ProtosBooleanValue.FALSE);
         assertSame(
                 ProtosBooleanValue.FALSE,
-                closed.indexedAt(BigInteger.ZERO));
+                closed.indexedAt(0));
 
         ProtosArrayValue frozen =
                 new ProtosArrayValue(
@@ -79,11 +79,11 @@ class ProtosArrayValueTest {
                 IllegalStateException.class,
                 () ->
                         frozen.indexedPut(
-                                BigInteger.valueOf(99),
+                                99,
                                 ProtosBooleanValue.FALSE));
         assertSame(
                 ProtosBooleanValue.TRUE,
-                frozen.indexedAt(BigInteger.ZERO));
+                frozen.indexedAt(0));
     }
 
     @Test
@@ -96,10 +96,10 @@ class ProtosArrayValueTest {
 
         assertThrows(
                 IndexOutOfBoundsException.class,
-                () -> array.indexedAt(BigInteger.valueOf(-1)));
+                () -> array.indexedAt(-1));
         assertThrows(
                 IndexOutOfBoundsException.class,
-                () -> array.indexedAt(BigInteger.ONE));
+                () -> array.indexedAt(1));
 
         List<Object> snapshot = array.indexedSnapshot();
         assertSame(first, snapshot.get(0));
@@ -108,8 +108,8 @@ class ProtosArrayValueTest {
                 () -> snapshot.add(new Object()));
 
         Object replacement = new Object();
-        array.indexedPut(BigInteger.ZERO, replacement);
+        array.indexedPut(0, replacement);
         assertSame(first, snapshot.get(0));
-        assertSame(replacement, array.indexedAt(BigInteger.ZERO));
+        assertSame(replacement, array.indexedAt(0));
     }
 }

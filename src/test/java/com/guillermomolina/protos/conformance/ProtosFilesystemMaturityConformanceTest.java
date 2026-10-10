@@ -27,10 +27,10 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -163,13 +163,13 @@ final class ProtosFilesystemMaturityConformanceTest {
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                BigInteger position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             if (closed) {
                 completion.failed();
                 return () -> {};
             }
             try {
-                int start = position.intValueExact();
+                int start = position.intValueExactForRuntime();
                 synchronized (shared) {
                     if (start >= shared.data.length) {
                         completion.eof();
@@ -186,7 +186,7 @@ final class ProtosFilesystemMaturityConformanceTest {
 
         @Override
         public ProtosFileFlow.Cancellation writeAt(
-                BigInteger position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             if (closed) {
                 completion.failed(0);
                 return () -> {};
@@ -196,7 +196,7 @@ final class ProtosFilesystemMaturityConformanceTest {
                 return () -> {};
             }
             try {
-                int start = position.intValueExact();
+                int start = position.intValueExactForRuntime();
                 int end = Math.addExact(start, bytes.length);
                 if (!completion.commitFirstContribution()) {
                     return () -> {};
@@ -220,7 +220,7 @@ final class ProtosFilesystemMaturityConformanceTest {
                 completion.failed();
             } else {
                 synchronized (shared) {
-                    completion.succeeded(BigInteger.valueOf(shared.data.length));
+                    completion.succeeded(new ProtosIntegerValue(shared.data.length));
                 }
             }
             return () -> {};
@@ -233,13 +233,13 @@ final class ProtosFilesystemMaturityConformanceTest {
 
         @Override
         public ProtosFileFlow.Cancellation truncate(
-                BigInteger requestedSize, ProtosFileFlow.ChangeCompletion completion) {
+                ProtosIntegerValue requestedSize, ProtosFileFlow.ChangeCompletion completion) {
             if (closed) {
                 completion.failed();
                 return () -> {};
             }
             try {
-                int size = requestedSize.intValueExact();
+                int size = requestedSize.intValueExactForRuntime();
                 synchronized (shared) {
                     if (size >= shared.data.length) {
                         completion.succeeded();

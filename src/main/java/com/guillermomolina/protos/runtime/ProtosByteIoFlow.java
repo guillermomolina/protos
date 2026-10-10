@@ -1,9 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -49,7 +47,7 @@ public final class ProtosByteIoFlow {
         void failed();
     }
     public interface IntegerCompletion {
-        void succeeded(BigInteger value);
+        void succeeded(ProtosIntegerValue value);
         void failed();
     }
     public interface Backend {
@@ -60,11 +58,11 @@ public final class ProtosByteIoFlow {
     public interface ExtendedBackend extends Backend {
         Cancellation flush(ReceiverCompletion completion);
         Cancellation position(IntegerCompletion completion);
-        Cancellation seek(BigInteger absolutePosition, IntegerCompletion completion);
-        Cancellation seekBy(BigInteger offset, IntegerCompletion completion);
+        Cancellation seek(ProtosIntegerValue absolutePosition, IntegerCompletion completion);
+        Cancellation seekBy(ProtosIntegerValue offset, IntegerCompletion completion);
         Cancellation seekToEnd(IntegerCompletion completion);
         Cancellation size(IntegerCompletion completion);
-        Cancellation truncate(BigInteger size, ReceiverCompletion completion);
+        Cancellation truncate(ProtosIntegerValue size, ReceiverCompletion completion);
     }
     /** Optional durability capability; ByteWritable does not imply Syncable. */
     public interface SyncBackend extends ExtendedBackend {
@@ -166,8 +164,7 @@ public final class ProtosByteIoFlow {
             if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN)return lifecycleFailedFuture(activation);
             if(readState!=DirectionState.OPEN)return resolvedNullFuture(activation);
         }
-        BigInteger n=integer(maxBytesValue);
-        if(n==null||n.signum()<=0||n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE))>0)
+        if(!(maxBytesValue instanceof ProtosIntegerValue n)||!n.fitsInIntForRuntime()||n.signumForRuntime()<=0)
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         return enqueue(new Request(Kind.READ,begin(activation),n,null,null));
     }
@@ -177,7 +174,7 @@ public final class ProtosByteIoFlow {
         synchronized(this){if(writeState!=DirectionState.OPEN)return lifecycleFailedFuture(activation);}
         if(!(value instanceof ProtosBytesValue bytes))
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
-        byte[] snapshot=snapshot(bytes);
+        byte[] snapshot=bytes.octetSnapshot();
         synchronized(this){
             if(snapshot.length>maxRetainedWriteBytes-retainedWriteBytes)
                 return failedFuture(activation,ProtosCoreErrors.StandardError.I_O_CAPACITY_EXHAUSTED);
@@ -195,17 +192,17 @@ public final class ProtosByteIoFlow {
     }
     public ProtosFutureValue position(ProtosActivation a){return enqueueSimple(a,Kind.POSITION,null);}
     public ProtosFutureValue seek(ProtosActivation a,Object v){
-        BigInteger n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
+        ProtosIntegerValue n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
         return enqueueSimple(a,Kind.SEEK,n);
     }
     public ProtosFutureValue seekBy(ProtosActivation a,Object v){
-        Objects.requireNonNull(a);requireDomain(a);BigInteger n=integer(v);
-        if(n==null)return invalidFuture(a);return enqueueSimple(a,Kind.SEEK_BY,n);
+        Objects.requireNonNull(a);requireDomain(a);
+        if(!(v instanceof ProtosIntegerValue n))return invalidFuture(a);return enqueueSimple(a,Kind.SEEK_BY,n);
     }
     public ProtosFutureValue seekToEnd(ProtosActivation a){return enqueueSimple(a,Kind.SEEK_END,null);}
     public ProtosFutureValue size(ProtosActivation a){return enqueueSimple(a,Kind.SIZE,null);}
     public ProtosFutureValue truncate(ProtosActivation a,Object v){
-        BigInteger n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
+        ProtosIntegerValue n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
         return enqueueSimple(a,Kind.TRUNCATE,n);
     }
     public ProtosFutureValue sync(ProtosActivation a){
@@ -291,15 +288,15 @@ public final class ProtosByteIoFlow {
     private ProtosFutureValue lifecycleFailedFuture(ProtosActivation a){return failedFuture(a,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);}
     private ProtosFutureValue resolvedNullFuture(ProtosActivation a){ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),domain);f.resolve(ProtosNullValue.INSTANCE,a);return f;}
 
-    private ProtosFutureValue enqueueSimple(ProtosActivation a,Kind k,BigInteger n){
+    private ProtosFutureValue enqueueSimple(ProtosActivation a,Kind k,ProtosIntegerValue n){
         Objects.requireNonNull(a);requireDomain(a);
         if(!(backend instanceof ExtendedBackend))
             return failedFuture(a,ProtosCoreErrors.StandardError.I_O_ERROR);
         return enqueue(new Request(k,begin(a),n,null,null));
     }
-    private BigInteger validatedNonNegative(ProtosActivation a,Object v){
-        Objects.requireNonNull(a);requireDomain(a);BigInteger n=integer(v);
-        return n!=null&&n.signum()>=0?n:null;
+    private ProtosIntegerValue validatedNonNegative(ProtosActivation a,Object v){
+        Objects.requireNonNull(a);requireDomain(a);
+        return v instanceof ProtosIntegerValue n&&n.signumForRuntime()>=0?n:null;
     }
     private ProtosFutureValue invalidFuture(ProtosActivation a){
         return failedFuture(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
@@ -335,14 +332,14 @@ public final class ProtosByteIoFlow {
         byte[] buffered=null;
         synchronized(this){
             if(!unread.isEmpty()){
-                int n=Math.min(r.number.intValueExact(),unread.size());
+                int n=Math.min(r.number.intValueExactForRuntime(),unread.size());
                 buffered=new byte[n];
                 for(int i=0;i<n;i++)buffered[i]=unread.removeFirst();
             }
         }
         if(buffered!=null){completeReadData(r,buffered);return;}
         try{
-            setCancellation(r,backend.read(r.number.intValueExact(),new ReadCompletion(){
+            setCancellation(r,backend.read(r.number.intValueExactForRuntime(),new ReadCompletion(){
                 public void data(byte[] b){completeReadData(r,b);}
                 public void eof(){if(r.op.commit())r.op.resolve(ProtosNullValue.INSTANCE);finish(r);}
                 public void failed(){failIo(r);finish(r);}
@@ -352,13 +349,13 @@ public final class ProtosByteIoFlow {
 
     private void completeReadData(Request r,byte[] bytes){
         Objects.requireNonNull(bytes);
-        if(bytes.length==0||bytes.length>r.number.intValueExact()){failIo(r);finish(r);return;}
+        if(bytes.length==0||bytes.length>r.number.intValueExactForRuntime()){failIo(r);finish(r);return;}
         if(!r.op.commit()){
             synchronized(this){if(!r.shutdownDiscard)for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
             finish(r);return;
         }
         ProtosBytesValue result=new ProtosBytesValue(bytesPrototype);
-        for(byte b:bytes)result.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(b&0xff)));
+        for(byte b:bytes)result.indexedAdd(new ProtosIntegerValue(b&0xff));
         r.op.resolve(result);finish(r);
     }
 
@@ -428,9 +425,9 @@ public final class ProtosByteIoFlow {
     private void startInteger(Request r,IntegerStarter starter,boolean changesPosition){
         try{
             setCancellation(r,starter.start(new IntegerCompletion(){
-                public void succeeded(BigInteger n){
-                    if(n==null||n.signum()<0){failIo(r);finish(r);return;}
-                    if(r.op.commit())r.op.resolve(new ProtosIntegerValue(n));
+                public void succeeded(ProtosIntegerValue n){
+                    if(n==null||n.signumForRuntime()<0){failIo(r);finish(r);return;}
+                    if(r.op.commit())r.op.resolve(n);
                     finish(r);
                 }
                 public void failed(){failIo(r);finish(r);}
@@ -471,24 +468,10 @@ public final class ProtosByteIoFlow {
     private void requireDomain(ProtosActivation a){
         if(a.executionDomain()!=domain)throw new IllegalArgumentException("I/O flow belongs to another Actor domain");
     }
-    private static BigInteger integer(Object v){
-        if(v instanceof ProtosIntegerValue i)return i.value();
-        return null;
-    }
-    private static byte[] snapshot(ProtosBytesValue b){
-        List<Object>s=b.indexedSnapshot();byte[]out=new byte[s.size()];
-        for(int i=0;i<s.size();i++){
-            BigInteger n=integer(s.get(i));
-            if(n==null||n.signum()<0||n.compareTo(BigInteger.valueOf(255))>0)
-                throw new IllegalStateException("Bytes invariant violated");
-            out[i]=(byte)n.intValue();
-        }
-        return out;
-    }
     private static final class Request{
-        final Kind kind;final ProtosIoOperation op;final BigInteger number;final byte[]bytes;
+        final Kind kind;final ProtosIoOperation op;final ProtosIntegerValue number;final byte[]bytes;
         boolean started;boolean shutdownDiscard;Cancellation cancellation;
-        Request(Kind kind,ProtosIoOperation op,BigInteger number,byte[]bytes,Cancellation cancellation){
+        Request(Kind kind,ProtosIoOperation op,ProtosIntegerValue number,byte[]bytes,Cancellation cancellation){
             this.kind=kind;this.op=op;this.number=number;this.bytes=bytes;this.cancellation=cancellation;
         }
     }

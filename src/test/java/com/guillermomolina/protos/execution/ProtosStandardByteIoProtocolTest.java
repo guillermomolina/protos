@@ -32,14 +32,14 @@ class ProtosStandardByteIoProtocolTest {
         var p=core();var a=p.newModuleActivation();var bp=new ProtosObjectValue(ProtosObjectValue.rootObject());ProtosStandardBytesProtocol.install(bp);var r=new ProtosObjectValue(ProtosObjectValue.rootObject());
         var payloads=new ArrayList<byte[]>();var completions=new ArrayDeque<ProtosByteIoFlow.WriteCompletion>();
         ProtosStandardByteIoProtocol.install(r,bp,a,new BackendAdapter(){public ProtosByteIoFlow.Cancellation write(byte[] b,ProtosByteIoFlow.WriteCompletion c){payloads.add(b);completions.add(c);return()->{};}});
-        var b=bytes(bp,7,8);var f1=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"write",List.of(b),a);b.indexedPut(BigInteger.ZERO,i(9));var f2=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"write",List.of(bytes(bp,3)),a);
+        var b=bytes(bp,7,8);var f1=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"write",List.of(b),a);b.indexedPut(0,i(9));var f2=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"write",List.of(bytes(bp,3)),a);
         assertArrayEquals(new byte[]{7,8},payloads.get(0));assertEquals(1,payloads.size());completions.remove().succeeded();assertSame(r,f1.resolvedValue().orElseThrow());assertEquals(2,payloads.size());completions.remove().succeeded();assertSame(r,f2.resolvedValue().orElseThrow());
     }
     @Test void cancellationBeforeReadCommitPreservesReturnedBytes()throws Exception{
         var p=core();var a=p.newModuleActivation();var bp=new ProtosObjectValue(ProtosObjectValue.rootObject());ProtosStandardBytesProtocol.install(bp);var r=new ProtosObjectValue(ProtosObjectValue.rootObject());var c=new AtomicReference<ProtosByteIoFlow.ReadCompletion>();
         ProtosStandardByteIoProtocol.install(r,bp,a,new BackendAdapter(){public ProtosByteIoFlow.Cancellation read(int n,ProtosByteIoFlow.ReadCompletion x){c.set(x);return()->{};}});
         var f=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"read",List.of(i(2)),a);assertTrue(f.cancelRequest());c.get().data(new byte[]{4,5});
-        var next=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"read",List.of(i(2)),a);var got=(ProtosBytesValue)next.resolvedValue().orElseThrow();assertEquals(BigInteger.valueOf(4),((ProtosIntegerValue)got.indexedAt(BigInteger.ZERO)).value());
+        var next=(ProtosFutureValue)ProtosInvocation.invokeMessage(r,"read",List.of(i(2)),a);var got=(ProtosBytesValue)next.resolvedValue().orElseThrow();assertEquals(BigInteger.valueOf(4),((ProtosIntegerValue)got.indexedAt(0)).value());
     }
     private static class BackendAdapter implements ProtosByteIoFlow.Backend{
         public ProtosByteIoFlow.Cancellation read(int n,ProtosByteIoFlow.ReadCompletion c){return()->{};}

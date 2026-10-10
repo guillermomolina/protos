@@ -51,7 +51,7 @@ class ProtosStandardBytesProtocolTest {
         assertNotSame(a, b);
         assertTrue(a.isOpen());
         assertSame(fixture.factory, a.parent().orElseThrow());
-        assertEquals(BigInteger.ZERO, a.indexedSize());
+        assertEquals(0, a.indexedSize());
 
         ProtosObjectValue derived = new ProtosObjectValue(fixture.factory);
         ProtosBytesValue child =
@@ -96,7 +96,7 @@ class ProtosStandardBytesProtocolTest {
         assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", integer(-1)));
         assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", integer(2)));
 
-        assertEquals(BigInteger.TWO, bytes.indexedSize());
+        assertEquals(2, bytes.indexedSize());
         assertSame(ten, fixture.send(bytes, "at", integer(0)));
         assertSame(twenty, fixture.send(bytes, "at", integer(1)));
     }

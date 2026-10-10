@@ -5,7 +5,6 @@ import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecut
 import com.guillermomolina.protos.execution.ProtosBufferedByteWriterCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
-import java.math.BigInteger;
 import java.util.*;
 
 /** Ordered bounded state machine for the standard {@code std:io} byte buffering wrappers. */
@@ -93,10 +92,9 @@ public final class ProtosBufferedByteIo {
             Object maximum,
             ProtosBufferedByteReaderCPrimeExecution.Plan cPrimePlan) {
         check(activation);
-        BigInteger n = integer(maximum);
-        if (n == null
-                || n.signum() <= 0
-                || n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+        if (!(maximum instanceof ProtosIntegerValue n)
+                || !n.fitsInIntForRuntime()
+                || n.signumForRuntime() <= 0) {
             return failed(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -109,7 +107,7 @@ public final class ProtosBufferedByteIo {
                         activation,
                         operation,
                         Kind.READ,
-                        n.intValue(),
+                        n.intValueExactForRuntime(),
                         null,
                         cPrimePlan));
     }
@@ -120,7 +118,7 @@ public final class ProtosBufferedByteIo {
             return failed(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
-        byte[] snapshot = snapshot(bytes);
+        byte[] snapshot = bytes.octetSnapshot();
 
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         if (operation.terminal()) return operation.future();
@@ -391,8 +389,7 @@ public final class ProtosBufferedByteIo {
     private List<?> readArguments(Req req) {
         return List.of(
                 new ProtosIntegerValue(
-                        BigInteger.valueOf(
-                                Math.max(req.maximum, READ_AHEAD))));
+                                Math.max(req.maximum, READ_AHEAD)));
     }
 
     private boolean completeBufferedReadIfAvailable(Req req) {
@@ -451,7 +448,7 @@ public final class ProtosBufferedByteIo {
             return;
         }
 
-        byte[] obtained = snapshot(bytes);
+        byte[] obtained = bytes.octetSnapshot();
         if (obtained.length == 0) {
             req.operation.fail(ioError(req.a));
             done(req);
@@ -1289,31 +1286,8 @@ public final class ProtosBufferedByteIo {
         ProtosBytesValue bytes = new ProtosBytesValue(bytesPrototype);
         for (byte value : values) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(BigInteger.valueOf(value & 255)));
+                    new ProtosIntegerValue(value & 255));
         }
         return bytes;
-    }
-
-    private static BigInteger integer(Object value) {
-        return value instanceof ProtosIntegerValue integer
-                ? integer.value()
-                : null;
-    }
-
-    private static byte[] snapshot(ProtosBytesValue bytes) {
-        int size = bytes.indexedSize().intValueExact();
-        byte[] result = new byte[size];
-        for (int index = 0; index < result.length; index++) {
-            Object value = bytes.indexedAt(BigInteger.valueOf(index));
-            if (!(value instanceof ProtosIntegerValue integer)) {
-                throw new IllegalStateException("invalid Bytes");
-            }
-            int octet = integer.value().intValueExact();
-            if (octet < 0 || octet > 255) {
-                throw new IllegalStateException("invalid Bytes octet");
-            }
-            result[index] = (byte) octet;
-        }
-        return result;
     }
 }

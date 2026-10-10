@@ -28,7 +28,6 @@ import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -441,14 +440,14 @@ final class ProtosTestLogicalCaseAttemptBridge {
     static String fixtureIdentity(
             ProtosArrayValue descriptor,
             ProtosActivation caller) {
-        if (!descriptor.indexedSize().equals(BigInteger.valueOf(4))) {
+        if (descriptor.indexedSize() != 4) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        Object kind = descriptor.indexedAt(BigInteger.ZERO);
-        Object fixture = descriptor.indexedAt(BigInteger.ONE);
-        Object isolation = descriptor.indexedAt(BigInteger.valueOf(2));
-        Object lifecycle = descriptor.indexedAt(BigInteger.valueOf(3));
+        Object kind = descriptor.indexedAt(0);
+        Object fixture = descriptor.indexedAt(1);
+        Object isolation = descriptor.indexedAt(2);
+        Object lifecycle = descriptor.indexedAt(3);
 
         if (!(kind instanceof ProtosStringValue kindValue)
                 || !(fixture instanceof ProtosStringValue fixtureValue)

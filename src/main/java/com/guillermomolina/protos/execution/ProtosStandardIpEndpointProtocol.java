@@ -25,16 +25,12 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 /** D048 representation bridge for the ordinary frozen IpEndpoint prototype/data shape. */
 public final class ProtosStandardIpEndpointProtocol {
-    private static final BigInteger MIN_PORT = BigInteger.ONE;
-    private static final BigInteger MAX_PORT = BigInteger.valueOf(65535);
-    private static final BigInteger HASH_MULTIPLIER = BigInteger.valueOf(31);
     private static final Set<String> STATE_SLOTS = Set.of("address", "port");
 
     private ProtosStandardIpEndpointProtocol() {}
@@ -154,7 +150,7 @@ public final class ProtosStandardIpEndpointProtocol {
         ProtosObjectValue rightAddress = addressSlot(right);
         return ProtosBooleanValue.of(
                 ProtosStandardIpAddressProtocol.sameCanonicalState(leftAddress, rightAddress)
-                        && portSlot(left).value().equals(portSlot(right).value()));
+                        && portSlot(left).sameIntegerForRuntime(portSlot(right)));
     }
 
     private static Object hash(
@@ -163,14 +159,19 @@ public final class ProtosStandardIpEndpointProtocol {
             ProtosObjectValue prototype,
             ProtosObjectValue ipAddressPrototype) {
         if (!supplied.isEmpty()
-                || !recognizesValue(activation.receiver(), prototype, ipAddressPrototype)) {
+                || !recognizesValue(
+                        activation.receiver(), prototype, ipAddressPrototype)) {
             throw invalid(activation);
         }
-        ProtosObjectValue endpoint = (ProtosObjectValue) activation.receiver();
-        BigInteger addressHash =
-                ProtosStandardIpAddressProtocol.canonicalHash(addressSlot(endpoint));
-        BigInteger port = portSlot(endpoint).value();
-        return new ProtosIntegerValue(addressHash.multiply(HASH_MULTIPLIER).add(port));
+
+        ProtosObjectValue endpoint =
+                (ProtosObjectValue) activation.receiver();
+        ProtosIntegerValue addressHash =
+                ProtosStandardIpAddressProtocol.canonicalHash(
+                        addressSlot(endpoint));
+
+        return addressHash.multiplyForRuntime(new ProtosIntegerValue(31L))
+                .addForRuntime(portSlot(endpoint));
     }
 
     static boolean recognizesValue(
@@ -198,11 +199,12 @@ public final class ProtosStandardIpEndpointProtocol {
     }
 
     private static boolean validPort(Object portValue) {
-        if (!(portValue instanceof ProtosIntegerValue port)) {
+        if (!(portValue instanceof ProtosIntegerValue port)
+                || !port.fitsInIntForRuntime()) {
             return false;
         }
-        BigInteger value = port.value();
-        return value.compareTo(MIN_PORT) >= 0 && value.compareTo(MAX_PORT) <= 0;
+        int value = port.intValueExactForRuntime();
+        return value >= 1 && value <= 65535;
     }
 
     private static ProtosObjectValue addressSlot(ProtosObjectValue endpoint) {

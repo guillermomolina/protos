@@ -255,8 +255,10 @@ final class ProtosStandardIpFamilyPlacementTest {
         assertNotSame(sourceAddress, copyAddress);
         assertSame(addressPrototype, copyAddress.parent().orElseThrow());
         assertTrue(ProtosStandardIpAddressProtocol.sameCanonicalState(sourceAddress, copyAddress));
-        assertEquals(
-                ProtosStandardIpAddressProtocol.canonicalHash(sourceAddress),
-                ProtosStandardIpAddressProtocol.canonicalHash(copyAddress));
+        assertTrue(
+                ProtosStandardIpAddressProtocol.canonicalHash(sourceAddress)
+                        .sameIntegerForRuntime(
+                                ProtosStandardIpAddressProtocol.canonicalHash(
+                                        copyAddress)));
     }
 }

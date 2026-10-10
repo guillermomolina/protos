@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
 import java.util.Objects;
 
@@ -25,10 +27,49 @@ final class ProtosBinary64Rounding {
     private static final BigInteger TWO_POW_53 = BigInteger.ONE.shiftLeft(53);
     private static final long SIGN_BIT = 0x8000000000000000L;
     private static final long POSITIVE_INFINITY_BITS = 0x7ff0000000000000L;
+    private static final long EXACT_BINARY64_INTEGER_BOUND = 1L << 53;
 
     private ProtosBinary64Rounding() {}
 
-    static double divideExactIntegers(BigInteger numerator, BigInteger denominator) {
+    /** The binary64 value nearest to an exact Integer, ties to even. */
+    static double roundExactInteger(ProtosIntegerValue integer) {
+        Objects.requireNonNull(integer, "integer");
+        if (integer.isSmallForRuntime()) {
+            return (double) integer.smallValueForRuntime();
+        }
+        return divideExactIntegers(integer.value(), BigInteger.ONE);
+    }
+
+    /**
+     * The binary64 value nearest to the exact rational quotient, ties to even. When both
+     * operands are exact binary64 integers, one IEEE division already rounds that exact
+     * quotient once, so only other operands need arbitrary-precision scaling.
+     */
+    static double divideExactIntegers(ProtosIntegerValue numerator, ProtosIntegerValue denominator) {
+        Objects.requireNonNull(numerator, "numerator");
+        Objects.requireNonNull(denominator, "denominator");
+        if (numerator.isSmallForRuntime() && denominator.isSmallForRuntime()) {
+            long exactNumerator = numerator.smallValueForRuntime();
+            long exactDenominator = denominator.smallValueForRuntime();
+            if (exactDenominator == 0L) {
+                throw new ArithmeticException("division by zero");
+            }
+            if (exactNumerator == 0L) {
+                return 0.0d;
+            }
+            if (exactBinary64Integer(exactNumerator) && exactBinary64Integer(exactDenominator)) {
+                return (double) exactNumerator / (double) exactDenominator;
+            }
+        }
+        return divideExactIntegers(numerator.value(), denominator.value());
+    }
+
+    private static boolean exactBinary64Integer(long value) {
+        return value >= -EXACT_BINARY64_INTEGER_BOUND && value <= EXACT_BINARY64_INTEGER_BOUND;
+    }
+
+    @TruffleBoundary
+    private static double divideExactIntegers(BigInteger numerator, BigInteger denominator) {
         Objects.requireNonNull(numerator, "numerator");
         Objects.requireNonNull(denominator, "denominator");
         if (denominator.signum() == 0) {

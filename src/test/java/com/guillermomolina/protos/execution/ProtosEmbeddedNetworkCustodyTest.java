@@ -27,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
@@ -90,7 +89,7 @@ final class ProtosEmbeddedNetworkCustodyTest {
         @Override
         public void succeeded(
                 Object resourceState,
-                BigInteger localPort,
+                int localPort,
                 ProtosTcpListenerFlow.Backend listenerBackend,
                 Runnable releaseIfUntransferred) {
             releaseIfUntransferred.run();

@@ -23,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -62,7 +61,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         ProtosObjectValue plan = requireObject(rawPlan, "plan");
         requireExactFields(plan, PLAN_FIELDS, "plan");
 
-        int generation = requireInteger(plan, "generation").intValueExact();
+        int generation = requireInteger(plan, "generation").intValueExactForRuntime();
         if (generation != 1) {
             throw new IOException("unsupported PackageExecutionPlan generation");
         }
@@ -243,13 +242,13 @@ public final class ProtosPackageExecutionPlanAdapter {
         return map;
     }
 
-    static BigInteger requireInteger(ProtosObjectValue object, String name)
+    static ProtosIntegerValue requireInteger(ProtosObjectValue object, String name)
             throws IOException {
         Object value = requireField(object, name);
         if (!(value instanceof ProtosIntegerValue integer)) {
             throw new IOException(name + " is not an Integer");
         }
-        return integer.value();
+        return integer;
     }
 
     static String requireString(Object value, String label)

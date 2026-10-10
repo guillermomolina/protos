@@ -56,7 +56,7 @@ final class ProtosNioTcpListenerBackendTest {
             throws Exception {
         try (Fixture x = fixture("protos-test-nio-listener-v4", () -> List.of())) {
             ProtosTcpListenerValue listener = listen(x, 4, null, null);
-            int port = listener.localPortForRuntime().intValueExact();
+            int port = listener.localPortForRuntime();
 
             ProtosFutureValue cancelled = accept(listener, x.activation);
             assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
@@ -97,7 +97,7 @@ final class ProtosNioTcpListenerBackendTest {
         Inet6Address loopback6 = loopback6();
         try (Fixture x = fixture("protos-test-nio-listener-v6", () -> List.of(loopback6))) {
             ProtosTcpListenerValue listener = listen(x, 6, null, null);
-            int port = listener.localPortForRuntime().intValueExact();
+            int port = listener.localPortForRuntime();
             ProtosFutureValue accepted = accept(listener, x.activation);
 
             try (SocketChannel peer = SocketChannel.open(StandardProtocolFamily.INET6)) {

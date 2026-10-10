@@ -52,7 +52,7 @@ final class ProtosAdditionalIndexedInteropTest {
         assertEquals(BigInteger.ONE, interop.asBigInteger(
                 interop.readArrayElement(bytes, 0)));
 
-        bytes.indexedPut(BigInteger.ZERO, replacement);
+        bytes.indexedPut(0, replacement);
         assertSame(replacement, interop.readArrayElement(bytes, 0));
 
         assertFalse(interop.isArrayElementWritable(bytes, 0));
@@ -79,7 +79,7 @@ final class ProtosAdditionalIndexedInteropTest {
         assertThrows(
                 InvalidArrayIndexException.class,
                 () -> interop.readArrayElement(bytes, 0));
-        assertSame(hostOnly, bytes.indexedAt(BigInteger.ZERO));
+        assertSame(hostOnly, bytes.indexedAt(0));
     }
 
     @Test

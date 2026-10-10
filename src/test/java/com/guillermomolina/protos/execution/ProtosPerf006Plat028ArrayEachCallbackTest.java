@@ -104,7 +104,7 @@ final class ProtosPerf006Plat028ArrayEachCallbackTest {
                             (activation, supplied) -> {
                                 callbacks.incrementAndGet();
                                 array.indexedPut(
-                                        BigInteger.ONE,
+                                        1,
                                         new ProtosIntegerValue(BigInteger.valueOf(99)));
                                 return ProtosNullValue.INSTANCE;
                             }));

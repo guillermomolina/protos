@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
 import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -198,7 +197,7 @@ final class ProtosNioNetworkBackend
                 try {
                     completion.succeeded(
                             acquired,
-                            BigInteger.valueOf(localPort),
+                            localPort,
                             acquired,
                             acquired::releaseIfUntransferred);
                 } catch (RuntimeException completionFailure) {
@@ -267,7 +266,7 @@ final class ProtosNioNetworkBackend
         StandardProtocolFamily family =
                 version == 4 ? StandardProtocolFamily.INET : StandardProtocolFamily.INET6;
         int requestedPort =
-                request.portConstraint() == null ? 0 : request.portConstraint().intValueExact();
+                request.portConstraint() == null ? 0 : request.portConstraint();
 
         if (request.addressConstraint() != null) {
             InetAddress exact = decodeListenAddress(request.addressConstraint(), version);
@@ -312,11 +311,11 @@ final class ProtosNioNetworkBackend
         Map<String, Object> slots = address.localSlotsSnapshot();
         if (!(slots.get("version") instanceof ProtosIntegerValue versionValue)
                 || !(slots.get("bits") instanceof ProtosIntegerValue bitsValue)
-                || versionValue.value().intValueExact() != expectedVersion) {
+                || versionValue.intValueExactForRuntime() != expectedVersion) {
             throw new IOException("listen address changed request IP version");
         }
         if (expectedVersion == 4) {
-            byte[] bytes = HostEndpoint.unsignedBytes(bitsValue.value(), 4);
+            byte[] bytes = HostEndpoint.unsignedBytes(bitsValue, 4);
             InetAddress result = InetAddress.getByAddress(bytes);
             if (!(result instanceof Inet4Address)) {
                 throw new IOException("IPv4 listen address did not materialize as IPv4");
@@ -324,7 +323,7 @@ final class ProtosNioNetworkBackend
             return result;
         }
 
-        byte[] bytes = HostEndpoint.unsignedBytes(bitsValue.value(), 16);
+        byte[] bytes = HostEndpoint.unsignedBytes(bitsValue, 16);
         Inet6Address resolved =
                 Objects.requireNonNull(
                         ipv6ScopeResolver.resolve(bytes.clone()),
@@ -563,17 +562,17 @@ final class ProtosNioNetworkBackend
                 throw new IOException("address is not canonical");
             }
 
-            int version = versionValue.value().intValueExact();
-            int portNumber = port.value().intValueExact();
+            int version = versionValue.intValueExactForRuntime();
+            int portNumber = port.intValueExactForRuntime();
             InetAddress hostAddress;
             if (version == 4) {
-                byte[] bytes = unsignedBytes(bitsValue.value(), 4);
+                byte[] bytes = unsignedBytes(bitsValue, 4);
                 hostAddress = InetAddress.getByAddress(bytes);
                 if (!(hostAddress instanceof Inet4Address)) {
                     throw new IOException("IPv4 data did not materialize as IPv4");
                 }
             } else if (version == 6) {
-                byte[] bytes = unsignedBytes(bitsValue.value(), 16);
+                byte[] bytes = unsignedBytes(bitsValue, 16);
                 Inet6Address resolved =
                         Objects.requireNonNull(
                                 ipv6ScopeResolver.resolve(bytes.clone()),
@@ -626,30 +625,24 @@ final class ProtosNioNetworkBackend
 
             ProtosObjectValue address = new ProtosObjectValue(addressPrototype);
             address.createLocalSlot(
-                    "version", new ProtosIntegerValue(BigInteger.valueOf(version)));
+                    "version", new ProtosIntegerValue(version));
             address.createLocalSlot(
-                    "bits", new ProtosIntegerValue(new BigInteger(1, bytes)));
+                    "bits", ProtosIntegerValue.fromUnsignedBigEndianForRuntime(bytes));
             address.freeze();
 
             ProtosObjectValue endpoint = new ProtosObjectValue(endpointPrototype);
             endpoint.createLocalSlot("address", address);
             endpoint.createLocalSlot(
-                    "port", new ProtosIntegerValue(BigInteger.valueOf(local.getPort())));
+                    "port", new ProtosIntegerValue(local.getPort()));
             return endpoint.freeze();
         }
 
-        private static byte[] unsignedBytes(BigInteger value, int width)
+        private static byte[] unsignedBytes(ProtosIntegerValue value, int width)
                 throws IOException {
-            if (value.signum() < 0 || value.bitLength() > width * 8) {
+            if (!value.fitsUnsignedBitsForRuntime(width * Byte.SIZE)) {
                 throw new IOException("IP address bits exceed canonical width");
             }
-            byte[] raw = value.toByteArray();
-            int offset = raw.length > 1 && raw[0] == 0 ? 1 : 0;
-            int length = raw.length - offset;
-            if (length > width) throw new IOException("IP address bits exceed width");
-            byte[] result = new byte[width];
-            System.arraycopy(raw, offset, result, width - length, length);
-            return result;
+            return value.toUnsignedBigEndianForRuntime(width);
         }
     }
 

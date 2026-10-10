@@ -21,6 +21,8 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
@@ -6127,6 +6129,63 @@ final class CanonicalToBytecodeLowerer {
                         + identity.name());
     }
 
+    /* Numeric carriers are private to the guarded arithmetic expression chain. */
+    private static boolean primitiveNumericSendCandidate(CanonicalSend send) {
+        return send.arguments().size() == 1
+                && ("+".equals(send.message())
+                        || "-".equals(send.message())
+                        || "*".equals(send.message())
+                        || "/".equals(send.message()))
+                && !hasSpreadArgument(send.arguments());
+    }
+
+    private static boolean primitiveNumericCarrierSource(CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            Object value = materialize(literal);
+            return (value instanceof ProtosIntegerValue integer
+                    && integer.isSmallForRuntime())
+                    || value instanceof ProtosFloatValue;
+        }
+        return expression instanceof CanonicalSend send
+                && primitiveNumericSendCandidate(send);
+    }
+
+    private void emitPrimitiveNumericOperandToLocal(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal target,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalLiteral literal) {
+            Object value = materialize(literal);
+            if (value instanceof ProtosIntegerValue integer
+                    && integer.isSmallForRuntime()) {
+                builder.beginStoreLocal(target);
+                builder.emitLoadConstant(integer.smallValueForRuntime());
+                builder.endStoreLocal();
+                return;
+            }
+            if (value instanceof ProtosFloatValue floating) {
+                builder.beginStoreLocal(target);
+                builder.emitLoadConstant(floating.value());
+                builder.endStoreLocal();
+                return;
+            }
+        }
+        if (expression instanceof CanonicalSend nested
+                && primitiveNumericSendCandidate(nested)) {
+            builder.beginSourceSection(
+                    nested.span().startOffset(), nested.span().length());
+            emitComposedSend(builder, nested, target, preparedCall,
+                    childResult, resumeValue, true);
+            builder.endSourceSection();
+            return;
+        }
+        emitBodyExpressionToLocal(builder, expression, target,
+                preparedCall, childResult, resumeValue);
+    }
+
     private void emitComposedSend(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
@@ -6134,6 +6193,18 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        emitComposedSend(builder, send, result, preparedCall,
+                childResult, resumeValue, false);
+    }
+
+    private void emitComposedSend(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean primitiveCarrierResult) {
         if (result == null
                 || preparedCall == null
                 || childResult == null
@@ -6143,6 +6214,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         CanonicalExpression receiver = send.receiver();
+        boolean tryPrimitiveNumericSend = primitiveNumericSendCandidate(send);
         boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
@@ -6200,7 +6272,8 @@ final class CanonicalToBytecodeLowerer {
                         || inlineIndexedEachCandidate
                         || inlineTwoParameterEachCandidate
                         || tryDirectSendZero
-                        || tryDirectSendOne;
+                        || tryDirectSendOne
+                        || tryPrimitiveNumericSend;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -6214,7 +6287,11 @@ final class CanonicalToBytecodeLowerer {
                     builder.createLocal(
                             "sendReceiver",
                             null);
-            if (stageReceiver) {
+            if (tryPrimitiveNumericSend) {
+                emitPrimitiveNumericOperandToLocal(
+                        builder, receiver, receiverValue,
+                        preparedCall, childResult, resumeValue);
+            } else if (stageReceiver) {
                 emitBodyExpressionToLocal(
                         builder,
                         receiver,
@@ -6250,16 +6327,55 @@ final class CanonicalToBytecodeLowerer {
                             builder.createLocal(
                                     "sendArgument",
                                     null);
-                    emitBodyExpressionToLocal(
-                            builder,
-                            argument,
-                            argumentValue,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
+                    if (tryPrimitiveNumericSend) {
+                        emitPrimitiveNumericOperandToLocal(
+                                builder, argument, argumentValue,
+                                preparedCall, childResult, resumeValue);
+                    } else {
+                        emitBodyExpressionToLocal(
+                                builder, argument, argumentValue,
+                                preparedCall, childResult, resumeValue);
+                    }
                     argumentValues.add(argumentValue);
                 }
             }
+        }
+
+        BytecodeLocal primitiveNumericAttempt = null;
+        if (tryPrimitiveNumericSend) {
+            primitiveNumericAttempt = builder.createLocal("primitiveNumericAttempt", null);
+            builder.beginStoreLocal(primitiveNumericAttempt);
+            builder.beginTryPrimitiveNumericSendOne();
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(send.message());
+            emitSendCallerOperand(builder);
+            builder.emitLoadLocal(argumentValues.get(0));
+            builder.emitLoadConstant(primitiveNumericCarrierSource(receiver));
+            builder.emitLoadConstant(
+                    primitiveNumericCarrierSource(send.arguments().get(0)));
+            builder.endTryPrimitiveNumericSendOne();
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginIsPrimitiveNumericSendMiss();
+            builder.emitLoadLocal(primitiveNumericAttempt);
+            builder.endIsPrimitiveNumericSendMiss();
+            builder.beginBlock();
+            // Any internal carriers must become guest values before normal D013.
+            builder.beginStoreLocal(receiverValue);
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(primitiveNumericCarrierSource(receiver));
+            builder.endMaterializePrimitiveNumericCarrier();
+            builder.endStoreLocal();
+            BytecodeLocal stagedArgument = argumentValues.get(0);
+            builder.beginStoreLocal(stagedArgument);
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(stagedArgument);
+            builder.emitLoadConstant(
+                    primitiveNumericCarrierSource(send.arguments().get(0)));
+            builder.endMaterializePrimitiveNumericCarrier();
+            builder.endStoreLocal();
         }
 
         /*
@@ -6455,6 +6571,23 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             builder.endBlock();
 
+            builder.endIfThenElse();
+        }
+
+        if (tryPrimitiveNumericSend) {
+            builder.endBlock();
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            if (primitiveCarrierResult) {
+                builder.emitLoadLocal(primitiveNumericAttempt);
+            } else {
+                builder.beginMaterializePrimitiveNumericCarrier();
+                builder.emitLoadLocal(primitiveNumericAttempt);
+                builder.emitLoadConstant(true);
+                builder.endMaterializePrimitiveNumericCarrier();
+            }
+            builder.endStoreLocal();
+            builder.endBlock();
             builder.endIfThenElse();
         }
 

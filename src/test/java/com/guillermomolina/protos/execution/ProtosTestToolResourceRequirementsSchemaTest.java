@@ -42,8 +42,8 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         ProtosArrayValue first = parseCompleted("resource-requirements-version = 1\n");
         ProtosArrayValue second = parseCompleted("resource-requirements-version = 1\n");
 
-        assertEquals(0, first.indexedSize().intValueExact());
-        assertEquals(0, second.indexedSize().intValueExact());
+        assertEquals(0, first.indexedSize());
+        assertEquals(0, second.indexedSize());
         assertTrue(first.isFrozen());
         assertTrue(second.isFrozen());
         org.junit.jupiter.api.Assertions.assertNotSame(first, second);
@@ -87,7 +87,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         ProtosArrayValue firstRequirement = arrayAt(observed, 4);
         ProtosArrayValue secondRequirement = arrayAt(observed, 6);
 
-        assertEquals(2, declarations.indexedSize().intValueExact());
+        assertEquals(2, declarations.indexedSize());
         assertTrue(declarations.isFrozen());
         assertTrue(firstDeclaration.isFrozen());
         assertTrue(secondDeclaration.isFrozen());
@@ -97,7 +97,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         assertEquals("integration/db.protos", stringAt(observed, 3));
         assertEquals("db/integration", stringAt(firstRequirement, 0));
         assertEquals("exclusive", stringAt(firstRequirement, 1));
-        assertSame(ProtosNullValue.INSTANCE, firstRequirement.indexedAt(BigInteger.valueOf(2)));
+        assertSame(ProtosNullValue.INSTANCE, firstRequirement.indexedAt(2));
 
         assertEquals("gpu/matrix.protos", stringAt(observed, 5));
         assertEquals("gpu", stringAt(secondRequirement, 0));
@@ -106,7 +106,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
                 2,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                secondRequirement.indexedAt(BigInteger.valueOf(2)))
+                                secondRequirement.indexedAt(2))
                         .value()
                         .intValueExact());
     }
@@ -118,7 +118,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
                         + "[[requirement]]\ncase = \"a.protos\"\nkey = \"gpu\"\nmode = \"shared\"\nunits = 1\n"
                         + "[[requirement]]\ncase = \"b.protos\"\nkey = \"gpu\"\nmode = \"exclusive\"\n";
         ProtosArrayValue parsed = parseCompleted(document);
-        assertEquals(2, parsed.indexedSize().intValueExact());
+        assertEquals(2, parsed.indexedSize());
     }
 
     @Test
@@ -234,13 +234,13 @@ fixture.prelude().newModuleActivation());
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosArrayValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static String stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         ProtosStringValue.class,
-                        array.indexedAt(BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value();
     }
 

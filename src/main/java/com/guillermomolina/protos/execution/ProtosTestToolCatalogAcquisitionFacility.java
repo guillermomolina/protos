@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
-import java.math.BigInteger;
+
 import java.nio.file.Files;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
@@ -134,8 +134,7 @@ public final class ProtosTestToolCatalogAcquisitionFacility {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (byte octet : content) {
             bytes.indexedAdd(
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(octet & 0xff)));
+                    new ProtosIntegerValue(octet & 0xff));
         }
         bytes.freeze();
         return bytes;

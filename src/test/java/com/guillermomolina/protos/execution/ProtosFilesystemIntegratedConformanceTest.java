@@ -123,7 +123,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         assertEquals(
                 BigInteger.valueOf(7),
-                ((ProtosIntegerValue) bytes.indexedAt(BigInteger.ZERO)).value());
+                ((ProtosIntegerValue) bytes.indexedAt(0)).value());
         assertEquals(1, first.reads.get());
         assertEquals(0, replacement.reads.get());
     }
@@ -285,7 +285,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         @Override
         public ProtosFileFlow.Cancellation readAt(
-                BigInteger position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
+                ProtosIntegerValue position, int maxBytes, ProtosFileFlow.ReadCompletion completion) {
             reads.incrementAndGet();
             completion.data(new byte[] {(byte) octet});
             return () -> {};
@@ -306,7 +306,7 @@ class ProtosFilesystemIntegratedConformanceTest {
         @Override
         public ProtosFileFlow.Cancellation endPosition(
                 ProtosFileFlow.IntegerCompletion completion) {
-            completion.succeeded(BigInteger.ONE);
+            completion.succeeded(new ProtosIntegerValue(1));
             return () -> {};
         }
     }

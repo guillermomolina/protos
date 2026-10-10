@@ -1,9 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -37,7 +35,7 @@ public final class ProtosFileFlow {
     }
 
     public interface IntegerCompletion {
-        void succeeded(BigInteger value);
+        void succeeded(ProtosIntegerValue value);
         void failed();
     }
 
@@ -69,7 +67,7 @@ public final class ProtosFileFlow {
     }
 
     public interface ReadableResource extends Resource {
-        Cancellation readAt(BigInteger position, int maxBytes, ReadCompletion completion);
+        Cancellation readAt(ProtosIntegerValue position, int maxBytes, ReadCompletion completion);
     }
 
     /**
@@ -77,7 +75,7 @@ public final class ProtosFileFlow {
      * beyond EOF, the backend must provide the standard deterministic zero-valued logical gap.
      */
     public interface WritableResource extends Resource {
-        Cancellation writeAt(BigInteger position, byte[] bytes, WriteCompletion completion);
+        Cancellation writeAt(ProtosIntegerValue position, byte[] bytes, WriteCompletion completion);
     }
 
     /** Internal end-position support needed for ByteSeekable.seekToEnd; does not imply ByteSized. */
@@ -90,7 +88,7 @@ public final class ProtosFileFlow {
     }
 
     public interface TruncatableResource extends Resource {
-        Cancellation truncate(BigInteger size, ChangeCompletion completion);
+        Cancellation truncate(ProtosIntegerValue size, ChangeCompletion completion);
     }
 
     public interface SyncableResource extends Resource {
@@ -128,6 +126,7 @@ public final class ProtosFileFlow {
     }
 
     private static final int DEFAULT_MAX_RETAINED_WRITE_BYTES = 1024 * 1024;
+    private static final ProtosIntegerValue ZERO = new ProtosIntegerValue(0L);
 
     private final ProtosObjectValue receiver;
     private final ProtosObjectValue bytesPrototype;
@@ -139,7 +138,7 @@ public final class ProtosFileFlow {
     private final int maxRetainedWriteBytes;
     private final ArrayDeque<Request> operations = new ArrayDeque<>();
 
-    private BigInteger logicalPosition = BigInteger.ZERO;
+    private ProtosIntegerValue logicalPosition = ZERO;
     private int retainedWriteBytes;
 
     public ProtosFileFlow(
@@ -193,10 +192,9 @@ public final class ProtosFileFlow {
         if (!capabilities.readable()) {
             return ioFailedFuture(activation);
         }
-        BigInteger maxBytes = integer(maxBytesValue);
-        if (maxBytes == null
-                || maxBytes.signum() <= 0
-                || maxBytes.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+        if (!(maxBytesValue instanceof ProtosIntegerValue maxBytes)
+                || !maxBytes.fitsInIntForRuntime()
+                || maxBytes.signumForRuntime() <= 0) {
             return invalidFuture(activation);
         }
         return enqueue(new Request(Kind.READ, begin(activation), maxBytes, null));
@@ -210,7 +208,7 @@ public final class ProtosFileFlow {
         if (!(value instanceof ProtosBytesValue bytes)) {
             return invalidFuture(activation);
         }
-        byte[] snapshot = snapshot(bytes);
+        byte[] snapshot = bytes.octetSnapshot();
         synchronized (this) {
             if (snapshot.length > maxRetainedWriteBytes - retainedWriteBytes) {
                 return capacityFailedFuture(activation);
@@ -238,8 +236,7 @@ public final class ProtosFileFlow {
         if (!capabilities.seekable()) {
             return ioFailedFuture(activation);
         }
-        BigInteger target = integer(value);
-        if (target == null || target.signum() < 0) {
+        if (!(value instanceof ProtosIntegerValue target) || target.signumForRuntime() < 0) {
             return invalidFuture(activation);
         }
         return enqueue(new Request(Kind.SEEK, begin(activation), target, null));
@@ -250,8 +247,7 @@ public final class ProtosFileFlow {
         if (!capabilities.seekable()) {
             return ioFailedFuture(activation);
         }
-        BigInteger displacement = integer(value);
-        if (displacement == null) {
+        if (!(value instanceof ProtosIntegerValue displacement)) {
             return invalidFuture(activation);
         }
         return enqueue(new Request(Kind.SEEK_BY, begin(activation), displacement, null));
@@ -278,8 +274,7 @@ public final class ProtosFileFlow {
         if (!capabilities.truncatable()) {
             return ioFailedFuture(activation);
         }
-        BigInteger target = integer(value);
-        if (target == null || target.signum() < 0) {
+        if (!(value instanceof ProtosIntegerValue target) || target.signumForRuntime() < 0) {
             return invalidFuture(activation);
         }
         return enqueue(new Request(Kind.TRUNCATE, begin(activation), target, null));
@@ -355,7 +350,7 @@ public final class ProtosFileFlow {
     }
 
     private void startRead(Request request) {
-        BigInteger start = currentPosition();
+        ProtosIntegerValue start = currentPosition();
         request.startPosition = start;
         try {
             setCancellation(
@@ -363,7 +358,7 @@ public final class ProtosFileFlow {
                     ((ReadableResource) resource)
                             .readAt(
                                     start,
-                                    request.number.intValueExact(),
+                                    request.number.intValueExactForRuntime(),
                                     new ReadCompletion() {
                                         @Override
                                         public void data(byte[] bytes) {
@@ -392,7 +387,7 @@ public final class ProtosFileFlow {
 
     private void completeReadData(Request request, byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
-        if (bytes.length == 0 || bytes.length > request.number.intValueExact()) {
+        if (bytes.length == 0 || bytes.length > request.number.intValueExactForRuntime()) {
             failIo(request);
             finish(request);
             return;
@@ -404,17 +399,17 @@ public final class ProtosFileFlow {
 
         ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
         for (byte octet : bytes) {
-            result.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(octet & 0xff)));
+            result.indexedAdd(new ProtosIntegerValue(octet & 0xff));
         }
         synchronized (this) {
-            logicalPosition = request.startPosition.add(BigInteger.valueOf(bytes.length));
+            logicalPosition = advanced(request.startPosition, bytes.length);
         }
         request.operation.resolve(result);
         finish(request);
     }
 
     private void startWrite(Request request) {
-        BigInteger start = currentPosition();
+        ProtosIntegerValue start = currentPosition();
         request.startPosition = start;
         if (request.bytes.length == 0) {
             if (request.operation.commit()) {
@@ -483,15 +478,14 @@ public final class ProtosFileFlow {
             if (request.startPosition == null) {
                 throw new IllegalStateException("write contribution without start position");
             }
-            logicalPosition =
-                    request.startPosition.add(BigInteger.valueOf(contributedPrefix));
+            logicalPosition = advanced(request.startPosition, contributedPrefix);
         }
     }
 
     private void completeLocalPosition(Request request) {
-        BigInteger position = currentPosition();
+        ProtosIntegerValue position = currentPosition();
         if (request.operation.commit()) {
-            request.operation.resolve(new ProtosIntegerValue(position));
+            request.operation.resolve(position);
         }
         finish(request);
     }
@@ -501,15 +495,14 @@ public final class ProtosFileFlow {
             synchronized (this) {
                 logicalPosition = request.number;
             }
-            request.operation.resolve(new ProtosIntegerValue(request.number));
+            request.operation.resolve(request.number);
         }
         finish(request);
     }
 
     private void completeSeekBy(Request request) {
-        BigInteger base = currentPosition();
-        BigInteger target = base.add(request.number);
-        if (target.signum() < 0) {
+        ProtosIntegerValue target = currentPosition().addForRuntime(request.number);
+        if (target.signumForRuntime() < 0) {
             failIo(request);
             finish(request);
             return;
@@ -518,7 +511,7 @@ public final class ProtosFileFlow {
             synchronized (this) {
                 logicalPosition = target;
             }
-            request.operation.resolve(new ProtosIntegerValue(target));
+            request.operation.resolve(target);
         }
         finish(request);
     }
@@ -531,8 +524,8 @@ public final class ProtosFileFlow {
                             .endPosition(
                                     new IntegerCompletion() {
                                         @Override
-                                        public void succeeded(BigInteger value) {
-                                            if (value == null || value.signum() < 0) {
+                                        public void succeeded(ProtosIntegerValue value) {
+                                            if (value == null || value.signumForRuntime() < 0) {
                                                 failIo(request);
                                                 finish(request);
                                                 return;
@@ -541,8 +534,7 @@ public final class ProtosFileFlow {
                                                 synchronized (ProtosFileFlow.this) {
                                                     logicalPosition = value;
                                                 }
-                                                request.operation.resolve(
-                                                        new ProtosIntegerValue(value));
+                                                request.operation.resolve(value);
                                             }
                                             finish(request);
                                         }
@@ -567,15 +559,14 @@ public final class ProtosFileFlow {
                             .size(
                                     new IntegerCompletion() {
                                         @Override
-                                        public void succeeded(BigInteger value) {
-                                            if (value == null || value.signum() < 0) {
+                                        public void succeeded(ProtosIntegerValue value) {
+                                            if (value == null || value.signumForRuntime() < 0) {
                                                 failIo(request);
                                                 finish(request);
                                                 return;
                                             }
                                             if (request.operation.commit()) {
-                                                request.operation.resolve(
-                                                        new ProtosIntegerValue(value));
+                                                request.operation.resolve(value);
                                             }
                                             finish(request);
                                         }
@@ -735,7 +726,7 @@ public final class ProtosFileFlow {
         }
     }
 
-    private BigInteger currentPosition() {
+    private ProtosIntegerValue currentPosition() {
         synchronized (this) {
             return logicalPosition;
         }
@@ -802,42 +793,24 @@ public final class ProtosFileFlow {
         }
     }
 
-    private static BigInteger integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        return null;
-    }
-
-    private static byte[] snapshot(ProtosBytesValue bytes) {
-        List<Object> values = bytes.indexedSnapshot();
-        byte[] snapshot = new byte[values.size()];
-        for (int index = 0; index < values.size(); index++) {
-            BigInteger octet = integer(values.get(index));
-            if (octet == null
-                    || octet.signum() < 0
-                    || octet.compareTo(BigInteger.valueOf(255)) > 0) {
-                throw new IllegalStateException("Bytes invariant violated");
-            }
-            snapshot[index] = (byte) octet.intValue();
-        }
-        return snapshot;
+    private static ProtosIntegerValue advanced(ProtosIntegerValue start, int octets) {
+        return start.addForRuntime(new ProtosIntegerValue(octets));
     }
 
     private static final class Request {
         private final Kind kind;
         private final ProtosIoOperation operation;
-        private final BigInteger number;
+        private final ProtosIntegerValue number;
         private final byte[] bytes;
         private boolean started;
         private boolean cancellationRequested;
         private Cancellation cancellation;
-        private BigInteger startPosition;
+        private ProtosIntegerValue startPosition;
 
         private Request(
                 Kind kind,
                 ProtosIoOperation operation,
-                BigInteger number,
+                ProtosIntegerValue number,
                 byte[] bytes) {
             this.kind = kind;
             this.operation = operation;

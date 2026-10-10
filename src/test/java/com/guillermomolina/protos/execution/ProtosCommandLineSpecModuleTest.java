@@ -308,11 +308,11 @@ final class ProtosCommandLineSpecModuleTest {
         assertTrue(subcommands.isFrozen());
 
         ProtosObjectValue option =
-                assertInstanceOf(ProtosObjectValue.class, options.indexedAt(BigInteger.ZERO));
+                assertInstanceOf(ProtosObjectValue.class, options.indexedAt(0));
         ProtosObjectValue positional =
-                assertInstanceOf(ProtosObjectValue.class, positionals.indexedAt(BigInteger.ZERO));
+                assertInstanceOf(ProtosObjectValue.class, positionals.indexedAt(0));
         ProtosObjectValue child =
-                assertInstanceOf(ProtosObjectValue.class, subcommands.indexedAt(BigInteger.ZERO));
+                assertInstanceOf(ProtosObjectValue.class, subcommands.indexedAt(0));
         assertTrue(option.isFrozen());
         assertTrue(positional.isFrozen());
         assertTrue(child.isFrozen());
@@ -663,12 +663,12 @@ final class ProtosCommandLineSpecModuleTest {
         while (level < depth) {
             assertCanonicalCommandShape(node, "node");
             ProtosArrayValue subcommands = arraySlot(node, "subcommands");
-            assertEquals(BigInteger.ONE, subcommands.indexedSize());
-            node = assertInstanceOf(ProtosObjectValue.class, subcommands.indexedAt(BigInteger.ZERO));
+            assertEquals(1, subcommands.indexedSize());
+            node = assertInstanceOf(ProtosObjectValue.class, subcommands.indexedAt(0));
             level++;
         }
         assertCanonicalCommandShape(node, "leaf");
-        assertEquals(BigInteger.ZERO, arraySlot(node, "subcommands").indexedSize());
+        assertEquals(0, arraySlot(node, "subcommands").indexedSize());
     }
 
     private static void assertCanonicalCommandShape(ProtosObjectValue command, String name) {

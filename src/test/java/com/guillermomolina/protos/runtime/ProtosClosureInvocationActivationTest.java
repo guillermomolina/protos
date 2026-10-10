@@ -76,7 +76,7 @@ class ProtosClosureInvocationActivationTest {
         ProtosArrayValue args = activation.arguments().orElseThrow();
         assertSame(arrayPrototype, args.parent().orElseThrow());
         assertSame(ProtosObjectValue.MutationState.FROZEN, args.mutationState());
-        assertSame(suppliedValue, args.indexedAt(java.math.BigInteger.ZERO));
+        assertSame(suppliedValue, args.indexedAt(0));
     }
 
     @Test

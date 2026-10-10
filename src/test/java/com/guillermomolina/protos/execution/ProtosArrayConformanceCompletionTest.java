@@ -64,7 +64,7 @@ class ProtosArrayConformanceCompletionTest {
                 ((ProtosIntegerValue) execute(activation, "xs[0] = 2")).value());
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
+                ((ProtosIntegerValue) xs.indexedAt(0)).value());
         assertEquals(
                 BigInteger.TWO,
                 ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
@@ -77,7 +77,7 @@ class ProtosArrayConformanceCompletionTest {
         assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertEquals(
                 BigInteger.TWO,
-                ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
+                ((ProtosIntegerValue) xs.indexedAt(0)).value());
         assertEquals(
                 BigInteger.TWO,
                 ((ProtosIntegerValue) execute(activation, "xs.size()")).value());

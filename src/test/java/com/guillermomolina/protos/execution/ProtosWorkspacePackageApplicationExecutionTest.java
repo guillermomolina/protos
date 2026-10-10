@@ -174,8 +174,8 @@ final class ProtosWorkspacePackageApplicationExecutionTest {
             ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
             ProtosNetworkCapabilityValue network =
                     assertInstanceOf(
-                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
-            Object applicationNetworkPrototype = result.indexedAtForRuntime(1);
+                            ProtosNetworkCapabilityValue.class, result.indexedAt(0));
+            Object applicationNetworkPrototype = result.indexedAt(1);
             assertSame(applicationNetworkPrototype, network.representedDelegationParent(null));
             assertTrue(runtimeHost.networkHostInitializedForTesting());
         }

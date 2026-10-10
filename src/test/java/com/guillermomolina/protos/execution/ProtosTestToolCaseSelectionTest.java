@@ -233,13 +233,13 @@ final class ProtosTestToolCaseSelectionTest {
                         + "]}",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
         assertEquals(
                 BigInteger.ZERO,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
     }
 
@@ -304,19 +304,19 @@ final class ProtosTestToolCaseSelectionTest {
                         + "]}",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
         assertEquals(
                 "{\"schema\":\"protos.test.cases/v1\",\"cases\":[]}",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
         assertEquals(
                 BigInteger.ZERO,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.TWO))
+                                observed.indexedAt(2))
                         .value());
     }
 

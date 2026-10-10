@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.327-SNAPSHOT
+
+- `I091` (#869): contain Java `BigInteger` dependencies behind exact numeric boundaries.
+  - Replace arbitrary-precision index, size, octet, port, position, and count plumbing
+    in Array, Bytes, byte/file/text I/O, filesystem and network backends, Actor/P
+    transfers, and tooling with compact `int`/`long` or exact `ProtosIntegerValue`
+    carriers; file and byte-flow positions remain exact Protos Integers.
+  - Return identity hashes as `long` with representation-independent Integer hashing,
+    and add an exact unsigned big-endian codec for IP address bits.
+  - Add compact paths for mixed Float/Integer equality, ordering and normal hash,
+    integral binary64 extraction, correctly rounded Integer division, Integer
+    binary32/binary64 interop projection, and integer literal parsing.
+  - Keep `BigInteger` only for genuine arbitrary-precision arithmetic and rounding,
+    Truffle interop, the public foreign SPI, PLAT051 transfer payloads, and SemVer DTOs.
+  - Reduce the I091 census from 450 to 165 references and extend focal coverage.
+
 ## 0.3.326-SNAPSHOT
 
 - `I092` (#870): implement compact canonical Boolean control.

@@ -18,7 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -379,8 +379,7 @@ public final class ProtosExactExecutionFacility {
                 new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
         for (byte octet : bytes) {
             value.indexedAdd(
-                    new ProtosIntegerValue(
-                            BigInteger.valueOf(octet & 0xff)));
+                    new ProtosIntegerValue(octet & 0xff));
         }
         value.freeze();
         return value;

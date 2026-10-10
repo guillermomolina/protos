@@ -89,7 +89,7 @@ final class ProtosStandardProcessProtocolTest {
         assertEquals(List.of("one", "two"), strings(second));
         assertThrows(
                 IllegalStateException.class,
-                () -> first.indexedPut(BigInteger.ZERO, new ProtosStringValue("changed")));
+                () -> first.indexedPut(0, new ProtosStringValue("changed")));
         assertEquals(List.of("one", "two"), strings(first));
     }
 

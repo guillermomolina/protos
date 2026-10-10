@@ -217,12 +217,12 @@ final class ProtosTestToolCatalogAcquisitionFacilityTest {
     }
 
     private static byte[] octets(ProtosBytesValue bytes) {
-        byte[] result = new byte[bytes.indexedSize().intValueExact()];
+        byte[] result = new byte[bytes.indexedSize()];
         for (int index = 0; index < result.length; index++) {
             ProtosIntegerValue octet =
                     assertInstanceOf(
                             ProtosIntegerValue.class,
-                            bytes.indexedAt(BigInteger.valueOf(index)));
+                            bytes.indexedAt(index));
             result[index] = (byte) octet.value().intValueExact();
         }
         return result;

@@ -201,12 +201,12 @@ final class ProtosCapturedFilesystemCustodyTest {
                                 activation));
         ProtosBytesValue bytes =
                 assertInstanceOf(ProtosBytesValue.class, read.resolvedValue().orElseThrow());
-        byte[] raw = new byte[bytes.indexedSize().intValueExact()];
+        byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
             BigInteger octet =
                     assertInstanceOf(
                                     ProtosIntegerValue.class,
-                                    bytes.indexedAt(BigInteger.valueOf(index)))
+                                    bytes.indexedAt(index))
                             .value();
             raw[index] = (byte) octet.intValueExact();
         }

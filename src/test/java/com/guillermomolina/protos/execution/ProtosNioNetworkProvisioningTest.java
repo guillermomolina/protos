@@ -81,7 +81,7 @@ final class ProtosNioNetworkProvisioningTest {
                         assertInstanceOf(
                                 ProtosTcpListenerValue.class,
                                 listening.resolvedValue().orElseThrow());
-                int port = listener.localPortForRuntime().intValueExact();
+                int port = listener.localPortForRuntime();
 
                 ProtosFutureValue accepting = future(listener, "accept", List.of(), activation);
                 ProtosFutureValue connecting =

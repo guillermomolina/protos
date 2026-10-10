@@ -43,6 +43,8 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -114,7 +116,7 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
         enableMaterializedLocalAccesses = true,
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {int.class},
+        boxingEliminationTypes = {int.class, long.class, double.class},
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosSemanticBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosSemanticBytecodeRootNode(
@@ -5251,6 +5253,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             if (caller instanceof ProtosActivation activation) {
                 return ProtosBytecodeRootNode.PrepareSendArguments.callerPrelude(activation);
             }
+            if (caller instanceof PreparedInlineLiteralCall inline) {
+                return inline.prelude();
+            }
             return ProtosFrameArguments.preludeOrNull((Object[]) caller);
         }
 
@@ -6233,6 +6238,257 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         static boolean isForeignReceiver(Object receiver) {
             return TryDirectSendOne.isForeignReceiver(receiver);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+
+    /** I091-C2: an internal Long must never be observed as a guest Number. */
+    @Operation
+    public static final class MaterializePrimitiveNumericCarrier {
+        @Specialization
+        public static Object perform(Object value, boolean carrierPermitted) {
+            if (carrierPermitted && value instanceof Long small) {
+                return new ProtosIntegerValue(small.longValue());
+            }
+            if (carrierPermitted && value instanceof Double floating) {
+                return new ProtosFloatValue(floating.doubleValue());
+            }
+            return value;
+        }
+    }
+
+    @Operation
+    public static final class IsPrimitiveNumericSendMiss {
+        @Specialization
+        public static boolean perform(Object value) {
+            return value == TryPrimitiveNumericSendOne.MISS;
+        }
+    }
+
+    /**
+     * Exact canonical Integer dispatch, selected using the same protected D013
+     * lookup as PrepareSendOne. The exemplar is valid for all represented
+     * Integer values sharing a Prelude: their immutable represented receiver
+     * step has no own slots. Never dispatch a guest send on a Java Long.
+     */
+    @Operation
+    public static final class TryPrimitiveNumericSendOne {
+        private static final Object MISS = new Object();
+
+        @Specialization(
+                guards = {
+                    "smallInteger(receiver, receiverCarrier)",
+                    "smallInteger(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null",
+                    "arithmetic(cachedInteger.operation())"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static Object canonical(
+                Object receiver,
+                String selector,
+                Object caller,
+                Object argument,
+                boolean receiverCarrier,
+                boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("canonicalGuard(selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            long left = smallValue(receiver);
+            long right = smallValue(argument);
+            try {
+                long result = switch (cachedInteger.operation()) {
+                    case ADD -> Math.addExact(left, right);
+                    case SUBTRACT -> Math.subtractExact(left, right);
+                    case MULTIPLY -> Math.multiplyExact(left, right);
+                    default -> throw new AssertionError("non-arithmetic canonical operation");
+                };
+                return result;
+            } catch (ArithmeticException overflow) {
+                // Exact BigInteger arithmetic belongs to the selected native fallback.
+                return MISS;
+            }
+        }
+
+        @Specialization(
+                guards = {
+                    "smallInteger(receiver, receiverCarrier)",
+                    "smallFloat(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null",
+                    "mixedArithmetic(cachedInteger.operation())"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static Object canonicalMixedInteger(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("canonicalGuard(selector, prelude, enteredContext)")
+                        GuardedIntegerSend cachedInteger) {
+            double left = (double) smallValue(receiver);
+            double right = floatValue(argument);
+            return switch (cachedInteger.operation()) {
+                case ADD -> left + right;
+                case SUBTRACT -> left - right;
+                case MULTIPLY -> left * right;
+                case FLOAT_DIVIDE -> left / right;
+                default -> throw new AssertionError(
+                        "non-mixed canonical Integer operation");
+            };
+        }
+
+        record GuardedFloatSend(
+                ProtosStandardFloatProtocol.CanonicalFloatOperation operation,
+                Assumption stability) {}
+
+        @Specialization(
+                guards = {
+                    "smallFloat(receiver, receiverCarrier)",
+                    "smallNumeric(argument, argumentCarrier)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedFloat != null"
+                },
+                assumptions = "cachedFloat.stability()",
+                limit = "3")
+        public static Object canonicalFloat(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("canonicalFloatGuard(selector, prelude, enteredContext)")
+                        GuardedFloatSend cachedFloat) {
+            double left = floatValue(receiver);
+            double right = smallFloat(argument, argumentCarrier)
+                    ? floatValue(argument) : (double) smallValue(argument);
+            return switch (cachedFloat.operation()) {
+                case ADD -> left + right;
+                case SUBTRACT -> left - right;
+                case MULTIPLY -> left * right;
+                case DIVIDE -> left / right;
+            };
+        }
+
+        @Specialization(
+                replaces = {"canonical", "canonicalMixedInteger", "canonicalFloat"})
+        public static Object generic(
+                Object receiver, String selector, Object caller, Object argument,
+                boolean receiverCarrier, boolean argumentCarrier) {
+            return MISS;
+        }
+
+        static boolean smallInteger(Object value, boolean carrierPermitted) {
+            return (carrierPermitted && value instanceof Long)
+                    || (value instanceof ProtosIntegerValue integer
+                            && integer.isSmallForRuntime());
+        }
+
+        static long smallValue(Object value) {
+            if (value instanceof Long carrier) {
+                return carrier.longValue();
+            }
+            return ((ProtosIntegerValue) value).smallValueForRuntime();
+        }
+
+        static boolean arithmetic(
+                ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation) {
+            return operation == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD
+                    || operation == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.SUBTRACT
+                    || operation == ProtosStandardIntegerProtocol.CanonicalIntegerOperation.MULTIPLY;
+        }
+
+        static boolean smallFloat(Object value, boolean carrierPermitted) {
+            return (carrierPermitted && value instanceof Double)
+                    || value instanceof ProtosFloatValue;
+        }
+
+        static boolean smallNumeric(Object value, boolean carrierPermitted) {
+            return smallInteger(value, carrierPermitted)
+                    || smallFloat(value, carrierPermitted);
+        }
+
+        static double floatValue(Object value) {
+            if (value instanceof Double carrier) {
+                return carrier.doubleValue();
+            }
+            return ((ProtosFloatValue) value).value();
+        }
+
+        static boolean mixedArithmetic(
+                ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation) {
+            return arithmetic(operation)
+                    || operation ==
+                            ProtosStandardIntegerProtocol.CanonicalIntegerOperation.FLOAT_DIVIDE;
+        }
+
+        static GuardedFloatSend canonicalFloatGuard(
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null || prelude == null) {
+                return null;
+            }
+            ProtosValueLookup.GuardedLookup lookup =
+                    ProtosValueLookup.lookupGuardedFloat(
+                            new ProtosFloatValue(0.0), selector, prelude);
+            if (lookup == null) {
+                return null;
+            }
+            ProtosSlotLookupResult selected = lookup.selected();
+            if (!(selected.value() instanceof ProtosClosureValue closure)
+                    || !lookup.stability().isValid()) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            ProtosStandardFloatProtocol.CanonicalFloatOperation operation =
+                    ProtosStandardFloatProtocol.canonicalOperationForSelection(
+                            closure, selected.home(), selector, prelude);
+            if (operation == null) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            return new GuardedFloatSend(operation, lookup.stability());
+        }
+
+        static GuardedIntegerSend canonicalGuard(
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return ProtosBytecodeRootNode.PrepareSendArguments.createGuardedIntegerSend(
+                    new ProtosIntegerValue(0L), selector, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return PrepareSendOne.callerPrelude(caller);
         }
 
         @NonIdempotent

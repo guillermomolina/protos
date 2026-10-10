@@ -100,7 +100,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
                                 observed.add(octet.value());
                                 if (observed.size() == 1) {
                                     bytes.indexedPut(
-                                            BigInteger.ONE,
+                                            1,
                                             new ProtosIntegerValue(
                                                     BigInteger.valueOf(99)));
                                 }
@@ -126,7 +126,7 @@ final class ProtosPerf006Plat028BytesEachCallbackTest {
             assertEquals(
                     BigInteger.valueOf(99),
                     ((ProtosIntegerValue)
-                                    bytes.indexedAt(BigInteger.ONE))
+                                    bytes.indexedAt(1))
                             .value());
         }
 

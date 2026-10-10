@@ -284,8 +284,9 @@ public final class ProtosParallelRuntime {
             // D188: raw foreign references, foreign module facades, and projected foreign Closures
             // carry provider-session state with no P transfer contract.
             if(v instanceof ProtosForeignProjectedReceiver||(v instanceof ProtosClosureValue c&&ProtosForeignProjectedOperations.isProjectionClosure(c)))throw new NonParallel();
-            if(v instanceof ProtosIntegerValue x)return new ProtosIntegerValue(x.value());
-            if(v instanceof ProtosFloatValue x)return new ProtosFloatValue(x.value());
+            Object copiedNumber =
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(v);
+            if (copiedNumber != null) return copiedNumber;
             if(v instanceof ProtosStringValue x)return x.copyForRuntime();
             if(v instanceof ProtosPathValue x)return new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.components());
             if(v instanceof ProtosEncodingValue x){

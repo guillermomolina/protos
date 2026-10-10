@@ -403,12 +403,12 @@ final class ProtosAsyncExactExecutionFacilityTest {
     }
 
     private static String bytesText(ProtosBytesValue bytes) {
-        byte[] raw = new byte[bytes.indexedSize().intValueExact()];
+        byte[] raw = new byte[bytes.indexedSize()];
         for (int index = 0; index < raw.length; index++) {
             ProtosIntegerValue octet =
                     assertInstanceOf(
                             ProtosIntegerValue.class,
-                            bytes.indexedAt(BigInteger.valueOf(index)));
+                            bytes.indexedAt(index));
             raw[index] = (byte) octet.value().intValueExact();
         }
         return new String(raw, StandardCharsets.UTF_8);

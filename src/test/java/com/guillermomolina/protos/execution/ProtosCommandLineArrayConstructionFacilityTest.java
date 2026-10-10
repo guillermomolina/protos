@@ -78,14 +78,14 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         ProtosInvocation.invokeMessage(second, "finish", List.of(), activation));
-        assertEquals(0, secondResult.indexedSizeForRuntime());
+        assertEquals(0, secondResult.indexedSize());
 
         ProtosArrayValue firstResult =
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         ProtosInvocation.invokeMessage(first, "finish", List.of(), activation));
-        assertEquals(1, firstResult.indexedSizeForRuntime());
-        assertSame(value, firstResult.indexedAtForRuntime(0));
+        assertEquals(1, firstResult.indexedSize());
+        assertSame(value, firstResult.indexedAt(0));
         assertThrows(
                 ProtosSignalException.class,
                 () -> ProtosInvocation.invokeMessage(
@@ -110,9 +110,9 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
                         ProtosInvocation.invokeMessage(builder, "finish", List.of(), activation));
         assertSame(prelude.arrayPrototype(), result.parent().orElseThrow());
         assertFalse(result.isFrozen());
-        assertEquals(VALUE_COUNT, result.indexedSizeForRuntime());
+        assertEquals(VALUE_COUNT, result.indexedSize());
         for (int index = 0; index < VALUE_COUNT; index++) {
-            assertSame(values.get(index), result.indexedAtForRuntime(index));
+            assertSame(values.get(index), result.indexedAt(index));
         }
 
         assertThrows(
@@ -171,12 +171,12 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
         ProtosArrayValue result = state.finish(prelude);
         assertTrue(state.isConsumed());
         assertEquals(1, state.finalMaterializations());
-        assertEquals(VALUE_COUNT, result.indexedSizeForRuntime());
+        assertEquals(VALUE_COUNT, result.indexedSize());
 
         assertNull(state.finish(prelude));
         assertFalse(state.append(values.get(0)));
         assertEquals(1, state.finalMaterializations());
-        assertEquals(VALUE_COUNT, result.indexedSizeForRuntime());
+        assertEquals(VALUE_COUNT, result.indexedSize());
     }
 
     @Test
@@ -217,7 +217,7 @@ final class ProtosCommandLineArrayConstructionFacilityTest {
                         activation);
         ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, positionals);
         assertTrue(result.isFrozen());
-        assertEquals(3, result.indexedSizeForRuntime());
+        assertEquals(3, result.indexedSize());
     }
 
     private static List<ProtosObjectValue> distinctValues() {

@@ -61,7 +61,7 @@ final class ProtosTcpListenerAcceptTest {
             @Override public void close(ProtosTcpListenerFlow.CloseCompletion completion){ completion.succeeded(); }
             @Override public ProtosTcpListenerFlow.Cancellation accept(ProtosTcpListenerFlow.AcceptCompletion completion){ a.executionDomain().actorTerminated(); return cancels::incrementAndGet; }
         };
-        ProtosTcpListenerValue listener=new ProtosTcpListenerValue(p,new Object(),a,b,BigInteger.valueOf(51000),ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
+        ProtosTcpListenerValue listener=new ProtosTcpListenerValue(p,new Object(),a,b,51000,ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
         ProtosFutureValue f=future(listener,"accept",List.of(),a); assertEquals(ProtosFutureValue.State.CANCELLED,f.state()); assertEquals(1,cancels.get());
     }
 
@@ -75,7 +75,7 @@ final class ProtosTcpListenerAcceptTest {
             @Override public void close(ProtosTcpListenerFlow.CloseCompletion completion){ completion.succeeded(); }
             @Override public ProtosTcpListenerFlow.Cancellation accept(ProtosTcpListenerFlow.AcceptCompletion completion){ throw new IllegalStateException("backend boom"); }
         };
-        ProtosTcpListenerValue listener=new ProtosTcpListenerValue(x.prelude,new Object(),x.activation,throwing,BigInteger.valueOf(51000),ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
+        ProtosTcpListenerValue listener=new ProtosTcpListenerValue(x.prelude,new Object(),x.activation,throwing,51000,ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
         assertFailedAs(future(listener,"accept",List.of(),x.activation),x.prelude,"IOError");
     }
 
@@ -83,14 +83,14 @@ final class ProtosTcpListenerAcceptTest {
         Fixture x=fixture(); ProtosObjectValue child=new ProtosObjectValue(x.listener);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(child,"accept",List.of(),x.activation));
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(x.listener,"accept",List.of(new ProtosIntegerValue(BigInteger.ONE)),x.activation));
-        ProtosTcpListenerValue lifecycleOnly=new ProtosTcpListenerValue(x.prelude,new Object(),x.activation,x.backend,BigInteger.valueOf(51000));
+        ProtosTcpListenerValue lifecycleOnly=new ProtosTcpListenerValue(x.prelude,new Object(),x.activation,x.backend,51000);
         assertThrows(ProtosSignalException.class,()->ProtosInvocation.invokeMessage(lifecycleOnly,"accept",List.of(),x.activation));
         assertTrue(x.backend.accepts.isEmpty());
     }
 
     private static Fixture fixture() throws Exception {
         ProtosPrelude p=core(); ProtosActivation a=p.newModuleActivation(); RecordingBackend b=new RecordingBackend();
-        ProtosTcpListenerValue l=new ProtosTcpListenerValue(p,new Object(),a,b,BigInteger.valueOf(51000),ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
+        ProtosTcpListenerValue l=new ProtosTcpListenerValue(p,new Object(),a,b,51000,ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
         return new Fixture(p,a,l,b);
     }
     private static ProtosPrelude core() throws Exception { return new ProtosCoreBootstrap().bootstrap(CORE); }

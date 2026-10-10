@@ -37,6 +37,7 @@ def review_boundary(path):
         "ProtosIntegerValue",
         "ProtosFloatValue",
         "ProtosNumberLiteral",
+        "ProtosNumericValueSupport",
         "ProtosBinary64Rounding",
         "ProtosStandardIntegerProtocol",
         "ProtosStandardFloatProtocol",
@@ -45,6 +46,7 @@ def review_boundary(path):
 
     identity = {
         "ProtosIdentity",
+        "ProtosCurrentNumericRelations",
         "ProtosStandardHashSupport",
         "ProtosStandardNumberEqualityProtocol",
         "ProtosStandardNumberOrderingProtocol",
@@ -158,14 +160,14 @@ CHECKS = [
     (
         "F2_BYTECODE_ROOT_TYPED_CARRIERS",
         "execution/ProtosBytecodeRootNode.java",
-        "boxingEliminationTypes = {int.class}",
-        "This root has not established the required long/double carrier chain",
+        "boxingEliminationTypes = {int.class, long.class, double.class}",
+        "The root enables long/double boxing elimination; the complete guest numeric chain remains unproven",
     ),
     (
         "F2_SEMANTIC_ROOT_TYPED_CARRIERS",
         "execution/ProtosSemanticBytecodeRootNode.java",
-        "boxingEliminationTypes = {int.class}",
-        "This root has not established the required long/double carrier chain",
+        "boxingEliminationTypes = {int.class, long.class, double.class}",
+        "The root enables long/double boxing elimination; the complete guest numeric chain remains unproven",
     ),
     (
         "F2_INTEGER_WRAPPER_RESULT",
@@ -175,21 +177,21 @@ CHECKS = [
     ),
     (
         "F4_NUMBER_EQUALITY_CARRIER_DEPENDENCY",
-        "execution/ProtosStandardNumberEqualityProtocol.java",
-        "return value instanceof ProtosIntegerValue",
-        "Current number recognition is tied to existing wrappers",
+        "runtime/ProtosNumericValueSupport.java",
+        "return isCurrentInteger(value) || isCurrentFloat(value);",
+        "Current numeric recognition is centralized; rich families remain pending",
     ),
     (
         "F4_IDENTITY_WRAPPER_DEPENDENCY",
         "runtime/ProtosIdentity.java",
-        "left instanceof ProtosIntegerValue",
-        "Current numeric value identity recognizes existing wrapper families",
+        "ProtosNumericValueSupport.sameCurrentFamilyIdentity(left,right)",
+        "Identity delegates to the numeric boundary; rich identity remains pending",
     ),
     (
         "F4_HASH_WRAPPER_DEPENDENCY",
-        "execution/ProtosStandardHashSupport.java",
-        "v instanceof ProtosIntegerValue",
-        "Current Number hash dispatch recognizes wrapper families",
+        "execution/ProtosCurrentNumericRelations.java",
+        "static BigInteger normalHash(Object value)",
+        "Current numeric hash is centralized; rich-family hashing remains pending",
     ),
 ]
 

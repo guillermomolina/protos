@@ -108,12 +108,12 @@ final class ProtosFreshProcessExecutorTest {
 
         ProtosArrayValue captures =
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
-        assertEquals(BigInteger.ONE, captures.indexedSize());
+        assertEquals(1, captures.indexedSize());
 
         ProtosIntegerValue captured =
                 assertInstanceOf(
                         ProtosIntegerValue.class,
-                        captures.indexedAt(BigInteger.ZERO));
+                        captures.indexedAt(0));
         assertEquals(BigInteger.valueOf(42), captured.value());
     }
 
@@ -140,12 +140,12 @@ final class ProtosFreshProcessExecutorTest {
 
         ProtosArrayValue captures =
                 assertInstanceOf(ProtosArrayValue.class, outcome.value());
-        assertEquals(BigInteger.ONE, captures.indexedSize());
+        assertEquals(1, captures.indexedSize());
 
         ProtosIntegerValue captured =
                 assertInstanceOf(
                         ProtosIntegerValue.class,
-                        captures.indexedAt(BigInteger.ZERO));
+                        captures.indexedAt(0));
         assertEquals(BigInteger.valueOf(42), captured.value());
     }
 

@@ -198,7 +198,7 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                         ProtosClosureValue.nativeClosure(
                                 (activation, supplied) -> {
                                     items.indexedPut(
-                                            BigInteger.ZERO,
+                                            0,
                                             newValue);
                                     return tail;
                                 }));
@@ -216,7 +216,7 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                         seen.get());
                 assertSame(
                         newValue,
-                        items.indexedAt(BigInteger.ZERO));
+                        items.indexedAt(0));
             } finally {
                 context.leave();
             }
@@ -426,7 +426,7 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                                 first);
 
                 items.indexedPut(
-                        BigInteger.ZERO,
+                        0,
                         after);
 
                 Object completed =
@@ -439,7 +439,7 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                         seen.get());
                 assertSame(
                         after,
-                        items.indexedAt(BigInteger.ZERO));
+                        items.indexedAt(0));
             } finally {
                 context.leave();
             }

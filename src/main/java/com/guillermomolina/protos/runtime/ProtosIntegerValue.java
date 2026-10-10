@@ -74,6 +74,104 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
                 && smallValue <= Integer.MAX_VALUE;
     }
 
+    /**
+     * Exact unsigned-width check for bounded host protocols.
+     * Arbitrarily large values remain exact and are never narrowed.
+     */
+    public boolean fitsUnsignedBitsForRuntime(int bits) {
+        if (bits < 0) {
+            throw new IllegalArgumentException("negative unsigned width");
+        }
+        if (bigValue != null) {
+            return bigValue.signum() >= 0 && bigValue.bitLength() <= bits;
+        }
+        if (smallValue < 0) {
+            return false;
+        }
+        return bits >= Long.SIZE - 1 || (smallValue >>> bits) == 0L;
+    }
+
+    /**
+     * Exact non-negative Integer denoted by an unsigned big-endian octet sequence, as used by
+     * fixed-width host encodings such as IP address bits. Only sequences beyond the signed-long
+     * range allocate arbitrary-precision state.
+     */
+    public static ProtosIntegerValue fromUnsignedBigEndianForRuntime(byte[] octets) {
+        Objects.requireNonNull(octets, "octets");
+        int first = 0;
+        while (first < octets.length && octets[first] == 0) {
+            first++;
+        }
+        int significant = octets.length - first;
+        if (significant < Long.BYTES
+                || (significant == Long.BYTES && octets[first] > 0)) {
+            long value = 0L;
+            for (int index = first; index < octets.length; index++) {
+                value = (value << Byte.SIZE) | (octets[index] & 0xffL);
+            }
+            return new ProtosIntegerValue(value);
+        }
+        return fromUnsignedBigEndianBig(octets);
+    }
+
+    /**
+     * Unsigned big-endian encoding of exactly {@code width} octets. The value must be
+     * non-negative and fit {@code width * 8} bits; the encoding never truncates.
+     */
+    public byte[] toUnsignedBigEndianForRuntime(int width) {
+        if (width < 0 || !fitsUnsignedBitsForRuntime(width * Byte.SIZE)) {
+            throw new ArithmeticException("Integer does not fit the unsigned width");
+        }
+        byte[] result = new byte[width];
+        if (bigValue != null) {
+            copyUnsignedBig(bigValue, result);
+            return result;
+        }
+        long remaining = smallValue;
+        for (int index = width - 1; index >= 0 && remaining != 0L; index--) {
+            result[index] = (byte) remaining;
+            remaining >>>= Byte.SIZE;
+        }
+        return result;
+    }
+
+    @TruffleBoundary
+    private static ProtosIntegerValue fromUnsignedBigEndianBig(byte[] octets) {
+        return new ProtosIntegerValue(new BigInteger(1, octets));
+    }
+
+    @TruffleBoundary
+    private static void copyUnsignedBig(BigInteger value, byte[] result) {
+        byte[] raw = value.toByteArray();
+        int offset = raw.length > 1 && raw[0] == 0 ? 1 : 0;
+        int length = raw.length - offset;
+        System.arraycopy(raw, offset, result, result.length - length, length);
+    }
+
+    /**
+     * Hash of the exact value, identical to the canonical arbitrary-precision host hash so the
+     * observable identity hash never depends on the internal representation. Small values are
+     * hashed without allocating arbitrary-precision state.
+     */
+    public int exactHashCodeForRuntime() {
+        if (bigValue != null) {
+            return bigHashCode(bigValue);
+        }
+        if (smallValue == 0L) {
+            return 0;
+        }
+        long magnitude = smallValue < 0L ? -smallValue : smallValue;
+        int high = (int) (magnitude >>> Integer.SIZE);
+        int low = (int) magnitude;
+        int hash = high != 0 ? 31 * high + low : low;
+        return smallValue < 0L ? -hash : hash;
+    }
+
+    @TruffleBoundary
+    private static int bigHashCode(BigInteger value) {
+        return value.hashCode();
+    }
+
     public int intValueExactForRuntime() {
         if (!fitsInIntForRuntime()) {
             throw new ArithmeticException("Integer does not fit in int");
@@ -209,33 +307,34 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
         return true;
     }
 
+    /*
+     * The arbitrary-precision representation is used only outside the signed-long range, so it
+     * never fits a fixed host integral width and only binary32/binary64 projection can apply.
+     */
     @ExportMessage
     boolean fitsInByte() {
-        if (bigValue == null) {
-            return smallValue >= Byte.MIN_VALUE && smallValue <= Byte.MAX_VALUE;
-        }
-        return fitsInByteBig(bigValue);
+        return bigValue == null
+                && smallValue >= Byte.MIN_VALUE
+                && smallValue <= Byte.MAX_VALUE;
     }
 
     @ExportMessage
     boolean fitsInShort() {
-        if (bigValue == null) {
-            return smallValue >= Short.MIN_VALUE && smallValue <= Short.MAX_VALUE;
-        }
-        return fitsInShortBig(bigValue);
+        return bigValue == null
+                && smallValue >= Short.MIN_VALUE
+                && smallValue <= Short.MAX_VALUE;
     }
 
     @ExportMessage
     boolean fitsInInt() {
-        if (bigValue == null) {
-            return smallValue >= Integer.MIN_VALUE && smallValue <= Integer.MAX_VALUE;
-        }
-        return fitsInIntBig(bigValue);
+        return bigValue == null
+                && smallValue >= Integer.MIN_VALUE
+                && smallValue <= Integer.MAX_VALUE;
     }
 
     @ExportMessage
     boolean fitsInLong() {
-        return bigValue == null || fitsInLongBig(bigValue);
+        return bigValue == null;
     }
 
     @ExportMessage
@@ -244,56 +343,51 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
-    @TruffleBoundary
     boolean fitsInFloat() {
-        return ProtosIntegralInteropSupport.fitsInFloat(value());
+        if (bigValue == null) {
+            return smallFitsInFloat(smallValue);
+        }
+        return fitsInFloatBig(bigValue);
     }
 
     @ExportMessage
-    @TruffleBoundary
     boolean fitsInDouble() {
-        return ProtosIntegralInteropSupport.fitsInDouble(value());
+        if (bigValue == null) {
+            return smallFitsInDouble(smallValue);
+        }
+        return fitsInDoubleBig(bigValue);
     }
 
     @ExportMessage
     byte asByte() throws UnsupportedMessageException {
-        if (bigValue == null) {
-            if (smallValue < Byte.MIN_VALUE || smallValue > Byte.MAX_VALUE) {
-                throw UnsupportedMessageException.create();
-            }
-            return (byte) smallValue;
+        if (!fitsInByte()) {
+            throw UnsupportedMessageException.create();
         }
-        return asByteBig(bigValue);
+        return (byte) smallValue;
     }
 
     @ExportMessage
     short asShort() throws UnsupportedMessageException {
-        if (bigValue == null) {
-            if (smallValue < Short.MIN_VALUE || smallValue > Short.MAX_VALUE) {
-                throw UnsupportedMessageException.create();
-            }
-            return (short) smallValue;
+        if (!fitsInShort()) {
+            throw UnsupportedMessageException.create();
         }
-        return asShortBig(bigValue);
+        return (short) smallValue;
     }
 
     @ExportMessage
     int asInt() throws UnsupportedMessageException {
-        if (bigValue == null) {
-            if (smallValue < Integer.MIN_VALUE || smallValue > Integer.MAX_VALUE) {
-                throw UnsupportedMessageException.create();
-            }
-            return (int) smallValue;
+        if (!fitsInInt()) {
+            throw UnsupportedMessageException.create();
         }
-        return asIntBig(bigValue);
+        return (int) smallValue;
     }
 
     @ExportMessage
     long asLong() throws UnsupportedMessageException {
-        if (bigValue == null) {
-            return smallValue;
+        if (bigValue != null) {
+            throw UnsupportedMessageException.create();
         }
-        return asLongBig(bigValue);
+        return smallValue;
     }
 
     @ExportMessage
@@ -302,15 +396,25 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
-    @TruffleBoundary
     float asFloat() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asFloat(value());
+        if (bigValue == null) {
+            if (!smallFitsInFloat(smallValue)) {
+                throw UnsupportedMessageException.create();
+            }
+            return (float) smallValue;
+        }
+        return asFloatBig(bigValue);
     }
 
     @ExportMessage
-    @TruffleBoundary
     double asDouble() throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asDouble(value());
+        if (bigValue == null) {
+            if (!smallFitsInDouble(smallValue)) {
+                throw UnsupportedMessageException.create();
+            }
+            return (double) smallValue;
+        }
+        return asDoubleBig(bigValue);
     }
 
     @ExportMessage
@@ -319,44 +423,37 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
         return bigValue != null ? bigValue.toString() : Long.toString(smallValue);
     }
 
-    @TruffleBoundary
-    private static boolean fitsInByteBig(BigInteger value) {
-        return ProtosIntegralInteropSupport.fitsInByte(value);
+    /*
+     * A rounded conversion below 2^63 is integral and converts back to long exactly, so the
+     * round trip decides exact representability; 2^63 itself is beyond every long.
+     */
+    private static boolean smallFitsInFloat(long value) {
+        float converted = (float) value;
+        return converted != 0x1p63f && (long) converted == value;
+    }
+
+    private static boolean smallFitsInDouble(long value) {
+        double converted = (double) value;
+        return converted != 0x1p63 && (long) converted == value;
     }
 
     @TruffleBoundary
-    private static boolean fitsInShortBig(BigInteger value) {
-        return ProtosIntegralInteropSupport.fitsInShort(value);
+    private static boolean fitsInFloatBig(BigInteger value) {
+        return ProtosIntegralInteropSupport.fitsInFloat(value);
     }
 
     @TruffleBoundary
-    private static boolean fitsInIntBig(BigInteger value) {
-        return ProtosIntegralInteropSupport.fitsInInt(value);
+    private static boolean fitsInDoubleBig(BigInteger value) {
+        return ProtosIntegralInteropSupport.fitsInDouble(value);
     }
 
     @TruffleBoundary
-    private static boolean fitsInLongBig(BigInteger value) {
-        return ProtosIntegralInteropSupport.fitsInLong(value);
+    private static float asFloatBig(BigInteger value) throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asFloat(value);
     }
 
     @TruffleBoundary
-    private static byte asByteBig(BigInteger value) throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asByte(value);
+    private static double asDoubleBig(BigInteger value) throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asDouble(value);
     }
-
-    @TruffleBoundary
-    private static short asShortBig(BigInteger value) throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asShort(value);
-    }
-
-    @TruffleBoundary
-    private static int asIntBig(BigInteger value) throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asInt(value);
-    }
-
-    @TruffleBoundary
-    private static long asLongBig(BigInteger value) throws UnsupportedMessageException {
-        return ProtosIntegralInteropSupport.asLong(value);
-    }
-
 }

@@ -44,7 +44,21 @@ public final class ProtosNumberLiteral {
             digitsStart = 2;
         }
 
-        return new ProtosIntegerValue(new BigInteger(normalized.substring(digitsStart), radix));
+        String digits = normalized.substring(digitsStart);
+        if (digits.length() <= signedLongSafeDigits(radix)) {
+            return new ProtosIntegerValue(Long.parseLong(digits, radix));
+        }
+        return new ProtosIntegerValue(new BigInteger(digits, radix));
+    }
+
+    /** Longest digit run that cannot exceed the signed-long range in the given radix. */
+    private static int signedLongSafeDigits(int radix) {
+        return switch (radix) {
+            case 2 -> 63;
+            case 8 -> 21;
+            case 16 -> 15;
+            default -> 18;
+        };
     }
 
     private static boolean isFloat(String spelling) {

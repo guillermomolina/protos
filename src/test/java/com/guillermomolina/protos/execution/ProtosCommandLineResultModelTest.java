@@ -151,12 +151,12 @@ final class ProtosCommandLineResultModelTest {
 
         ProtosArrayValue arguments = arraySlot(result, "arguments");
         assertTrue(arguments.isFrozen());
-        assertEquals(BigInteger.valueOf(5), arguments.indexedSize());
-        assertEquals("--verbose", stringValue(arguments.indexedAt(BigInteger.ZERO)));
-        assertEquals("package", stringValue(arguments.indexedAt(BigInteger.ONE)));
-        assertEquals("install", stringValue(arguments.indexedAt(BigInteger.TWO)));
-        assertEquals("--", stringValue(arguments.indexedAt(BigInteger.valueOf(3))));
-        assertEquals("-literal", stringValue(arguments.indexedAt(BigInteger.valueOf(4))));
+        assertEquals(5, arguments.indexedSize());
+        assertEquals("--verbose", stringValue(arguments.indexedAt(0)));
+        assertEquals("package", stringValue(arguments.indexedAt(1)));
+        assertEquals("install", stringValue(arguments.indexedAt(2)));
+        assertEquals("--", stringValue(arguments.indexedAt(3)));
+        assertEquals("-literal", stringValue(arguments.indexedAt(4)));
 
         ProtosObjectValue root = objectSlot(result, "command");
         assertCommandResultShape(root);
@@ -168,11 +168,11 @@ final class ProtosCommandLineResultModelTest {
         ProtosArrayValue rootPositionals = arraySlot(root, "positionals");
         assertTrue(rootOptions.isFrozen());
         assertTrue(rootPositionals.isFrozen());
-        assertEquals(BigInteger.ONE, rootOptions.indexedSize());
-        assertEquals(BigInteger.ZERO, rootPositionals.indexedSize());
+        assertEquals(1, rootOptions.indexedSize());
+        assertEquals(0, rootPositionals.indexedSize());
 
         ProtosObjectValue verbose =
-                assertInstanceOf(ProtosObjectValue.class, rootOptions.indexedAt(BigInteger.ZERO));
+                assertInstanceOf(ProtosObjectValue.class, rootOptions.indexedAt(0));
         assertTrue(verbose.isFrozen());
         assertEquals(
                 Set.of("kind", "key", "spelling", "tokenIndex", "value", "valueTokenIndex"),
@@ -201,11 +201,11 @@ final class ProtosCommandLineResultModelTest {
 
         ProtosArrayValue leafPositionals = arraySlot(leaf, "positionals");
         assertTrue(leafPositionals.isFrozen());
-        assertEquals(BigInteger.ONE, leafPositionals.indexedSize());
+        assertEquals(1, leafPositionals.indexedSize());
         ProtosObjectValue positional =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        leafPositionals.indexedAt(BigInteger.ZERO));
+                        leafPositionals.indexedAt(0));
         assertTrue(positional.isFrozen());
         assertEquals(
                 Set.of("kind", "key", "value", "tokenIndex"),

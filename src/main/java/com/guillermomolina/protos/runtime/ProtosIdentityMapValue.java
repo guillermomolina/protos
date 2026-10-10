@@ -16,7 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
+
 import java.util.AbstractList;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -33,10 +33,10 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
      */
     public static final class Entry implements Map.Entry<Object, Object> {
         private final Object key;
-        private final BigInteger hash;
+        private final ProtosNumericHashKey hash;
         private Object value;
 
-        Entry(Object key, BigInteger hash, Object value) {
+        Entry(Object key, ProtosNumericHashKey hash, Object value) {
             this.key = Objects.requireNonNull(key, "key");
             this.hash = Objects.requireNonNull(hash, "hash");
             this.value = Objects.requireNonNull(value, "value");
@@ -46,7 +46,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
             return key;
         }
 
-        public BigInteger recordedIdentityHash() {
+        public ProtosNumericHashKey recordedIdentityHash() {
             return hash;
         }
 
@@ -116,7 +116,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
      */
     private static final class IdentityMapGeneration {
         private final List<Entry> entries = new ArrayList<>();
-        private final Map<BigInteger, Bucket> entriesByIdentityHash =
+        private final Map<ProtosNumericHashKey, Bucket> entriesByIdentityHash =
                 new HashMap<>();
 
         private List<Entry> keyedSnapshotView;
@@ -133,7 +133,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
                     .add(entry);
         }
 
-        private List<Entry> candidates(BigInteger hash) {
+        private List<Entry> candidates(ProtosNumericHashKey hash) {
             Bucket bucket =
                     entriesByIdentityHash.get(
                             Objects.requireNonNull(hash, "hash"));
@@ -271,7 +271,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
     }
 
     public List<Entry> candidatesForRecordedIdentityHash(
-            BigInteger hash) {
+            ProtosNumericHashKey hash) {
         return generation.candidates(hash);
     }
 
@@ -281,7 +281,7 @@ public final class ProtosIdentityMapValue extends ProtosObjectValue {
 
     public void append(
             Object key,
-            BigInteger hash,
+            ProtosNumericHashKey hash,
             Object value) {
         if (generation.published) {
             generation = generation.detachedCopy();

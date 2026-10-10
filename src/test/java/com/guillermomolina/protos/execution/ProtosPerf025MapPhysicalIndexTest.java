@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -71,8 +72,8 @@ final class ProtosPerf025MapPhysicalIndexTest {
         Object secondCollisionValue = new ProtosObjectValue(parent);
         Object reinsertedValue = new ProtosObjectValue(parent);
 
-        BigInteger collisionHash = BigInteger.valueOf(7);
-        BigInteger otherHash = BigInteger.valueOf(11);
+        ProtosNumericHashKey collisionHash = ProtosNumericHashKey.ofLong(7);
+        ProtosNumericHashKey otherHash = ProtosNumericHashKey.ofLong(11);
 
         map.append(firstKey, collisionHash, firstValue);
         map.append(otherHashKey, otherHash, otherHashValue);
@@ -86,7 +87,7 @@ final class ProtosPerf025MapPhysicalIndexTest {
         assertSame(secondCollisionKey, candidates.get(1).key());
         assertEquals(collisionHash, candidates.get(0).recordedHash());
         assertEquals(collisionHash, candidates.get(1).recordedHash());
-        assertTrue(map.candidatesForRecordedHash(BigInteger.valueOf(13)).isEmpty());
+        assertTrue(map.candidatesForRecordedHash(ProtosNumericHashKey.ofLong(13)).isEmpty());
 
         map.replaceValue(candidates.get(0), replacementValue);
 
@@ -130,10 +131,10 @@ final class ProtosPerf025MapPhysicalIndexTest {
         assertNotSame(first, semanticallyIdentical);
         assertTrue(ProtosIdentity.identical(first, semanticallyIdentical));
 
-        BigInteger identityHash = ProtosIdentity.identityHash(first);
+        ProtosNumericHashKey identityHash = ProtosNumericHashKey.fromIdentity(first);
         assertEquals(
                 identityHash,
-                ProtosIdentity.identityHash(semanticallyIdentical));
+                ProtosNumericHashKey.fromIdentity(semanticallyIdentical));
 
         Object firstValue = new ProtosObjectValue(parent);
         Object secondValue = new ProtosObjectValue(parent);

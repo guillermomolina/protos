@@ -54,7 +54,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "root: SuiteGraph.suite(\"root\", Array(a, nested, f, g))\n"
                                         + "SuiteGraph.flattenLeafIds(root)"));
 
-        assertEquals(7, flattened.indexedSize().intValueExact());
+        assertEquals(7, flattened.indexedSize());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "a");
         assertLeafId(flattened, 1, "b");
@@ -79,7 +79,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "root: SuiteGraph.suite(\"protos/root-suite\", Array(leaf))\n"
                                         + "SuiteGraph.flattenLeafIds(root)"));
 
-        assertEquals(1, flattened.indexedSize().intValueExact());
+        assertEquals(1, flattened.indexedSize());
         assertLeafId(flattened, 0, logicalId);
     }
 
@@ -101,7 +101,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
-        assertEquals(24, flattened.indexedSize().intValueExact());
+        assertEquals(24, flattened.indexedSize());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "protos/conformance");
         assertLeafId(flattened, 1, "protos/process-snapshot");
@@ -139,7 +139,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(24, leaves.indexedSize().intValueExact());
+        assertEquals(24, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
         assertLeafCorpus(leaves, 1, "protos/process-snapshot", "protos/corpus/process-snapshot");
@@ -177,7 +177,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(24, leaves.indexedSize().intValueExact());
+        assertEquals(24, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafRequirement(leaves, 0, "protos/conformance", "protos/test/ordinary");
         assertLeafRequirement(leaves, 1, "protos/process-snapshot", "protos/test/process-snapshot");
@@ -331,7 +331,7 @@ final class ProtosTestToolSuiteGraphTest {
         ProtosObjectValue leaf =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        leaves.indexedAt(BigInteger.valueOf(index)));
+                        leaves.indexedAt(index));
         assertTrue(leaf.isFrozen());
         assertEquals(
                 expectedId,
@@ -355,7 +355,7 @@ final class ProtosTestToolSuiteGraphTest {
         ProtosObjectValue leaf =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        leaves.indexedAt(BigInteger.valueOf(index)));
+                        leaves.indexedAt(index));
         assertTrue(leaf.isFrozen());
         assertEquals(
                 expectedId,
@@ -376,7 +376,7 @@ final class ProtosTestToolSuiteGraphTest {
                 expected,
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                flattened.indexedAt(BigInteger.valueOf(index)))
+                                flattened.indexedAt(index))
                         .value());
     }
 

@@ -98,7 +98,7 @@ class ProtosJsonDataModelModuleTest {
                         ProtosArrayValue.class,
                         copiedNumbers.readLocalSlot("value").orElseThrow());
         assertTrue(copiedArray.isFrozen());
-        assertEquals(BigInteger.TWO, copiedArray.indexedSize());
+        assertEquals(2, copiedArray.indexedSize());
     }
 
     private static String kind(ProtosObjectValue node) {

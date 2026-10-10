@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -53,7 +54,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
             ProtosObjectValue conflictingKey = key();
             AtomicInteger hashCalls = new AtomicInteger();
 
-            map.append(stored, BigInteger.valueOf(7), new ProtosIntegerValue(BigInteger.ONE));
+            map.append(stored, ProtosNumericHashKey.ofLong(7), new ProtosIntegerValue(BigInteger.ONE));
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("query", query);
@@ -150,8 +151,8 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                                 storedEqualityCalls.incrementAndGet();
                                 return ProtosBooleanValue.FALSE;
                             }));
-            map.append(skipped, BigInteger.valueOf(8), key());
-            map.append(stored, BigInteger.valueOf(7), marker);
+            map.append(skipped, ProtosNumericHashKey.ofLong(8), key());
+            map.append(stored, ProtosNumericHashKey.ofLong(7), marker);
 
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
@@ -219,7 +220,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
             ProtosObjectValue stored = key();
             ProtosObjectValue query = key();
 
-            map.append(stored, BigInteger.valueOf(7), key());
+            map.append(stored, ProtosNumericHashKey.ofLong(7), key());
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("gate", gate);
             module.context().createLocalSlot("query", query);
@@ -276,7 +277,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
             ProtosObjectValue stored = key();
             ProtosObjectValue invalidHash = key();
             ProtosObjectValue invalidEquality = key();
-            map.append(stored, BigInteger.valueOf(7), key());
+            map.append(stored, ProtosNumericHashKey.ofLong(7), key());
             module.context().createLocalSlot("map", map);
             module.context().createLocalSlot("invalidHash", invalidHash);
             module.context().createLocalSlot("invalidEquality", invalidEquality);

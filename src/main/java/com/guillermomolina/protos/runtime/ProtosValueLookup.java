@@ -330,7 +330,7 @@ public final class ProtosValueLookup {
      * representation contract to the owning prelude's Integer prototype.
      */
     public static boolean isInteger(Object receiver) {
-        return receiver instanceof ProtosIntegerValue;
+        return ProtosNumericValueSupport.isCurrentInteger(receiver);
     }
 
     /**
@@ -357,6 +357,27 @@ public final class ProtosValueLookup {
      *
      * @return a protected selection, or null when absent or unsupported
      */
+    /** Guarded D013 Float selection, symmetric with Integer lookup. */
+    public static GuardedLookup lookupGuardedFloat(
+            Object receiver, String name, ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (!(receiver instanceof ProtosFloatValue)
+                || prelude == null
+                || delegationParent(receiver, prelude).orElse(null)
+                        != prelude.floatPrototype()) {
+            return null;
+        }
+        Assumption stability =
+                Truffle.getRuntime().createAssumption("Protos selected Float slot");
+        Optional<ProtosSlotLookupResult> selected =
+                lookup(receiver, name, prelude, stability, true);
+        if (selected.isEmpty() || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
     public static GuardedLookup lookupGuardedInteger(
             Object receiver,
             String name,

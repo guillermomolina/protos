@@ -85,9 +85,9 @@ class ProtosPolymorphicInvocationTest {
                         activation);
 
         ProtosArrayValue rest = assertInstanceOf(ProtosArrayValue.class, result);
-        assertEquals(BigInteger.valueOf(2), rest.indexedSize());
-        assertSame(first, rest.indexedAt(BigInteger.ZERO));
-        assertSame(second, rest.indexedAt(BigInteger.ONE));
+        assertEquals(2, rest.indexedSize());
+        assertSame(first, rest.indexedAt(0));
+        assertSame(second, rest.indexedAt(1));
         assertTrue(rest.isFrozen());
     }
 

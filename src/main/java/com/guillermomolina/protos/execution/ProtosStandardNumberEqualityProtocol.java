@@ -20,11 +20,9 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.util.Objects;
 
 public final class ProtosStandardNumberEqualityProtocol {
@@ -47,13 +45,13 @@ public final class ProtosStandardNumberEqualityProtocol {
                             }
 
                             Object receiver = activation.receiver();
-                            if (!isSemanticNumber(receiver)) {
+                            if (!ProtosNumericValueSupport.isCurrentNumber(receiver)) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
 
                             Object argument = supplied.get(0);
-                            if (!isSemanticNumber(argument)) {
+                            if (!ProtosNumericValueSupport.isCurrentNumber(argument)) {
                                 return ProtosBooleanValue.FALSE;
                             }
 
@@ -64,40 +62,6 @@ public final class ProtosStandardNumberEqualityProtocol {
     }
 
     static boolean numericEquals(Object left, Object right) {
-        if (left instanceof ProtosIntegerValue leftInteger
-                && right instanceof ProtosIntegerValue rightInteger) {
-            return leftInteger.sameIntegerForRuntime(rightInteger);
-        }
-
-        if (left instanceof ProtosFloatValue leftFloat) {
-            if (right instanceof ProtosFloatValue rightFloat) {
-                return leftFloat.value() == rightFloat.value();
-            }
-            return floatEqualsExactInteger(leftFloat.value(), exactInteger(right));
-        }
-
-        if (right instanceof ProtosFloatValue rightFloat) {
-            return floatEqualsExactInteger(rightFloat.value(), exactInteger(left));
-        }
-
-        return exactInteger(left).equals(exactInteger(right));
-    }
-
-    private static boolean floatEqualsExactInteger(double floating, BigInteger integer) {
-        BigInteger exact =
-                ProtosStandardNumericConversionProtocol.exactIntegralBinary64(floating);
-        return exact != null && exact.equals(integer);
-    }
-
-    private static BigInteger exactInteger(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        throw new IllegalArgumentException("value is not an exact-integer family");
-    }
-
-    private static boolean isSemanticNumber(Object value) {
-        return value instanceof ProtosIntegerValue
-                || value instanceof ProtosFloatValue;
+        return ProtosCurrentNumericRelations.numericEquals(left, right);
     }
 }

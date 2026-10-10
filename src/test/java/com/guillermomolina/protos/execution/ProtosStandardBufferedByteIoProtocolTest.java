@@ -812,9 +812,9 @@ class ProtosStandardBufferedByteIoProtocolTest {
 
     private static List<Integer> ints(ProtosBytesValue bytes) {
         ArrayList<Integer> result = new ArrayList<>();
-        for (int j = 0, n = bytes.indexedSize().intValueExact(); j < n; j++) {
+        for (int j = 0, n = bytes.indexedSize(); j < n; j++) {
             result.add(
-                    ((ProtosIntegerValue) bytes.indexedAt(BigInteger.valueOf(j)))
+                    ((ProtosIntegerValue) bytes.indexedAt(j))
                             .value()
                             .intValue());
         }

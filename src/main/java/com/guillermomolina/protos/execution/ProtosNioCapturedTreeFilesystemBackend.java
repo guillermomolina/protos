@@ -20,9 +20,9 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
@@ -493,14 +493,14 @@ final class ProtosNioCapturedTreeFilesystemBackend
 
         @Override
         public synchronized ProtosFileFlow.Cancellation readAt(
-                BigInteger position,
+                ProtosIntegerValue position,
                 int maxBytes,
                 ProtosFileFlow.ReadCompletion completion) {
             Objects.requireNonNull(position, "position");
             Objects.requireNonNull(completion, "completion");
             if (closed
-                    || position.signum() < 0
-                    || position.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0
+                    || !position.isSmallForRuntime()
+                    || position.signumForRuntime() < 0
                     || maxBytes <= 0) {
                 completion.failed();
                 return () -> {};
@@ -509,7 +509,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
             int requested = Math.min(maxBytes, MAX_READ_CHUNK);
             ByteBuffer buffer = ByteBuffer.allocate(requested);
             try {
-                cleanup.channel.position(position.longValueExact());
+                cleanup.channel.position(position.smallValueForRuntime());
                 int read = cleanup.channel.read(buffer);
                 if (read < 0) {
                     completion.eof();

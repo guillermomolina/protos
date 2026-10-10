@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTextReader;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
@@ -150,12 +149,13 @@ public final class ProtosStandardTextReaderProtocol {
                 yield reader.readText(activation);
             }
             case READ_LINE -> {
-                BigInteger maxBytes = null;
+                ProtosIntegerValue maxBytes = null;
                 if (supplied.size() == 1) {
-                    maxBytes = integer(supplied.get(0));
-                    if (maxBytes == null || maxBytes.signum() <= 0) {
+                    if (!(supplied.get(0) instanceof ProtosIntegerValue integer)
+                            || integer.signumForRuntime() <= 0) {
                         yield invalidFuture(activation);
                     }
+                    maxBytes = integer;
                 } else if (!supplied.isEmpty()) {
                     yield invalidFuture(activation);
                 }
@@ -165,7 +165,9 @@ public final class ProtosStandardTextReaderProtocol {
                             maxBytes,
                             ProtosTextReaderCPrimeExecution.planForEnteredContext());
                 }
-                yield reader.readLine(activation, maxBytes);
+                yield reader.readLine(
+                        activation,
+                        maxBytes);
             }
             case CLOSE ->
                     supplied.isEmpty()
@@ -174,13 +176,6 @@ public final class ProtosStandardTextReaderProtocol {
                                     ProtosIoReleaseCPrimeExecution.planForEnteredContext())
                             : invalidFuture(activation);
         };
-    }
-
-    private static BigInteger integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        return null;
     }
 
     private static boolean hasCallableCapability(

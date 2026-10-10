@@ -16,6 +16,7 @@ import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -117,7 +118,7 @@ final class ProtosPerf006Plat028MapEachCallbackTest {
                                             replacementValue);
                                     map.append(
                                             appendedKey,
-                                            BigInteger.valueOf(map.keyedSize() + 1L),
+                                            ProtosNumericHashKey.ofLong(map.keyedSize() + 1L),
                                             appendedValue);
                                 }
                                 return ProtosNullValue.INSTANCE;
@@ -191,7 +192,7 @@ final class ProtosPerf006Plat028MapEachCallbackTest {
     }
 
     private static void append(ProtosMapValue map, Object key, Object value) {
-        map.append(key, BigInteger.valueOf(map.keyedSize() + 1L), value);
+        map.append(key, ProtosNumericHashKey.ofLong(map.keyedSize() + 1L), value);
     }
 
     private static ProtosTask execute(

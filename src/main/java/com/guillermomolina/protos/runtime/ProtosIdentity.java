@@ -21,24 +21,23 @@ public final class ProtosIdentity {
     private ProtosIdentity() {}
     public static boolean identical(Object left,Object right) {
         if(left==right)return true;
-        if(left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b)return a.sameIntegerForRuntime(b);
-        if(left instanceof ProtosFloatValue a && right instanceof ProtosFloatValue b){double av=a.value(),bv=b.value();if(Double.isNaN(av)&&Double.isNaN(bv))return true;return Double.doubleToRawLongBits(av)==Double.doubleToRawLongBits(bv);}
+        if(ProtosNumericValueSupport.sameCurrentFamilyIdentity(left,right))return true;
         if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
         if(left instanceof ProtosActorRefValue a && right instanceof ProtosActorRefValue b)return a.denotesSameIncarnation(b);
         if(left instanceof ProtosGroupRefValue a && right instanceof ProtosGroupRefValue b)return a.denotesSameReference(b);
         if(left instanceof ProtosRawForeignValue a && right instanceof ProtosRawForeignValue b)return a.sameForeignIdentity(b);
         return false;
     }
-    public static java.math.BigInteger identityHash(Object value){
+    /** Identity hash; every family tag and host hash is confined to the signed-long range. */
+    public static long identityHash(Object value){
         java.util.Objects.requireNonNull(value,"value");
-        if(value instanceof ProtosIntegerValue i)return tagged(1,i.value().hashCode());
-        if(value instanceof ProtosFloatValue f){double d=f.value();long bits=Double.isNaN(d)?0x7ff8000000000000L:Double.doubleToRawLongBits(d);return tagged(30,Long.hashCode(bits));}
+        if(ProtosNumericValueSupport.isCurrentNumber(value))return ProtosNumericValueSupport.currentNumericIdentityHash(value);
         if(value instanceof ProtosStringValue st)return tagged(31,st.value().hashCode());
         if(value instanceof ProtosActorRefValue ref)return tagged(34,Long.hashCode(ref.incarnationIdentityForRuntime()));
         if(value instanceof ProtosGroupRefValue ref)return tagged(35,ref.semanticIdentityForRuntime().hashCode());
-        if(value instanceof ProtosRawForeignValue raw)return java.math.BigInteger.valueOf(raw.taggedIdentityHash());
+        if(value instanceof ProtosRawForeignValue raw)return raw.taggedIdentityHash();
         if(value==ProtosBooleanValue.TRUE)return tagged(32,1); if(value==ProtosBooleanValue.FALSE)return tagged(32,0); if(value==ProtosNullValue.INSTANCE)return tagged(33,0);
-        return java.math.BigInteger.valueOf(Integer.toUnsignedLong(System.identityHashCode(value)));
+        return Integer.toUnsignedLong(System.identityHashCode(value));
     }
-    private static java.math.BigInteger tagged(int family,int hash){long x=(((long)family)<<32)^Integer.toUnsignedLong(hash);return java.math.BigInteger.valueOf(x);}
+    private static long tagged(int family,int hash){return (((long)family)<<32)^Integer.toUnsignedLong(hash);}
 }

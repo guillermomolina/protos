@@ -50,7 +50,7 @@ final class ProtosTcpListenerLifecycleTest {
 
     private static Fixture fixture(int port) throws Exception {
         ProtosPrelude p=new ProtosCoreBootstrap().bootstrap(CORE); ProtosActivation a=p.newModuleActivation(); RecordingBackend b=new RecordingBackend();
-        ProtosTcpListenerValue l=new ProtosTcpListenerValue(p,new Object(),a,b,BigInteger.valueOf(port)); return new Fixture(p,a,l,b);
+        ProtosTcpListenerValue l=new ProtosTcpListenerValue(p,new Object(),a,b,port); return new Fixture(p,a,l,b);
     }
     private record Fixture(ProtosPrelude prelude,ProtosActivation activation,ProtosTcpListenerValue listener,RecordingBackend backend) {}
     private static final class RecordingBackend implements ProtosTcpListenerFlow.Backend {

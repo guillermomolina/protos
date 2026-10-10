@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -111,11 +110,10 @@ public final class ProtosDetachedExecutionValue {
                     || value == ProtosBooleanValue.FALSE) {
                 return remember(value, value);
             }
-            if (value instanceof ProtosIntegerValue integer) {
-                return remember(value, new ProtosIntegerValue(integer.value()));
-            }
-            if (value instanceof ProtosFloatValue floating) {
-                return remember(value, new ProtosFloatValue(floating.value()));
+            Object copiedNumber =
+                    ProtosNumericValueSupport.copyCurrentNumberOrNull(value);
+            if (copiedNumber != null) {
+                return remember(value, copiedNumber);
             }
             if (value instanceof ProtosStringValue string) {
                 return remember(value, string.copyForRuntime());
@@ -152,7 +150,7 @@ public final class ProtosDetachedExecutionValue {
 
             Object shell;
             if (object instanceof ProtosArrayValue array) {
-                int size = array.indexedSize().intValueExact();
+                int size = array.indexedSize();
                 ArrayList<Object> placeholders = new ArrayList<>(size);
                 for (int index = 0; index < size; index++) {
                     placeholders.add(ProtosNullValue.INSTANCE);
@@ -199,7 +197,7 @@ public final class ProtosDetachedExecutionValue {
                             sourceArray.indexedSnapshot();
                     for (int index = 0; index < elements.size(); index++) {
                         destinationArray.indexedPut(
-                                BigInteger.valueOf(index),
+                                index,
                                 copy(elements.get(index)));
                     }
                 } else if (source instanceof ProtosBytesValue sourceBytes) {

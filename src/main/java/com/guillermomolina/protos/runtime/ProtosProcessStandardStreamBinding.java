@@ -17,9 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
-import java.math.BigInteger;
 import java.util.ArrayDeque;
-import java.util.List;
 import java.util.Objects;
 
 /**
@@ -142,10 +140,9 @@ public final class ProtosProcessStandardStreamBinding {
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        BigInteger maxBytes = integer(maxBytesValue);
-        if (maxBytes == null
-                || maxBytes.signum() <= 0
-                || maxBytes.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+        if (!(maxBytesValue instanceof ProtosIntegerValue maxBytes)
+                || !maxBytes.fitsInIntForRuntime()
+                || maxBytes.signumForRuntime() <= 0) {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -155,7 +152,7 @@ public final class ProtosProcessStandardStreamBinding {
             return operation.future();
         }
 
-        Request request = new Request(Kind.READ, receiver, operation, maxBytes, null);
+        Request request = new Request(Kind.READ, receiver, operation, maxBytes.intValueExactForRuntime(), null);
         enqueue(request);
         return operation.future();
     }
@@ -175,7 +172,7 @@ public final class ProtosProcessStandardStreamBinding {
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        byte[] snapshot = snapshot(bytes);
+        byte[] snapshot = bytes.octetSnapshot();
         synchronized (this) {
             if (snapshot.length > maxRetainedWriteBytes - retainedWriteBytes) {
                 return failedFuture(
@@ -190,7 +187,7 @@ public final class ProtosProcessStandardStreamBinding {
             return operation.future();
         }
 
-        Request request = new Request(Kind.WRITE, receiver, operation, null, snapshot);
+        Request request = new Request(Kind.WRITE, receiver, operation, 0, snapshot);
         enqueue(request);
         return operation.future();
     }
@@ -267,7 +264,7 @@ public final class ProtosProcessStandardStreamBinding {
         byte[] buffered = null;
         synchronized (this) {
             if (!unread.isEmpty()) {
-                int count = Math.min(request.number.intValueExact(), unread.size());
+                int count = Math.min(request.maxBytes, unread.size());
                 buffered = new byte[count];
                 for (int index = 0; index < count; index++) {
                     buffered[index] = unread.removeFirst();
@@ -283,7 +280,7 @@ public final class ProtosProcessStandardStreamBinding {
             setCancellation(
                     request,
                     readableBackend.read(
-                            request.number.intValueExact(),
+                            request.maxBytes,
                             new ProtosByteIoFlow.ReadCompletion() {
                                 @Override
                                 public void data(byte[] bytes) {
@@ -312,7 +309,7 @@ public final class ProtosProcessStandardStreamBinding {
 
     private void completeReadData(Request request, byte[] bytes) {
         Objects.requireNonNull(bytes, "bytes");
-        if (bytes.length == 0 || bytes.length > request.number.intValueExact()) {
+        if (bytes.length == 0 || bytes.length > request.maxBytes) {
             failIo(request);
             finish(request);
             return;
@@ -330,7 +327,7 @@ public final class ProtosProcessStandardStreamBinding {
         ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
         for (byte value : bytes) {
             result.indexedAdd(
-                    new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+                    new ProtosIntegerValue(value & 0xff));
         }
         request.operation.resolve(result);
         finish(request);
@@ -443,28 +440,6 @@ public final class ProtosProcessStandardStreamBinding {
         return future;
     }
 
-    private static BigInteger integer(Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        return null;
-    }
-
-    private static byte[] snapshot(ProtosBytesValue bytes) {
-        List<Object> values = bytes.indexedSnapshot();
-        byte[] result = new byte[values.size()];
-        for (int index = 0; index < values.size(); index++) {
-            BigInteger value = integer(values.get(index));
-            if (value == null
-                    || value.signum() < 0
-                    || value.compareTo(BigInteger.valueOf(255)) > 0) {
-                throw new IllegalStateException("Bytes invariant violated");
-            }
-            result[index] = (byte) value.intValue();
-        }
-        return result;
-    }
-
     private enum Kind {
         READ,
         WRITE
@@ -474,7 +449,7 @@ public final class ProtosProcessStandardStreamBinding {
         private final Kind kind;
         private final ProtosProcessStandardStreamValue receiver;
         private final ProtosIoOperation operation;
-        private final BigInteger number;
+        private final int maxBytes;
         private final byte[] bytes;
         private boolean started;
         private ProtosByteIoFlow.Cancellation cancellation;
@@ -483,12 +458,12 @@ public final class ProtosProcessStandardStreamBinding {
                 Kind kind,
                 ProtosProcessStandardStreamValue receiver,
                 ProtosIoOperation operation,
-                BigInteger number,
+                int maxBytes,
                 byte[] bytes) {
             this.kind = kind;
             this.receiver = receiver;
             this.operation = operation;
-            this.number = number;
+            this.maxBytes = maxBytes;
             this.bytes = bytes;
         }
     }

@@ -394,7 +394,7 @@ final class ProtosFormatterToolBootstrapTest {
         assertEquals(
                 1,
                 array(slot(projected, "trailingClosures"))
-                        .indexedSizeForRuntime());
+                        .indexedSize());
 
         AtomicReference<ProtosProcessRuntime> observed =
                 new AtomicReference<>();

@@ -212,8 +212,8 @@ final class ProtosSealedFamilyFacilityTest {
                                         + "original: StyledText(\"ab\", Style(\"cyan\"))\n"
                                         + "[original, StyledText.concat(original)]",
                                 activation));
-        Object original = pair.indexedAtForRuntime(0);
-        Object copy = pair.indexedAtForRuntime(1);
+        Object original = pair.indexedAt(0);
+        Object copy = pair.indexedAt(1);
         assertNotSame(original, copy);
         assertEquals(List.of("ab@cyan"), describe(prelude, activation, original));
         assertEquals(List.of("ab@cyan"), describe(prelude, activation, copy));
@@ -316,15 +316,15 @@ final class ProtosSealedFamilyFacilityTest {
                                 styledTextFacility(prelude), "state", List.of(value), activation));
         assertTrue(runs.isFrozen());
         List<String> described = new ArrayList<>();
-        for (int index = 0; index < runs.indexedSizeForRuntime(); index++) {
+        for (int index = 0; index < runs.indexedSize(); index++) {
             ProtosArrayValue run =
-                    assertInstanceOf(ProtosArrayValue.class, runs.indexedAtForRuntime(index));
+                    assertInstanceOf(ProtosArrayValue.class, runs.indexedAt(index));
             assertTrue(run.isFrozen());
-            assertEquals(2, run.indexedSizeForRuntime());
+            assertEquals(2, run.indexedSize());
             String text =
-                    assertInstanceOf(ProtosStringValue.class, run.indexedAtForRuntime(0)).value();
+                    assertInstanceOf(ProtosStringValue.class, run.indexedAt(0)).value();
             assertFalse(text.isEmpty());
-            described.add(text + "@" + foreground(prelude, activation, run.indexedAtForRuntime(1)));
+            described.add(text + "@" + foreground(prelude, activation, run.indexedAt(1)));
         }
         return described;
     }

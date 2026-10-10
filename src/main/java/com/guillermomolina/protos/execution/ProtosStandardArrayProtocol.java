@@ -126,8 +126,8 @@ public final class ProtosStandardArrayProtocol {
                                     requireExistingIndex(
                                             activation,
                                             supplied.get(0),
-                                            array.indexedSizeForRuntime());
-                            return array.indexedAtForRuntime(index);
+                                            array.indexedSize());
+                            return array.indexedAt(index);
                         }));
 
         arrayPrototype.createLocalSlot(
@@ -145,8 +145,8 @@ public final class ProtosStandardArrayProtocol {
                                     requireExistingIndex(
                                             activation,
                                             supplied.get(0),
-                                            array.indexedSizeForRuntime());
-                            return array.indexedPutForRuntime(index, supplied.get(1));
+                                            array.indexedSize());
+                            return array.indexedPut(index, supplied.get(1));
                         }));
 
         arrayPrototype.createLocalSlot(
@@ -157,7 +157,7 @@ public final class ProtosStandardArrayProtocol {
                             if (!supplied.isEmpty()) {
                                 throw invalid(activation);
                             }
-                            return new ProtosIntegerValue(array.indexedSizeForRuntime());
+                            return new ProtosIntegerValue(array.indexedSize());
                         }));
 
         arrayPrototype.createLocalSlot("each", STANDARD_EACH);

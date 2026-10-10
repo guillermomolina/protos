@@ -84,12 +84,12 @@ class ProtosStandardByteIoDurabilityProtocolTest {
         void completeHeldWrite(){var x=heldWrite;var c=heldWriteCompletion;heldWrite=null;heldWriteCompletion=null;holdWrite=false;writeNow(x);c.succeeded();}
         void writeNow(byte[]x){int end=position+x.length;if(end>data.length)data=Arrays.copyOf(data,end);System.arraycopy(x,0,data,position,x.length);position=end;}
         public ProtosByteIoFlow.Cancellation flush(ProtosByteIoFlow.ReceiverCompletion c){c.succeeded();return()->{};}
-        public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(BigInteger.valueOf(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation seek(BigInteger p,ProtosByteIoFlow.IntegerCompletion c){position=p.intValueExact();c.succeeded(p);return()->{};}
-        public ProtosByteIoFlow.Cancellation seekBy(BigInteger o,ProtosByteIoFlow.IntegerCompletion c){var p=BigInteger.valueOf(position).add(o);if(p.signum()<0)c.failed();else{position=p.intValueExact();c.succeeded(p);}return()->{};}
-        public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(BigInteger.valueOf(position));return()->{};}
-        public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(BigInteger.valueOf(data.length));return()->{};}
-        public ProtosByteIoFlow.Cancellation truncate(BigInteger n,ProtosByteIoFlow.ReceiverCompletion c){int x=n.intValueExact();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
+        public ProtosByteIoFlow.Cancellation position(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(position));return()->{};}
+        public ProtosByteIoFlow.Cancellation seek(ProtosIntegerValue p,ProtosByteIoFlow.IntegerCompletion c){position=p.intValueExactForRuntime();c.succeeded(p);return()->{};}
+        public ProtosByteIoFlow.Cancellation seekBy(ProtosIntegerValue o,ProtosByteIoFlow.IntegerCompletion c){var p=new ProtosIntegerValue(position).addForRuntime(o);if(p.signumForRuntime()<0)c.failed();else{position=p.intValueExactForRuntime();c.succeeded(p);}return()->{};}
+        public ProtosByteIoFlow.Cancellation seekToEnd(ProtosByteIoFlow.IntegerCompletion c){position=data.length;c.succeeded(new ProtosIntegerValue(position));return()->{};}
+        public ProtosByteIoFlow.Cancellation size(ProtosByteIoFlow.IntegerCompletion c){c.succeeded(new ProtosIntegerValue(data.length));return()->{};}
+        public ProtosByteIoFlow.Cancellation truncate(ProtosIntegerValue n,ProtosByteIoFlow.ReceiverCompletion c){int x=n.intValueExactForRuntime();if(x<data.length)data=Arrays.copyOf(data,x);c.succeeded();return()->{};}
     }
 
     private static final class SyncMemoryBackend extends ExtendedMemoryBackend implements ProtosByteIoFlow.SyncBackend{

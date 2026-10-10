@@ -182,15 +182,15 @@ final class ProtosLoggingFacilityTest {
                                 List.of(new ProtosFloatValue(value)),
                                 activation));
         assertTrue(result.isFrozen());
-        assertEquals(2, result.indexedSizeForRuntime());
+        assertEquals(2, result.indexedSize());
         assertEquals(
                 coefficient,
-                assertInstanceOf(ProtosIntegerValue.class, result.indexedAtForRuntime(0))
+                assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(0))
                         .value()
                         .toString());
         assertEquals(
                 exponent,
-                assertInstanceOf(ProtosIntegerValue.class, result.indexedAtForRuntime(1))
+                assertInstanceOf(ProtosIntegerValue.class, result.indexedAt(1))
                         .intValueExactForRuntime());
     }
 

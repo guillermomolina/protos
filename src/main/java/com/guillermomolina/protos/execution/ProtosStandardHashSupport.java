@@ -15,10 +15,26 @@
  * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.execution;
-import com.guillermomolina.protos.runtime.*; import java.math.BigInteger;
+import com.guillermomolina.protos.runtime.*;
 public final class ProtosStandardHashSupport {
  private ProtosStandardHashSupport(){}
  public static void installObjectHash(){var o=ProtosObjectValue.rootObject();if(!o.hasLocalSlot("hash"))o.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty())throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(ProtosIdentity.identityHash(a.receiver()));}));}
- public static void installNumberHash(ProtosObjectValue n){if(!n.hasLocalSlot("hash"))n.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty())throw new ProtosSignalException(ProtosCoreErrors.newError(a));Object v=a.receiver();BigInteger h;if(v instanceof ProtosIntegerValue i)h=i.value();else if(v instanceof ProtosFloatValue f){double d=f.value();if(Double.isNaN(d))h=BigInteger.valueOf(2146959360L);else{BigInteger z=ProtosStandardNumericConversionProtocol.exactIntegralBinary64(d);h=z!=null?z:BigInteger.valueOf(Double.hashCode(d==0.0?0.0:d));}}else throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(h);}));}
- public static void installStringHash(ProtosObjectValue s){if(!s.hasLocalSlot("hash"))s.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty()||!(a.receiver() instanceof ProtosStringValue v))throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(BigInteger.valueOf(v.value().hashCode()));}));}
+ public static void installNumberHash(ProtosObjectValue numberPrototype) {
+    if (!numberPrototype.hasLocalSlot("hash")) {
+        numberPrototype.createLocalSlot(
+                "hash",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            Object receiver = activation.receiver();
+                            if (!supplied.isEmpty()
+                                    || !ProtosNumericValueSupport.isCurrentNumber(
+                                            receiver)) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return ProtosCurrentNumericRelations.normalHash(receiver);
+                        }));
+    }
+ }
+ public static void installStringHash(ProtosObjectValue s){if(!s.hasLocalSlot("hash"))s.createLocalSlot("hash",ProtosClosureValue.nativeClosure((a,x)->{if(!x.isEmpty()||!(a.receiver() instanceof ProtosStringValue v))throw new ProtosSignalException(ProtosCoreErrors.newError(a));return new ProtosIntegerValue(v.value().hashCode());}));}
 }

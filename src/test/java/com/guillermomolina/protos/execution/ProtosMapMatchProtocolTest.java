@@ -293,19 +293,19 @@ class ProtosMapMatchProtocolTest {
                                 matcher.match(subject)
                                 """));
 
-        assertEquals(BigInteger.valueOf(2), captures.indexedSize());
+        assertEquals(2, captures.indexedSize());
 
         ProtosIntegerValue first =
                 assertInstanceOf(
                         ProtosIntegerValue.class,
-                        captures.indexedAt(BigInteger.ZERO));
+                        captures.indexedAt(0));
         assertEquals(BigInteger.ONE, first.value());
 
         ProtosArrayValue nested =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        captures.indexedAt(BigInteger.ONE));
-        assertEquals(BigInteger.valueOf(2), nested.indexedSize());
+                        captures.indexedAt(1));
+        assertEquals(2, nested.indexedSize());
     }
 
     @Test
@@ -343,12 +343,12 @@ class ProtosMapMatchProtocolTest {
                                 matcher.match(subject)
                                 """));
 
-        assertEquals(BigInteger.ONE, captures.indexedSize());
+        assertEquals(1, captures.indexedSize());
 
         ProtosIntegerValue captured =
                 assertInstanceOf(
                         ProtosIntegerValue.class,
-                        captures.indexedAt(BigInteger.ZERO));
+                        captures.indexedAt(0));
         assertEquals(BigInteger.ONE, captured.value());
     }
 

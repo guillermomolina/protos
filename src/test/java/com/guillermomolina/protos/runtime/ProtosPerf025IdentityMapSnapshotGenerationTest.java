@@ -61,7 +61,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
         Object key = new ProtosObjectValue(parent);
         Object firstValue = new ProtosObjectValue(parent);
         Object replacement = new ProtosObjectValue(parent);
-        BigInteger hash = ProtosIdentity.identityHash(key);
+        ProtosNumericHashKey hash = ProtosNumericHashKey.fromIdentity(key);
 
         map.append(key, hash, firstValue);
 
@@ -123,7 +123,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
         Object second = new ProtosObjectValue(parent);
         Object third = new ProtosObjectValue(parent);
         Object fourth = new ProtosObjectValue(parent);
-        BigInteger hash = ProtosIdentity.identityHash(key);
+        ProtosNumericHashKey hash = ProtosNumericHashKey.fromIdentity(key);
 
         map.append(key, hash, first);
 
@@ -194,7 +194,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
         Object secondValue = new ProtosObjectValue(parent);
         Object reinsertedValue = new ProtosObjectValue(parent);
 
-        BigInteger collisionHash = BigInteger.valueOf(17);
+        ProtosNumericHashKey collisionHash = ProtosNumericHashKey.ofLong(17);
 
         map.append(firstKey, collisionHash, firstValue);
 

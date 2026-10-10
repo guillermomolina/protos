@@ -20,9 +20,9 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;
 import java.nio.file.DirectoryStream;
@@ -304,13 +304,13 @@ public final class ProtosNioConfinedFilesystemBackend
 
         @Override
         public synchronized ProtosFileFlow.Cancellation writeAt(
-                BigInteger position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+                ProtosIntegerValue position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             Objects.requireNonNull(position, "position");
             Objects.requireNonNull(bytes, "bytes");
             Objects.requireNonNull(completion, "completion");
             if (closed
-                    || position.signum() < 0
-                    || position.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                    || !position.isSmallForRuntime()
+                    || position.signumForRuntime() < 0) {
                 completion.failed(0);
                 return () -> {};
             }
@@ -321,7 +321,7 @@ public final class ProtosNioConfinedFilesystemBackend
 
             ByteBuffer buffer = ByteBuffer.wrap(bytes);
             try {
-                channel.position(position.longValueExact());
+                channel.position(position.smallValueForRuntime());
                 if (!completion.commitFirstContribution()) {
                     return () -> {};
                 }

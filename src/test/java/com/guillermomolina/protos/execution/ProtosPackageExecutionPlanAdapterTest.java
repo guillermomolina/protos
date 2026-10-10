@@ -90,7 +90,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
             ProtosObjectValue rawPlan = (ProtosObjectValue) raw;
             ProtosArrayValue rawPackages =
                     (ProtosArrayValue) rawPlan.readLocalSlot("packages").orElseThrow();
-            rawPackages.indexedPut(BigInteger.ZERO, rawPackages.indexedAt(BigInteger.ONE));
+            rawPackages.indexedPut(0, rawPackages.indexedAt(1));
 
             assertEquals("root", detached.root().packageId());
             assertEquals("", detached.packages().get(0).location());
@@ -113,7 +113,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
             ProtosArrayValue packages =
                     (ProtosArrayValue) plan.readLocalSlot("packages").orElseThrow();
             ProtosObjectValue member =
-                    (ProtosObjectValue) packages.indexedAt(BigInteger.ONE);
+                    (ProtosObjectValue) packages.indexedAt(1);
             Object location = member.readLocalSlot("location").orElseThrow();
             member.assignLocalSlot("location", new ProtosStringValue("../escape"));
             assertThrows(
@@ -124,7 +124,7 @@ final class ProtosPackageExecutionPlanAdapterTest {
             ProtosArrayValue dependencies =
                     (ProtosArrayValue) plan.readLocalSlot("dependencies").orElseThrow();
             ProtosObjectValue edge =
-                    (ProtosObjectValue) dependencies.indexedAt(BigInteger.ZERO);
+                    (ProtosObjectValue) dependencies.indexedAt(0);
             Object alias = edge.readLocalSlot("alias").orElseThrow();
             edge.assignLocalSlot("alias", new ProtosStringValue("bad-name"));
             assertThrows(

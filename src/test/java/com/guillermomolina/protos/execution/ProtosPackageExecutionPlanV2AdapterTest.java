@@ -265,7 +265,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
             rawVersion.assignLocalSlot("text", new ProtosStringValue("9.9.9"));
             ((ProtosObjectValue) rawRegistry.readLocalSlot("content").orElseThrow())
                     .assignLocalSlot("hex", new ProtosStringValue("00"));
-            rawPackages(raw).indexedPut(BigInteger.ZERO, rawPackages(raw).indexedAt(BigInteger.ONE));
+            rawPackages(raw).indexedPut(0, rawPackages(raw).indexedAt(1));
 
             assertEquals(
                     new ProtosExactExternalPackageIdentity.Registry("pkg", "1.0.0", content()),
@@ -419,7 +419,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
     }
 
     private static ProtosObjectValue rawPackage(ProtosObjectValue plan, int index) {
-        return (ProtosObjectValue) rawPackages(plan).indexedAt(BigInteger.valueOf(index));
+        return (ProtosObjectValue) rawPackages(plan).indexedAt(index);
     }
 
     private static ProtosObjectValue ref(ProtosObjectValue packageValue) {
@@ -433,7 +433,7 @@ final class ProtosPackageExecutionPlanV2AdapterTest {
     private static ProtosObjectValue edge(ProtosObjectValue plan, int index) {
         return (ProtosObjectValue)
                 ((ProtosArrayValue) plan.readLocalSlot("dependencies").orElseThrow())
-                        .indexedAt(BigInteger.valueOf(index));
+                        .indexedAt(index);
     }
 
     private static ProtosObjectValue edgeRef(ProtosObjectValue plan, int index, String side) {

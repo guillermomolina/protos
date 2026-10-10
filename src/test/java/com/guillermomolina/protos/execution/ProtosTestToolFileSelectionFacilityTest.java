@@ -67,8 +67,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
                         fixture,
                         "tests/conformance/case.protos");
 
-        assertEquals(
-                BigInteger.ONE,
+        assertEquals(1,
                 associations.indexedSize());
         assertAssociation(
                 associations,
@@ -97,8 +96,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
         ProtosArrayValue associations =
                 resolve(fixture, source.toAbsolutePath().toString());
 
-        assertEquals(
-                BigInteger.ONE,
+        assertEquals(1,
                 associations.indexedSize());
         assertAssociation(
                 associations,
@@ -136,8 +134,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
         ProtosArrayValue associations =
                 resolve(fixture, source.toString());
 
-        assertEquals(
-                BigInteger.valueOf(3),
+        assertEquals(3,
                 associations.indexedSize());
 
         assertAssociation(
@@ -172,22 +169,19 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                         "protos/corpus/example",
                                         root)));
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolve(
                                 fixture,
                                 tempDir.resolve("outside.protos").toString())
                         .indexedSize());
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolve(
                                 fixture,
                                 root.resolve("missing.protos").toString())
                         .indexedSize());
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolve(
                                 fixture,
                                 root.resolve("directory").toString())
@@ -214,8 +208,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
         ProtosArrayValue associations =
                 resolveDirectory(fixture, selected.toString());
 
-        assertEquals(
-                BigInteger.ONE,
+        assertEquals(1,
                 associations.indexedSize());
         assertAssociation(
                 associations,
@@ -241,8 +234,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
         ProtosArrayValue associations =
                 resolveDirectory(fixture, root.toString());
 
-        assertEquals(
-                BigInteger.ONE,
+        assertEquals(1,
                 associations.indexedSize());
         assertAssociation(
                 associations,
@@ -269,19 +261,16 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                         "protos/corpus/example",
                                         root)));
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolveDirectory(fixture, file.toString()).indexedSize());
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolveDirectory(
                                 fixture,
                                 root.resolve("missing").toString())
                         .indexedSize());
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolveDirectory(
                                 fixture,
                                 tempDir.resolve("outside").toString())
@@ -318,12 +307,10 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                         "protos/corpus/example",
                                         root)));
 
-        assertEquals(
-                BigInteger.ZERO,
+        assertEquals(0,
                 resolve(fixture, link.toString()).indexedSize());
 
-        assertEquals(
-                BigInteger.ONE,
+        assertEquals(1,
                 resolve(fixture, target.toString()).indexedSize());
     }
 
@@ -349,7 +336,7 @@ final class ProtosTestToolFileSelectionFacilityTest {
         ProtosArrayValue association =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        associations.indexedAt(BigInteger.ZERO));
+                        associations.indexedAt(0));
 
         assertTrue(associations.isFrozen());
         assertTrue(association.isFrozen());
@@ -593,20 +580,20 @@ final class ProtosTestToolFileSelectionFacilityTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         associations.indexedAt(
-                                BigInteger.valueOf(index)));
+                                index));
 
         assertEquals(
                 expectedCorpusId,
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                association.indexedAt(BigInteger.ZERO))
+                                association.indexedAt(0))
                         .value());
 
         assertEquals(
                 expectedRelativePath,
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                association.indexedAt(BigInteger.ONE))
+                                association.indexedAt(1))
                         .value());
     }
 

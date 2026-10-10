@@ -123,13 +123,13 @@ final class ProtosProcessStandardStreamBindingTest {
                 BigInteger.valueOf(11),
                 ((ProtosIntegerValue)
                                 ((ProtosBytesValue) a.resolvedValue().orElseThrow())
-                                        .indexedAt(BigInteger.ZERO))
+                                        .indexedAt(0))
                         .value());
         assertEquals(
                 BigInteger.valueOf(22),
                 ((ProtosIntegerValue)
                                 ((ProtosBytesValue) b.resolvedValue().orElseThrow())
-                                        .indexedAt(BigInteger.ZERO))
+                                        .indexedAt(0))
                         .value());
     }
 
@@ -209,7 +209,7 @@ final class ProtosProcessStandardStreamBindingTest {
                 BigInteger.valueOf(77),
                 ((ProtosIntegerValue)
                                 ((ProtosBytesValue) next.resolvedValue().orElseThrow())
-                                        .indexedAt(BigInteger.ZERO))
+                                        .indexedAt(0))
                         .value());
         assertEquals(1, stdin.started.get());
     }

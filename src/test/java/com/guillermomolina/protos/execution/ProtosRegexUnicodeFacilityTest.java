@@ -190,13 +190,13 @@ final class ProtosRegexUnicodeFacilityTest {
     private static List<int[]> pairs(Object result) {
         ProtosArrayValue array = assertInstanceOf(ProtosArrayValue.class, result);
         assertTrue(array.isFrozen());
-        int size = array.indexedSizeForRuntime();
+        int size = array.indexedSize();
         assertEquals(0, size % 2);
         List<int[]> pairs = new ArrayList<>();
         int previousHigh = -2;
         for (int index = 0; index < size; index += 2) {
-            int low = bound(array.indexedAtForRuntime(index));
-            int high = bound(array.indexedAtForRuntime(index + 1));
+            int low = bound(array.indexedAt(index));
+            int high = bound(array.indexedAt(index + 1));
             assertTrue(low <= high);
             assertTrue(low > previousHigh + 1, "ranges are ascending, disjoint, non-adjacent");
             assertFalse(low <= 0xDFFF && high >= 0xD800, "surrogates are never members");

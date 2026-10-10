@@ -53,11 +53,11 @@ final class ProtosJsonParserStress {
                     assertInstanceOf(
                             ProtosArrayValue.class,
                             value(node, "array"));
-            assertEquals(BigInteger.ONE, array.indexedSize());
+            assertEquals(1, array.indexedSize());
             node =
                     assertInstanceOf(
                             ProtosObjectValue.class,
-                            array.indexedAt(BigInteger.ZERO));
+                            array.indexedAt(0));
         }
         assertDecimal(node, 0, 0);
     }
@@ -83,13 +83,13 @@ final class ProtosJsonParserStress {
                                 "array"));
 
         assertTrue(array.isFrozen());
-        assertEquals(BigInteger.valueOf(size), array.indexedSize());
+        assertEquals(size, array.indexedSize());
 
         for (int index : new int[] {0, 1, 2, 31, 32, 511, 1024, 2047}) {
             assertDecimal(
                     assertInstanceOf(
                             ProtosObjectValue.class,
-                            array.indexedAt(BigInteger.valueOf(index))),
+                            array.indexedAt(index)),
                     index,
                     0);
         }

@@ -200,7 +200,7 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
         // completion order.
         ProtosArrayValue results =
                 assertInstanceOf(ProtosArrayValue.class, run.resolvedValue().orElseThrow());
-        assertEquals(BigInteger.valueOf(3), results.indexedSize());
+        assertEquals(3, results.indexedSize());
         assertEquals("done-first", stringAt(results, 0));
         assertEquals("done-second", stringAt(results, 1));
         assertEquals("done-third", stringAt(results, 2));
@@ -208,7 +208,7 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
 
     private static String stringAt(ProtosArrayValue values, int index) {
         return assertInstanceOf(
-                        ProtosStringValue.class, values.indexedAt(BigInteger.valueOf(index)))
+                        ProtosStringValue.class, values.indexedAt(index))
                 .value();
     }
 

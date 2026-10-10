@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -51,7 +52,8 @@ public final class ProtosStandardIntegerProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return ProtosBooleanValue.of(
-                                    supplied.get(0) instanceof ProtosIntegerValue);
+                                    ProtosNumericValueSupport.isCurrentInteger(
+                                            supplied.get(0)));
                         }));
 
         installCanonical(integerPrototype, CanonicalIntegerOperation.ADD);
@@ -250,8 +252,7 @@ public final class ProtosStandardIntegerProtocol {
             case FLOAT_DIVIDE ->
                     new ProtosFloatValue(
                             ProtosBinary64Rounding.divideExactIntegers(
-                                    receiver.value(),
-                                    argument.value()));
+                                    receiver, argument));
             case QUOTIENT -> receiver.divideForRuntime(argument);
             case REMAINDER -> receiver.remainderForRuntime(argument);
         };

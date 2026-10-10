@@ -105,19 +105,19 @@ final class ProtosTestToolManifestPlanTest {
                         ProtosArrayValue.class,
                         completed(source, fixture.activation()));
 
-        assertEquals(5, caseSpec.indexedSize().intValueExact());
+        assertEquals(5, caseSpec.indexedSize());
         org.junit.jupiter.api.Assertions.assertTrue(caseSpec.isFrozen());
         ProtosArrayValue requirements =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        caseSpec.indexedAt(java.math.BigInteger.valueOf(4)));
-        assertEquals(0, requirements.indexedSize().intValueExact());
+                        caseSpec.indexedAt(4));
+        assertEquals(0, requirements.indexedSize());
         org.junit.jupiter.api.Assertions.assertTrue(requirements.isFrozen());
         assertEquals(
                 "integer/add-small.protos",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                caseSpec.indexedAt(java.math.BigInteger.ZERO))
+                                caseSpec.indexedAt(0))
                         .value());
     }
 
@@ -155,19 +155,19 @@ final class ProtosTestToolManifestPlanTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(source, fixture.activation()));
-        assertEquals(2, requirements.indexedSize().intValueExact());
+        assertEquals(2, requirements.indexedSize());
 
         ProtosArrayValue first =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        requirements.indexedAt(java.math.BigInteger.ZERO));
+                        requirements.indexedAt(0));
         ProtosArrayValue second =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        requirements.indexedAt(java.math.BigInteger.ONE));
+                        requirements.indexedAt(1));
 
-        assertEquals(0, first.indexedSize().intValueExact());
-        assertEquals(0, second.indexedSize().intValueExact());
+        assertEquals(0, first.indexedSize());
+        assertEquals(0, second.indexedSize());
         org.junit.jupiter.api.Assertions.assertTrue(first.isFrozen());
         org.junit.jupiter.api.Assertions.assertTrue(second.isFrozen());
         assertNotSame(first, second);
@@ -193,18 +193,18 @@ final class ProtosTestToolManifestPlanTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(source, fixture.activation()));
-        assertEquals(8, observed.indexedSize().intValueExact());
+        assertEquals(8, observed.indexedSize());
 
         ProtosArrayValue shared =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(java.math.BigInteger.ZERO));
+                        observed.indexedAt(0));
         ProtosArrayValue exclusive =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(java.math.BigInteger.ONE));
-        assertEquals(3, shared.indexedSize().intValueExact());
-        assertEquals(3, exclusive.indexedSize().intValueExact());
+                        observed.indexedAt(1));
+        assertEquals(3, shared.indexedSize());
+        assertEquals(3, exclusive.indexedSize());
         org.junit.jupiter.api.Assertions.assertTrue(shared.isFrozen());
         org.junit.jupiter.api.Assertions.assertTrue(exclusive.isFrozen());
         assertNotSame(shared, exclusive);
@@ -213,36 +213,36 @@ final class ProtosTestToolManifestPlanTest {
                 "gpu",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(2)))
+                                observed.indexedAt(2))
                         .value());
         assertEquals(
                 "shared",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(3)))
+                                observed.indexedAt(3))
                         .value());
         assertEquals(
                 2,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(4)))
+                                observed.indexedAt(4))
                         .value()
                         .intValueExact());
         assertEquals(
                 "db/integration",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(5)))
+                                observed.indexedAt(5))
                         .value());
         assertEquals(
                 "exclusive",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(6)))
+                                observed.indexedAt(6))
                         .value());
         assertSame(
                 ProtosNullValue.INSTANCE,
-                observed.indexedAt(java.math.BigInteger.valueOf(7)));
+                observed.indexedAt(7));
     }
 
     @Test
@@ -264,7 +264,7 @@ final class ProtosTestToolManifestPlanTest {
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(validSource, fixture.activation()));
-        assertEquals(7, valid.indexedSize().intValueExact());
+        assertEquals(7, valid.indexedSize());
 
         String[] invalidKeys = {
             "",
@@ -311,7 +311,7 @@ invalidFixture.activation());
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(validSource, fixture.activation()));
-        assertEquals(3, valid.indexedSize().intValueExact());
+        assertEquals(3, valid.indexedSize());
 
         String[] invalidArguments = {
             "\"gpu\", \"shared\", 0",
@@ -373,68 +373,68 @@ invalidFixture.activation());
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(source, fixture.activation()));
-        assertEquals(8, observed.indexedSize().intValueExact());
+        assertEquals(8, observed.indexedSize());
 
         ProtosArrayValue attached =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(java.math.BigInteger.ZERO));
+                        observed.indexedAt(0));
         ProtosArrayValue requirements =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(java.math.BigInteger.ONE));
-        assertEquals(5, attached.indexedSize().intValueExact());
-        assertEquals(2, requirements.indexedSize().intValueExact());
+                        observed.indexedAt(1));
+        assertEquals(5, attached.indexedSize());
+        assertEquals(2, requirements.indexedSize());
         org.junit.jupiter.api.Assertions.assertTrue(attached.isFrozen());
         org.junit.jupiter.api.Assertions.assertTrue(requirements.isFrozen());
 
         ProtosArrayValue first =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        requirements.indexedAt(java.math.BigInteger.ZERO));
+                        requirements.indexedAt(0));
         ProtosArrayValue second =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        requirements.indexedAt(java.math.BigInteger.ONE));
+                        requirements.indexedAt(1));
         org.junit.jupiter.api.Assertions.assertTrue(first.isFrozen());
         org.junit.jupiter.api.Assertions.assertTrue(second.isFrozen());
-        assertEquals(3, first.indexedSize().intValueExact());
-        assertEquals(3, second.indexedSize().intValueExact());
+        assertEquals(3, first.indexedSize());
+        assertEquals(3, second.indexedSize());
 
         assertEquals(
                 "gpu",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(2)))
+                                observed.indexedAt(2))
                         .value());
         assertEquals(
                 "shared",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(3)))
+                                observed.indexedAt(3))
                         .value());
         assertEquals(
                 2,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(4)))
+                                observed.indexedAt(4))
                         .value()
                         .intValueExact());
         assertEquals(
                 "db/integration",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(5)))
+                                observed.indexedAt(5))
                         .value());
         assertEquals(
                 "exclusive",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(java.math.BigInteger.valueOf(6)))
+                                observed.indexedAt(6))
                         .value());
         assertSame(
                 ProtosNullValue.INSTANCE,
-                observed.indexedAt(java.math.BigInteger.valueOf(7)));
+                observed.indexedAt(7));
     }
 
     @Test
@@ -503,19 +503,19 @@ fixture.activation());
                 assertInstanceOf(
                         ProtosArrayValue.class,
                         completed(source, fixture.activation()));
-        assertEquals(2, sizes.indexedSize().intValueExact());
+        assertEquals(2, sizes.indexedSize());
         assertEquals(
                 1,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                sizes.indexedAt(java.math.BigInteger.ZERO))
+                                sizes.indexedAt(0))
                         .value()
                         .intValueExact());
         assertEquals(
                 1,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                sizes.indexedAt(java.math.BigInteger.ONE))
+                                sizes.indexedAt(1))
                         .value()
                         .intValueExact());
     }
@@ -753,12 +753,12 @@ fixture.activation());
                                             + "Manifest.caseExpected(cases[2]))",
                                     fixture.activation()));
 
-            assertEquals(13, observed.indexedSize().intValueExact());
+            assertEquals(13, observed.indexedSize());
             assertEquals(
                     3,
                     assertInstanceOf(
                                     ProtosIntegerValue.class,
-                                    observed.indexedAt(java.math.BigInteger.ZERO))
+                                    observed.indexedAt(0))
                             .value()
                             .intValueExact());
             assertEquals("ns/keep.protos", stringAt(observed, 1));
@@ -839,12 +839,12 @@ fixture.activation());
                                         + "Manifest.caseAuthorityLifecycle(authority))",
                                 fixture.activation()));
 
-        assertEquals(7, observed.indexedSize().intValueExact());
+        assertEquals(7, observed.indexedSize());
         assertEquals(
                 6,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(java.math.BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value()
                         .intValueExact());
         assertEquals("sample.protos", stringAt(observed, 1));
@@ -893,12 +893,12 @@ fixture.activation());
                                             + "Manifest.caseExpected(cases[2]))",
                                     fixture.activation()));
 
-            assertEquals(9, observed.indexedSize().intValueExact());
+            assertEquals(9, observed.indexedSize());
             assertEquals(
                     3,
                     assertInstanceOf(
                                     ProtosIntegerValue.class,
-                                    observed.indexedAt(java.math.BigInteger.ZERO))
+                                    observed.indexedAt(0))
                             .value()
                             .intValueExact());
             assertEquals("ns/root-only/build-current.protos", stringAt(observed, 1));
@@ -937,19 +937,19 @@ fixture.activation());
                                         + "Manifest.caseAuthorityFixtureIdentity(authority))",
                                 fixture.activation()));
 
-        assertEquals(4, observed.indexedSize().intValueExact());
+        assertEquals(4, observed.indexedSize());
         assertEquals(
                 6,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(java.math.BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value()
                         .intValueExact());
         assertEquals(
                 1,
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(java.math.BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value()
                         .intValueExact());
         assertEquals("project-tree", stringAt(observed, 2));
@@ -1003,17 +1003,17 @@ fixture.activation());
                                                 + "Array(cases.size(), valid)",
                                         fixture.activation()));
 
-                assertEquals(2, observed.indexedSize().intValueExact());
+                assertEquals(2, observed.indexedSize());
                 assertEquals(
                         expectedCounts[index],
                         assertInstanceOf(
                                         ProtosIntegerValue.class,
-                                        observed.indexedAt(java.math.BigInteger.ZERO))
+                                        observed.indexedAt(0))
                                 .value()
                                 .intValueExact());
                 assertSame(
                         ProtosBooleanValue.TRUE,
-                        observed.indexedAt(java.math.BigInteger.ONE));
+                        observed.indexedAt(1));
             }
         }
     }
@@ -1080,7 +1080,7 @@ fixture.activation());
     private static String stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         ProtosStringValue.class,
-                        array.indexedAt(java.math.BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value();
     }
 
@@ -1191,7 +1191,7 @@ fixture.activation());
 
             @Override
             public com.guillermomolina.protos.runtime.ProtosFileFlow.Cancellation readAt(
-                    java.math.BigInteger position,
+                    com.guillermomolina.protos.runtime.ProtosIntegerValue position,
                     int maxBytes,
                     com.guillermomolina.protos.runtime.ProtosFileFlow.ReadCompletion completion) {
                 if (closed) {
@@ -1200,7 +1200,7 @@ fixture.activation());
                 }
 
                 try {
-                    int start = position.intValueExact();
+                    int start = position.intValueExactForRuntime();
                     if (start < 0) {
                         completion.failed();
                     } else if (start >= bytes.length) {

@@ -210,8 +210,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                         ProtosArrayValue.class,
                         run.resolvedValue().orElseThrow());
 
-        assertEquals(
-                BigInteger.valueOf(4),
+        assertEquals(4,
                 results.indexedSize());
 
         assertEquals(
@@ -599,8 +598,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                         ProtosArrayValue.class,
                         run.resolvedValue().orElseThrow());
 
-        assertEquals(
-                BigInteger.valueOf(4),
+        assertEquals(4,
                 results.indexedSize());
 
         assertEquals(
@@ -625,7 +623,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
         return assertInstanceOf(
                         ProtosStringValue.class,
                         values.indexedAt(
-                                BigInteger.valueOf(index)))
+                                index))
                 .value();
     }
 

@@ -42,8 +42,8 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         ProtosArrayValue first = parseCompleted("resource-catalog-version = 1\n");
         ProtosArrayValue second = parseCompleted("resource-catalog-version = 1\n");
 
-        assertEquals(0, first.indexedSize().intValueExact());
-        assertEquals(0, second.indexedSize().intValueExact());
+        assertEquals(0, first.indexedSize());
+        assertEquals(0, second.indexedSize());
         assertTrue(first.isFrozen());
         assertTrue(second.isFrozen());
         org.junit.jupiter.api.Assertions.assertNotSame(first, second);
@@ -90,7 +90,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         ProtosArrayValue first = arrayAt(observed, 1);
         ProtosArrayValue second = arrayAt(observed, 2);
 
-        assertEquals(2, entries.indexedSize().intValueExact());
+        assertEquals(2, entries.indexedSize());
         assertTrue(entries.isFrozen());
         assertTrue(first.isFrozen());
         assertTrue(second.isFrozen());
@@ -105,7 +105,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         assertEquals(20, integerAt(observed, 9));
         assertEquals("run", stringAt(observed, 10));
         assertEquals("license/flexlm", stringAt(observed, 11));
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.valueOf(12)));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(12));
     }
 
     @Test
@@ -218,20 +218,20 @@ fixture.prelude().newModuleActivation());
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosArrayValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static String stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         ProtosStringValue.class,
-                        array.indexedAt(BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value();
     }
 
     private static int integerAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                         ProtosIntegerValue.class,
-                        array.indexedAt(BigInteger.valueOf(index)))
+                        array.indexedAt(index))
                 .value()
                 .intValueExact();
     }

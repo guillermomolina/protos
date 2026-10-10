@@ -61,9 +61,9 @@ final class ProtosTestToolResourceCatalogCompositionTest {
         assertEquals(BigInteger.ZERO, integerAt(observed, 0).value());
 
         ProtosArrayValue catalog = arrayAt(observed, 1);
-        assertEquals(0, catalog.indexedSize().intValueExact());
+        assertEquals(0, catalog.indexedSize());
         assertTrue(catalog.isFrozen());
-        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(BigInteger.valueOf(2)));
+        assertSame(ProtosNullValue.INSTANCE, observed.indexedAt(2));
     }
 
     @Test
@@ -108,7 +108,7 @@ final class ProtosTestToolResourceCatalogCompositionTest {
         assertEquals("catalog.toml", stringAt(observed, 1).value());
 
         ProtosArrayValue catalog = arrayAt(observed, 2);
-        assertEquals(1, catalog.indexedSize().intValueExact());
+        assertEquals(1, catalog.indexedSize());
         assertTrue(catalog.isFrozen());
 
         assertEquals("gpu", stringAt(observed, 3).value());
@@ -180,19 +180,19 @@ prelude.newModuleActivation());
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosArrayValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static ProtosIntegerValue integerAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosIntegerValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static ProtosStringValue stringAt(ProtosArrayValue array, int index) {
         return assertInstanceOf(
                 ProtosStringValue.class,
-                array.indexedAt(BigInteger.valueOf(index)));
+                array.indexedAt(index));
     }
 
     private static String protosString(String value) {

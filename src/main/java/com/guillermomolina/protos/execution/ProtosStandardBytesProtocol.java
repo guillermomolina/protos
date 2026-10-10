@@ -28,12 +28,10 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
 public final class ProtosStandardBytesProtocol {
-    private static final BigInteger MAX_OCTET = BigInteger.valueOf(255);
     private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
             ProtosStandardBytesProtocol::each;
     private static final ProtosClosureValue STANDARD_EACH =
@@ -108,7 +106,7 @@ public final class ProtosStandardBytesProtocol {
                             if (supplied.size() != 1) {
                                 return fail(activation);
                             }
-                            BigInteger index =
+                            int index =
                                     requireExistingIndex(
                                             supplied.get(0), bytes.indexedSize(), activation);
                             return bytes.indexedAt(index);
@@ -125,7 +123,7 @@ public final class ProtosStandardBytesProtocol {
                             if (supplied.size() != 2) {
                                 return fail(activation);
                             }
-                            BigInteger index =
+                            int index =
                                     requireExistingIndex(
                                             supplied.get(0), bytes.indexedSize(), activation);
                             requireOctet(supplied.get(1), activation);
@@ -160,7 +158,7 @@ public final class ProtosStandardBytesProtocol {
                             if (supplied.size() != 1) {
                                 return fail(activation);
                             }
-                            BigInteger index =
+                            int index =
                                     requireExistingIndex(
                                             supplied.get(0), bytes.indexedSize(), activation);
                             return bytes.indexedRemoveAt(index);
@@ -188,27 +186,29 @@ public final class ProtosStandardBytesProtocol {
         return (ProtosBytesValue) activation.receiver();
     }
 
-    private static BigInteger requireExistingIndex(
-            Object candidate, BigInteger size, ProtosActivation activation) {
-        BigInteger index = exactIntegerValue(candidate);
-        if (index == null || index.signum() < 0 || index.compareTo(size) >= 0) {
-            fail(activation);
+    private static int requireExistingIndex(
+            Object candidate, int size, ProtosActivation activation) {
+        if (!(candidate instanceof ProtosIntegerValue integer)
+                || !integer.fitsInIntForRuntime()) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        int index = integer.intValueExactForRuntime();
+        if (index < 0 || index >= size) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
         return index;
     }
 
-    private static void requireOctet(Object candidate, ProtosActivation activation) {
-        BigInteger value = exactIntegerValue(candidate);
-        if (value == null || value.signum() < 0 || value.compareTo(MAX_OCTET) > 0) {
-            fail(activation);
+    private static void requireOctet(
+            Object candidate, ProtosActivation activation) {
+        if (!(candidate instanceof ProtosIntegerValue integer)
+                || !integer.fitsInIntForRuntime()) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-    }
-
-    private static BigInteger exactIntegerValue(Object candidate) {
-        if (candidate instanceof ProtosIntegerValue integer) {
-            return integer.value();
+        int value = integer.intValueExactForRuntime();
+        if (value < 0 || value > 255) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-        return null;
     }
 
     static void requireInvokableForStructured(

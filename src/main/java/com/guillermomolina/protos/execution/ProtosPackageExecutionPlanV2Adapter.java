@@ -81,7 +81,7 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         ProtosObjectValue plan = requireObject(rawPlan, "plan");
         requireExactFields(plan, PLAN_FIELDS, "plan");
 
-        int generation = requireInteger(plan, "generation").intValueExact();
+        int generation = requireInteger(plan, "generation").intValueExactForRuntime();
         if (generation != 2) {
             throw new IOException("unsupported PackageExecutionPlan generation");
         }
@@ -283,11 +283,11 @@ public final class ProtosPackageExecutionPlanV2Adapter {
 
     private static BigInteger requireNonNegative(ProtosObjectValue object, String name)
             throws IOException {
-        BigInteger value = requireInteger(object, name);
-        if (value.signum() < 0) {
+        ProtosIntegerValue value = requireInteger(object, name);
+        if (value.signumForRuntime() < 0) {
             throw new IOException(name + " is negative");
         }
-        return value;
+        return value.value();
     }
 
     private static String requireNonEmptyString(Object value, String label) throws IOException {

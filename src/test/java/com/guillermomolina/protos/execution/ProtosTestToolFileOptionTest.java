@@ -54,12 +54,12 @@ final class ProtosTestToolFileOptionTest {
         assertStringArray(
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(BigInteger.ZERO)));
+                        observed.indexedAt(0)));
 
         assertStringArray(
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(BigInteger.ONE)));
+                        observed.indexedAt(1)));
     }
 
     @Test
@@ -200,12 +200,12 @@ final class ProtosTestToolFileOptionTest {
             assertStringArray(
                     assertInstanceOf(
                             ProtosArrayValue.class,
-                            observed.indexedAt(BigInteger.ZERO)));
+                            observed.indexedAt(0)));
 
             assertStringArray(
                     assertInstanceOf(
                             ProtosArrayValue.class,
-                            observed.indexedAt(BigInteger.ONE)));
+                            observed.indexedAt(1)));
         }
     }
 
@@ -243,35 +243,34 @@ final class ProtosTestToolFileOptionTest {
                 BigInteger.valueOf(3),
                 assertInstanceOf(
                                 ProtosIntegerValue.class,
-                                observed.indexedAt(BigInteger.ZERO))
+                                observed.indexedAt(0))
                         .value());
 
         assertEquals(
                 "catalog.toml",
                 assertInstanceOf(
                                 ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.ONE))
+                                observed.indexedAt(1))
                         .value());
 
         assertStringArray(
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(BigInteger.valueOf(2))),
+                        observed.indexedAt(2)),
                 "one.protos",
                 "two.protos");
 
         assertStringArray(
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        observed.indexedAt(BigInteger.valueOf(3))),
+                        observed.indexedAt(3)),
                 "group");
     }
 
     private static void assertStringArray(
             ProtosArrayValue values,
             String... expected) {
-        assertEquals(
-                BigInteger.valueOf(expected.length),
+        assertEquals(expected.length,
                 values.indexedSize());
 
         for (int index = 0; index < expected.length; index++) {
@@ -280,7 +279,7 @@ final class ProtosTestToolFileOptionTest {
                     assertInstanceOf(
                                     ProtosStringValue.class,
                                     values.indexedAt(
-                                            BigInteger.valueOf(index)))
+                                            index))
                             .value());
         }
     }

@@ -24,18 +24,12 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 /** D048 representation bridge for the ordinary frozen IpAddress prototype/data shape. */
 public final class ProtosStandardIpAddressProtocol {
-    private static final BigInteger IPV4_MAX =
-            BigInteger.ONE.shiftLeft(32).subtract(BigInteger.ONE);
-    private static final BigInteger IPV6_MAX =
-            BigInteger.ONE.shiftLeft(128).subtract(BigInteger.ONE);
-    private static final BigInteger HASH_MULTIPLIER = BigInteger.valueOf(31);
     private static final Set<String> STATE_SLOTS = Set.of("version", "bits");
 
     private ProtosStandardIpAddressProtocol() {}
@@ -131,7 +125,7 @@ public final class ProtosStandardIpAddressProtocol {
             throw invalid(activation);
         }
         ProtosObjectValue address = (ProtosObjectValue) activation.receiver();
-        return new ProtosIntegerValue(canonicalHash(address));
+        return canonicalHash(address);
     }
 
     static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
@@ -153,34 +147,37 @@ public final class ProtosStandardIpAddressProtocol {
                 address.readLocalSlot("bits").orElseThrow());
     }
 
-    private static boolean validNumericState(Object versionValue, Object bitsValue) {
+    private static boolean validNumericState(
+            Object versionValue, Object bitsValue) {
         if (!(versionValue instanceof ProtosIntegerValue version)
-                || !(bitsValue instanceof ProtosIntegerValue bits)) {
+                || !(bitsValue instanceof ProtosIntegerValue bits)
+                || !version.isSmallForRuntime()) {
             return false;
         }
-        BigInteger versionNumber = version.value();
-        BigInteger bitsNumber = bits.value();
-        if (bitsNumber.signum() < 0) {
-            return false;
+
+        long ipVersion = version.smallValueForRuntime();
+        if (ipVersion == 4L) {
+            return bits.fitsUnsignedBitsForRuntime(32);
         }
-        if (versionNumber.equals(BigInteger.valueOf(4))) {
-            return bitsNumber.compareTo(IPV4_MAX) <= 0;
-        }
-        if (versionNumber.equals(BigInteger.valueOf(6))) {
-            return bitsNumber.compareTo(IPV6_MAX) <= 0;
+        if (ipVersion == 6L) {
+            return bits.fitsUnsignedBitsForRuntime(128);
         }
         return false;
     }
 
-    static boolean sameCanonicalState(ProtosObjectValue left, ProtosObjectValue right) {
-        return integerSlot(left, "version").value().equals(integerSlot(right, "version").value())
-                && integerSlot(left, "bits").value().equals(integerSlot(right, "bits").value());
+    static boolean sameCanonicalState(
+            ProtosObjectValue left, ProtosObjectValue right) {
+        return integerSlot(left, "version")
+                        .sameIntegerForRuntime(integerSlot(right, "version"))
+                && integerSlot(left, "bits")
+                        .sameIntegerForRuntime(integerSlot(right, "bits"));
     }
 
-    static BigInteger canonicalHash(ProtosObjectValue address) {
-        BigInteger version = integerSlot(address, "version").value();
-        BigInteger bits = integerSlot(address, "bits").value();
-        return bits.multiply(HASH_MULTIPLIER).add(version);
+    static ProtosIntegerValue canonicalHash(ProtosObjectValue address) {
+        ProtosIntegerValue version = integerSlot(address, "version");
+        ProtosIntegerValue bits = integerSlot(address, "bits");
+        return bits.multiplyForRuntime(new ProtosIntegerValue(31L))
+                .addForRuntime(version);
     }
 
     private static ProtosIntegerValue integerSlot(ProtosObjectValue address, String name) {

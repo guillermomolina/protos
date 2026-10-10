@@ -64,13 +64,13 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         assertEquals(1, x.networkBackend.invocations.size());
         ListenInvocation listenInvocation = x.networkBackend.invocations.get(0);
         assertEquals(4, listenInvocation.request.ipVersion());
-        assertEquals(BigInteger.valueOf(51000), listenInvocation.request.portConstraint());
+        assertEquals(51000, listenInvocation.request.portConstraint());
 
         RecordingListenerBackend listenerBackend = new RecordingListenerBackend();
         AtomicInteger listenerRelease = new AtomicInteger();
         listenInvocation.completion.succeeded(
                 new Object(),
-                BigInteger.valueOf(51000),
+                51000,
                 listenerBackend,
                 listenerRelease::incrementAndGet);
 
@@ -183,7 +183,7 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         AtomicInteger release = new AtomicInteger();
         invocation.completion.succeeded(
                 new Object(),
-                BigInteger.valueOf(51000),
+                51000,
                 new RecordingListenerBackend(),
                 release::incrementAndGet);
         assertEquals(1, release.get());

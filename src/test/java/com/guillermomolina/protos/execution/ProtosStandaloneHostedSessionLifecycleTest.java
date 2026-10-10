@@ -102,14 +102,14 @@ final class ProtosStandaloneHostedSessionLifecycleTest {
             ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, initial.value());
             ProtosNetworkCapabilityValue network =
                     assertInstanceOf(
-                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
-            assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+                            ProtosNetworkCapabilityValue.class, result.indexedAt(0));
+            assertSame(result.indexedAt(1), network.representedDelegationParent(null));
 
             // The granted capability is the module's binding, observed again by a later call.
             ProtosArrayValue again =
                     assertInstanceOf(
                             ProtosArrayValue.class, session.invokeTopLevel("probe").value());
-            assertSame(network, again.indexedAtForRuntime(0));
+            assertSame(network, again.indexedAt(0));
 
             assertTrue(runtimeHost.networkHostInitializedForTesting());
             assertSame(processContext, process.executionHostForRuntime().orElseThrow());
