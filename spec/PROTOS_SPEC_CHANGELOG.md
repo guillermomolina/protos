@@ -23,6 +23,20 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.452] - 2026-10-10
+
+### I089-A / D196 B1 — Operand-first mixed Integer/Float arithmetic
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: standard `+`, `-`, `*`,
+  and `/` now accept Integer/Float and Float/Integer pairs. Convert the
+  Integer operand to IEEE 754 binary64 using the existing
+  `Float(Integer)` roundTiesToEven rule before applying the selected
+  binary64 operator in original operand order; result family is Float.
+  Exact mixed arithmetic followed by one final rounding is not equivalent.
+- Preserve exact Integer/Integer `+`, `-`, `*`, and the existing
+  correctly rounded Float result of exact-rational Integer/Integer `/`;
+  retain Integer-only `div`, `mod`, `%`, exact cross-family equality
+  and ordering, identity, hashing, and ordinary overridable dispatch.
+
 ## [0.1.451] - 2026-10-08
 
 ### PLAT054-3E3-SPEC — Filesystem bootstrap failure policy (B011)

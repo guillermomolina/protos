@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.Objects;
@@ -69,13 +70,23 @@ public final class ProtosStandardFloatProtocol {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             ProtosFloatValue receiver = requireFloatReceiver(activation);
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0) instanceof ProtosFloatValue argument)) {
+                            if (supplied.size() != 1) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            Object argument = supplied.get(0);
+                            double right;
+                            if (argument instanceof ProtosFloatValue floating) {
+                                right = floating.value();
+                            } else if (argument instanceof ProtosIntegerValue integer) {
+                                right = ProtosStandardNumericConversionProtocol
+                                        .integerToBinary64(integer);
+                            } else {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosFloatValue(
-                                    operation.applyAsDouble(receiver.value(), argument.value()));
+                                    operation.applyAsDouble(receiver.value(), right));
                         }));
     }
 

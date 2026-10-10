@@ -98,13 +98,25 @@ public final class ProtosStandardNumericConversionProtocol {
                     yield floating;
                 }
                 if (value instanceof ProtosIntegerValue integer) {
-                    yield new ProtosFloatValue(
-                            ProtosBinary64Rounding.divideExactIntegers(
-                                    integer.value(), BigInteger.ONE));
+                    yield new ProtosFloatValue(integerToBinary64(integer));
                 }
                 yield null;
             }
         };
+    }
+
+    /**
+     * D196 operand-first conversion shared by explicit Float(Integer)
+     * and standard mixed arithmetic. Small Integers never require
+     * BigInteger materialization for this conversion.
+     */
+    static double integerToBinary64(ProtosIntegerValue integer) {
+        Objects.requireNonNull(integer, "integer");
+        if (integer.isSmallForRuntime()) {
+            return (double) integer.smallValueForRuntime();
+        }
+        return ProtosBinary64Rounding.divideExactIntegers(
+                integer.value(), BigInteger.ONE);
     }
 
     static BigInteger exactIntegralBinary64(double value) {

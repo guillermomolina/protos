@@ -181,17 +181,11 @@ public final class ProtosStandardIntegerProtocol {
         Objects.requireNonNull(operation, "operation");
         Objects.requireNonNull(supplied, "supplied");
 
-        if (!(receiver instanceof ProtosIntegerValue integer)
-                || supplied.length != 1
-                || !(supplied[0] instanceof ProtosIntegerValue argument)
-                || (operation.requiresNonZeroDivisor()
-                        && argument.signumForRuntime() == 0)) {
+        if (supplied.length != 1) {
             return null;
         }
-        return executeValidCanonicalOperation(
-                operation,
-                integer,
-                argument);
+        return tryExecuteCanonicalOperationOne(
+                operation, receiver, supplied[0]);
     }
 
     /**
@@ -205,8 +199,19 @@ public final class ProtosStandardIntegerProtocol {
             Object supplied0) {
         Objects.requireNonNull(operation, "operation");
 
-        if (!(receiver instanceof ProtosIntegerValue integer)
-                || !(supplied0 instanceof ProtosIntegerValue argument)
+        if (!(receiver instanceof ProtosIntegerValue integer)) {
+            return null;
+        }
+
+        if (supplied0 instanceof ProtosFloatValue floating) {
+            return switch (operation) {
+                case ADD, SUBTRACT, MULTIPLY, FLOAT_DIVIDE ->
+                        executeMixedFloatOperation(operation, integer, floating);
+                case QUOTIENT, REMAINDER -> null;
+            };
+        }
+
+        if (!(supplied0 instanceof ProtosIntegerValue argument)
                 || (operation.requiresNonZeroDivisor()
                         && argument.signumForRuntime() == 0)) {
             return null;
@@ -221,17 +226,17 @@ public final class ProtosStandardIntegerProtocol {
             ProtosActivation activation,
             List<?> supplied) {
         ProtosIntegerValue receiver = requireIntegerReceiver(activation);
-        if (supplied.size() != 1
-                || !(supplied.get(0) instanceof ProtosIntegerValue argument)
-                || (operation.requiresNonZeroDivisor()
-                        && argument.signumForRuntime() == 0)) {
+        if (supplied.size() != 1) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
         }
-        return executeValidCanonicalOperation(
-                operation,
-                receiver,
-                argument);
+        Object result = tryExecuteCanonicalOperationOne(
+                operation, receiver, supplied.get(0));
+        if (result == null) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+        return result;
     }
 
     private static Object executeValidCanonicalOperation(
@@ -250,6 +255,25 @@ public final class ProtosStandardIntegerProtocol {
             case QUOTIENT -> receiver.divideForRuntime(argument);
             case REMAINDER -> receiver.remainderForRuntime(argument);
         };
+    }
+
+    private static ProtosFloatValue executeMixedFloatOperation(
+            CanonicalIntegerOperation operation,
+            ProtosIntegerValue receiver,
+            ProtosFloatValue argument) {
+        double left = ProtosStandardNumericConversionProtocol
+                .integerToBinary64(receiver);
+        double right = argument.value();
+        double result = switch (operation) {
+            case ADD -> left + right;
+            case SUBTRACT -> left - right;
+            case MULTIPLY -> left * right;
+            case FLOAT_DIVIDE -> left / right;
+            case QUOTIENT, REMAINDER ->
+                    throw new IllegalArgumentException(
+                            "Integer-only operation cannot use a Float operand");
+        };
+        return new ProtosFloatValue(result);
     }
 
     private static void installCanonical(

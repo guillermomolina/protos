@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.325-SNAPSHOT
+
+- `I089-A` (#867): implement D196 B1 mixed Integer/Float arithmetic.
+  - Promote the Integer operand to IEEE binary64 using the standard
+    `Float(Integer)` roundTiesToEven conversion before `+`, `-`, `*`, or `/`,
+    preserving original operand order and returning Float in both directions.
+  - Preserve exact unbounded Integer/Integer arithmetic and the existing
+    correctly rounded exact-quotient Integer/Integer `/`; keep `div`,
+    `mod`, and `%` Integer-only and ordinary guarded dispatch intact.
+  - Extend Java and Protos conformance tests for mixed operations,
+    integer rounding boundaries, infinities, NaN, signed zero, and errors.
+
 ## 0.3.324-SNAPSHOT
 
 - `PERF038-H` (#852): specialize fixed-arity source calls and sends.

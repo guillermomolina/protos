@@ -17,24 +17,25 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("add integer error", () => {
-        Assertions.signals(Error, () => {
-            1.0 + 1
-        })
+    Test("add integer uses Float promotion", () => {
+        Assertions.require((1.0 + 1) === 2.0)
     }),
-    Test("subtract integer error", () => {
-        Assertions.signals(Error, () => {
-            1.0 - 1
-        })
+    Test("subtract integer uses Float promotion", () => {
+        Assertions.require((1.0 - 1) === 0.0)
     }),
-    Test("multiply integer error", () => {
-        Assertions.signals(Error, () => {
-            1.0 * 1
-        })
+    Test("multiply integer uses Float promotion", () => {
+        Assertions.require((1.0 * 1) === 1.0)
     }),
-    Test("divide integer error", () => {
+    Test("divide integer uses Float promotion", () => {
+        Assertions.require((1.0 / 1) === 1.0)
+    }),
+    Test("mixed Float receiver preserves operand order", () => {
+        Assertions.require((7.0 - 2) === 5.0)
+        Assertions.require((7.0 / 2) === 3.5)
+    }),
+    Test("nonnumeric argument still signals", () => {
         Assertions.signals(Error, () => {
-            1.0 / 1
+            1.0 + {}
         })
     }),
     Test("copied standard plus nonfloat receiver error", () => {

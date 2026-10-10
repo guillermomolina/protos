@@ -1310,32 +1310,56 @@ integer precision in this explicit conversion is therefore permitted and
 normative, not an `Error`. A result beyond the finite binary64 range is the
 correspondingly signed infinity. Integer zero converts to positive `0.0`.
 
-No other implicit numeric conversion follows from these factories. In
-particular, the availability of `Float(x)` does not make an `Integer` acceptable
-to a standard Float arithmetic operation.
+Outside the standard mixed Integer/Float arithmetic rule below, these
+conversion factories introduce no implicit numeric coercion. Standard mixed
+arithmetic is defined using the existing `Float(Integer)` conversion, but that
+does not make `Float(x)` an implicit conversion for other protocols.
 
 ### Standard arithmetic compatibility matrix
 
 Standard numeric arithmetic uses the **original receiver and argument semantic
-families**. There is no implicit arithmetic promotion, widening, narrowing, or
-coercion between distinct numeric families.
-
-For binary `+`, `-`, and `*`, the complete Core v0.1 matrix is:
+families** to determine the standard operation. For binary `+`, `-`, and `*`,
+the complete Core v0.1 matrix is:
 
 | receiver family | argument family | result |
 | --- | --- | --- |
 | `Integer` | `Integer` | `Integer`, exact |
+| `Integer` | `Float` | `Float`, operand-first binary64 rule below |
+| `Float` | `Integer` | `Float`, operand-first binary64 rule below |
 | `Float` | `Float` | `Float`, binary64 rule below |
-| any numeric family `A` | distinct numeric family `B` | `Error` |
 
-Thus the result family is independent of operand order whenever both operand
-orders select the standard behavior. Examples:
+For standard binary `+`, `-`, `*`, and `/` with one semantic Integer and one
+semantic Float operand, convert the Integer operand to binary64 using exactly
+the standard `Float(Integer)` rule above, including `roundTiesToEven`, signed
+infinity for out-of-range magnitude, and positive zero for Integer zero. Then
+apply the selected IEEE 754-2019 binary64 operation to the resulting Float
+operands **in their original receiver/argument order**, with the normal binary64
+operation rounding. The standard result is a semantic Float in both operand
+orders. Conversion happens **before** arithmetic: implementations must not
+perform exact mixed arithmetic followed by a single final rounding.
+
+Consequently, rounding an Integer operand can discard information before the
+operation; for example, mathematical `(2^53 + 1) + (-2^53.0)` produces `+0.0`.
+An Integer whose magnitude converts to infinity participates as that infinity:
+mathematical `2^1024 * 0.0` produces NaN, rather than exact zero; mathematical
+`0.5 / 2^1024` produces `+0.0`. Mixed division by Float zero follows IEEE
+binary64, not Integer/Integer division-by-zero Error behavior.
+
+The result family is Float for either mixed operand order, but subtraction and
+division preserve left/right order. Examples:
 
 ```js
 1 + 2                 // Integer(3)
-1 + 2.0               // Error
-2.0 + 1               // Error
+1 + 2.0               // Float(3.0)
+2.0 + 1               // Float(3.0)
+1 - 2.0               // Float(-1.0)
+2.0 - 1               // Float(1.0)
 ```
+
+This is a rule for the standard numeric operations, not an unconditional syntax
+intrinsic. Ordinary overridable message dispatch, custom methods, lookup,
+receiver-domain checking, evaluation order, and guarded-send fallback retain
+their existing semantics.
 
 The same-family rule also governs standard unary negation:
 
@@ -1346,8 +1370,9 @@ The grammar-owned prefix `-` lowering inherits exactly that standard behavior.
 
 ### Division, integer quotient, and remainder
 
-Standard `/` also rejects distinct numeric families; it performs no mixed-family
-promotion.
+Standard `/` applies the same operand-first binary64 rule above to
+Integer/Float and Float/Integer operand pairs. The result is Float, with
+original operand order preserved.
 
 For same-family operands:
 
@@ -1418,8 +1443,9 @@ because the IEEE condition occurred.
 
 The earlier **Numeric Equality Across Families**, **Numeric hash coherence**,
 **Float Special Values and Identity**, and **Float Signed Zero Semantics**
-sections remain the authoritative equality/identity/hash rules. This subsection
-closes their ordering and arithmetic interaction without introducing conversion.
+sections remain the authoritative equality/identity/hash rules. The
+mixed-arithmetic Float conversion rule does not apply to equality, ordering,
+identity, or hashing.
 
 For any two numeric values, standard `==` compares exact mathematical numeric
 value across families as already specified. The comparison never converts an
@@ -1450,7 +1476,7 @@ without promotion or coercion:
   canonical `false`.
 
 Consequently `1 < 1.5` is `true`. Integer/Float ordering is cross-family by
-exact mathematical value even though mixed-family arithmetic is invalid.
+exact mathematical value; it does not use mixed arithmetic's binary64 promotion.
 
 The existing numeric hash coherence rule is unchanged and mandatory across all
 these families: whenever numeric `a == b` is true, standard `a.hash` and

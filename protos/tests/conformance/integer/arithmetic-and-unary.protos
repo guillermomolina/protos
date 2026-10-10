@@ -59,20 +59,43 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 123)
     }),
-    Test("mixed add error", () => {
-        Assertions.signals(Error, () => {
-            1 + 1.0
-        })
+    Test("mixed add returns Float", () => {
+        Assertions.require((1 + 1.0) === 2.0)
     }),
-    Test("mixed subtract error", () => {
-        Assertions.signals(Error, () => {
-            1 - 1.0
-        })
+    Test("mixed subtract returns Float", () => {
+        Assertions.require((1 - 1.0) === 0.0)
     }),
-    Test("mixed multiply error", () => {
-        Assertions.signals(Error, () => {
-            1 * 1.0
-        })
+    Test("mixed multiply returns Float", () => {
+        Assertions.require((1 * 1.0) === 1.0)
+    }),
+    Test("mixed addition rounds Integer operand first", () => {
+        Assertions.require(
+            (9007199254740993 + (-9007199254740992.0)) === 0.0
+        )
+    }),
+    Test("mixed division uses Float semantics", () => {
+        Assertions.require((1 / 0.0) === (1.0 / 0.0))
+        Assertions.require((7 / 2.0) === 3.5)
+    }),
+    Test("mixed signed64 boundary rounds Integer first", () => {
+        Assertions.require(
+            (9223372036854775807 + (-9223372036854775808.0)) === 0.0
+        )
+    }),
+    Test("mixed huge Integer converts to infinity first", () => {
+        huge: 179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624224137216
+        Assertions.require((huge * 0.0) === (0.0 / 0.0))
+        Assertions.require(
+            (huge + (1.0 / -0.0)) === (0.0 / 0.0)
+        )
+    }),
+    Test("mixed division by negative Float zero", () => {
+        Assertions.require((1 / -0.0) === (1.0 / -0.0))
+    }),
+    Test("integer-only selectors reject Float", () => {
+        Assertions.signals(Error, () => { 7.div(2.0) })
+        Assertions.signals(Error, () => { 7.mod(2.0) })
+        Assertions.signals(Error, () => { 7 % 2.0 })
     }),
     Test("copied standard plus noninteger receiver error", () => {
         Assertions.signals(Error, () => {

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -212,6 +213,51 @@ class ProtosStandardIntegerArithmeticTest {
                 direct(prelude, "mod",
                         new ProtosIntegerValue(BigInteger.ONE),
                         new ProtosIntegerValue(BigInteger.ZERO)));
+    }
+
+    @Test
+    void canonicalMixedArithmeticUsesOperandFirstBinary64()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        ProtosFloatValue rounded = assertInstanceOf(
+                ProtosFloatValue.class,
+                direct(prelude, "+",
+                        new ProtosIntegerValue(9007199254740993L),
+                        new ProtosFloatValue(-9007199254740992.0)));
+        assertEquals(0.0d, rounded.value());
+
+        ProtosFloatValue subtraction = assertInstanceOf(
+                ProtosFloatValue.class,
+                direct(prelude, "-",
+                        new ProtosIntegerValue(7L),
+                        new ProtosFloatValue(2.5)));
+        assertEquals(4.5d, subtraction.value());
+
+        ProtosFloatValue divideByFloatZero = assertInstanceOf(
+                ProtosFloatValue.class,
+                direct(prelude, "/",
+                        new ProtosIntegerValue(1L),
+                        new ProtosFloatValue(0.0)));
+        assertEquals(Double.POSITIVE_INFINITY, divideByFloatZero.value());
+
+        BigInteger huge = BigInteger.ONE.shiftLeft(1024);
+        ProtosFloatValue invalidProduct = assertInstanceOf(
+                ProtosFloatValue.class,
+                direct(prelude, "*",
+                        new ProtosIntegerValue(huge),
+                        new ProtosFloatValue(0.0)));
+        assertTrue(Double.isNaN(invalidProduct.value()));
+
+        assertNull(direct(prelude, "div",
+                new ProtosIntegerValue(7L),
+                new ProtosFloatValue(2.0)));
+        assertNull(direct(prelude, "mod",
+                new ProtosIntegerValue(7L),
+                new ProtosFloatValue(2.0)));
+        assertNull(direct(prelude, "/",
+                new ProtosIntegerValue(7L),
+                new ProtosIntegerValue(0L)));
     }
 
     private static Object direct(

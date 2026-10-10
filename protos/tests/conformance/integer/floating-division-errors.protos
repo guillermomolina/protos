@@ -22,9 +22,9 @@ tests: [
             1 / 0
         })
     }),
-    Test("division float error", () => {
+    Test("division nonnumeric argument error", () => {
         Assertions.signals(Error, () => {
-            1 / 1.0
+            1 / {}
         })
     })
 ]
