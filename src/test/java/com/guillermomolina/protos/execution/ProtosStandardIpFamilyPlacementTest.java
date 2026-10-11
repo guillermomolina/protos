@@ -97,6 +97,9 @@ final class ProtosStandardIpFamilyPlacementTest {
 
         assertTrue(prelude.bindings().readLocalSlot("IpAddress").isEmpty());
         assertTrue(prelude.bindings().readLocalSlot("IpEndpoint").isEmpty());
+        // The private bootstrap anchors captured by the source IP closures are not Prelude surface.
+        assertTrue(prelude.bindings().readLocalSlot("_coreIpAddressCanonical").isEmpty());
+        assertTrue(prelude.bindings().readLocalSlot("_coreIpEndpointCanonical").isEmpty());
         assertTrue(prelude.ipAddressPrototypeForRuntime().isFrozen());
         assertTrue(prelude.ipEndpointPrototypeForRuntime().isFrozen());
         assertSame(
@@ -313,12 +316,18 @@ final class ProtosStandardIpFamilyPlacementTest {
     }
 
     @Test
-    void largeHashWithoutAPreludeFailsInsteadOfAnsweringNull() throws Exception {
+    void largeHashIsComputedBySourceInTheExecutingPrelude() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, new CountingResolver());
+        ProtosActivation activation = prelude.newModuleActivation();
+        BigInteger bits = BigInteger.ONE.shiftLeft(62);
         ProtosObjectValue address = (ProtosObjectValue) ProtosTestExecutionSupport.evaluate(
-                IP_ADDRESS + "IpAddress(6, 4611686018427387904)", prelude.newModuleActivation());
-        assertThrows(NullPointerException.class,
-                () -> ProtosStandardIpAddressProtocol.canonicalHash(address, null));
+                IP_ADDRESS + "IpAddress(6, " + bits + ")", activation);
+        Object hash = ProtosInvocation.invokeMessage(address, "hash", java.util.List.of(), activation);
+        assertTrue(hash != null, "IP hash must never be a guest null");
+        assertTrue(ProtosNumericValueSupport.isCurrentInteger(hash));
+        assertEquals(expectedHash(bits, 6), ProtosTestIntegers.exact(hash));
+        assertTrue(expectedHash(bits, 6).bitLength() >= Long.SIZE);
+        assertSame(prelude.integerPrototype(), ((ProtosObjectValue) hash).parent().orElseThrow());
     }
 
     private static void assertCanonicalCopy(
@@ -341,10 +350,19 @@ final class ProtosStandardIpFamilyPlacementTest {
                 (ProtosObjectValue) copy.readLocalSlot("address").orElseThrow();
         assertNotSame(sourceAddress, copyAddress);
         assertSame(addressPrototype, copyAddress.parent().orElseThrow());
-        assertTrue(ProtosStandardIpAddressProtocol.sameCanonicalState(sourceAddress, copyAddress));
+        ProtosActivation activation = prelude.newModuleActivation();
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                ProtosInvocation.invokeMessage(
+                        sourceAddress, "==", java.util.List.of(copyAddress), activation));
         assertTrue(
                 ProtosNumericValueSupport.sameInteger(
-                        ProtosStandardIpAddressProtocol.canonicalHash(sourceAddress, prelude),
-                        ProtosStandardIpAddressProtocol.canonicalHash(copyAddress, prelude)));
+                        ProtosInvocation.invokeMessage(
+                                sourceAddress, "hash", java.util.List.of(), activation),
+                        ProtosInvocation.invokeMessage(
+                                copyAddress, "hash", java.util.List.of(), activation)));
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                ProtosInvocation.invokeMessage(source, "==", java.util.List.of(copy), activation));
     }
 }

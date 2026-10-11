@@ -75,6 +75,15 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("private octet codec is not module surface", () => {
+        IpAddresses: import("std:network/IpAddresses")
+
+        Assertions.require(!IpAddresses.hasSlot("_ipOctets"))
+        Assertions.require(!IpAddresses.hasSlot("toOctets"))
+        Assertions.require(!IpAddresses.hasSlot("fromOctets"))
+        Assertions.require(!IpAddresses.hasSlot("_coreIpAddressCanonical"))
+        Assertions.require(!IpAddresses.hasSlot("_coreIpEndpointCanonical"))
     })
 ]
 tests.freeze()

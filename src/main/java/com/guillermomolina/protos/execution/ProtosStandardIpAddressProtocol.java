@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -29,10 +28,14 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** D048 representation bridge for the ordinary frozen IpAddress prototype/data shape. */
+/**
+ * D048 recognition bridge for the ordinary frozen IpAddress prototype/data shape.
+ *
+ * <p>Construction ({@code call}), structural equality ({@code ==}) and {@code hash} are
+ * source closures of {@code lib/core/IpAddress.protos}. Only {@code recognizes} is native: it
+ * inspects the candidate's internal shape directly and never dispatches guest behavior.
+ */
 public final class ProtosStandardIpAddressProtocol {
-    private static final Set<String> STATE_SLOTS = Set.of("version", "bits");
-
     private ProtosStandardIpAddressProtocol() {}
 
     public static ProtosObjectValue install(ProtosObjectValue prototype) {
@@ -41,52 +44,44 @@ public final class ProtosStandardIpAddressProtocol {
             throw new IllegalArgumentException(
                     "standard IpAddress prototype must delegate directly to Object");
         }
-        if (!prototype.isOpen() || !prototype.localSlotsSnapshot().isEmpty()) {
-            throw new IllegalStateException(
-                    "standard IpAddress prototype must be a fresh open source object");
-        }
+        requireSourcePrototype(prototype, "IpAddress", "_coreIpAddressEquals");
 
-        prototype.createLocalSlot(
-                "init",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> initialize(activation, supplied, prototype)));
         prototype.createLocalSlot(
                 "recognizes",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> recognizes(activation, supplied, prototype)));
-        prototype.createLocalSlot(
-                "==",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> equalsValue(activation, supplied, prototype)));
-        prototype.createLocalSlot(
-                "hash",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> hash(activation, supplied, prototype)));
         return prototype.freeze();
     }
 
-    private static Object initialize(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype) {
-        if (supplied.size() != 2) {
-            throw invalid(activation);
+    /*
+     * The open source prototype owns exactly the source-backed call, hash and
+     * equality closures. Equality is written under {@code equalsName} because a
+     * source slot target cannot spell an operator; the same Closure is moved to
+     * {@code ==}, as Core Integer does for {@code %}.
+     */
+    static void requireSourcePrototype(
+            ProtosObjectValue prototype, String family, String equalsName) {
+        if (!prototype.isOpen()
+                || !prototype.localSlotsSnapshot().keySet().equals(
+                        Set.of("call", equalsName, "hash"))) {
+            throw new IllegalStateException(
+                    "standard " + family
+                            + " prototype must be an open source object with exactly call, "
+                            + equalsName + " and hash");
         }
-        if (!(activation.receiver() instanceof ProtosObjectValue address)
-                || address.parent().orElse(null) != prototype
-                || !address.isOpen()
-                || !address.localSlotsSnapshot().isEmpty()) {
-            throw invalid(activation);
+        for (String selector : java.util.List.of("call", equalsName, "hash")) {
+            Object value = prototype.readLocalSlot(selector).orElseThrow();
+            if (!(value instanceof ProtosClosureValue closure)
+                    || closure.definition() == null
+                    || closure.executionPlan().isEmpty()
+                    || closure.nativeBody().isPresent()) {
+                throw new IllegalStateException(
+                        "standard " + family + " " + selector + " must be a source-backed Closure");
+            }
         }
-        Object versionValue = supplied.get(0);
-        Object bitsValue = supplied.get(1);
-        if (!validNumericState(versionValue, bitsValue)) {
-            throw invalid(activation);
-        }
-
-        address.createLocalSlot("version", versionValue);
-        address.createLocalSlot("bits", bitsValue);
-        return address.freeze();
+        Object equality = prototype.readLocalSlot(equalsName).orElseThrow();
+        prototype.removeLocalSlot(equalsName);
+        prototype.createLocalSlot("==", equality);
     }
 
     private static Object recognizes(
@@ -97,36 +92,6 @@ public final class ProtosStandardIpAddressProtocol {
             throw invalid(activation);
         }
         return ProtosBooleanValue.of(recognizesValue(supplied.get(0), prototype));
-    }
-
-    private static Object equalsValue(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype) {
-        if (supplied.size() != 1
-                || !recognizesValue(activation.receiver(), prototype)) {
-            throw invalid(activation);
-        }
-        Object other = supplied.get(0);
-        if (!recognizesValue(other, prototype)) {
-            return ProtosBooleanValue.FALSE;
-        }
-
-        ProtosObjectValue left = (ProtosObjectValue) activation.receiver();
-        ProtosObjectValue right = (ProtosObjectValue) other;
-        return ProtosBooleanValue.of(sameCanonicalState(left, right));
-    }
-
-    private static Object hash(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype) {
-        if (!supplied.isEmpty()
-                || !recognizesValue(activation.receiver(), prototype)) {
-            throw invalid(activation);
-        }
-        ProtosObjectValue address = (ProtosObjectValue) activation.receiver();
-        return canonicalHash(address, owningPrelude(activation));
     }
 
     static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
@@ -162,41 +127,6 @@ public final class ProtosStandardIpAddressProtocol {
             return ProtosNumericValueSupport.isUnsignedIntegerWithin(bitsValue, 128);
         }
         return false;
-    }
-
-    static boolean sameCanonicalState(
-            ProtosObjectValue left, ProtosObjectValue right) {
-        return ProtosNumericValueSupport.sameInteger(
-                        integerSlot(left, "version"), integerSlot(right, "version"))
-                && ProtosNumericValueSupport.sameInteger(
-                        integerSlot(left, "bits"), integerSlot(right, "bits"));
-    }
-
-    /**
-     * The exact hash {@code bits * 31 + version}. {@code prelude} owns a hash beyond the
-     * signed-64 range (IPv6 bits); it is required, because the exact Integer service answers
-     * null for an unowned large result and a hash must never be a guest null.
-     */
-    static Object canonicalHash(ProtosObjectValue address, ProtosPrelude prelude) {
-        Objects.requireNonNull(prelude, "prelude");
-        Object version = integerSlot(address, "version");
-        Object bits = integerSlot(address, "bits");
-        return ProtosNumericValueSupport.addIntegers(
-                ProtosNumericValueSupport.multiplyIntegers(
-                        bits, ProtosNumericValueSupport.integer(31L), prelude),
-                version,
-                prelude);
-    }
-
-    /* The Prelude of the executing domain, which owns every large hash it computes. */
-    static ProtosPrelude owningPrelude(ProtosActivation activation) {
-        return activation.prelude().orElseThrow(
-                () -> new IllegalStateException("IP hashing requires the Core prelude"));
-    }
-
-    private static Object integerSlot(ProtosObjectValue address, String name) {
-        return ProtosNumericValueSupport.requireCurrentInteger(
-                address.readLocalSlot(name).orElseThrow());
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

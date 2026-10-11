@@ -14,11 +14,83 @@
 // the specific language governing rights and limitations under the License.
 
 //! Construction, parsing, and formatting of canonical `IpAddress` values; the
-//! `IpAddress` factory itself is installed by the runtime.
+//! The canonical `IpAddress` prototype is published by the runtime;
+//! its construction, equality and hash behavior are implemented in Protos. 
+
+// Private exact octet codec. Addresses are encoded as fixed-width arrays of 4
+// (IPv4) or 16 (IPv6) Integer octets in network order using exact guest
+// Integer arithmetic, so all 128 IPv6 bits are preserved. It carries no
+// Network authority and is captured below before its binding is removed.
+_ipOctets: {
+    // Answers the IpAddress of `version` whose network-order octets are
+    // `octets`, an Array of exactly 4 or 16 Integers in 0..255.
+    from: (version, octets) => {
+        width: 0
+        (version == 4).ifTrue(() => { width = 4 })
+        (version == 6).ifTrue(() => { width = 16 })
+        (width == 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        Array.recognizes(octets).ifFalse(() => {
+            Error().signal()
+        })
+        (octets.size() == width).ifFalse(() => {
+            Error().signal()
+        })
+
+        bits: 0
+        index: 0
+        (() => index < width).whileTrue() {
+            octet: octets[index]
+            Integer.recognizes(octet).ifFalse(() => {
+                Error().signal()
+            })
+            ((octet < 0) || (octet > 255)).ifTrue(() => {
+                Error().signal()
+            })
+            bits = bits * 256 + octet
+            index = index + 1
+        }
+
+        IpAddress(version, bits)
+    }
+
+    // Answers a frozen Array of the 4 or 16 network-order Integer octets of a
+    // recognized IpAddress, keeping leading zero octets.
+    to: (address) => {
+        IpAddress.recognizes(address).ifFalse(() => {
+            Error().signal()
+        })
+
+        result: null
+        (address.version == 4).ifTrue(() => {
+            result = Array(0, 0, 0, 0)
+        })
+        (address.version == 6).ifTrue(() => {
+            result = Array(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        })
+
+        remaining: address.bits
+        index: result.size() - 1
+        (() => index >= 0).whileTrue() {
+            result[index] = remaining.mod(256)
+            remaining = remaining.div(256)
+            index = index - 1
+        }
+
+        (remaining == 0).ifFalse(() => {
+            Error().signal()
+        })
+
+        result.freeze()
+    }
+}
+_ipOctets.freeze()
 
 /// Answers the IPv4 `IpAddress` with octets `a.b.c.d`; each must be an Integer in
 /// 0..255.
-v4: (a, b, c, d) => {
+v4: ((codec) => (a, b, c, d) => {
     requireComponent: (value) => {
         // Validate the exact ordinary-Integer family without conversion.
         Integer.recognizes(value).ifFalse(() => {
@@ -37,17 +109,12 @@ v4: (a, b, c, d) => {
     requireComponent(c)
     requireComponent(d)
 
-    bits: a
-    bits = bits * 256 + b
-    bits = bits * 256 + c
-    bits = bits * 256 + d
-
-    IpAddress(4, bits)
-}
+    codec.from(4, Array(a, b, c, d))
+})(_ipOctets)
 
 /// Answers the IPv6 `IpAddress` with hextets `a` through `h`; each must be an Integer
 /// in 0..65535.
-v6: (a, b, c, d, e, f, g, h) => {
+v6: ((codec) => (a, b, c, d, e, f, g, h) => {
     requireHextet: (value) => {
         // Validate the exact ordinary-Integer family without conversion or
         // delegation.
@@ -71,17 +138,20 @@ v6: (a, b, c, d, e, f, g, h) => {
     requireHextet(g)
     requireHextet(h)
 
-    bits: a
-    bits = bits * 65536 + b
-    bits = bits * 65536 + c
-    bits = bits * 65536 + d
-    bits = bits * 65536 + e
-    bits = bits * 65536 + f
-    bits = bits * 65536 + g
-    bits = bits * 65536 + h
+    // Sixteen network-order octets; no signed-64 intermediate is formed.
+    octets: Array(
+        a.div(256), a.mod(256),
+        b.div(256), b.mod(256),
+        c.div(256), c.mod(256),
+        d.div(256), d.mod(256),
+        e.div(256), e.mod(256),
+        f.div(256), f.mod(256),
+        g.div(256), g.mod(256),
+        h.div(256), h.mod(256)
+    )
 
-    IpAddress(6, bits)
-}
+    codec.from(6, octets)
+})(_ipOctets)
 
 /// Parses numeric IP address text: dotted-decimal IPv4 without leading zeros, or
 /// IPv6 hextets with optional `::` compression and a trailing dotted-decimal
@@ -444,7 +514,7 @@ parse: (text) => {
 /// Formats an `IpAddress`: IPv4 as dotted decimal, IPv6 as lowercase hextets
 /// with the leftmost longest run of two or more zero hextets compressed to `::`,
 /// and IPv4-mapped IPv6 as `::ffff:` followed by dotted decimal.
-format: (address) => {
+format: ((codec) => (address) => {
     IpAddress.recognizes(address).ifFalse(() => {
         fail()
     })
@@ -497,16 +567,7 @@ format: (address) => {
         result
     }
 
-    ipv4BitsText: (bits) => {
-        a: bits.div(16777216)
-        remainder: bits.mod(16777216)
-
-        b: remainder.div(65536)
-        remainder = remainder.mod(65536)
-
-        c: remainder.div(256)
-        d: remainder.mod(256)
-
+    dottedText: (a, b, c, d) => {
         octetText(a) + "." + octetText(b) + "." + octetText(c) + "." + octetText(d)
     }
 
@@ -576,20 +637,20 @@ format: (address) => {
     }
 
     result: null
+    octets: codec.to(address)
 
     (address.version == 4).ifTrue(() => {
-        result = ipv4BitsText(address.bits)
+        result = dottedText(octets[0], octets[1], octets[2], octets[3])
     })
 
     (address.version == 6).ifTrue(() => {
         hextets: Array(0, 0, 0, 0, 0, 0, 0, 0)
-        remaining: address.bits
-        hextetIndex: 7
+        hextetIndex: 0
 
-        (() => hextetIndex >= 0).whileTrue() {
-            hextets[hextetIndex] = remaining.mod(65536)
-            remaining = remaining.div(65536)
-            hextetIndex = hextetIndex - 1
+        (() => hextetIndex < 8).whileTrue() {
+            hextets[hextetIndex] =
+                octets[hextetIndex * 2] * 256 + octets[hextetIndex * 2 + 1]
+            hextetIndex = hextetIndex + 1
         }
 
         mapped: true
@@ -601,8 +662,8 @@ format: (address) => {
         (hextets[5] == 65535).ifFalse(() => { mapped = false })
 
         mapped.ifTrue(() => {
-            ipv4Bits: hextets[6] * 65536 + hextets[7]
-            result = "::ffff:" + ipv4BitsText(ipv4Bits)
+            result =
+                "::ffff:" + dottedText(octets[12], octets[13], octets[14], octets[15])
         })
 
         mapped.ifFalse(() => {
@@ -672,4 +733,7 @@ format: (address) => {
     })
 
     result
-}
+})(_ipOctets)
+
+// The private octet codec is captured above; it is not module surface.
+context.removeSlot("_ipOctets")

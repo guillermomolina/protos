@@ -13,4 +13,58 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-IpEndpoint: {}
+// The canonical IpEndpoint family prototype. Construction, structural equality
+// and hash are ordinary source closures; only the exact structural recognizer
+// is installed by the runtime. The closures reach both canonical families
+// through private bootstrap anchors, which survive removal of the public
+// IpAddress and IpEndpoint bindings.
+IpEndpoint: {
+    call: (address, port) => {
+        (this === _coreIpEndpointCanonical).ifFalse(() => {
+            Error().signal()
+        })
+
+        _coreIpAddressCanonical.recognizes(address).ifFalse(() => {
+            Error().signal()
+        })
+
+        Integer.recognizes(port).ifFalse(() => {
+            Error().signal()
+        })
+
+        ((port < 1) || (port > 65535)).ifTrue(() => {
+            Error().signal()
+        })
+
+        endpoint: (_coreIpEndpointCanonical) {
+            address: address
+            port: port
+        }
+        endpoint.freeze()
+    }
+
+    // Installed by the runtime as `==`; a slot target cannot spell an operator.
+    _coreIpEndpointEquals: (other) => {
+        _coreIpEndpointCanonical.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+
+        result: false
+        _coreIpEndpointCanonical.recognizes(other).ifTrue(() => {
+            result =
+                (this.address == other.address) &&
+                (this.port == other.port)
+        })
+        result
+    }
+
+    hash: () => {
+        _coreIpEndpointCanonical.recognizes(this).ifFalse(() => {
+            Error().signal()
+        })
+
+        this.address.hash() * 31 + this.port
+    }
+}
+
+_coreIpEndpointCanonical: IpEndpoint

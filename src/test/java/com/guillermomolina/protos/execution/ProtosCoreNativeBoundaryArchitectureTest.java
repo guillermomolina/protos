@@ -55,8 +55,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
                     Map.entry("execution/ProtosStandardPathProtocol.java", 4),
-                    Map.entry("execution/ProtosStandardIpAddressProtocol.java", 4),
-                    Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 4),
+                    Map.entry("execution/ProtosStandardIpAddressProtocol.java", 1),
+                    Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNetworkProtocol.java", 2),
                     Map.entry("execution/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/ProtosStandardTcpListenerProtocol.java", 3),
@@ -151,7 +151,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(34, actualCore.size());
-        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(132, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -279,19 +279,27 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertTrue(
                 ipAddressPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
                 "standard IpAddress prototype must delegate directly to Object");
-        assertNativeSelectors(
-                "IpAddress",
-                ipAddressPrototype,
-                Set.of("init", "recognizes", "==", "hash"));
+        assertNativeSelectors("IpAddress", ipAddressPrototype, Set.of("recognizes"));
+        assertEquals(
+                Set.of("call", "==", "hash", "recognizes"),
+                ipAddressPrototype.localSlotsSnapshot().keySet(),
+                "unexpected standard IpAddress prototype surface");
+        assertSourceBacked(ipAddressPrototype, "call");
+        assertSourceBacked(ipAddressPrototype, "==");
+        assertSourceBacked(ipAddressPrototype, "hash");
         ProtosObjectValue ipEndpointPrototype = prelude.ipEndpointPrototypeForRuntime();
         assertTrue(ipEndpointPrototype.isFrozen(), "standard IpEndpoint prototype must be frozen");
         assertTrue(
                 ipEndpointPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
                 "standard IpEndpoint prototype must delegate directly to Object");
-        assertNativeSelectors(
-                "IpEndpoint",
-                ipEndpointPrototype,
-                Set.of("init", "recognizes", "==", "hash"));
+        assertNativeSelectors("IpEndpoint", ipEndpointPrototype, Set.of("recognizes"));
+        assertEquals(
+                Set.of("call", "==", "hash", "recognizes"),
+                ipEndpointPrototype.localSlotsSnapshot().keySet(),
+                "unexpected standard IpEndpoint prototype surface");
+        assertSourceBacked(ipEndpointPrototype, "call");
+        assertSourceBacked(ipEndpointPrototype, "==");
+        assertSourceBacked(ipEndpointPrototype, "hash");
         assertNativeSelectors(
                 "Network",
                 prelude.networkPrototype(),

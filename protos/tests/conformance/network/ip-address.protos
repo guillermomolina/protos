@@ -141,6 +141,226 @@ tests: Array(
             ok
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("ip address construction accepts every exact range boundary", () => {
+        ok: true
+        valid: (version, bits) => {
+            address: IpAddress(version, bits)
+            (address.parent() === IpAddress) &&
+                (address.version == version) &&
+                (address.bits == bits) &&
+                IpAddress.recognizes(address)
+        }
+
+        valid(4, 0).ifFalse(() => { ok = false })
+        valid(4, 4294967295).ifFalse(() => { ok = false })
+        valid(6, 0).ifFalse(() => { ok = false })
+        valid(6, 9223372036854775808).ifFalse(() => { ok = false })
+        valid(6, 18446744073709551616).ifFalse(() => { ok = false })
+        valid(6, 170141183460469231731687303715884105728).ifFalse(() => { ok = false })
+        valid(6, 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
+
+        Assertions.require(ok)
+    }),
+    Test("ip address construction rejects invalid state and receivers", () => {
+        ok: true
+        reject: (body) => {
+            Error.handle(
+                () => {
+                    body()
+                    false
+                },
+                (error) => { true }
+            )
+        }
+
+        reject(() => { IpAddress(4, -1) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(6, -1) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(0, 0) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(-4, 0) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(6.0, 0) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(4, 1.0) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(4, 4294967296) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(6, 340282366920938463463374607431768211456) }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress() }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress(4, 1, 2) }).ifFalse(() => { ok = false })
+
+        derived: IpAddress {}
+        reject(() => { derived(4, 1) }).ifFalse(() => { ok = false })
+        derived.hasSlot("version").ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
+    }),
+    Test("ip address recognition rejects lookalikes without callbacks", () => {
+        called: false
+        derivedParent: IpAddress {}
+
+        wrongParent: {
+            version: 4
+            bits: 1
+        }
+        wrongParent.freeze()
+
+        derivedChild: (derivedParent) {
+            version: 4
+            bits: 1
+        }
+        derivedChild.freeze()
+
+        open: IpAddress {
+            version: 4
+            bits: 1
+        }
+
+        closed: IpAddress {
+            version: 4
+            bits: 1
+        }
+        closed.close()
+
+        extraSlot: IpAddress {
+            version: 4
+            bits: 1
+            extra: 0
+        }
+        extraSlot.freeze()
+
+        parentOverride: IpAddress {
+            version: 4
+            bits: 1
+            parent: () => {
+                called = true
+                IpAddress
+            }
+        }
+        parentOverride.freeze()
+
+        slotNamesOverride: IpAddress {
+            version: 4
+            bits: 1
+            slotNames: () => {
+                called = true
+                Array("version", "bits")
+            }
+        }
+        slotNamesOverride.freeze()
+
+        equalityBehavior: {
+            equals: (other) => {
+                called = true
+                true
+            }
+        }
+        equalityOverride: IpAddress {
+            version: 4
+            bits: 1
+            ...equalityBehavior.alias("equals", "==").without("equals")
+        }
+        equalityOverride.freeze()
+
+        hashOverride: IpAddress {
+            version: 4
+            bits: 1
+            hash: () => {
+                called = true
+                0
+            }
+        }
+        hashOverride.freeze()
+
+        delegatedVersion: IpAddress {
+            version: (4) {}
+            bits: 1
+        }
+        delegatedVersion.freeze()
+
+        delegatedBits: IpAddress {
+            version: 4
+            bits: (1) {}
+        }
+        delegatedBits.freeze()
+
+        ok: true
+        Array(
+            wrongParent,
+            derivedChild,
+            open,
+            closed,
+            extraSlot,
+            parentOverride,
+            slotNamesOverride,
+            equalityOverride,
+            hashOverride,
+            delegatedVersion,
+            delegatedBits
+        ).each((candidate) => {
+            IpAddress.recognizes(candidate).ifTrue(() => { ok = false })
+        })
+
+        Assertions.require(ok)
+        Assertions.require(!called)
+    }),
+    Test("ip address recognition accepts manually built exact shapes", () => {
+        manual: IpAddress {
+            version: 6
+            bits: 340282366920938463463374607431768211455
+        }
+        manual.freeze()
+
+        Assertions.require(IpAddress.recognizes(manual))
+        Assertions.require(manual == IpAddress(6, 340282366920938463463374607431768211455))
+        Assertions.require(manual.hash() == IpAddress(6, 340282366920938463463374607431768211455).hash())
+    }),
+    Test("ip address equality and hash are exact and structural", () => {
+        high: IpAddress(6, 18446744073709551616)
+        low: IpAddress(6, 0)
+        same: IpAddress(6, 18446744073709551616)
+        top: IpAddress(6, 340282366920938463463374607431768211455)
+
+        Assertions.require(high == same)
+        Assertions.require(!(high === same))
+        Assertions.require(!(high == low))
+        Assertions.require(!(IpAddress(6, 1) == IpAddress(4, 1)))
+        Assertions.require(!(IpAddress(4, 1) == IpAddress(4, 2)))
+        Assertions.require(!(high.hash() == low.hash()))
+        Assertions.require(high.hash() == same.hash())
+        Assertions.require(IpAddress(4, 4294967295).hash() == 4294967295 * 31 + 4)
+        Assertions.require(top.hash() == 340282366920938463463374607431768211455 * 31 + 6)
+        Assertions.require(
+            IpAddress(6, 170141183460469231731687303715884105728).hash() ==
+                170141183460469231731687303715884105728 * 31 + 6)
+
+        addresses: Map()
+        addresses[top] = 1
+        addresses[high] = 2
+        Assertions.require(addresses[IpAddress(6, 340282366920938463463374607431768211455)] == 1)
+        Assertions.require(addresses[IpAddress(6, 18446744073709551616)] == 2)
+        Assertions.require(addresses.size() == 2)
+    }),
+    Test("ip address equality and hash reject unrecognized receivers", () => {
+        ok: true
+        reject: (body) => {
+            Error.handle(
+                () => {
+                    body()
+                    false
+                },
+                (error) => { true }
+            )
+        }
+        derived: IpAddress {}
+        address: IpAddress(4, 1)
+
+        reject(() => { derived == address }).ifFalse(() => { ok = false })
+        reject(() => { derived.hash() }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress == address }).ifFalse(() => { ok = false })
+        reject(() => { IpAddress.hash() }).ifFalse(() => { ok = false })
+
+        (address == derived).ifTrue(() => { ok = false })
+        (address == 4).ifTrue(() => { ok = false })
+        (address == null).ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
     })
 )
 tests.freeze()

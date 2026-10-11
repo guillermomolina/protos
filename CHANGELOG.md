@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.334-SNAPSHOT
+
+- `I093` (#873): I093-A moves IpAddress/IpEndpoint construction, equality and hash
+  to Protos source and adds an exact private octet codec.
+  - The Core `IpAddress` and `IpEndpoint` prototypes now define `call`, `==` and
+    `hash` as source closures. Construction requires the exact canonical receiver,
+    validates with exact Integer arithmetic, and freezes an ordinary two-slot
+    instance. Equality and hash keep their contracts: an unrecognized receiver
+    signals Error, an unrecognized argument compares `false`, and the hashes are
+    exactly `bits * 31 + version` and `addressHash * 31 + port`. The closures reach
+    the canonical prototypes through private bootstrap anchors that are not
+    Prelude bindings.
+  - `ProtosStandardIpAddressProtocol` and `ProtosStandardIpEndpointProtocol` keep
+    only the native `recognizes` bridge, which inspects internal state without
+    invoking guest behavior. `install` moves the source equality closure to `==`,
+    as Core Integer does for `%`. The native Core closures drop from 138 to 132.
+  - `std:network/IpAddresses` gains a private `_ipOctets` codec (4/16 network-order
+    Integer octets, all 128 bits exact). `v4`, `v6` and `format` use it; the
+    exported surface is still exactly `IpAddress`, `v4`, `v6`, `parse` and `format`.
+  - Refresh the generated-bytecode BCI baseline (157 new proven sites, 92 stale
+    entries removed; no risky or unknown transitions).
+  - Add conformance coverage for range boundaries up to 2^128-1, lookalikes that
+    must not be recognized and must trigger no callbacks, hand-built exact shapes,
+    exact hashes and Map keys. Add library coverage for text round trips beyond
+    signed 64 bits and fixed-width leading zeros, and JUnit coverage for
+    source-backed selectors and private anchor placement.
+
 ## 0.3.333-SNAPSHOT
 
 - `I092` (#870): keep the unobserved generic fallback of native canonical

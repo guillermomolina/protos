@@ -130,6 +130,67 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("ipv4 and ipv6 text round trips preserve the exact address", () => {
+        IpAddresses: import("std:network/IpAddresses")
+
+        roundTrip: (text, expected) => {
+            parsed: IpAddresses.parse(text)
+            Assertions.require(parsed == expected)
+            Assertions.require(IpAddresses.format(parsed) == text)
+            Assertions.require(IpAddresses.parse(IpAddresses.format(expected)) == expected)
+        }
+
+        roundTrip("0.0.0.0", IpAddresses.v4(0, 0, 0, 0))
+        roundTrip("127.0.0.1", IpAddresses.v4(127, 0, 0, 1))
+        roundTrip("192.0.2.1", IpAddresses.v4(192, 0, 2, 1))
+        roundTrip("255.255.255.255", IpAddresses.v4(255, 255, 255, 255))
+
+        roundTrip("::", IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, 0))
+        roundTrip("::1", IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, 1))
+        roundTrip("2001:db8::1", IpAddresses.v6(8193, 3512, 0, 0, 0, 0, 0, 1))
+        roundTrip(
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            IpAddresses.v6(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535))
+        roundTrip("::ffff:192.0.2.1", IpAddresses.v6(0, 0, 0, 0, 0, 65535, 49152, 513))
+        roundTrip("fe80::1", IpAddresses.v6(65152, 0, 0, 0, 0, 0, 0, 1))
+
+        Assertions.require(IpAddresses.parse("fe80::1").bits ==
+            65152 * 5192296858534827628530496329220096 + 1)
+    }),
+    Test("ipv6 round trips keep every bit beyond signed 64", () => {
+        IpAddresses: import("std:network/IpAddresses")
+
+        exact: (bits, text, hextets) => {
+            address: IpAddress(6, bits)
+            Assertions.require(IpAddresses.format(address) == text)
+            parsed: IpAddresses.parse(text)
+            Assertions.require(parsed.bits == bits)
+            Assertions.require(parsed == address)
+            Assertions.require(hextets == address)
+        }
+
+        exact(9223372036854775808, "::8000:0:0:0",
+            IpAddresses.v6(0, 0, 0, 0, 32768, 0, 0, 0))
+        exact(18446744073709551616, "0:0:0:1::",
+            IpAddresses.v6(0, 0, 0, 1, 0, 0, 0, 0))
+        exact(170141183460469231731687303715884105728, "8000::",
+            IpAddresses.v6(32768, 0, 0, 0, 0, 0, 0, 0))
+        exact(340282366920938463463374607431768211455,
+            "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+            IpAddresses.v6(65535, 65535, 65535, 65535, 65535, 65535, 65535, 65535))
+    }),
+    Test("formatting keeps leading zero octets at fixed width", () => {
+        IpAddresses: import("std:network/IpAddresses")
+
+        Assertions.require(IpAddresses.format(IpAddress(4, 1)) == "0.0.0.1")
+        Assertions.require(IpAddresses.format(IpAddress(4, 16777216)) == "1.0.0.0")
+        Assertions.require(IpAddresses.format(IpAddress(6, 1)) == "::1")
+        Assertions.require(IpAddresses.format(IpAddress(6, 281470681743361)) == "::ffff:0.0.0.1")
+        Assertions.require(IpAddresses.format(IpAddresses.v6(1, 0, 0, 0, 0, 0, 0, 0)) == "1::")
+        Assertions.require(IpAddresses.format(IpAddresses.v6(0, 1, 0, 0, 0, 0, 0, 0)) == "0:1::")
+        Assertions.require(IpAddresses.parse("0.0.0.1") == IpAddress(4, 1))
+        Assertions.require(IpAddresses.parse("::ffff:0.0.0.1") == IpAddress(6, 281470681743361))
     })
 ]
 tests.freeze()

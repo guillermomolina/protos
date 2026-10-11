@@ -154,6 +154,185 @@ tests: Array(
             ok
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("ip endpoint construction validates port boundaries and keeps the address", () => {
+        ok: true
+        reject: (body) => {
+            Error.handle(
+                () => {
+                    body()
+                    false
+                },
+                (error) => { true }
+            )
+        }
+        address: IpAddress(6, 340282366920938463463374607431768211455)
+        low: IpEndpoint(address, 1)
+        high: IpEndpoint(address, 65535)
+
+        (low.port == 1).ifFalse(() => { ok = false })
+        (high.port == 65535).ifFalse(() => { ok = false })
+        (low.address === address).ifFalse(() => { ok = false })
+        (high.address === address).ifFalse(() => { ok = false })
+
+        reject(() => { IpEndpoint(address, 0) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(address, 65536) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(address, -80) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(address, 1.0) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(address, (80) {}) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(4, 80) }).ifFalse(() => { ok = false })
+
+        wrongParentAddress: {
+            version: 4
+            bits: 1
+        }
+        wrongParentAddress.freeze()
+        openAddress: IpAddress {
+            version: 4
+            bits: 1
+        }
+        reject(() => { IpEndpoint(wrongParentAddress, 80) }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint(openAddress, 80) }).ifFalse(() => { ok = false })
+
+        derived: IpEndpoint {}
+        reject(() => { derived(address, 80) }).ifFalse(() => { ok = false })
+        derived.hasSlot("port").ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
+    }),
+    Test("ip endpoint recognition rejects lookalikes without callbacks", () => {
+        called: false
+        address: IpAddress(4, 1)
+
+        lookalikeAddress: IpAddress {
+            version: 4
+            bits: 1
+            parent: () => {
+                called = true
+                IpAddress
+            }
+        }
+        lookalikeAddress.freeze()
+
+        badAddress: IpEndpoint {
+            address: lookalikeAddress
+            port: 80
+        }
+        badAddress.freeze()
+
+        closed: IpEndpoint {
+            address: address
+            port: 80
+        }
+        closed.close()
+
+        extraSlot: IpEndpoint {
+            address: address
+            port: 80
+            extra: 0
+        }
+        extraSlot.freeze()
+
+        hashOverride: IpEndpoint {
+            address: address
+            port: 80
+            hash: () => {
+                called = true
+                0
+            }
+        }
+        hashOverride.freeze()
+
+        delegatedPort: IpEndpoint {
+            address: address
+            port: (80) {}
+        }
+        delegatedPort.freeze()
+
+        zeroPort: IpEndpoint {
+            address: address
+            port: 0
+        }
+        zeroPort.freeze()
+
+        derivedParent: IpEndpoint {}
+        derivedChild: (derivedParent) {
+            address: address
+            port: 80
+        }
+        derivedChild.freeze()
+
+        ok: true
+        Array(
+            badAddress,
+            closed,
+            extraSlot,
+            hashOverride,
+            delegatedPort,
+            zeroPort,
+            derivedChild
+        ).each((candidate) => {
+            IpEndpoint.recognizes(candidate).ifTrue(() => { ok = false })
+        })
+
+        manual: IpEndpoint {
+            address: address
+            port: 80
+        }
+        manual.freeze()
+        IpEndpoint.recognizes(manual).ifFalse(() => { ok = false })
+        (manual == IpEndpoint(IpAddress(4, 1), 80)).ifFalse(() => { ok = false })
+
+        Assertions.require(ok)
+        Assertions.require(!called)
+    }),
+    Test("ip endpoint equality and hash are exact and structural", () => {
+        top: IpAddress(6, 340282366920938463463374607431768211455)
+        left: IpEndpoint(top, 65535)
+        same: IpEndpoint(IpAddress(6, 340282366920938463463374607431768211455), 65535)
+        otherPort: IpEndpoint(top, 65534)
+        otherAddress: IpEndpoint(IpAddress(6, 340282366920938463463374607431768211454), 65535)
+
+        Assertions.require(left == same)
+        Assertions.require(!(left === same))
+        Assertions.require(!(left == otherPort))
+        Assertions.require(!(left == otherAddress))
+        Assertions.require(left.hash() == same.hash())
+        Assertions.require(left.hash() == top.hash() * 31 + 65535)
+        Assertions.require(
+            left.hash() == (340282366920938463463374607431768211455 * 31 + 6) * 31 + 65535)
+        Assertions.require(IpEndpoint(IpAddress(4, 1), 80).hash() == (1 * 31 + 4) * 31 + 80)
+
+        endpoints: Map()
+        endpoints[left] = 1
+        endpoints[otherPort] = 2
+        Assertions.require(endpoints[same] == 1)
+        Assertions.require(endpoints[IpEndpoint(top, 65534)] == 2)
+        Assertions.require(endpoints.size() == 2)
+    }),
+    Test("ip endpoint equality and hash reject unrecognized receivers", () => {
+        ok: true
+        reject: (body) => {
+            Error.handle(
+                () => {
+                    body()
+                    false
+                },
+                (error) => { true }
+            )
+        }
+        derived: IpEndpoint {}
+        endpoint: IpEndpoint(IpAddress(4, 1), 80)
+
+        reject(() => { derived == endpoint }).ifFalse(() => { ok = false })
+        reject(() => { derived.hash() }).ifFalse(() => { ok = false })
+        reject(() => { IpEndpoint.hash() }).ifFalse(() => { ok = false })
+
+        (endpoint == derived).ifTrue(() => { ok = false })
+        (endpoint == endpoint.address).ifTrue(() => { ok = false })
+        (endpoint == 80).ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
     })
 )
 tests.freeze()

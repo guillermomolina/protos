@@ -137,6 +137,31 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("octet construction rejects lookalike and out of range components", () => {
+        IpAddresses: import("std:network/IpAddresses")
+
+        Assertions.signals(Error, () => {
+            IpAddresses.v4(0, 0, 0, 256)
+        })
+        Assertions.signals(Error, () => {
+            IpAddresses.v4(0, 0, 0, 1.0)
+        })
+        Assertions.signals(Error, () => {
+            IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, (1) {})
+        })
+        Assertions.signals(Error, () => {
+            IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, -1)
+        })
+        Assertions.signals(Error, () => {
+            IpAddresses.format((IpAddresses.IpAddress) {
+                version: 4
+                bits: 1
+            })
+        })
+
+        Assertions.require(IpAddresses.v4(255, 255, 255, 255).bits == 4294967295)
+        Assertions.require(IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, 65535).bits == 65535)
     })
 ]
 tests.freeze()

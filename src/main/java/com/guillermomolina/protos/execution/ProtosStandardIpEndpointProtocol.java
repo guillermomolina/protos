@@ -22,18 +22,21 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 
-/** D048 representation bridge for the ordinary frozen IpEndpoint prototype/data shape. */
+/**
+ * D048 recognition bridge for the ordinary frozen IpEndpoint prototype/data shape.
+ *
+ * <p>Construction ({@code call}), structural equality ({@code ==}) and {@code hash} are
+ * source closures of {@code lib/core/IpEndpoint.protos}. Only {@code recognizes} is native: it
+ * inspects the candidate's internal shape, including its address, directly and never
+ * dispatches guest behavior.
+ */
 public final class ProtosStandardIpEndpointProtocol {
-    private static final Set<String> STATE_SLOTS = Set.of("address", "port");
-
     private ProtosStandardIpEndpointProtocol() {}
 
     public static ProtosObjectValue install(
@@ -44,25 +47,14 @@ public final class ProtosStandardIpEndpointProtocol {
             throw new IllegalArgumentException(
                     "standard IpEndpoint prototype must delegate directly to Object");
         }
-        if (!prototype.isOpen() || !prototype.localSlotsSnapshot().isEmpty()) {
-            throw new IllegalStateException(
-                    "standard IpEndpoint prototype must be a fresh open source object");
-        }
+        ProtosStandardIpAddressProtocol.requireSourcePrototype(
+                prototype, "IpEndpoint", "_coreIpEndpointEquals");
         if (ipAddressPrototype.parent().orElse(null) != ProtosObjectValue.rootObject()
                 || !ipAddressPrototype.isFrozen()) {
             throw new IllegalStateException(
                     "standard IpAddress dependency must be the installed frozen Core prototype");
         }
 
-        prototype.createLocalSlot(
-                "init",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) ->
-                                initialize(
-                                        activation,
-                                        supplied,
-                                        prototype,
-                                        ipAddressPrototype)));
         prototype.createLocalSlot(
                 "recognizes",
                 ProtosClosureValue.nativeClosure(
@@ -72,51 +64,7 @@ public final class ProtosStandardIpEndpointProtocol {
                                         supplied,
                                         prototype,
                                         ipAddressPrototype)));
-        prototype.createLocalSlot(
-                "==",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) ->
-                                equalsValue(
-                                        activation,
-                                        supplied,
-                                        prototype,
-                                        ipAddressPrototype)));
-        prototype.createLocalSlot(
-                "hash",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) ->
-                                hash(
-                                        activation,
-                                        supplied,
-                                        prototype,
-                                        ipAddressPrototype)));
         return prototype.freeze();
-    }
-
-    private static Object initialize(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype,
-            ProtosObjectValue ipAddressPrototype) {
-        if (supplied.size() != 2) {
-            throw invalid(activation);
-        }
-        if (!(activation.receiver() instanceof ProtosObjectValue endpoint)
-                || endpoint.parent().orElse(null) != prototype
-                || !endpoint.isOpen()
-                || !endpoint.localSlotsSnapshot().isEmpty()) {
-            throw invalid(activation);
-        }
-        Object addressValue = supplied.get(0);
-        Object portValue = supplied.get(1);
-        if (!ProtosStandardIpAddressProtocol.recognizesValue(addressValue, ipAddressPrototype)
-                || !validPort(portValue)) {
-            throw invalid(activation);
-        }
-
-        endpoint.createLocalSlot("address", addressValue);
-        endpoint.createLocalSlot("port", portValue);
-        return endpoint.freeze();
     }
 
     private static Object recognizes(
@@ -129,55 +77,6 @@ public final class ProtosStandardIpEndpointProtocol {
         }
         return ProtosBooleanValue.of(
                 recognizesValue(supplied.get(0), prototype, ipAddressPrototype));
-    }
-
-    private static Object equalsValue(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype,
-            ProtosObjectValue ipAddressPrototype) {
-        if (supplied.size() != 1
-                || !recognizesValue(activation.receiver(), prototype, ipAddressPrototype)) {
-            throw invalid(activation);
-        }
-        Object other = supplied.get(0);
-        if (!recognizesValue(other, prototype, ipAddressPrototype)) {
-            return ProtosBooleanValue.FALSE;
-        }
-
-        ProtosObjectValue left = (ProtosObjectValue) activation.receiver();
-        ProtosObjectValue right = (ProtosObjectValue) other;
-        ProtosObjectValue leftAddress = addressSlot(left);
-        ProtosObjectValue rightAddress = addressSlot(right);
-        return ProtosBooleanValue.of(
-                ProtosStandardIpAddressProtocol.sameCanonicalState(leftAddress, rightAddress)
-                        && ProtosNumericValueSupport.sameInteger(
-                                portSlot(left), portSlot(right)));
-    }
-
-    private static Object hash(
-            ProtosActivation activation,
-            List<?> supplied,
-            ProtosObjectValue prototype,
-            ProtosObjectValue ipAddressPrototype) {
-        if (!supplied.isEmpty()
-                || !recognizesValue(
-                        activation.receiver(), prototype, ipAddressPrototype)) {
-            throw invalid(activation);
-        }
-
-        ProtosObjectValue endpoint =
-                (ProtosObjectValue) activation.receiver();
-        ProtosPrelude prelude = ProtosStandardIpAddressProtocol.owningPrelude(activation);
-        Object addressHash =
-                ProtosStandardIpAddressProtocol.canonicalHash(
-                        addressSlot(endpoint), prelude);
-
-        return ProtosNumericValueSupport.addIntegers(
-                ProtosNumericValueSupport.multiplyIntegers(
-                        addressHash, ProtosNumericValueSupport.integer(31L), prelude),
-                portSlot(endpoint),
-                prelude);
     }
 
     static boolean recognizesValue(
@@ -210,15 +109,6 @@ public final class ProtosStandardIpEndpointProtocol {
         }
         int value = ProtosNumericValueSupport.exactInt(portValue);
         return value >= 1 && value <= 65535;
-    }
-
-    private static ProtosObjectValue addressSlot(ProtosObjectValue endpoint) {
-        return (ProtosObjectValue) endpoint.readLocalSlot("address").orElseThrow();
-    }
-
-    private static Object portSlot(ProtosObjectValue endpoint) {
-        return ProtosNumericValueSupport.requireCurrentInteger(
-                endpoint.readLocalSlot("port").orElseThrow());
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {
