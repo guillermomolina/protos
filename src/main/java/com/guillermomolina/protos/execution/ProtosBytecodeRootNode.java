@@ -9611,6 +9611,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return inline;
             }
         }
+        return prepareNativeIfTrueCallbackFallback(caller, supplied);
+    }
+
+    /**
+     * Cold callback-invocation preparation when the compact B-prime
+     * admission is not valid.
+     *
+     * <p>The selected callback still uses the complete ordinary call protocol.
+     * Only its preparation is isolated; invocation, suspension, completion
+     * and control transfer remain in the existing Bytecode DSL machinery.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static PreparedInlineLiteralCall prepareNativeIfTrueCallbackFallback(
+            Object caller,
+            Object supplied) {
         return prepareInlineLiteralCall(
                 supplied,
                 List.of(),

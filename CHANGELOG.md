@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.333-SNAPSHOT
+
+- `I092` (#870): keep the unobserved generic fallback of native canonical
+  `Boolean.ifTrue` sites out of the compiled Boolean-only path.
+  - Add a per-site `CanonicalBooleanMissProfile` to the four
+    `TryCompactCanonicalBoolean*` operations: the first non-canonical receiver
+    invalidates once and marks the site generic; later misses continue without
+    further invalidation, and the uncached interpreter starts generic.
+  - Isolate the ordinary `call` preparation used when compact B-prime admission
+    fails behind a `@TruffleBoundary`; B-prime admission stays compilable.
+  - Add focal coverage for a dynamic-receiver site alternating canonical and
+    overriding receivers, and for single evaluation of an unselected producer.
+
 ## 0.3.332-SNAPSHOT
 
 - `PERF042` (#871): reuse the fused direct Closure Call0/Call1 target across fresh

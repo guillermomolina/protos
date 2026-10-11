@@ -446,6 +446,73 @@ final class ProtosI092CompactBooleanTest {
 
 
     @Test
+    void dynamicReceiverSiteSurvivesCanonicalAndOverrideTransitions() throws Exception {
+        var module = new ProtosCoreBootstrap()
+                .bootstrap(CORE).newModuleActivation();
+        assertInstanceOf(
+                ProtosClosureValue.class,
+                ProtosTestExecutionSupport.evaluate(
+                        "i092-dynamic-definition.protos",
+                        """
+                        run: (receiver) => {
+                            receiver.ifTrue(() => { 41 })
+                        }
+                        run
+                        """,
+                        module));
+
+        assertInteger(41, ProtosTestExecutionSupport.evaluate(
+                "i092-dynamic-true.protos", "run(true)", module));
+        assertSame(ProtosNullValue.INSTANCE, ProtosTestExecutionSupport.evaluate(
+                "i092-dynamic-false.protos", "run(false)", module));
+        for (int i = 0; i < 8; i++) {
+            assertInteger(41, ProtosTestExecutionSupport.evaluate(
+                    "i092-dynamic-alt-true.protos", "run(true)", module));
+            assertSame(ProtosNullValue.INSTANCE, ProtosTestExecutionSupport.evaluate(
+                    "i092-dynamic-alt-false.protos", "run(false)", module));
+        }
+        assertInteger(99, ProtosTestExecutionSupport.evaluate(
+                "i092-dynamic-override.protos",
+                """
+                custom: { ifTrue: (callback) => { 99 } }
+                run(custom)
+                """,
+                module));
+        assertInteger(41, ProtosTestExecutionSupport.evaluate(
+                "i092-dynamic-true-after.protos", "run(true)", module));
+        assertSame(ProtosNullValue.INSTANCE, ProtosTestExecutionSupport.evaluate(
+                "i092-dynamic-false-after.protos", "run(false)", module));
+    }
+
+    @Test
+    void dynamicReceiverUnselectedProducerIsEvaluatedOnce() throws Exception {
+        assertInteger(32199, evaluate("""
+                trace: () => {
+                    count: 0
+                    invoked: 0
+                    producer: () => {
+                        count = count + 1
+                        () => {
+                            invoked = invoked + 1
+                            99
+                        }
+                    }
+                    run: (receiver) => {
+                        receiver.ifTrue(producer())
+                    }
+                    custom: { ifTrue: (callback) => { callback() } }
+                    first: run(true)
+                    second: run(custom)
+                    third: run(false)
+                    nullMark: (third === null).ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    count * 10000 + invoked * 1000 + first + second + nullMark
+                }
+                trace()
+                """));
+    }
+
+
+    @Test
     void frameNativeSpreadErrorAndCallerProvenance() throws Exception {
         assertInteger(73, evaluate("""
                 run: () => {

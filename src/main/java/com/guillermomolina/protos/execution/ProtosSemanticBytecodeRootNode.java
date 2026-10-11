@@ -5500,6 +5500,37 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     // finite state machine stays owned by ProtosBytecodeRootNode.PreparedBooleanCall.
 
     /**
+     * Records whether an ordinary non-Boolean send was actually observed
+     * at this Boolean-control site.
+     *
+     * <p>Until the first miss, the generic continuation is reached only after
+     * deoptimization, so it does not belong to the compiled Boolean-only
+     * execution path.
+     */
+    static final class CanonicalBooleanMissProfile {
+        @CompilationFinal private boolean genericObserved;
+
+        private CanonicalBooleanMissProfile(boolean genericObserved) {
+            this.genericObserved = genericObserved;
+        }
+
+        static CanonicalBooleanMissProfile create() {
+            return new CanonicalBooleanMissProfile(false);
+        }
+
+        static CanonicalBooleanMissProfile uncached() {
+            return new CanonicalBooleanMissProfile(true);
+        }
+
+        void observeMiss() {
+            if (!genericObserved) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                genericObserved = true;
+            }
+        }
+    }
+
+    /**
      * I092: native canonical Boolean.ifTrue, before generic send preparation.
      *
      * <p>The lowerer emits these candidates only for an ordinary {@code ifTrue}
@@ -5516,6 +5547,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      */
     @Operation
     public static final class TryCompactCanonicalBooleanOne {
+
+        static CanonicalBooleanMissProfile createMissProfile() {
+            return CanonicalBooleanMissProfile.create();
+        }
+
+        static CanonicalBooleanMissProfile uncachedMissProfile() {
+            return CanonicalBooleanMissProfile.uncached();
+        }
+
         @Specialization
         public static Object perform(
                 Object receiver,
@@ -5523,8 +5563,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object supplied,
                 Object literalPlan,
                 @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext) {
+                        ProtosLanguageContext enteredContext,
+                @Cached(
+                        value = "createMissProfile()",
+                        uncached = "uncachedMissProfile()")
+                        CanonicalBooleanMissProfile missProfile) {
             if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                missProfile.observeMiss();
                 return null;
             }
             if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
@@ -5543,11 +5588,25 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     /** Spread form: native only for exactly one supplied argument. */
     @Operation
     public static final class TryCompactCanonicalBooleanVector {
+
+        static CanonicalBooleanMissProfile createMissProfile() {
+            return CanonicalBooleanMissProfile.create();
+        }
+
+        static CanonicalBooleanMissProfile uncachedMissProfile() {
+            return CanonicalBooleanMissProfile.uncached();
+        }
+
         @Specialization
         public static Object perform(
-                Object receiver, Object caller, PreparedArgumentVector vector) {
+                Object receiver, Object caller, PreparedArgumentVector vector,
+                @Cached(
+                        value = "createMissProfile()",
+                        uncached = "uncachedMissProfile()")
+                        CanonicalBooleanMissProfile missProfile) {
             Object supplied = vector.soleValueOrNull();
             if (supplied == null || !ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                missProfile.observeMiss();
                 return null;
             }
             if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
@@ -5564,6 +5623,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
     @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
     public static final class TryCompactCanonicalBooleanInlineOne {
+
+        static CanonicalBooleanMissProfile createMissProfile() {
+            return CanonicalBooleanMissProfile.create();
+        }
+
+        static CanonicalBooleanMissProfile uncachedMissProfile() {
+            return CanonicalBooleanMissProfile.uncached();
+        }
+
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
@@ -5572,8 +5640,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object supplied, Object literalPlan,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame,
-                @Bind("currentEnteredContext($node)") ProtosLanguageContext context) {
+                @Bind("currentEnteredContext($node)") ProtosLanguageContext context,
+                @Cached(
+                        value = "createMissProfile()",
+                        uncached = "uncachedMissProfile()")
+                        CanonicalBooleanMissProfile missProfile) {
             if (!ProtosValueLookup.isCanonicalBoolean(receiver)) {
+                missProfile.observeMiss();
                 return null;
             }
             if (receiver == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
@@ -5596,19 +5669,34 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
     @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
     public static final class TryCompactCanonicalBooleanInlineVector {
+
+        static CanonicalBooleanMissProfile createMissProfile() {
+            return CanonicalBooleanMissProfile.create();
+        }
+
+        static CanonicalBooleanMissProfile uncachedMissProfile() {
+            return CanonicalBooleanMissProfile.uncached();
+        }
+
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals, ProtosFrameLexicalLayout frameBackedLayout,
                 Object receiver, PreparedInlineLiteralCall child,
                 PreparedArgumentVector vector,
                 @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Cached(
+                        value = "createMissProfile()",
+                        uncached = "uncachedMissProfile()")
+                        CanonicalBooleanMissProfile missProfile) {
             if (vector.soleValueOrNull() == null) {
+                missProfile.observeMiss();
                 return null;
             }
             return TryCompactCanonicalBooleanInlineOne.perform(
                     frameBackedLocals, frameBackedLayout, receiver, child,
-                    vector.soleValueOrNull(), null, bytecodeNode, frame, null);
+                    vector.soleValueOrNull(), null, bytecodeNode, frame, null,
+                    missProfile);
         }
     }
 
