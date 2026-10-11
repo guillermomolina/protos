@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.332-SNAPSHOT
+
+- `PERF042` (#871): reuse the fused direct Closure Call0/Call1 target across fresh
+  instances of one definition.
+  - Add a `definitionSource` tier to `TryDirectCallZero`/`TryDirectCallOne` after the
+    receiver-identity PIC, keyed by Closure definition, prepared plan template,
+    Context-projection requirement and entered Context, so the cached target is exactly the
+    one the ordinary path derives for the current instance. The current Closure always
+    enters the compact Call0/Call1 frame, and the ordinary `call` selection and
+    unobservable ReturnHome are re-proved on every hit.
+  - Derive a target only after the instance's `call` selection and ReturnHome are proved
+    and its plan is already prepared; a deferred plan is never rematerialized and an
+    overridden `call` never reaches plan or projection work.
+  - Overridden, deferred or ReturnHome-observable instances miss through `rejectedSource`,
+    and `generic` no longer replaces the cached tiers, so a transient rejection keeps the
+    existing entries.
+  - Add focal coverage for structural installation and persistence of the tier at real
+    call sites, distinct plans of one definition, foreign-Context projection, overridden
+    deferred Closures and transient rejections.
+
 ## 0.3.331-SNAPSHOT
 
 - `I091` (#869): contain exact Integer handling at host boundaries and keep large positions,

@@ -6948,6 +6948,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class TryDirectCallZero {
         @Specialization(
+                excludeForUncached = true,
                 guards = {
                     "receiver == cachedReceiver",
                     "enteredContext != null",
@@ -6989,9 +6990,184 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
         }
 
-        @Specialization(replaces = "guardedSource")
+        /**
+         * PERF042: second tier keyed by the stable {@link CanonicalClosure}
+         * definition, the receiver's prepared plan template, its
+         * Context-projection requirement and the entered Context: exactly the
+         * inputs from which {@code fastOrdinarySendTarget} derives the
+         * Context-owned target, so the cached target is the one the ordinary
+         * path would select for the current instance. Only those keys, the
+         * target and target-level admission are cached; the current Closure
+         * is always the one entered. Per-instance facts (the ordinary
+         * {@code call} selection and the unobservable ReturnHome) are
+         * re-proved on every hit, and a rejected instance answers the miss
+         * marker, so neither fresh instances nor one overridden instance
+         * degrade the site.
+         */
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "sourcePlan != null",
+                    "sourcePlan == cachedSourcePlan",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "projectionRequired == cachedProjectionRequired",
+                    "cachedTarget != null",
+                    "cachedAdmitted"
+                },
+                limit = "3")
+        public static Object definitionSource(
+                Object receiver,
+                Object caller,
+                @Bind("sourceDefinitionOrNull(receiver)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("sourcePlanOrNull(receiver)")
+                        ProtosClosureExecutionPlan sourcePlan,
+                @Bind("requiresContextProjection(receiver)")
+                        boolean projectionRequired,
+                @Cached("closureDefinition")
+                        CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("sourcePlan")
+                        ProtosClosureExecutionPlan cachedSourcePlan,
+                @Cached("projectionRequired")
+                        boolean cachedProjectionRequired,
+                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("admittedTarget(cachedTarget, 0)")
+                        boolean cachedAdmitted,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node) {
+            ProtosClosureValue closure =
+                    admittedInstanceOrNull(receiver, caller);
+            if (closure == null) {
+                return TryDirectSendOne.MISS;
+            }
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments
+                            .compactDirectClosureCallZeroNoHome(
+                                    closure,
+                                    exactCaller);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        /**
+         * PERF042: a source Closure that currently cannot take the fused path
+         * (overridden {@code call}, observable ReturnHome, or a plan not yet
+         * prepared) misses without activating {@link #generic}, so the
+         * cached tiers keep admitting later instances.
+         */
+        @Specialization(
+                guards = "temporarilyRejectedInstance(receiver, caller)")
+        public static Object rejectedSource(Object receiver, Object caller) {
+            return TryDirectSendOne.MISS;
+        }
+
+        @Specialization
         public static Object generic(Object receiver, Object caller) {
             return TryDirectSendOne.MISS;
+        }
+
+        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+            return receiver instanceof ProtosClosureValue closure
+                            && closure.nativeBody().isEmpty()
+                    ? closure.definition()
+                    : null;
+        }
+
+        static ProtosClosureExecutionPlan sourcePlanOrNull(
+                Object receiver) {
+            return receiver instanceof ProtosClosureValue closure
+                            && closure.nativeBody().isEmpty()
+                    ? closure.executionPlan().orElse(null)
+                    : null;
+        }
+
+        static boolean requiresContextProjection(Object receiver) {
+            return receiver instanceof ProtosClosureValue closure
+                    && closure.requiresContextLocalExecutionProjectionForRuntime();
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(
+                RootCallTarget target) {
+            return target == null ? null : DirectCallNode.create(target);
+        }
+
+        @NonIdempotent
+        static boolean temporarilyRejectedInstance(
+                Object receiver, Object caller) {
+            return sourceDefinitionOrNull(receiver) != null
+                    && admittedInstanceOrNull(receiver, caller) == null;
+        }
+
+        /**
+         * Runs only while populating a definition-tier entry. The instance's
+         * ordinary {@code call} selection and ReturnHome are proved, and its
+         * plan must already be prepared, before any target is derived: a
+         * deferred plan is never rematerialized here and an overridden
+         * {@code call} never reaches plan or projection work.
+         */
+        static RootCallTarget definitionTarget(
+                Object receiver,
+                Object caller,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null
+                    || !(receiver instanceof ProtosClosureValue closure)
+                    || closure.executionPlan().isEmpty()
+                    || admittedInstanceOrNull(receiver, caller) != closure) {
+                return null;
+            }
+            return ProtosBytecodeRootNode.PrepareSendArguments
+                    .fastOrdinarySendTarget(closure, enteredContext);
+        }
+
+        /**
+         * Target-level half of {@link #admitted}: depends only on the
+         * cached target, so it is proved once per cache entry.
+         */
+        static boolean admittedTarget(
+                RootCallTarget target, int suppliedArgumentCount) {
+            return target != null
+                    && target.getRootNode()
+                            instanceof ProtosSemanticBytecodeRootNode root
+                    && root.provablyNonSuspendingBody()
+                    && ProtosSemanticBytecodeRootNode
+                                    .selectSourceEntryTarget(
+                                            target, suppliedArgumentCount)
+                            == target;
+        }
+
+        /**
+         * Instance-level half of {@link #admitted}, re-proved on every
+         * definition-tier hit: the receiver's current ordinary {@code call}
+         * selection is the canonical standard one, and this exact Closure
+         * proves the unobservable ReturnHome marker.
+         */
+        static ProtosClosureValue admittedInstanceOrNull(
+                Object receiver, Object caller) {
+            ProtosClosureValue closure =
+                    ProtosBytecodeRootNode
+                            .directClosureCallSelectionForPreludeOrNull(
+                                    receiver, callerPrelude(caller));
+            if (closure == null
+                    || closure.invocationReturnHomeForRuntime()
+                            != ProtosReturnHome.unobservable()) {
+                return null;
+            }
+            return closure;
         }
 
         static boolean admitted(
@@ -7045,6 +7221,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class TryDirectCallOne {
         @Specialization(
+                excludeForUncached = true,
                 guards = {
                     "receiver == cachedReceiver",
                     "enteredContext != null",
@@ -7088,12 +7265,121 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
         }
 
-        @Specialization(replaces = "guardedSource")
+        /** PERF042: the Call1 counterpart of {@link TryDirectCallZero#definitionSource}. */
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "sourcePlan != null",
+                    "sourcePlan == cachedSourcePlan",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "projectionRequired == cachedProjectionRequired",
+                    "cachedTarget != null",
+                    "cachedAdmitted"
+                },
+                limit = "3")
+        public static Object definitionSource(
+                Object receiver,
+                Object caller,
+                Object supplied0,
+                @Bind("sourceDefinitionOrNull(receiver)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("sourcePlanOrNull(receiver)")
+                        ProtosClosureExecutionPlan sourcePlan,
+                @Bind("requiresContextProjection(receiver)")
+                        boolean projectionRequired,
+                @Cached("closureDefinition")
+                        CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("sourcePlan")
+                        ProtosClosureExecutionPlan cachedSourcePlan,
+                @Cached("projectionRequired")
+                        boolean cachedProjectionRequired,
+                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("admittedTarget(cachedTarget, 1)")
+                        boolean cachedAdmitted,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node) {
+            ProtosClosureValue closure =
+                    TryDirectCallZero.admittedInstanceOrNull(receiver, caller);
+            if (closure == null) {
+                return TryDirectSendOne.MISS;
+            }
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments
+                            .compactDirectClosureCallOneNoHome(
+                                    closure,
+                                    exactCaller,
+                                    supplied0);
+
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        /** PERF042: see {@link TryDirectCallZero#rejectedSource}. */
+        @Specialization(
+                guards = "temporarilyRejectedInstance(receiver, caller)")
+        public static Object rejectedSource(Object receiver, Object caller, Object supplied0) {
+            return TryDirectSendOne.MISS;
+        }
+
+        @Specialization
         public static Object generic(
                 Object receiver,
                 Object caller,
                 Object supplied0) {
             return TryDirectSendOne.MISS;
+        }
+
+        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+            return TryDirectCallZero.sourceDefinitionOrNull(receiver);
+        }
+
+        static ProtosClosureExecutionPlan sourcePlanOrNull(
+                Object receiver) {
+            return TryDirectCallZero.sourcePlanOrNull(receiver);
+        }
+
+        static boolean requiresContextProjection(Object receiver) {
+            return TryDirectCallZero.requiresContextProjection(receiver);
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(
+                RootCallTarget target) {
+            return TryDirectCallZero.createDirectCallNodeOrNull(target);
+        }
+
+        @NonIdempotent
+        static boolean temporarilyRejectedInstance(
+                Object receiver, Object caller) {
+            return TryDirectCallZero.temporarilyRejectedInstance(
+                    receiver, caller);
+        }
+
+        static RootCallTarget definitionTarget(
+                Object receiver,
+                Object caller,
+                ProtosLanguageContext enteredContext) {
+            return TryDirectCallZero.definitionTarget(
+                    receiver, caller, enteredContext);
+        }
+
+        static boolean admittedTarget(
+                RootCallTarget target, int suppliedArgumentCount) {
+            return TryDirectCallZero.admittedTarget(
+                    target, suppliedArgumentCount);
         }
 
         static boolean admitted(
