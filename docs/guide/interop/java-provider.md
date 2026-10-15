@@ -143,8 +143,8 @@ usable flow.
   and [`java-date.protos`](../../../protos/tests/foreign-provider/java-date.protos);
 - harness: [`dist/test_external_foreign_providers.py`](../../../dist/test_external_foreign_providers.py);
 - host-Java catalogue provider:
-  [`ProtosHostJavaProvider.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosHostJavaProvider.java)
-  and [`ProtosHostJavaProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosHostJavaProviderTest.java);
+  [`ProtosHostJavaProvider.java`](../../../src/main/java/com/guillermomolina/protos/execution/foreign/host/ProtosHostJavaProvider.java)
+  and [`ProtosHostJavaProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/providers/ProtosHostJavaProviderTest.java);
 - normative: [`VALUES_AND_COLLECTIONS.md`](../../../spec/semantics/VALUES_AND_COLLECTIONS.md)
   (Foreign Values) and [`MODULES.md`](../../../spec/semantics/MODULES.md)
   (Foreign module instances).

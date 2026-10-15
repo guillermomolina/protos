@@ -256,11 +256,11 @@ separate processes.
 - SPI sources:
   [`spi/foreign/`](../../../src/main/java/com/guillermomolina/protos/spi/foreign/);
 - loader:
-  [`ProtosExternalProviderPluginLoader.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosExternalProviderPluginLoader.java);
+  [`ProtosExternalProviderPluginLoader.java`](../../../src/main/java/com/guillermomolina/protos/execution/foreign/providers/ProtosExternalProviderPluginLoader.java);
 - CLI option:
   [`ProtosCli.java`](../../../src/main/java/com/guillermomolina/protos/cli/ProtosCli.java);
 - tests:
-  [`ProtosExternalForeignProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosExternalForeignProviderTest.java);
+  [`ProtosExternalForeignProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosExternalForeignProviderTest.java);
 - normative: [`VALUES_AND_COLLECTIONS.md`](../../../spec/semantics/VALUES_AND_COLLECTIONS.md)
   (Foreign Values), [`MODULES.md`](../../../spec/semantics/MODULES.md)
   (Foreign module instances), [`ERRORS.md`](../../../spec/semantics/ERRORS.md)

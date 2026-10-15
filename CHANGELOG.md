@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.366-SNAPSHOT
+
+- `I103` (#897), slices E/F/G/H: complete the execution Java
+  source and JUnit reorganization and activate the mandatory
+  repository-wide 30-direct-file limit.
+  - Organize 240 production Java sources and 447 existing JUnit
+    sources by responsibility across Bytecode, lowering, numeric,
+    modules, packages, workspace, foreign interop, protocols,
+    hosting, IO, tooling and runtime execution.
+  - Integrate the additional I104 Builder-oracle test into the
+    reorganized test layout, preserving all published I104 behavior.
+  - Preserve Java package-private boundaries, Truffle DSL
+    generation, test discovery and observable Protos semantics.
+  - Reconcile physical source paths in structural tests, guides,
+    validation-impact classification and PE topology baselines.
+  - Preserve the I104 Closure parameter binding implementation
+    through three-way source reconciliation and exact PE baseline
+    updates, without weakening PE safety guards.
+  - Enforce the 30-direct-tracked-regular-file limit through
+    `make check` and the actual CI workflow, retaining only the
+    existing narrowly scoped third-party TOML exemption.
+  - Final acceptance: zero directory-limit violations,
+    `make check` PASS and integrated `make test` PASS on the
+    combined I103/I104 implementation.
+
 ## 0.3.365-SNAPSHOT
 
 - `I104` (#899), slices A/B/C: NORMAL-first Closure parameter entry

@@ -3,7 +3,7 @@
   "description": "Exact topology of every determinate PE-safe Bytecode API PE-argument sink. Risks are never baselined.",
   "entries": [
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "normalInlineCallbackBindings(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -15,7 +15,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "normalInlineCallbackBindings(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -27,7 +27,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "inlineCallbackFrameBindings(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -39,7 +39,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "inlineCallbackFrameBindings(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -51,7 +51,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "inlineCallbackCall(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -63,7 +63,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeTagTreeNodeExports.java",
       "class": "ProtosBytecodeTagTreeNodeExports",
       "method": "inlineCallbackCall(TagTreeNode,MaterializedFrame)",
       "family": "BytecodeNode",
@@ -75,7 +75,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/host/tooling/ProtosDiagnosticTraceCapture.java",
       "class": "ProtosDiagnosticTraceCapture",
       "method": "elementLocation(TruffleStackTraceElement)",
       "family": "BytecodeLocation",
@@ -87,7 +87,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/host/tooling/ProtosDiagnosticTraceCapture.java",
       "class": "ProtosDiagnosticTraceCapture",
       "method": "projectSemanticFrame(ProtosSemanticBytecodeRootNode,BytecodeLocation,Collector)",
       "family": "BytecodeRootNodes",
@@ -99,7 +99,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/host/tooling/ProtosDiagnosticTraceCapture.java",
       "class": "ProtosDiagnosticTraceCapture",
       "method": "hasLiveInlineCallbackCarrier(BytecodeNode,int)",
       "family": "BytecodeNode",
@@ -111,7 +111,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "readPresentFrameBackedValueAt(int)",
       "family": "BytecodeNode",

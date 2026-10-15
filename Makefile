@@ -298,7 +298,7 @@ test-protos-foreign:
 # the generated-dispatch BCI guard). TEST009-AM: the strict full-corpus Truffle
 # compilation gate is an explicit audit target (`make check-truffle-compilation`)
 # and is never a prerequisite of `make check`; neither is `make test`.
-check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-directory-file-limit
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify
@@ -326,9 +326,11 @@ dist-validate: dist
 	$(SH) dist/validate_portable.sh $(DIST_VALIDATE_FLAGS)
 
 # I103-A: manual inventory until all violations are resolved.
-.PHONY: directory-file-report directory-file-check
+.PHONY: directory-file-report directory-file-check check-directory-file-limit
 directory-file-report:
 	$(PYTHON) scripts/directory_file_limit.py report
 
 directory-file-check:
 	$(PYTHON) scripts/directory_file_limit.py check
+
+check-directory-file-limit: directory-file-check

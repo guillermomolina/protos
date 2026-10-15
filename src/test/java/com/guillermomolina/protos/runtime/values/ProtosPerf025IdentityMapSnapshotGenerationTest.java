@@ -50,7 +50,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
                             + "ProtosIdentityMapValue.java");
     private static final Path BYTECODE_ROOT =
             Path.of(
-                    "src/main/java/com/guillermomolina/protos/execution/"
+                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
                             + "ProtosBytecodeRootNode.java");
 
     @Test

@@ -236,7 +236,7 @@ class ValidationImpactTest(unittest.TestCase):
 
     def test_shared_main_requires_full(self):
         self.assert_full([
-            "src/main/java/com/guillermomolina/protos/execution/ProtosModuleRuntime.java"
+            "src/main/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntime.java"
         ])
 
     def test_shared_library_requires_full(self):
@@ -281,13 +281,13 @@ class ValidationImpactTest(unittest.TestCase):
 
     def test_top_level_closure_without_tool_change_forces_full(self):
         self.assert_full(
-            ["src/main/java/com/guillermomolina/protos/execution/ProtosModuleRuntime.java"],
+            ["src/main/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntime.java"],
             closure=True,
         )
 
     def test_shared_plus_package_tool_change_requires_full_with_tools(self):
         self.assert_full([
-            "src/main/java/com/guillermomolina/protos/execution/ProtosModuleRuntime.java",
+            "src/main/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntime.java",
             "protos/tools/package/LockDocument.protos",
         ])
 

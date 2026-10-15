@@ -128,6 +128,6 @@ An external provider JAR is executable Java code. Passing it with
   Synchronous foreign callbacks and the current Task;
 - [`protos/lib/interop.protos`](../../../protos/lib/interop.protos)
   (`std:interop`);
-- [`ProtosForeignPullEachTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosForeignPullEachTest.java)
+- [`ProtosForeignPullEachTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosForeignPullEachTest.java)
   and
-  [`ProtosExternalForeignProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosExternalForeignProviderTest.java).
+  [`ProtosExternalForeignProviderTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/foreign/api/ProtosExternalForeignProviderTest.java).

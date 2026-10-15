@@ -172,14 +172,14 @@ Everything on this page applies to the portable JVM runtime only.
 
 Implementation and evidence:
 
-- [`ProtosLanguage.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosLanguage.java)
+- [`ProtosLanguage.java`](../../../src/main/java/com/guillermomolina/protos/execution/host/embedding/ProtosLanguage.java)
   (`protos.CoreRoot` option, binding scope, Context close);
 - [`dist/Plat054EmbeddingProbe.java`](../../../dist/Plat054EmbeddingProbe.java)
   and [`dist/smoke/smoke_polyglot_embedding.sh`](../../../dist/smoke/smoke_polyglot_embedding.sh)
   (external application against the distributed JAR);
-- [`ProtosEmbeddingLifecycleTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddingLifecycleTest.java),
-  [`ProtosEmbeddedFilesystemTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedFilesystemTest.java),
-  and [`ProtosEmbeddedNetworkTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedNetworkTest.java).
+- [`ProtosEmbeddingLifecycleTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/integration/interop/ProtosEmbeddingLifecycleTest.java),
+  [`ProtosEmbeddedFilesystemTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/integration/filesystem/ProtosEmbeddedFilesystemTest.java),
+  and [`ProtosEmbeddedNetworkTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/integration/network/ProtosEmbeddedNetworkTest.java).
 
 Normative specification:
 

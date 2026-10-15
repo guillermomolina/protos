@@ -139,9 +139,9 @@ not that host mechanism, owns manifests, expectations, scheduling and reporting.
 
 Current mechanism references:
 
-- [`ProtosFreshProcessExecutor`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosFreshProcessExecutor.java)
+- [`ProtosFreshProcessExecutor`](../../../src/main/java/com/guillermomolina/protos/execution/host/embedding/ProtosFreshProcessExecutor.java)
   creates one fresh semantic Process for an exact source;
-- [`ProtosCapturedProcessExecution`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosCapturedProcessExecution.java)
+- [`ProtosCapturedProcessExecution`](../../../src/main/java/com/guillermomolina/protos/execution/host/resources/ProtosCapturedProcessExecution.java)
   captures the execution outcome and private standard streams.
 
 Those Java class names explain the current implementation. They are **not** a

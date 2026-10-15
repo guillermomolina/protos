@@ -554,11 +554,11 @@ execution.
 
 The current reference runtime implements the public isolated-parallel surface in:
 
-- [`../../src/main/java/com/guillermomolina/protos/execution/ProtosParallelRuntime.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosParallelRuntime.java).
+- [`../../src/main/java/com/guillermomolina/protos/execution/runtime/concurrency/ProtosParallelRuntime.java`](../../src/main/java/com/guillermomolina/protos/execution/runtime/concurrency/ProtosParallelRuntime.java).
 
 Its focused mechanism tests include:
 
-- [`../../src/test/java/com/guillermomolina/protos/execution/ProtosParallelExecutionTest.java`](../../src/test/java/com/guillermomolina/protos/execution/ProtosParallelExecutionTest.java),
+- [`../../src/test/java/com/guillermomolina/protos/execution/integration/process/ProtosParallelExecutionTest.java`](../../src/test/java/com/guillermomolina/protos/execution/integration/process/ProtosParallelExecutionTest.java),
 
 which guards the absence of a public `P`, presence of the closed standard
 parallel selectors, bounded implementation carriers, caller-domain Future

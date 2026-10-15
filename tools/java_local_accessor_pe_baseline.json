@@ -3,7 +3,7 @@
   "description": "Exact topology of every determinate PE-safe LocalAccessor/MaterializedLocalAccessor sink. Risks are never baselined.",
   "entries": [
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ReadFrameLocal",
       "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -16,7 +16,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ReadFrameLocal",
       "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -29,7 +29,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "ownerMaterializedFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -42,7 +42,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.CapturedNearerScopeAbsence",
       "method": "selectOwnerFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -55,7 +55,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.CapturedOwnerFrameCache",
       "method": "ownerFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,BytecodeNode,CapturedNearerScopeAbsence)",
       "family": "MaterializedLocalAccessor",
@@ -68,7 +68,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.CapturedOwnerFrameCache",
       "method": "admittedPresentContinuityOrNull(MaterializedLocalAccessor,ProtosFrameLexicalBindingAuthority,MaterializedFrame,String,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -81,7 +81,7 @@
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "capturedMaterializedWriteTargetOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,int,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -94,7 +94,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "assignCapturedMaterializedDestination(MaterializedLocalAccessor,CapturedLexicalWriteTarget,String,Object,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -107,7 +107,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "assignCapturedMaterializedDestination(MaterializedLocalAccessor,CapturedLexicalWriteTarget,String,Object,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
@@ -120,7 +120,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ResolveCurrentFrameLocalWriteTarget",
       "method": "perform(LocalAccessor,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -133,7 +133,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.AssignCurrentFrameLocal",
       "method": "perform(LocalAccessor,ProtosActivation,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -146,7 +146,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.AssignCurrentFrameLocal",
       "method": "perform(LocalAccessor,ProtosActivation,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -159,7 +159,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "read(PreparedInlineLiteralCall,LocalAccessor,Assumption,LocalRangeAccessor,ProtosFrameLexicalLayout,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -172,7 +172,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "read(PreparedInlineLiteralCall,LocalAccessor,Assumption,LocalRangeAccessor,ProtosFrameLexicalLayout,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -185,7 +185,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "resolveWriteTarget(PreparedInlineLiteralCall,LocalAccessor,LocalRangeAccessor,ProtosFrameLexicalLayout,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -198,7 +198,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "assign(PreparedInlineLiteralCall,LocalAccessor,LocalRangeAccessor,ProtosFrameLexicalLayout,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -211,7 +211,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "assign(PreparedInlineLiteralCall,LocalAccessor,LocalRangeAccessor,ProtosFrameLexicalLayout,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -224,7 +224,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.ReadRootFrameLocal",
       "method": "compact(LocalAccessor,Assumption,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -237,7 +237,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.ResolveRootFrameLocalWriteTarget",
       "method": "perform(LocalAccessor,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -250,7 +250,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.AssignRootFrameLocal",
       "method": "perform(LocalAccessor,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
@@ -263,7 +263,7 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.AssignRootFrameLocal",
       "method": "perform(LocalAccessor,ResolvedLexicalWriteTarget,String,Object,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",

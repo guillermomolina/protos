@@ -1275,13 +1275,13 @@ The durable implementation and closure record is:
 
 The implementation itself reflects the capability model:
 
-- [`ProtosStandardProcessProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardProcessProtocol.java)
+- [`ProtosStandardProcessProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardProcessProtocol.java)
   exposes exactly the eight Process bootstrap accessors and performs no host
   discovery;
-- [`ProtosStandardFilesystemProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFilesystemProtocol.java)
+- [`ProtosStandardFilesystemProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardFilesystemProtocol.java)
   constructs explicitly provisioned Filesystem capabilities with current
   `open`/`replace`/`remove`/`entries`;
-- [`ProtosStandardFileProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFileProtocol.java)
+- [`ProtosStandardFileProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/protocols/io/ProtosStandardFileProtocol.java)
   materializes only the File operations promised by its acquired capability
   descriptor.
 
@@ -1423,7 +1423,7 @@ accepted: listener.accept().value()
 
 Only TCP over numeric IPv4/IPv6 endpoints is standardized. The operations follow
 [`spec/io/NETWORK.md`](../../spec/io/NETWORK.md); the embedding tests in
-[`ProtosEmbeddedNetworkTest.java`](../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedNetworkTest.java)
+[`ProtosEmbeddedNetworkTest.java`](../../src/test/java/com/guillermomolina/protos/execution/integration/network/ProtosEmbeddedNetworkTest.java)
 exercise them.
 
 ## Practical authority flow

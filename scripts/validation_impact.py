@@ -49,6 +49,13 @@ PACKAGE_PREFIXES = (
 TEST_TOOL_PREFIXES = ("protos/tools/test/",)
 
 PACKAGE_TEST_GLOBS = (
+    "src/test/java/com/guillermomolina/protos/execution/tools/package/ProtosPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/integration/packages/ProtosPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/integration/modules/ProtosPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/tools/test/execution/ProtosTestToolPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/packages/ProtosPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/packages/ProtosExternalPackage*Test.java",
+    "src/test/java/com/guillermomolina/protos/execution/workspace/ProtosWorkspace*Test.java",
     "src/test/java/com/guillermomolina/protos/execution/ProtosPackage*Test.java",
     "src/test/java/com/guillermomolina/protos/execution/ProtosExternalPackage*Test.java",
     "src/test/java/com/guillermomolina/protos/execution/ProtosWorkspace*Test.java",
@@ -56,6 +63,7 @@ PACKAGE_TEST_GLOBS = (
 )
 
 TEST_TOOL_TEST_GLOBS = (
+    "src/test/java/com/guillermomolina/protos/execution/tools/test/*/ProtosTestTool*Test.java",
     "src/test/java/com/guillermomolina/protos/execution/ProtosTestTool*Test.java",
     "src/test/java/com/guillermomolina/protos/cli/ProtosTestTool*Test.java",
 )
@@ -64,6 +72,7 @@ TEST_TOOL_TEST_GLOBS = (
 # ProtosCli.java itself outside this list: it is shared CLI surface and receives
 # a narrower method-body check in classify_delta().
 TEST_TOOL_SOURCE_GLOBS = (
+    "src/main/java/com/guillermomolina/protos/execution/tools/test/*/ProtosTestTool*.java",
     "src/main/java/com/guillermomolina/protos/cli/ProtosTestCorpusRegistry.java",
     "src/main/java/com/guillermomolina/protos/cli/ProtosTestExecutionRequirementRegistry.java",
     "src/main/java/com/guillermomolina/protos/cli/ProtosTestTool*.java",

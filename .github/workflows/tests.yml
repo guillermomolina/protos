@@ -44,6 +44,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      - name: Check directory file limit
+        run: make check-directory-file-limit
+
       - name: Run repository tests
         run: |
           make test

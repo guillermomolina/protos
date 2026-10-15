@@ -111,8 +111,7 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
                                 "com",
                                 "guillermomolina",
                                 "protos",
-                                "execution",
-                                "ProtosStandaloneHostedExecution.java"));
+                                "execution", "host", "embedding", "ProtosStandaloneHostedExecution.java"));
         assertTrue(shared.contains("runtimeHost.hostProcess("));
         assertTrue(shared.contains("ProtosCanonicalInitialModuleExecution.execute("));
     }

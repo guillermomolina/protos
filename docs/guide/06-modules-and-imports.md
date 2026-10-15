@@ -777,11 +777,11 @@ Package-workspace import:
 The Standard Library resolver is implementation/distribution evidence for the
 current `std:` policy:
 
-- [`../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardLibraryModuleResolver.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardLibraryModuleResolver.java).
+- [`../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosStandardLibraryModuleResolver.java`](../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosStandardLibraryModuleResolver.java).
 
 The module runtime tests exercise the Core lifecycle directly:
 
-- [`../../src/test/java/com/guillermomolina/protos/execution/ProtosModuleRuntimeTest.java`](../../src/test/java/com/guillermomolina/protos/execution/ProtosModuleRuntimeTest.java)
+- [`../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java`](../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosModuleRuntimeTest.java)
   covers semantic-String validation, canonical-key aliasing, cache-before-execute,
   cycles, Actor-local caches, failed-initialization eviction, and retry.
 

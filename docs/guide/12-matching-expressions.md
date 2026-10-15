@@ -280,10 +280,10 @@ separate explicit decisions without changing the protocol foundation.
 
 Representative retained evidence includes:
 
-- [`ProtosObjectMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/ProtosObjectMatchProtocolTest.java);
-- [`ProtosArrayMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/ProtosArrayMatchProtocolTest.java);
-- [`ProtosMapMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/ProtosMapMatchProtocolTest.java);
-- [`ProtosCaseOfProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/ProtosCaseOfProtocolTest.java);
+- [`ProtosObjectMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosObjectMatchProtocolTest.java);
+- [`ProtosArrayMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosArrayMatchProtocolTest.java);
+- [`ProtosMapMatchProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/protocols/values/ProtosMapMatchProtocolTest.java);
+- [`ProtosCaseOfProtocolTest`](../../src/test/java/com/guillermomolina/protos/execution/integration/semantics/ProtosCaseOfProtocolTest.java);
 - [`protos/tests/conformance/matching/`](../../protos/tests/conformance/matching/);
 - [`ProtosParserMatchTest`](../../src/test/java/com/guillermomolina/protos/parser/ProtosParserMatchTest.java), which retains the rejection regression for the removed dedicated syntax.
 

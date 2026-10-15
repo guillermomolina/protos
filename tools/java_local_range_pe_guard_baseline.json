@@ -3,7 +3,7 @@
   "description": "PERF030-F exact baseline of current non-proven indexed LocalRangeAccessor sites. Baselined entries are KNOWN RISKS, not PE-safe sites; remove each entry when product work proves or repairs it.",
   "entries": [
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "recomputeLastCompactFrameOrdinal(BytecodeNode)",
       "operation": "isCleared",
@@ -13,7 +13,7 @@
       "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "hasFrameBackedBindingAt(BytecodeNode,String,int)",
       "operation": "isCleared",
@@ -23,7 +23,7 @@
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
@@ -33,7 +33,7 @@
       "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
@@ -43,7 +43,7 @@
       "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "removeBinding(String)",
       "operation": "isCleared",
@@ -53,7 +53,7 @@
       "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "removeBinding(String)",
       "operation": "clear",
@@ -63,7 +63,7 @@
       "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
@@ -73,7 +73,7 @@
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
       "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
       "operation": "setObject",
@@ -83,7 +83,7 @@
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
@@ -93,7 +93,7 @@
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
       "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
@@ -103,7 +103,7 @@
       "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
       "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
@@ -113,7 +113,7 @@
       "rationale": "ordinary int parameter 'ordinal'; constancy not provable"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter",
       "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
@@ -123,7 +123,7 @@
       "rationale": "METHOD_PARAMETER at helper scope. Generated Bytecode DSL @Specialization guard forwards an int @ConstantOperand ordinal; exact PE provenance and call chain are independently tracked by the reachability baseline."
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter",
       "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",

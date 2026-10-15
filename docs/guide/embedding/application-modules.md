@@ -181,11 +181,11 @@ Supplying code grants no authority. A catalog module:
 
 Implementation and evidence:
 
-- [`ProtosEmbeddedModules.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosEmbeddedModules.java)
+- [`ProtosEmbeddedModules.java`](../../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosEmbeddedModules.java)
   (public API and Javadoc);
-- [`ProtosApplicationModuleResolver.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosApplicationModuleResolver.java)
+- [`ProtosApplicationModuleResolver.java`](../../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosApplicationModuleResolver.java)
   (exact catalog lookup in front of the Standard Library resolver);
-- [`ProtosEmbeddedModulesTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedModulesTest.java)
+- [`ProtosEmbeddedModulesTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/modules/ProtosEmbeddedModulesTest.java)
   (identity, cycles, retry, Actor-local instances, installation order,
   atomicity, shared Engines, authority);
 - [`dist/Plat054EmbeddingProbe.java`](../../../dist/Plat054EmbeddingProbe.java)

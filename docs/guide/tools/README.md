@@ -139,7 +139,7 @@ should be designed and published as an appropriate library surface rather than
 exposing Tool internals by accident.
 
 The current confinement mechanism is implemented by
-[`ProtosBundledToolModuleResolver`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosBundledToolModuleResolver.java).
+[`ProtosBundledToolModuleResolver`](../../../src/main/java/com/guillermomolina/protos/execution/modules/ProtosBundledToolModuleResolver.java).
 
 ## Policy belongs in Protos; irreducible mechanism stays below it
 
