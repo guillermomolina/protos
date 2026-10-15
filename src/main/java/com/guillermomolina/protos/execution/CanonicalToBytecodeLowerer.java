@@ -1147,45 +1147,28 @@ final class CanonicalToBytecodeLowerer {
         if (directScalarLocalBody) {
             emitNormalDirectScalarLocalBody(builder, sequence);
         } else {
-
-            /*
-             * I101-B: a parameterless Closure with a single proven Integer
-             * result needs only a constant load and a return in NORMAL.
-             *
-             * The effective literal may be the original statement or the
-             * already-proven I101-A Boolean-control fold. Source metadata,
-             * arity rejection, group topology and capability proofs stay
-             * owned by the surrounding root lowering.
-             *
-             * Guest numeric materialization belongs to the call boundary.
-             */
             CanonicalExpression minimalTerminal =
                     sequence.expressions().size() == 1
                             ? (foldedTerminal != null
                                     ? foldedTerminal
                                     : sequence.expressions().get(0))
                             : null;
-            Object minimalIntegerCarrier = null;
+
+            Object constant = null;
             if (profile == ProtosExecutionMode.NORMAL
                     && activationDefinition != null
                     && activationDefinition.parameters().isEmpty()
-                    && scopeForThisRoot.declaredNames().isEmpty()) {
-                if (minimalTerminal instanceof CanonicalLiteral literal) {
-                    minimalIntegerCarrier = primitiveNumberLiteralOrNull(literal);
-                } else if (minimalTerminal instanceof CanonicalSend send) {
-                    // Exact signed-64 constant arithmetic has the same
-                    // physical Builder representation as its literal result.
-                    // There is no guest dispatch or fallback for this case.
-                    minimalIntegerCarrier =
-                            candidateSmallIntegerForFold(
-                                    send, java.util.Map.of());
-                }
+                    && scopeForThisRoot.declaredNames().isEmpty()
+                    && minimalTerminal != null) {
+                constant = i101Constant(
+                        minimalTerminal, java.util.Map.of(), scopeForThisRoot);
             }
 
-            if (minimalIntegerCarrier instanceof Long integer) {
+            if (constant instanceof Long
+                    || constant instanceof ProtosBooleanValue) {
                 emittedMinimalIntegerBody = true;
                 builder.beginReturn();
-                builder.emitLoadConstant(integer);
+                builder.emitLoadConstant(constant);
                 builder.endReturn();
             } else if (sequence.expressions().isEmpty()) {
                 builder.beginReturn();
@@ -1399,12 +1382,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I101-B: a parameterless NORMAL Closure whose bindings are created in
-     * one straight-line sequence from signed-64 constants and known additions.
-     * All local reads are identity-resolved to prior creations of this root.
-     * An unrecognized expression, overflow, or exposed activation fails closed.
-     * The addition rule is the existing PERF043 exact literal-addition fold,
-     * propagated through proven local bindings; it introduces no new selector.
+     * I101-C1: one bounded compile-time scalar domain for arithmetic,
+     * numeric comparisons, identity and immutable lexical bindings.
+     *
+     * Unknown values and effectful expressions are never admitted.
      */
     private boolean admitsNormalDirectScalarLocalBody(
             CanonicalSequence sequence,
@@ -1419,103 +1400,519 @@ final class CanonicalToBytecodeLowerer {
                 || sequence.expressions().isEmpty()) {
             return false;
         }
-        java.util.Map<String, Long> known = new java.util.HashMap<>();
-        for (CanonicalExpression expression : sequence.expressions()) {
-            if (expression instanceof CanonicalCreate creation) {
-                if (creation.target().isPresent()
-                        || !currentRootFrameLocals.containsKey(creation.name())
-                        || known.containsKey(creation.name())
-                        || currentRootAnalysis.identityOf(creation)
+
+        java.util.Map<String, Object> known = new java.util.HashMap<>();
+        var expressions = sequence.expressions();
+
+        for (int index = 0; index < expressions.size(); index++) {
+            CanonicalExpression expression = expressions.get(index);
+            if (expression instanceof CanonicalCreate create) {
+                if (create.target().isPresent()
+                        || !currentRootFrameLocals.containsKey(create.name())
+                        || known.containsKey(create.name())
+                        || currentRootAnalysis.identityOf(create)
                                 .map(identity -> identity.owner() != scope
-                                        || !identity.name().equals(creation.name()))
+                                        || !identity.name().equals(create.name()))
                                 .orElse(true)) {
                     return false;
                 }
-                Long value = knownDirectScalarInteger(creation.value(), known, scope);
-                if (value == null) {
+                Object value = i101Constant(create.value(), known, scope);
+                if (!i101DirectCarrier(value)) {
                     return false;
                 }
-                known.put(creation.name(), value);
+                known.put(create.name(), value);
             } else if (expression instanceof CanonicalLookup lookup) {
-                if (knownDirectScalarInteger(lookup, known, scope) == null) {
+                if (i101Constant(lookup, known, scope) == null) {
+                    return false;
+                }
+            } else if (index == expressions.size() - 1) {
+                if (!i101DirectCarrier(
+                        i101Constant(expression, known, scope))) {
                     return false;
                 }
             } else {
                 return false;
             }
         }
+
         return known.keySet().equals(scope.declaredNames());
     }
 
-    /** Return a statically known Integer only for proven, effect-free operands. */
-    private Long knownDirectScalarInteger(
+    private static boolean directScalarCarrier(Object value) {
+        return value instanceof Long
+                || value instanceof Double
+                || value instanceof ProtosBooleanValue
+                || value == ProtosNullValue.INSTANCE;
+    }
+
+    /**
+     * Evaluate a bounded pure expression from source literals and proven
+     * lexical constants. No guest dispatch or runtime state is consulted.
+     */
+    private Object knownScalarValue(
             CanonicalExpression expression,
-            java.util.Map<String, Long> known,
+            java.util.Map<String, Object> known,
             CanonicalLexicalScope scope) {
         if (expression instanceof CanonicalLiteral literal) {
-            if (literal.kind() != CanonicalLiteral.Kind.NUMBER) {
-                return null;
-            }
-            Object number = numberLiteralDescriptor(literal);
-            return number instanceof Long integer ? integer : null;
+            return switch (literal.kind()) {
+                case NUMBER -> numberLiteralDescriptor(literal);
+                case TRUE -> ProtosBooleanValue.TRUE;
+                case FALSE -> ProtosBooleanValue.FALSE;
+                case NULL -> ProtosNullValue.INSTANCE;
+                default -> null;
+            };
         }
+
         if (expression instanceof CanonicalLookup lookup) {
             if (!known.containsKey(lookup.name())
+                    || currentRootAnalysis == null
                     || currentRootAnalysis.resolutionOf(lookup)
                             .map(resolution -> !(resolution instanceof
                                     CanonicalBindingResolution.Resolved resolved)
                                     || resolved.identity().owner() != scope
-                                    || !resolved.identity().name().equals(lookup.name()))
+                                    || !resolved.identity().name()
+                                            .equals(lookup.name()))
                             .orElse(true)) {
                 return null;
             }
             return known.get(lookup.name());
         }
-        if (expression instanceof CanonicalSend send) {
-            // Evaluate only a proven signed-64 arithmetic candidate.
-            // Never emit this send: the Builder receives its constant.
-            return candidateSmallIntegerForFold(send, known);
+
+        if (expression instanceof CanonicalIdentity identity) {
+            Object left = knownScalarValue(identity.left(), known, scope);
+            Object right = knownScalarValue(identity.right(), known, scope);
+            return left == null || right == null
+                    ? null
+                    : ProtosBooleanValue.of(knownIdentity(left, right));
+        }
+
+        if (expression instanceof CanonicalNotIdentity identity) {
+            Object left = knownScalarValue(identity.left(), known, scope);
+            Object right = knownScalarValue(identity.right(), known, scope);
+            return left == null || right == null
+                    ? null
+                    : ProtosBooleanValue.of(!knownIdentity(left, right));
+        }
+
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            Object left = knownScalarValue(inequality.left(), known, scope);
+            Object right = knownScalarValue(inequality.right(), known, scope);
+            Object equality = knownEquality(left, right);
+            return equality instanceof ProtosBooleanValue result
+                    ? ProtosBooleanValue.of(!result.value())
+                    : null;
+        }
+
+        if (!(expression instanceof CanonicalSend send)
+                || send.arguments().size() != 1) {
+            return null;
+        }
+
+        // Reuse I101-B exact arithmetic, including its overflow and division
+        // restrictions. Only proven Long bindings enter that evaluator.
+        if (java.util.Set.of("+", "-", "*", "/").contains(send.message())) {
+            java.util.Map<String, Long> integers = new java.util.HashMap<>();
+            known.forEach((name, value) -> {
+                if (value instanceof Long integer) {
+                    integers.put(name, integer);
+                }
+            });
+            return candidateSmallIntegerForFold(send, integers);
+        }
+
+        Object left = knownScalarValue(send.receiver(), known, scope);
+        Object right = knownScalarValue(send.arguments().get(0), known, scope);
+
+        if ("==".equals(send.message())) {
+            return knownEquality(left, right);
+        }
+
+        if (!numericDescriptor(left) || !numericDescriptor(right)) {
+            return null;
+        }
+
+        ProtosStandardNumberOrderingProtocol.Comparison comparison =
+                compareKnownNumbers(left, right);
+
+        Boolean result = switch (send.message()) {
+            case "<" ->
+                    comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.LESS;
+            case "<=" ->
+                    comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.LESS
+                    || comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.EQUAL;
+            case ">" ->
+                    comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.GREATER;
+            case ">=" ->
+                    comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.GREATER
+                    || comparison == ProtosStandardNumberOrderingProtocol
+                            .Comparison.EQUAL;
+            default -> {
+                yield null;
+            }
+        };
+
+        return result == null ? null : ProtosBooleanValue.of(result);
+    }
+
+    private static boolean numericDescriptor(Object value) {
+        return value instanceof Long
+                || value instanceof Double
+                || value instanceof BigInteger;
+    }
+
+    private static BigInteger knownInteger(Object value) {
+        return value instanceof Long integer
+                ? BigInteger.valueOf(integer)
+                : (BigInteger) value;
+    }
+
+    /**
+     * Preserve mathematical equality across Integer/Float, but never
+     * convert a large Integer to a rounded binary64 value.
+     */
+    private static ProtosStandardNumberOrderingProtocol.Comparison
+            compareKnownNumbers(Object left, Object right) {
+        if (left instanceof Double floating) {
+            if (Double.isNaN(floating)) {
+                return ProtosStandardNumberOrderingProtocol
+                        .Comparison.UNORDERED;
+            }
+            if (right instanceof Double other) {
+                return ProtosCurrentNumericRelations.compareFloats(
+                        floating, other);
+            }
+            if (Double.isInfinite(floating)) {
+                return floating > 0.0
+                        ? ProtosStandardNumberOrderingProtocol
+                                .Comparison.GREATER
+                        : ProtosStandardNumberOrderingProtocol
+                                .Comparison.LESS;
+            }
+
+            int order = new java.math.BigDecimal(floating)
+                    .compareTo(new java.math.BigDecimal(knownInteger(right)));
+            return knownComparisonFromSign(order);
+        }
+
+        if (right instanceof Double) {
+            return ProtosCurrentNumericRelations.reverse(
+                    compareKnownNumbers(right, left));
+        }
+
+        return knownComparisonFromSign(
+                knownInteger(left).compareTo(knownInteger(right)));
+    }
+
+    private static ProtosStandardNumberOrderingProtocol.Comparison
+            knownComparisonFromSign(int sign) {
+        if (sign < 0) {
+            return ProtosStandardNumberOrderingProtocol.Comparison.LESS;
+        }
+        if (sign > 0) {
+            return ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
+        }
+        return ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
+    }
+
+    private static Object knownEquality(Object left, Object right) {
+        if (left == null || right == null) {
+            return null;
+        }
+        if (numericDescriptor(left) && numericDescriptor(right)) {
+            return ProtosBooleanValue.of(
+                    compareKnownNumbers(left, right)
+                            == ProtosStandardNumberOrderingProtocol
+                                    .Comparison.EQUAL);
+        }
+        if (left instanceof ProtosBooleanValue
+                && right instanceof ProtosBooleanValue) {
+            return ProtosBooleanValue.of(left == right);
+        }
+        if (left == ProtosNullValue.INSTANCE
+                || right == ProtosNullValue.INSTANCE) {
+            return ProtosBooleanValue.of(left == right);
         }
         return null;
     }
 
     /**
-     * Direct Bytecode DSL for proven scalar creations and terminal lookup.
-     * Sources remain attached to the original statement spans. No message
-     * dispatch, materialization or temporary result locals are introduced.
+     * Semantic numeric identity includes the numeric family. Float identity
+     * distinguishes signed zero and unifies all NaN representations.
      */
+    private static boolean knownIdentity(Object left, Object right) {
+        if (numericDescriptor(left) && numericDescriptor(right)) {
+            if (left instanceof Double floating) {
+                if (!(right instanceof Double other)) {
+                    return false;
+                }
+                return (Double.isNaN(floating) && Double.isNaN(other))
+                        || Double.doubleToRawLongBits(floating)
+                                == Double.doubleToRawLongBits(other);
+            }
+            if (right instanceof Double) {
+                return false;
+            }
+            return knownInteger(left).equals(knownInteger(right));
+        }
+        return left == right;
+    }
+
+    /**
+     * Direct emission preserves lexical StoreLocal/LoadLocal operations,
+     * but replaces every admitted constant initializer and comparison with
+     * its compile-time value.
+     */
+    /**
+     * I101-C1: one typed, bounded compile-time evaluator for arithmetic,
+     * numeric comparison, semantic equality and identity.
+     */
+    private Object i101Constant(
+            CanonicalExpression expression,
+            java.util.Map<String, Object> known,
+            CanonicalLexicalScope scope) {
+        if (expression instanceof CanonicalLiteral literal) {
+            return switch (literal.kind()) {
+                case NUMBER -> numberLiteralDescriptor(literal);
+                case TRUE -> ProtosBooleanValue.TRUE;
+                case FALSE -> ProtosBooleanValue.FALSE;
+                case NULL -> ProtosNullValue.INSTANCE;
+                default -> null;
+            };
+        }
+
+        if (expression instanceof CanonicalLookup lookup) {
+            if (!known.containsKey(lookup.name())
+                    || currentRootAnalysis == null
+                    || scope == null
+                    || currentRootAnalysis.resolutionOf(lookup)
+                            .map(resolution -> !(resolution instanceof
+                                    CanonicalBindingResolution.Resolved resolved)
+                                    || resolved.identity().owner() != scope
+                                    || !resolved.identity().name()
+                                            .equals(lookup.name()))
+                            .orElse(true)) {
+                return null;
+            }
+            return known.get(lookup.name());
+        }
+
+        if (expression instanceof CanonicalIdentity identity) {
+            Object left = i101Constant(identity.left(), known, scope);
+            Object right = i101Constant(identity.right(), known, scope);
+            return left == null || right == null ? null
+                    : ProtosBooleanValue.of(i101Identity(left, right));
+        }
+
+        if (expression instanceof CanonicalNotIdentity identity) {
+            Object left = i101Constant(identity.left(), known, scope);
+            Object right = i101Constant(identity.right(), known, scope);
+            return left == null || right == null ? null
+                    : ProtosBooleanValue.of(!i101Identity(left, right));
+        }
+
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            Object left = i101Constant(inequality.left(), known, scope);
+            Object right = i101Constant(inequality.right(), known, scope);
+            Object equal = i101Equality(left, right);
+            return equal instanceof ProtosBooleanValue booleanValue
+                    ? ProtosBooleanValue.of(!booleanValue.value()) : null;
+        }
+
+        if (!(expression instanceof CanonicalSend send)
+                || send.arguments().size() != 1) {
+            return null;
+        }
+
+        if (java.util.Set.of("+", "-", "*", "/").contains(send.message())) {
+            java.util.Map<String, Long> integers =
+                    new java.util.HashMap<>();
+            known.forEach((name, value) -> {
+                if (value instanceof Long integer) {
+                    integers.put(name, integer);
+                }
+            });
+            return candidateSmallIntegerForFold(send, integers);
+        }
+
+        Object left = i101Constant(send.receiver(), known, scope);
+        Object right = i101Constant(send.arguments().get(0), known, scope);
+
+        if ("==".equals(send.message())) {
+            return i101Equality(left, right);
+        }
+
+        if (!i101Numeric(left) || !i101Numeric(right)) {
+            return null;
+        }
+
+        var relation = i101Compare(left, right);
+        Boolean value = switch (send.message()) {
+            case "<" -> relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.LESS;
+            case "<=" -> relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.LESS
+                    || relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
+            case ">" -> relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
+            case ">=" -> relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.GREATER
+                    || relation ==
+                    ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
+            default -> {
+                yield null;
+            }
+        };
+        return value == null ? null : ProtosBooleanValue.of(value);
+    }
+
+    private static boolean i101DirectCarrier(Object value) {
+        return value instanceof Long
+                || value instanceof Double
+                || value instanceof ProtosBooleanValue
+                || value == ProtosNullValue.INSTANCE;
+    }
+
+    private static boolean i101Numeric(Object value) {
+        return value instanceof Long
+                || value instanceof Double
+                || value instanceof BigInteger;
+    }
+
+    private static BigInteger i101Integer(Object value) {
+        return value instanceof Long integer
+                ? BigInteger.valueOf(integer) : (BigInteger) value;
+    }
+
+    private static ProtosStandardNumberOrderingProtocol.Comparison
+            i101Compare(Object left, Object right) {
+        if (left instanceof Double floating) {
+            if (Double.isNaN(floating)) {
+                return ProtosStandardNumberOrderingProtocol
+                        .Comparison.UNORDERED;
+            }
+            if (right instanceof Double other) {
+                return ProtosCurrentNumericRelations.compareFloats(
+                        floating, other);
+            }
+            if (Double.isInfinite(floating)) {
+                return floating > 0.0
+                        ? ProtosStandardNumberOrderingProtocol
+                                .Comparison.GREATER
+                        : ProtosStandardNumberOrderingProtocol
+                                .Comparison.LESS;
+            }
+            return i101Sign(new java.math.BigDecimal(floating)
+                    .compareTo(new java.math.BigDecimal(i101Integer(right))));
+        }
+
+        if (right instanceof Double) {
+            return ProtosCurrentNumericRelations.reverse(
+                    i101Compare(right, left));
+        }
+        return i101Sign(i101Integer(left).compareTo(i101Integer(right)));
+    }
+
+    private static ProtosStandardNumberOrderingProtocol.Comparison
+            i101Sign(int sign) {
+        if (sign < 0) {
+            return ProtosStandardNumberOrderingProtocol.Comparison.LESS;
+        }
+        if (sign > 0) {
+            return ProtosStandardNumberOrderingProtocol.Comparison.GREATER;
+        }
+        return ProtosStandardNumberOrderingProtocol.Comparison.EQUAL;
+    }
+
+    private static Object i101Equality(Object left, Object right) {
+        if (left == null || right == null) {
+            return null;
+        }
+        if (i101Numeric(left) && i101Numeric(right)) {
+            return ProtosBooleanValue.of(i101Compare(left, right)
+                    == ProtosStandardNumberOrderingProtocol
+                            .Comparison.EQUAL);
+        }
+        if (left instanceof ProtosBooleanValue
+                && right instanceof ProtosBooleanValue) {
+            return ProtosBooleanValue.of(left == right);
+        }
+        if (left == ProtosNullValue.INSTANCE
+                || right == ProtosNullValue.INSTANCE) {
+            return ProtosBooleanValue.of(left == right);
+        }
+        return null;
+    }
+
+    private static boolean i101Identity(Object left, Object right) {
+        if (i101Numeric(left) && i101Numeric(right)) {
+            if (left instanceof Double floating) {
+                if (!(right instanceof Double other)) {
+                    return false;
+                }
+                return Double.isNaN(floating) && Double.isNaN(other)
+                        || Double.doubleToRawLongBits(floating)
+                                == Double.doubleToRawLongBits(other);
+            }
+            return !(right instanceof Double)
+                    && i101Integer(left).equals(i101Integer(right));
+        }
+        return left == right;
+    }
+
     private void emitNormalDirectScalarLocalBody(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence) {
-        java.util.Map<String, Long> known = new java.util.HashMap<>();
-        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        java.util.Map<String, Object> known = new java.util.HashMap<>();
+        var expressions = sequence.expressions();
+
         for (int index = 0; index < expressions.size(); index++) {
             CanonicalExpression expression = expressions.get(index);
             SourceSpan span = expression.span();
             builder.beginSourceSection(span.startOffset(), span.length());
-            if (expression instanceof CanonicalCreate creation) {
-                Long value = knownDirectScalarInteger(
-                        creation.value(), known, currentRootTopScope);
-                if (value == null) {
-                    throw new AssertionError("I101-B missing scalar initializer proof");
+
+            if (expression instanceof CanonicalCreate create) {
+                Object value = i101Constant(
+                        create.value(), known, currentRootTopScope);
+                if (!i101DirectCarrier(value)) {
+                    throw new AssertionError(
+                            "I101-C1 scalar proof changed during lowering");
                 }
-                builder.beginStoreLocal(currentRootFrameLocals.get(creation.name()));
-                if (creation.value() instanceof CanonicalLookup lookup) {
-                    // Preserve the lexical load; Graal performs propagation.
+
+                builder.beginStoreLocal(
+                        currentRootFrameLocals.get(create.name()));
+                if (create.value() instanceof CanonicalLookup lookup) {
                     builder.emitLoadLocal(
                             currentRootFrameLocals.get(lookup.name()));
                 } else {
-                    // Only literals and arithmetic sends are folded here.
                     builder.emitLoadConstant(value);
                 }
                 builder.endStoreLocal();
-                known.put(creation.name(), value);
+                known.put(create.name(), value);
             }
+
             if (index == expressions.size() - 1) {
-                String name = expression instanceof CanonicalCreate creation
-                        ? creation.name() : ((CanonicalLookup) expression).name();
                 builder.beginReturn();
-                builder.emitLoadLocal(currentRootFrameLocals.get(name));
+                if (expression instanceof CanonicalCreate create) {
+                    builder.emitLoadLocal(
+                            currentRootFrameLocals.get(create.name()));
+                } else if (expression instanceof CanonicalLookup lookup) {
+                    builder.emitLoadLocal(
+                            currentRootFrameLocals.get(lookup.name()));
+                } else {
+                    Object value = i101Constant(
+                            expression, known, currentRootTopScope);
+                    if (!i101DirectCarrier(value)) {
+                        throw new AssertionError(
+                                "I101-C1 terminal proof changed");
+                    }
+                    builder.emitLoadConstant(value);
+                }
                 builder.endReturn();
             }
             builder.endSourceSection();

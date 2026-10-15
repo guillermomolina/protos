@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.358-SNAPSHOT
+
+- `I101` (#892), slice C1: aggressive compile-time folding of
+  proven canonical comparisons in NORMAL mode.
+  - Fold statically proven ordering, equality and identity comparisons
+    to their canonical Boolean results during lowering.
+  - Cover `<`, `<=`, `>`, `>=`, `==`, `!=`, `===` and `!==`,
+    including exact numeric comparisons and supported Boolean,
+    null and identity cases.
+  - Propagate proven constants through scalar-local bindings and
+    nested arithmetic/comparison expressions.
+  - Enforce exact physical Bytecode DSL equivalence with literal
+    Boolean roots using independent Builder-oracle tests.
+  - Preserve ordinary dispatch for dynamic operands and
+    user-defined comparison behaviors.
+  - Preserve aggressive minimal lowering in NORMAL, explicit guest
+    context observations, and complete DEBUG observability.
+  - Reconcile PERF043 regression tests with the NORMAL/DEBUG
+    observability contract without adding runtime instructions
+    to minimal scalar-local roots.
+
 ## 0.3.357-SNAPSHOT
 
 - `I101` (#892), slice B: emit minimal NORMAL bytecode for proven

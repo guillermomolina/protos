@@ -490,10 +490,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "lowerer must emit the calculated result as an operand");
             }
             assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
-            assertContains(instructionNames(locals), "TryPrimitiveNumericSendOne");
+            // I101-B: proven immutable scalar locals are emitted directly.
+            // The mutated alias still requires ordinary numeric dispatch.
+            assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
             assertContains(instructionNames(aliases), "TryPrimitiveNumericSendOne");
 
-            assertContains(instructionNames(locals), "IsCompactLocalFrame");
+            assertNone(instructionNames(locals), "IsCompactLocalFrame");
             assertContains(instructionNames(aliases), "IsCompactLocalFrame");
 
             assertNone(instructionNames(locals), "InstallFrameLexicalAuthority");
@@ -502,36 +504,76 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf043FoldKeepsObservedActivationAndSourceTags() throws Exception {
-        withCore(module -> {
+        // Full implicit observability is a DEBUG guarantee, not NORMAL.
+        // NORMAL retains only observations explicitly required by the
+        // guest program and preserves the physically minimal Builder.
+        withCoreDebug(module -> {
+            assertEquals(
+                    ProtosExecutionMode.DEBUG,
+                    ProtosLanguageContext.current().executionMode());
+
             ProtosClosureValue sum =
                     closure("() => { left: 1\nright: 2\nleft + right }", module);
 
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
                             sum, module, null, new Object[0]);
-            ProtosActivation activation = ProtosFrameArguments.activation(arguments);
+
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(arguments);
             ProtosObjectValue observed = activation.context();
 
             assertEquals("3", integerValue(target(sum).call(arguments)));
+
+            assertSame(activation, arguments[0]);
+            assertSame(observed, activation.context());
+
             assertEquals(
-                    "1", integerValue(observed.readLocalSlot("left").orElseThrow()));
+                    "1",
+                    integerValue(
+                            observed.readLocalSlot("left").orElseThrow()));
             assertEquals(
-                    "2", integerValue(observed.readLocalSlot("right").orElseThrow()));
+                    "2",
+                    integerValue(
+                            observed.readLocalSlot("right").orElseThrow()));
 
             ProtosSemanticBytecodeRootNode root =
                     sum.executionPlan()
                             .orElseThrow()
                             .bytecodeActivationRootForTesting();
+
             root.getRootNodes().ensureComplete();
+
             List<TagTree> statements =
                     collectTags(
                             root.getBytecodeNode().getTagTree(),
                             StandardTags.StatementTag.class);
+
             assertEquals(
                     List.of("left: 1", "right: 2", "left + right"),
                     statements.stream()
-                            .map(tag -> tag.getSourceSection().getCharacters().toString())
+                            .map(tag ->
+                                    tag.getSourceSection()
+                                            .getCharacters()
+                                            .toString())
                             .toList());
+
+            List<TagTree> calls =
+                    collectTags(
+                            root.getBytecodeNode().getTagTree(),
+                            StandardTags.CallTag.class);
+
+            assertEquals(
+                    1,
+                    calls.size(),
+                    "DEBUG retains the source-visible arithmetic call");
+
+            assertEquals(
+                    "left + right",
+                    calls.get(0)
+                            .getSourceSection()
+                            .getCharacters()
+                            .toString());
         });
     }
 
@@ -557,9 +599,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 root.getRootNodes().ensureComplete();
                 var calls = collectTags(root.getBytecodeNode().getTagTree(),
                         StandardTags.CallTag.class);
-                int count = candidate == locals || candidate == aliases ? 1 : 0;
+                // Proven local sends disappear physically. Only the
+                // mutated-alias path still performs an ordinary send.
+                int count = candidate == aliases ? 1 : 0;
                 assertEquals(count, calls.size(),
-                        "folded sends retain each source-visible CallTag");
+                        "Only surviving dynamic sends retain CallTag");
                 assertTrue(calls.stream().allMatch(tag ->
                         tag.getSourceSection() != null
                                 && tag.getSourceSection().getCharacters().toString().contains("+")));
@@ -568,10 +612,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
             assertNone(instructionNames(nested), "TryPrimitiveNumericSendOne");
             assertNone(instructionNames(tree), "TryPrimitiveNumericSendOne");
-            // A compact fast arm contains the literal result, and the
-            // observed/materialized frame retains ordinary send semantics.
+            // The proven local path is now physically minimal.
+            // Mutation still forces the original guarded alias fallback.
+            assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(aliases), "TryPrimitiveNumericSendOne");
             for (var candidate : List.of(locals, aliases)) {
-                assertContains(instructionNames(candidate), "TryPrimitiveNumericSendOne");
                 assertTrue(loweredIntegerConstantCount(candidate, 3L) >= 1,
                         "a guarded arithmetic candidate must retain its folded operand");
 
@@ -579,7 +624,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         candidate, module, null, new Object[0]);
                 ProtosActivation observed = ProtosFrameArguments.activation(observedCall);
                 observed.context();
-                assertEquals("3", integerValue(target(candidate).call(observedCall)));
+                Object raw = target(candidate).call(observedCall);
+                assertEquals(
+                        "3",
+                        integerValue(
+                                com.guillermomolina.protos.runtime
+                                        .ProtosNumericValueSupport.guestValue(raw)));
             }
         });
     }
@@ -748,7 +798,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         integerValue(enter(fastDirect(locals, module))));
 
                 assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
-                assertContains(instructionNames(locals), "TryPrimitiveNumericSendOne");
+                assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
             });
         }
 
