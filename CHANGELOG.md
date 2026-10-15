@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.361-SNAPSHOT
+
+- `I102` (#896), slice B: B5 caller-slot invariant reconciliation and
+  rich-entry conformance coverage.
+  - Record the owner-approved PLAT060-B5 distinction: before publication,
+    slot 3 holds the exact non-null caller; after publication, it retains
+    that caller or is null when an already-rich entry cannot supply it.
+  - Keep one physical five-slot Closure-call ABI in NORMAL and DEBUG;
+    published-state provenance continues to come from the exact activation,
+    with no invented caller or eager activation, Context, or Task.
+  - Add structural regression tests for rich Call0/Call1, method receiver and
+    home, supplied-argument identity, arity rejection, ReturnHome identity,
+    and caller-slot preservation across lazy activation publication.
+  - Preserve existing dispatch, tooling and control semantics; the change is
+    an approved contract clarification and test coverage, not a new ABI.
+
 ## 0.3.360-SNAPSHOT
 
 - `PERF040` (#862), slices E1/E2: per-selector primitive numeric
