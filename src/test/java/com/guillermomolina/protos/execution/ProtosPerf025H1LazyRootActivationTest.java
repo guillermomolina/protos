@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -146,6 +147,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosActivation observed = ProtosFrameArguments.activation(arguments);
             assertSame(observed, arguments[0], "published into frame argument 0");
             assertSame(observed, ProtosFrameArguments.activation(arguments), "at most once");
+            assertSame(module, arguments[3], "compact publication preserves exact caller");
             assertNull(privateField(observed, "context"), "the guest Context stays deferred");
 
             assertSame(supplied, enter(prepared));
@@ -316,6 +318,159 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertSame(activation, arguments[0]);
         });
         System.out.println("GENERIC_FALLBACK=PASS");
+    }
+
+    /**
+     * I102-B: already-materialized ordinary invocations enter the same
+     * five-position B5 argument layout, with their activation published
+     * from the beginning. Arity rejection still selects the proper entry
+     * instead of mistaking header fields for user arguments.
+     */
+    @Test
+    void i102BRichDirectEntryPreservesB5AndArity() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue zero =
+                    parsedClosure("() => { 1 }", "i102b-zero.protos", module);
+            ProtosActivation zeroActivation =
+                    ProtosActivation.forClosureInvocation(
+                            zero,
+                            List.of(),
+                            module.prelude().orElseThrow(),
+                            module.actorModuleState(),
+                            module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+            RootCallTarget zeroTarget =
+                    ProtosBytecodeRootNode.PrepareSendArguments
+                            .fastOrdinarySendTarget(
+                                    zero,
+                                    ProtosLanguageContext.currentIfEnteredForRuntime());
+            ProtosBytecodeRootNode.PreparedClosureCall zeroCall =
+                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+                            zeroTarget, zeroActivation);
+            Object[] zeroArguments = zeroCall.targetArguments();
+
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, zeroArguments.length);
+            assertSame(zeroActivation, zeroArguments[0]);
+            assertNull(zeroArguments[3], "no invented dynamic caller");
+            assertTrue(ProtosFrameArguments.hasPublishedActivation(zeroArguments));
+            assertTrue(!ProtosFrameArguments.isUnmaterializedCompactCall(zeroArguments));
+            assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(zeroArguments));
+            assertSame(
+                    zeroActivation.returnHome().orElseThrow(),
+                    ProtosFrameArguments.compactReturnHome(zeroArguments));
+            assertSame(zeroActivation, ProtosFrameArguments.activation(zeroArguments));
+            assertEquals("1", integerValue(enter(zeroCall)));
+            assertSame(zeroActivation, zeroArguments[0]);
+
+            ProtosClosureValue identity =
+                    parsedClosure("(value) => { value }", "i102b-one.protos", module);
+            ProtosIntegerValue supplied = integer(42);
+            RootCallTarget identityTarget =
+                    ProtosBytecodeRootNode.PrepareSendArguments
+                            .fastOrdinarySendTarget(
+                                    identity,
+                                    ProtosLanguageContext.currentIfEnteredForRuntime());
+
+            ProtosActivation oneActivation =
+                    ProtosActivation.forClosureInvocation(
+                            identity,
+                            List.of(supplied),
+                            module.prelude().orElseThrow(),
+                            module.actorModuleState(),
+                            module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+            ProtosBytecodeRootNode.PreparedClosureCall oneCall =
+                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+                            identityTarget, oneActivation);
+            Object[] oneArguments = oneCall.targetArguments();
+
+            assertEquals(
+                    ProtosFrameArguments.HEADER_LENGTH + 1,
+                    oneArguments.length);
+            assertSame(oneActivation, oneArguments[0]);
+            assertNull(oneArguments[3], "no invented dynamic caller");
+            assertSame(supplied, oneArguments[ProtosFrameArguments.HEADER_LENGTH]);
+            assertSame(supplied, ProtosFrameArguments.compactSuppliedArgument(
+                    oneArguments, 0));
+            assertEquals(1, ProtosFrameArguments.compactSuppliedArgumentCount(oneArguments));
+            assertSame(supplied, enter(oneCall));
+            assertSame(oneActivation, oneArguments[0]);
+
+            ProtosActivation excessActivation =
+                    ProtosActivation.forClosureInvocation(
+                            identity,
+                            List.of(supplied, integer(99)),
+                            module.prelude().orElseThrow(),
+                            module.actorModuleState(),
+                            module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+            ProtosBytecodeRootNode.PreparedClosureCall excessCall =
+                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+                            identityTarget, excessActivation);
+            Object[] excessArguments = excessCall.targetArguments();
+
+            assertEquals(
+                    ProtosFrameArguments.HEADER_LENGTH + 2,
+                    excessArguments.length);
+            assertEquals(2, ProtosFrameArguments.compactSuppliedArgumentCount(
+                    excessArguments));
+            assertThrows(ProtosSignalException.class, () -> enter(excessCall));
+            assertSame(excessActivation, excessArguments[0]);
+        });
+        System.out.println("I102_B_RICH_DIRECT_B5=PASS");
+    }
+
+    /**
+     * I102-B: the already-materialized immediate-method path preserves its
+     * receiver and method home instead of becoming a direct Closure call.
+     */
+    @Test
+    void i102BRichMethodEntryPreservesReceiverAndHome() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue method =
+                    parsedClosure("(value) => { this }", "i102b-method.protos", module);
+            ProtosObjectValue receiver = new ProtosObjectValue(method);
+            ProtosObjectValue methodHome = new ProtosObjectValue(method);
+            ProtosIntegerValue supplied = integer(17);
+
+            ProtosActivation activation =
+                    ProtosActivation.forImmediateMethodInvocation(
+                            method,
+                            List.of(supplied),
+                            receiver,
+                            methodHome,
+                            module.prelude().orElseThrow(),
+                            module.actorModuleState(),
+                            module.currentModuleKey().orElse(null),
+                            module.executionDomain());
+
+            RootCallTarget target =
+                    ProtosBytecodeRootNode.PrepareSendArguments
+                            .fastOrdinarySendTarget(
+                                    method,
+                                    ProtosLanguageContext.currentIfEnteredForRuntime());
+            ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+                            target, activation);
+            Object[] arguments = prepared.targetArguments();
+
+            assertEquals(
+                    ProtosFrameArguments.HEADER_LENGTH + 1,
+                    arguments.length);
+            assertSame(activation, arguments[0]);
+            assertNull(arguments[3], "no invented dynamic caller");
+            assertSame(receiver, arguments[1]);
+            assertSame(methodHome, arguments[2]);
+            assertSame(
+                    activation.returnHome().orElseThrow(),
+                    arguments[4]);
+            assertSame(supplied, ProtosFrameArguments.compactSuppliedArgument(
+                    arguments, 0));
+            assertSame(activation, ProtosFrameArguments.activation(arguments));
+            assertSame(receiver, enter(prepared));
+            assertSame(activation, arguments[0]);
+        });
+        System.out.println("I102_B_RICH_METHOD_B5=PASS");
     }
 
     private interface CoreTest {

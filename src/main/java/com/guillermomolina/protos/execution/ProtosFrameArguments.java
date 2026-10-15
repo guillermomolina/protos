@@ -44,7 +44,8 @@ final class ProtosFrameArguments {
      *       ProtosActivation of this invocation
      *   [1] receiver (immediate method call) | DIRECT_CLOSURE_CALL
      *   [2] methodHome (immediate method call) | explicit ProtosTask or null
-     *   [3] caller ProtosActivation
+     *   [3] exact caller while unpublished; after publication, the
+     *       retained exact caller or null for an already-rich entry
      *   [4] the exact ProtosReturnHome of the invocation, including the
      *       unobservable and primitive-accepting markers
      *   [5...] supplied positional arguments
