@@ -239,7 +239,7 @@ This slice deliberately does not extract or execute Protos.
 ```sh
 python3 dist/build_portable.py
 python3 dist/verify_portable.py --require-clean-source
-sh dist/smoke_cwd_package.sh
+sh dist/smoke/smoke_cwd_package.sh
 ```
 
 The smoke first relies on B2's direct archive identity/checksum verification,
@@ -270,7 +270,7 @@ can bootstrap and execute its current bundled plan:
 ```sh
 python3 dist/build_portable.py
 python3 dist/verify_portable.py --require-clean-source
-sh dist/smoke_test_tool.sh
+sh dist/smoke/smoke_test_tool.sh
 ```
 
 The smoke extracts a disposable toolchain outside the checkout and invokes public
@@ -294,7 +294,7 @@ Exact optimizing-runtime validation is deliberately separate:
 
 ```sh
 PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
-    sh dist/smoke_optimizing_runtime.sh
+    sh dist/smoke/smoke_optimizing_runtime.sh
 ```
 
 The smoke requires exact GraalVM Community JDK `22.0.0`; it does not accept the
@@ -324,7 +324,7 @@ Truffle internal resource, so a standard `Context.newBuilder("protos").build()`
 embedding needs neither `protos.CoreRoot` nor a language home:
 
 ```sh
-sh dist/smoke_polyglot_embedding.sh
+sh dist/smoke/smoke_polyglot_embedding.sh
 ```
 
 The smoke copies only `lib/protos.jar` and `lib/runtime/*.jar` out of the

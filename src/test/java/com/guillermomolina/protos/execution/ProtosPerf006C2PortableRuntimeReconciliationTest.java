@@ -17,7 +17,7 @@ final class ProtosPerf006C2PortableRuntimeReconciliationTest {
     void portableDistributionIsDerivedFromCanonicalRootPomRuntimePlane() throws Exception {
         String pom = Files.readString(Path.of("pom.xml"));
         String builder = Files.readString(Path.of("dist/build_portable.py"));
-        String smoke = Files.readString(Path.of("dist/smoke_optimizing_runtime.sh"));
+        String smoke = Files.readString(Path.of("dist/smoke/smoke_optimizing_runtime.sh"));
         String verifier = Files.readString(Path.of("tools/verify_toolchain.py"));
 
         assertFalse(Files.exists(Path.of("dist/runtime-pom.xml")));

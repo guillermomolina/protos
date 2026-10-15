@@ -182,7 +182,7 @@ test-java-stress:
 		test
 
 check-local-range-index-pe:
-	$(PYTHON) tools/test_java_local_range_pe_guard.py
+	$(PYTHON) tools/tests/test_java_local_range_pe_guard.py
 	$(PYTHON) tools/java_local_range_pe_guard.py check \
 		--source src/main/java \
 		--baseline $(LOCAL_RANGE_PE_GUARD_BASELINE) \
@@ -190,21 +190,21 @@ check-local-range-index-pe:
 		--report $(LOCAL_RANGE_PE_GUARD_REPORT)
 
 check-local-range-operands-pe:
-	$(PYTHON) tools/test_java_local_range_operand_pe_guard.py
+	$(PYTHON) tools/tests/test_java_local_range_operand_pe_guard.py
 	$(PYTHON) tools/java_local_range_operand_pe_guard.py check \
 		--source src/main/java \
 		--baseline $(LOCAL_RANGE_OPERAND_PE_BASELINE) \
 		--report $(LOCAL_RANGE_OPERAND_PE_REPORT)
 
 check-local-accessor-pe:
-	$(PYTHON) tools/test_java_local_accessor_pe_guard.py
+	$(PYTHON) tools/tests/test_java_local_accessor_pe_guard.py
 	$(PYTHON) tools/java_local_accessor_pe_guard.py check \
 		--source src/main/java \
 		--baseline $(LOCAL_ACCESSOR_PE_BASELINE) \
 		--report $(LOCAL_ACCESSOR_PE_REPORT)
 
 check-bytecode-api-pe:
-	$(PYTHON) tools/test_java_bytecode_api_pe_guard.py
+	$(PYTHON) tools/tests/test_java_bytecode_api_pe_guard.py
 	$(PYTHON) tools/java_bytecode_api_pe_guard.py check \
 		--source src/main/java \
 		--baseline $(BYTECODE_API_PE_BASELINE) \
@@ -214,8 +214,8 @@ check-bytecode-api-pe:
 # check runs the packaged CLI with real synchronous Truffle compilation.
 check-generated-bytecode-bci-pe:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
-	$(PYTHON) tools/test_java_generated_bytecode_bci_pe_guard.py
-	$(PYTHON) tools/test_java_generated_bytecode_bci_compilation_check.py
+	$(PYTHON) tools/tests/test_java_generated_bytecode_bci_pe_guard.py
+	$(PYTHON) tools/tests/test_java_generated_bytecode_bci_compilation_check.py
 	$(PYTHON) tools/java_generated_bytecode_bci_pe_guard.py check \
 		--generated target/generated-sources \
 		--baseline $(GENERATED_BYTECODE_BCI_PE_BASELINE) \
@@ -227,7 +227,7 @@ check-generated-bytecode-bci-pe:
 # TEST009-F: packages once, then runs both strict modes; fail-closed.
 check-truffle-compilation:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
-	$(PYTHON) tools/test_truffle_compilation_gate.py
+	$(PYTHON) tools/tests/test_truffle_compilation_gate.py
 	$(PYTHON) tools/truffle_compilation_gate.py check \
 		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
 		--artifacts $(TRUFFLE_COMPILATION_DIR) \
@@ -248,7 +248,7 @@ diagnose-truffle-compilation:
 # TEST009-V: manual single-root escalation; observation only, never a compiler-policy change.
 truffle-root-catalog:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
-	$(PYTHON) tools/test_truffle_root_diagnostic.py
+	$(PYTHON) tools/tests/test_truffle_root_diagnostic.py
 	$(PYTHON) tools/truffle_root_diagnostic.py catalog \
 		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
 		--artifacts $(TRUFFLE_COMPILATION_DIR) \
@@ -256,7 +256,7 @@ truffle-root-catalog:
 
 diagnose-truffle-root:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
-	$(PYTHON) tools/test_truffle_root_diagnostic.py
+	$(PYTHON) tools/tests/test_truffle_root_diagnostic.py
 	$(PYTHON) tools/truffle_root_diagnostic.py diagnose \
 		--selector '$(TRUFFLE_ROOT_SELECTOR)' \
 		--expansion '$(TRUFFLE_ROOT_EXPANSION)' \
@@ -324,3 +324,11 @@ dist:
 
 dist-validate: dist
 	$(SH) dist/validate_portable.sh $(DIST_VALIDATE_FLAGS)
+
+# I103-A: manual inventory until all violations are resolved.
+.PHONY: directory-file-report directory-file-check
+directory-file-report:
+	$(PYTHON) scripts/directory_file_limit.py report
+
+directory-file-check:
+	$(PYTHON) scripts/directory_file_limit.py check

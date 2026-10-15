@@ -43,7 +43,7 @@ import org.junit.jupiter.api.Test;
  * <p>Every test asserts that the resolved Core lies in the Truffle internal-resource cache that
  * the build isolates below {@code target}, never in the checkout's {@code protos/lib}, so a pass
  * cannot come from the source tree. The JAR-level counterpart, run from outside the checkout
- * against the distributed JAR, is {@code dist/smoke_polyglot_embedding.sh}.
+ * against the distributed JAR, is {@code dist/smoke/smoke_polyglot_embedding.sh}.
  */
 final class ProtosPackagedCoreEmbeddingTest {
     private static final String SOURCE_TREE_LIBRARY = "protos/lib";

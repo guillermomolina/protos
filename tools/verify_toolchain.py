@@ -668,7 +668,7 @@ def audit_bindings(root, contract, include_native=True):
         first_match(builder, r'^EXPECTED_TRUFFLE_VERSION[ \t]*=[ \t]*[\"\']([^\"\']+)', "EXPECTED_TRUFFLE_VERSION"),
     ))
 
-    smoke = read_text(root / "dist" / "smoke_optimizing_runtime.sh")
+    smoke = read_text(root / "dist" / "smoke" / "smoke_optimizing_runtime.sh")
     rows.append((
         "dist.smoke.java_feature",
         feature,

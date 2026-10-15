@@ -39,7 +39,7 @@ relying on it, check the release notes of the distribution you actually use.
   in `lib/runtime/`. These supply the Protos language and the GraalVM Polyglot
   and Truffle runtime.
 
-The repository's portable smoke (`dist/smoke_polyglot_embedding.sh`) compiles
+The repository's portable smoke (`dist/smoke/smoke_polyglot_embedding.sh`) compiles
 and runs an external application with exactly that class path, outside the
 checkout. No Maven coordinates for consuming Protos as a library dependency are
 documented here; none are verified as published.
@@ -175,7 +175,7 @@ Implementation and evidence:
 - [`ProtosLanguage.java`](../../../src/main/java/com/guillermomolina/protos/execution/ProtosLanguage.java)
   (`protos.CoreRoot` option, binding scope, Context close);
 - [`dist/Plat054EmbeddingProbe.java`](../../../dist/Plat054EmbeddingProbe.java)
-  and [`dist/smoke_polyglot_embedding.sh`](../../../dist/smoke_polyglot_embedding.sh)
+  and [`dist/smoke/smoke_polyglot_embedding.sh`](../../../dist/smoke/smoke_polyglot_embedding.sh)
   (external application against the distributed JAR);
 - [`ProtosEmbeddingLifecycleTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddingLifecycleTest.java),
   [`ProtosEmbeddedFilesystemTest.java`](../../../src/test/java/com/guillermomolina/protos/execution/ProtosEmbeddedFilesystemTest.java),
