@@ -521,7 +521,7 @@ final class ProtosPerf006B4DErrorHandlersTest {
     }
 
     private static ProtosClosureValue nativeClosure(
-            com.guillermomolina.protos.runtime.ProtosNativeClosureBody body) {
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
     }
 

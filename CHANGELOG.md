@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.364-SNAPSHOT
+
+- `I103` (#897), slice D: reorganize runtime Java production and JUnit
+  sources by responsibility under the 30-direct-file directory limit.
+  - Preserve Java package-private boundaries, Truffle exports and
+    runtime contracts; use physical organization without package changes
+    where classes require their original Java encapsulation.
+  - Group actors, IO/network/filesystem, Process, values, numeric helpers,
+    lexical/context machinery, control and semantic-transfer components.
+  - Reconcile Java package imports, qualified references and structural
+    source-path assertions while preserving test discovery.
+  - Keep observable Protos semantics unchanged and defer strict
+    repository-wide directory-guard activation to I103-H.
+
 ## 0.3.363-SNAPSHOT
 
 - `I103` (#897), slice C: reorganize five canonical Core network/TCP

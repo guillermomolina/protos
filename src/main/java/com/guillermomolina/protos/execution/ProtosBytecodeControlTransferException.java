@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.nodes.ControlFlowException;

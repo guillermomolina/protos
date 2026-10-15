@@ -16,6 +16,9 @@
  */
 package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.*;  import java.util.*;
 public final class ProtosStandardMapProtocol {
  enum StructuredReadLookupKind { AT, CONTAINS_KEY, AT_IF_ABSENT }

@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.debug.Breakpoint;

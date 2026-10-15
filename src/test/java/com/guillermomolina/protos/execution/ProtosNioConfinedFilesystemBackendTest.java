@@ -21,8 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemNamespaceMutationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

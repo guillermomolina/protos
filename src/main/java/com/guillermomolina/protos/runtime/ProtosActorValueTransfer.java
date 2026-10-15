@@ -16,6 +16,12 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.io.ProtosFileValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;

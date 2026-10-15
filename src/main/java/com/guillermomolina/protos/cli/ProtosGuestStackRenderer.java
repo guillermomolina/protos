@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.cli;
 
-import com.guillermomolina.protos.runtime.ProtosDiagnosticTrace;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import java.io.PrintStream;
 
 /**

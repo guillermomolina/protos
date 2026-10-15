@@ -24,9 +24,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.io.IOException;

@@ -20,6 +20,9 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;

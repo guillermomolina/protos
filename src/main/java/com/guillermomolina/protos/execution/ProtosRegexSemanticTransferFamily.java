@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSemanticTransferDestination;
 import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
-import com.guillermomolina.protos.runtime.ProtosSemanticTransferPayload;
+import com.guillermomolina.protos.runtime.transfer.ProtosSemanticTransferPayload;
 import com.guillermomolina.protos.runtime.ProtosSemanticTransferValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;

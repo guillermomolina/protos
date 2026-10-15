@@ -443,7 +443,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
                         Path.of(
                                 "src/main/java/com/guillermomolina/protos/execution/ProtosNativeSuspension.java"),
                         Path.of(
-                                "src/main/java/com/guillermomolina/protos/runtime/ProtosFutureValue.java"));
+                                "src/main/java/com/guillermomolina/protos/runtime/actors/ProtosFutureValue.java"));
         Pattern staticTaskRegistry =
                 Pattern.compile(
                         "(?m)^\\s*(?:public|protected|private)?\\s*static\\s+(?:final\\s+)?[^;]*(?:Map|Set|Collection|ConcurrentMap|ConcurrentHashMap|IdentityHashMap)[^;]*(?:ProtosTask|Continuation|WaitDependency)[^;]*;");
@@ -472,7 +472,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
 
     private static ProtosClosureValue taskNative(
             java.util.function.Supplier<Object> ordinary,
-            com.guillermomolina.protos.runtime.ProtosNativeClosureBody continuation) {
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody continuation) {
         return ProtosClosureValue.suspensionCapableNativeClosure(
                 (activation, supplied) -> ordinary.get(),
                 continuation);

@@ -1,0 +1,75 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+package com.guillermomolina.protos.runtime.process;
+
+import com.guillermomolina.protos.runtime.ProtosActor;
+import com.guillermomolina.protos.runtime.ProtosActorScheduler;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Supplier;
+
+/**
+ * Host-runtime execution placement for one local Protos Process.
+ *
+ * <p>This interface is implementation machinery only. It carries no Protos identity or authority
+ * and must not be exposed as a Process/Actor/Task value. A Process may be unbound while legacy
+ * drivers are still being migrated by I026-A4B3; once bound, the host is fixed for that Process
+ * incarnation.
+ */
+public interface ProtosProcessExecutionHost {
+    <T> T callForRuntime(Supplier<T> action);
+
+    default void runForRuntime(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        callForRuntime(
+                () -> {
+                    action.run();
+                    return null;
+                });
+    }
+
+    /**
+     * Returns the host-owned normal Actor scheduler when this placement provides one.
+     *
+     * <p>Execution hosts without Actor carrier ownership return empty so staged unhosted and
+     * deterministic test paths may retain their explicitly supplied scheduler.
+     */
+    default Optional<ProtosActorScheduler> actorSchedulerForRuntime() {
+        return Optional.empty();
+    }
+
+    /**
+     * Waits for this execution host's terminal disposition after semantic Process termination.
+     *
+     * <p>Hosts whose {@link #processTerminatedForRuntime()} callback is synchronously terminal may
+     * retain this no-op default. Hosts with deferred cleanup override it and must surface terminal
+     * cleanup failure as host/runtime failure rather than guest Error.
+     */
+    default void awaitTerminalDispositionForRuntime() {}
+
+    /**
+     * Platform lifecycle notification after one hosted Actor actually reached TERMINATED.
+     *
+     * <p>It precedes the Actor's removal from its Process, so Process terminal notification never
+     * observes host resources of a terminated Actor. Implementations release Actor-owned host
+     * resources only, must not throw, and report cleanup failure through terminal disposition.
+     */
+    default void actorTerminatedForRuntime(ProtosActor actor) {}
+
+    /** Platform lifecycle notification after semantic Process termination is already complete. */
+    void processTerminatedForRuntime();
+}

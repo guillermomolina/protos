@@ -3,6 +3,10 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;

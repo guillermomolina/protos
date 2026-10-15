@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import java.util.Optional;
 
 /**

@@ -10,7 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

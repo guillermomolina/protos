@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;

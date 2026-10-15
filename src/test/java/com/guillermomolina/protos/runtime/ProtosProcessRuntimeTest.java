@@ -26,6 +26,7 @@ import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosModuleResolver;
 import com.guillermomolina.protos.execution.ProtosModuleRuntime;
 import com.guillermomolina.protos.execution.ProtosStandardActorProtocol;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;

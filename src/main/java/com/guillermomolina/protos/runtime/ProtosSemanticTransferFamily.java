@@ -16,6 +16,9 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.transfer.ProtosSemanticTransferPayload;
+
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.util.Objects;
 
 /**

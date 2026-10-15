@@ -17,6 +17,9 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.io.ProtosFileValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;

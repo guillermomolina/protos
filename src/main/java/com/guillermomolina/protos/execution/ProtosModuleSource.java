@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

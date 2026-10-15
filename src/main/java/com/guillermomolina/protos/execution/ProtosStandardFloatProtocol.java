@@ -24,7 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosComplexArithmetic;
 import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;

@@ -32,7 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
-import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
 
 import java.nio.file.Path;
 import java.util.ArrayDeque;

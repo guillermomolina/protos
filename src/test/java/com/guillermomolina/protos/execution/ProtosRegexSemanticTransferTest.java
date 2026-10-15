@@ -19,6 +19,11 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
+import com.guillermomolina.protos.runtime.transfer.ProtosSemanticTransferPayload;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferRecord;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferValue;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;

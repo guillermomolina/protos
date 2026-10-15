@@ -1,0 +1,118 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.runtime.io;
+
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
+import java.util.Objects;
+
+/**
+ * Ordinary-object JVM representation of one live TcpListener capability.
+ *
+ * <p>D052 owns the Protos-visible object topology. PLAT003 keeps backend/resource state outside
+ * ordinary Protos slots while preserving ordinary local slots, mutation state, delegation and
+ * reflection inherited from {@link ProtosObjectValue}. I028-D1 establishes only the resource/prototype
+ * and isolation foundation; listener protocol operations are attached by later D slices.
+ */
+public final class ProtosTcpListenerValue extends ProtosObjectValue {
+    private final Object resourceState;
+    private final ProtosTcpListenerFlow flow;
+    private final Integer localPort;
+
+    public ProtosTcpListenerValue(ProtosPrelude prelude, Object resourceState) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.flow = null;
+        this.localPort = null;
+    }
+
+    /** Runtime construction path for an acquired/operational TCP listener. */
+    public ProtosTcpListenerValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpListenerFlow.Backend backend,
+            int localPort) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.localPort = requireLocalPort(localPort);
+        this.flow = new ProtosTcpListenerFlow(this, Objects.requireNonNull(activation, "activation"), Objects.requireNonNull(backend, "backend"));
+    }
+
+    /** Runtime construction path for an acquired listener with standardized accept capability. */
+    public ProtosTcpListenerValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpListenerFlow.Backend backend,
+            int localPort,
+            ProtosTcpListenerFlow.ResultMaterializer resultMaterializer) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.localPort = requireLocalPort(localPort);
+        this.flow = new ProtosTcpListenerFlow(
+                this,
+                Objects.requireNonNull(activation, "activation"),
+                Objects.requireNonNull(backend, "backend"),
+                Objects.requireNonNull(resultMaterializer, "resultMaterializer"));
+    }
+
+
+    /** Opaque host/runtime state. This value is never an ordinary Protos slot. */
+    public Object resourceStateForRuntime() {
+        return resourceState;
+    }
+
+    public boolean hasProtocolFlowForRuntime() { return flow != null; }
+    public boolean hasAcceptForRuntime() { return flow != null && flow.acceptsForRuntime(); }
+
+    public int localPortForRuntime() {
+        if (localPort == null) throw new IllegalStateException("TcpListener has no acquired local port");
+        return localPort;
+    }
+
+    public ProtosFutureValue acceptForRuntime(ProtosActivation activation) {
+        if (!hasAcceptForRuntime()) throw new IllegalStateException("TcpListener has no accept capability");
+        return flow.accept(activation);
+    }
+
+    public ProtosFutureValue closeForRuntime(ProtosActivation activation) {
+        if (flow == null) throw new IllegalStateException("TcpListener has no operational runtime flow");
+        return flow.close(activation);
+    }
+
+    public ProtosIoLifecycle lifecycleForRuntime() {
+        if (flow == null) throw new IllegalStateException("TcpListener has no operational runtime flow");
+        return flow.lifecycleForRuntime();
+    }
+
+    private static int requireLocalPort(int value) {
+        if (value < 1 || value > 65535) {
+            throw new IllegalArgumentException("acquired TcpListener local port must be in 1..65535");
+        }
+        return value;
+    }
+
+    private static ProtosObjectValue requirePrototype(ProtosPrelude prelude) {
+        return Objects.requireNonNull(prelude, "prelude").tcpListenerPrototypeForRuntime();
+    }
+}

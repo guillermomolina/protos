@@ -16,7 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;

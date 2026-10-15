@@ -24,7 +24,7 @@ import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
-import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;

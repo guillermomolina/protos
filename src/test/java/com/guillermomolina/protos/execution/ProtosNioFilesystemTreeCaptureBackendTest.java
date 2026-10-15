@@ -25,9 +25,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

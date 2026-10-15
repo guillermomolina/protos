@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.numeric.ProtosRichNumericFamily;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import java.math.BigInteger;

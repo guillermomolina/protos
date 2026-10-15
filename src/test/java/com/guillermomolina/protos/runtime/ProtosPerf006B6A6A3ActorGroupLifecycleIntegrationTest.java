@@ -10,6 +10,7 @@ import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosLanguage;
 import com.guillermomolina.protos.execution.ProtosPerf006BytecodeTestSupport;
 import com.guillermomolina.protos.execution.ProtosPerf006BytecodeTestSupport.Dependency;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;

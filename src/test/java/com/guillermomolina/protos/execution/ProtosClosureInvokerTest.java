@@ -26,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 

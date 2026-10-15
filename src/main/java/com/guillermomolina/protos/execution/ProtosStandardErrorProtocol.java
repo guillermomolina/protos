@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
-import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;

@@ -2,7 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;

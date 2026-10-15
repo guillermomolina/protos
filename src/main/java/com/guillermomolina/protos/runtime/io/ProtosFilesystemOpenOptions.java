@@ -1,0 +1,142 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.runtime.io;
+
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+
+/**
+ * Immutable semantic snapshot of the standard Filesystem.open option tuple.
+ *
+ * <p>Only local slots of the supplied options object participate. Capturing this value never
+ * exercises filesystem authority and never invokes user code.
+ */
+public final class ProtosFilesystemOpenOptions {
+    public enum Creation {
+        EXISTING,
+        CREATE,
+        CREATE_NEW
+    }
+
+    private static final Set<String> STANDARD_OPTION_NAMES =
+            Set.of("read", "write", "create", "createNew", "truncate");
+
+    private final boolean read;
+    private final boolean write;
+    private final Creation creation;
+    private final boolean truncate;
+
+    private ProtosFilesystemOpenOptions(
+            boolean read,
+            boolean write,
+            Creation creation,
+            boolean truncate) {
+        this.read = read;
+        this.write = write;
+        this.creation = Objects.requireNonNull(creation, "creation");
+        this.truncate = truncate;
+    }
+
+    /** Standard one-argument open defaults: read existing content, preserve. */
+    public static ProtosFilesystemOpenOptions defaults() {
+        return new ProtosFilesystemOpenOptions(true, false, Creation.EXISTING, false);
+    }
+
+    /**
+     * Captures and validates the complete standard option tuple exactly once.
+     *
+     * @throws IllegalArgumentException when the supplied semantic options value is invalid
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static Map<String, Object> captureValidatedSlotsForHost(
+            ProtosObjectValue options) {
+        Map<String, Object> slots = options.localSlotsSnapshot();
+        for (String name : slots.keySet()) {
+            if (!STANDARD_OPTION_NAMES.contains(name)) {
+                throw new IllegalArgumentException(
+                        "unknown filesystem open option: " + name);
+            }
+        }
+        return slots;
+    }
+
+    public static ProtosFilesystemOpenOptions capture(Object optionsValue) {
+        if (optionsValue == null || optionsValue.getClass() != ProtosObjectValue.class) {
+            throw new IllegalArgumentException(
+                    "filesystem open options must be an ordinary object");
+        }
+        ProtosObjectValue options = (ProtosObjectValue) optionsValue;
+
+        Map<String, Object> slots = captureValidatedSlotsForHost(options);
+
+        boolean read = booleanOption(slots, "read", true);
+        boolean write = booleanOption(slots, "write", false);
+        boolean create = booleanOption(slots, "create", false);
+        boolean createNew = booleanOption(slots, "createNew", false);
+        boolean truncate = booleanOption(slots, "truncate", false);
+
+        if (!read && !write) {
+            throw new IllegalArgumentException("filesystem open requires read or write access");
+        }
+        if (create && createNew) {
+            throw new IllegalArgumentException("create and createNew are mutually exclusive");
+        }
+        if (truncate && !write) {
+            throw new IllegalArgumentException("truncate requires write access");
+        }
+
+        Creation creation =
+                createNew ? Creation.CREATE_NEW : create ? Creation.CREATE : Creation.EXISTING;
+        return new ProtosFilesystemOpenOptions(read, write, creation, truncate);
+    }
+
+    public boolean readAccess() {
+        return read;
+    }
+
+    public boolean writeAccess() {
+        return write;
+    }
+
+    public Creation creation() {
+        return creation;
+    }
+
+    public boolean truncateInitialContent() {
+        return truncate;
+    }
+
+    private static boolean booleanOption(
+            Map<String, Object> slots, String name, boolean defaultValue) {
+        if (!slots.containsKey(name)) {
+            return defaultValue;
+        }
+        Object value = slots.get(name);
+        if (value == ProtosBooleanValue.TRUE) {
+            return true;
+        }
+        if (value == ProtosBooleanValue.FALSE) {
+            return false;
+        }
+        throw new IllegalArgumentException(
+                "filesystem open option " + name + " must be canonical Boolean");
+    }
+}

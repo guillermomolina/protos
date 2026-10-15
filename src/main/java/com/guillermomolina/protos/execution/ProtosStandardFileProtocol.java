@@ -5,7 +5,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
-import com.guillermomolina.protos.runtime.ProtosFileValue;
+import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;

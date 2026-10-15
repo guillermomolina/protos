@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.nio.channels.SeekableByteChannel;
@@ -569,9 +569,9 @@ final class ProtosExternalPackageResourceScopeTest {
     private static final class UnsupportedBackend
             implements ProtosStandardFilesystemProtocol.CapturedBackend {
         @Override
-        public com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow.Cancellation open(
-                com.guillermomolina.protos.runtime.ProtosPathComponents path,
-                com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions options,
+        public com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow.Cancellation open(
+                com.guillermomolina.protos.runtime.io.ProtosPathComponents path,
+                com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             completion.failed();
             return () -> {};
@@ -579,7 +579,7 @@ final class ProtosExternalPackageResourceScopeTest {
 
         @Override
         public ProtosFilesystemTreeObservationFlow.Cancellation entries(
-                com.guillermomolina.protos.runtime.ProtosPathComponents path,
+                com.guillermomolina.protos.runtime.io.ProtosPathComponents path,
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             completion.failed();
             return () -> {};

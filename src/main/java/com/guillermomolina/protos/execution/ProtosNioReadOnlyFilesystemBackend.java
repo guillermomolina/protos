@@ -17,9 +17,9 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
-import com.guillermomolina.protos.runtime.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SeekableByteChannel;

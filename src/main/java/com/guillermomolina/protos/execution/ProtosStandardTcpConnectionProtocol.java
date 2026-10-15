@@ -22,7 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
 import java.util.List;
 import java.util.Objects;
 

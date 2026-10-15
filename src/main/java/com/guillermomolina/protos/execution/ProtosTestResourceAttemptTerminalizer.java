@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
+import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.util.ArrayList;
 import java.util.List;

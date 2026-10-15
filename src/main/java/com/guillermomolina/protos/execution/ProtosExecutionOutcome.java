@@ -16,7 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosDiagnosticTrace;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
 import java.util.Optional;

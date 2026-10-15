@@ -26,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -1074,9 +1074,9 @@ fixture.activation());
         }
 
         @Override
-        public com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow.Cancellation open(
-                com.guillermomolina.protos.runtime.ProtosPathComponents path,
-                com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions options,
+        public com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow.Cancellation open(
+                com.guillermomolina.protos.runtime.io.ProtosPathComponents path,
+                com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             String name = portableName(path);
             byte[] bytes = name == null ? null : files.get(name);
@@ -1085,7 +1085,7 @@ fixture.activation());
                     || !options.readAccess()
                     || options.writeAccess()
                     || options.creation()
-                            != com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions.Creation.EXISTING
+                            != com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions.Creation.EXISTING
                     || options.truncateInitialContent()) {
                 completion.failed();
                 return () -> {};
@@ -1101,7 +1101,7 @@ fixture.activation());
         }
 
         private static String portableName(
-                com.guillermomolina.protos.runtime.ProtosPathComponents path) {
+                com.guillermomolina.protos.runtime.io.ProtosPathComponents path) {
             if (path.components().isEmpty()) {
                 return null;
             }

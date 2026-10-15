@@ -28,10 +28,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosPathComponents;import java.io.ByteArrayOutputStream;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.channels.SeekableByteChannel;

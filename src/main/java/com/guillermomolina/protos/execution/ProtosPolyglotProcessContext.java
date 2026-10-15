@@ -20,7 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
+import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;

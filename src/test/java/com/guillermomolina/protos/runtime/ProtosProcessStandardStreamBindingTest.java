@@ -267,8 +267,8 @@ final class ProtosProcessStandardStreamBindingTest {
             new ProtosIntegerValue(-1L),
             new ProtosIntegerValue(Integer.MAX_VALUE + 1L),
             new ProtosIntegerValue((1L << 32) + 1),
-            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551616"), prelude),
-            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551617"), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551616"), prelude),
+            com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551617"), prelude),
             new ProtosFloatValue(1.0d),
             Long.valueOf(1L),
         };

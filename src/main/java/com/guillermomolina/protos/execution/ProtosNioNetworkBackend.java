@@ -16,9 +16,9 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosHostIpEndpoint;
-import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
-import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.io.ProtosNetworkConnectFlow;
+import com.guillermomolina.protos.runtime.io.ProtosNetworkListenFlow;
 import java.io.IOException;
 import java.net.Inet4Address;
 import java.net.Inet6Address;

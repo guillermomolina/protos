@@ -31,7 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;

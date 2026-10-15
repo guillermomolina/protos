@@ -10,7 +10,7 @@
  */
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;

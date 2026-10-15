@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -71,7 +72,7 @@ class ProtosRepresentedValueLookupTest {
         assertFalse(prelude.smallIntegerPrototype().hasLocalSlot("call"));
 
         Object large =
-                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.ProtosNumberLiteral.parse("18446744073709551616"), prelude);
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerFromHost(com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral.parse("18446744073709551616"), prelude);
         assertSame(
                 prelude.bigIntegerPrototype(),
                 ProtosValueLookup.delegationParent(large, prelude).orElseThrow());

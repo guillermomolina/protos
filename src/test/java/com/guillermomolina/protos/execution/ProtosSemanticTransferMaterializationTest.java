@@ -20,6 +20,11 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
 
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferDestination;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
+import com.guillermomolina.protos.runtime.transfer.ProtosSemanticTransferPayload;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferValue;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;

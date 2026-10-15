@@ -10,6 +10,9 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;

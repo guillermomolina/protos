@@ -3,6 +3,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.*;

@@ -23,9 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosTcpListenerFlow;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;

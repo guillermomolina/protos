@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
-import com.guillermomolina.protos.runtime.ProtosDiagnosticTrace;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.ByteArrayOutputStream;

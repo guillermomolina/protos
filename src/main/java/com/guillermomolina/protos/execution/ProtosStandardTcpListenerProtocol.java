@@ -18,6 +18,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import java.util.List;
 import java.util.Objects;
 

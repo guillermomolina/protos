@@ -134,7 +134,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                 assertSame(home, method[2]);
                 assertSame(module, method[3]);
                 assertInstanceOf(
-                        com.guillermomolina.protos.runtime.ProtosReturnHome.class,
+                        com.guillermomolina.protos.runtime.control.ProtosReturnHome.class,
                         method[4]);
                 assertEquals(supplied.length,
                         ProtosFrameArguments.compactSuppliedArgumentCount(method));
@@ -176,7 +176,7 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                     receiver,
                     home,
                     module,
-                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    com.guillermomolina.protos.runtime.control.ProtosReturnHome.unobservable(),
                     new Object[0]);
 
             assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
@@ -185,13 +185,13 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
             assertSame(home, arguments[2]);
             assertSame(module, arguments[3]);
             assertSame(
-                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    com.guillermomolina.protos.runtime.control.ProtosReturnHome.unobservable(),
                     arguments[4]);
             assertEquals(0,
                     ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
             assertSame(module, ProtosFrameArguments.compactCaller(arguments));
             assertSame(
-                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    com.guillermomolina.protos.runtime.control.ProtosReturnHome.unobservable(),
                     ProtosFrameArguments.compactReturnHome(arguments));
             assertTrue(
                     ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));

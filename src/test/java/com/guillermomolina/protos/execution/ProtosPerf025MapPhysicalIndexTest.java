@@ -27,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
-import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.nio.file.Files;
 import java.nio.file.Path;

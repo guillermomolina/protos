@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
 
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;

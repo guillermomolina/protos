@@ -18,6 +18,8 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.oracle.truffle.api.source.Source;
 
 import java.util.List;

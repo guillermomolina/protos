@@ -20,6 +20,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
 
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.io.ProtosFileValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;

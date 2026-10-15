@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosDiagnosticTrace;
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;

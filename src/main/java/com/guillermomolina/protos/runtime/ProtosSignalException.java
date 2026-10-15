@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;

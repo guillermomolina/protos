@@ -26,7 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
+import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.util.List;
 import java.util.Map;

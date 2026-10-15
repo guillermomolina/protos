@@ -13,7 +13,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.runtime.ProtosNumericHashKey;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 

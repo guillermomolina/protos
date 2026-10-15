@@ -19,6 +19,14 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferDestination;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
+import com.guillermomolina.protos.runtime.transfer.ProtosSemanticTransferPayload;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferRecord;
+import com.guillermomolina.protos.runtime.ProtosSemanticTransferValue;
 import java.lang.reflect.Modifier;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -488,7 +496,7 @@ final class ProtosSemanticTransferFamilyTest {
                 List.of(
                         "runtime/ProtosSemanticTransferFamily.java",
                         "runtime/ProtosSemanticTransferValue.java",
-                        "runtime/ProtosSemanticTransferPayload.java",
+                        "runtime/transfer/ProtosSemanticTransferPayload.java",
                         "runtime/ProtosSemanticTransferRecord.java",
                         "runtime/ProtosSemanticTransferDestination.java",
                         "runtime/ProtosActorValueTransfer.java",

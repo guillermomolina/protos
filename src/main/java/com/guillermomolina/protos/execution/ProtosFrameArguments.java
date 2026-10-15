@@ -22,7 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;

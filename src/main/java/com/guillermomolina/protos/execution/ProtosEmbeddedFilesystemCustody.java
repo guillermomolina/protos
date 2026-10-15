@@ -17,11 +17,11 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
-import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemNamespaceMutationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenFlow;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemTreeObservationFlow;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
 import java.io.IOException;

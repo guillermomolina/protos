@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;

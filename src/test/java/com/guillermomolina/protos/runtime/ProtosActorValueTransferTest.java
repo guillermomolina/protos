@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;

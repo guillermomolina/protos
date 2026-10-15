@@ -33,7 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.Canonicalizer;

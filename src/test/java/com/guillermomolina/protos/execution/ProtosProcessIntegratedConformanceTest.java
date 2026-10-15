@@ -20,6 +20,8 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 

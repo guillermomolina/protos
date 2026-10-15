@@ -302,7 +302,7 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
     }
 
     private static ProtosClosureValue nativeClosure(
-            com.guillermomolina.protos.runtime.ProtosNativeClosureBody body) {
+            com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);
     }
 

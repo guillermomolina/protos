@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosNumericCoreAdmission;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;

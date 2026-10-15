@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import java.util.*;
 
 /**

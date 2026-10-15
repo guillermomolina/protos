@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.CompilerDirectives;

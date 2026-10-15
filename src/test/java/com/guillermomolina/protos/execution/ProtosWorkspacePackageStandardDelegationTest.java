@@ -6,6 +6,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;

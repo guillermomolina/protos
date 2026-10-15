@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import org.graalvm.polyglot.Context;
 
 import java.nio.file.Path;

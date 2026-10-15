@@ -4,6 +4,8 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.runtime.io.ProtosFileValue;
+import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
