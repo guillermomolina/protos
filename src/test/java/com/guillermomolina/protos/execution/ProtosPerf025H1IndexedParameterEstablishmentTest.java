@@ -319,11 +319,12 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     }
 
     @Test
-    void frameNativeParameterRootIsUnchanged() throws Exception {
+    void frameNativeParameterRootUsesI104UnaryEntry() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity = closure("(value) => value", module);
             List<String> names = instructionNames(identity);
-            assertContains(names, FRAME_NATIVE);
+            assertContains(names, "BindUnaryFrameParameter");
+            assertNone(names, FRAME_NATIVE);
             assertNone(names, INSTALL);
             assertNone(names, INDEXED);
             assertNone(names, NAMED);

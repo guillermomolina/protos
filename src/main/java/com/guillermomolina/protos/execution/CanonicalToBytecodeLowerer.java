@@ -988,6 +988,13 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure activationDefinition,
             CanonicalLexicalScope scopeForThisRoot) {
         SourceSpan rootSpan = sequence.span();
+        UnaryNormalEntry unaryEntry =
+                admitUnaryNormalEntry(
+                        sequence,
+                        activationDefinition,
+                        currentRootAnalysis,
+                        scopeForThisRoot,
+                        profile);
 
         builder.beginSourceSection(
                 rootSpan.startOffset(),
@@ -1119,13 +1126,60 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (activationDefinition != null) {
-            emitClosureParameterBindings(
-                    builder,
-                    activationDefinition,
-                    defaultValue,
-                    defaultPreparedCall,
-                    defaultChildResult,
-                    defaultResumeValue);
+            int requiredPrefixCount =
+                    admitRequiredPrefix(
+                            activationDefinition, sequence, scopeForThisRoot);
+            if (requiredPrefixCount >= 2) {
+                // I104-B: each emitted ordinal is a constant operand.
+                for (int ordinal = 0;
+                        ordinal < requiredPrefixCount;
+                        ordinal++) {
+                    CanonicalParameter parameter =
+                            activationDefinition.parameters().get(ordinal);
+                    builder.beginBindRequiredFrameParameter(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout,
+                            ordinal);
+                    builder.emitLoadConstant(parameter.name());
+                    builder.endBindRequiredFrameParameter();
+                }
+                emitClosureParameterBindings(
+                        builder,
+                        activationDefinition,
+                        defaultValue,
+                        defaultPreparedCall,
+                        defaultChildResult,
+                        defaultResumeValue,
+                        requiredPrefixCount);
+            } else if (unaryEntry != null
+                    && currentActivationLocal == null
+                    && currentRootFrameNativeLocals != null
+                    && currentRootFrameNativeLayout != null) {
+                int ordinal = frameNativeOrdinal(unaryEntry.name());
+                if (ordinal < 0) {
+                    throw new AssertionError(
+                            "I104-A admitted parameter without a frame local");
+                }
+
+                builder.emitBindUnaryFrameParameter(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout,
+                        ordinal,
+                        unaryEntry.name());
+
+                // Preserve the original ordering: bind first, then reject excess.
+                builder.beginCheckFrameClosureArgumentUpperBound();
+                builder.emitLoadConstant(1);
+                builder.endCheckFrameClosureArgumentUpperBound();
+            } else {
+                emitClosureParameterBindings(
+                        builder,
+                        activationDefinition,
+                        defaultValue,
+                        defaultPreparedCall,
+                        defaultChildResult,
+                        defaultResumeValue);
+            }
         }
 
         /*
@@ -1998,6 +2052,63 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return true;
+    }
+
+    /**
+     * I104-A: immutable pre-lowering proof for the one-required-parameter
+     * identity body. This is deliberately independent of I101 constant folding:
+     * the parameter value is supplied dynamically and is never a known
+     * compile-time constant.
+     *
+     * The identity is established before the body lookup, no expression can
+     * remove or mutate it, and no Context observer or lexical capture exists.
+     * The runtime binding operation still preserves materialized-entry
+     * authority and D179 presence semantics.
+     */
+    private record UnaryNormalEntry(String name) {}
+
+    private static UnaryNormalEntry admitUnaryNormalEntry(
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            ProtosExecutionMode profile) {
+        if (profile != ProtosExecutionMode.NORMAL
+                || definition == null
+                || analysis == null
+                || scope == null
+                || analysis.scopeOf(definition).orElse(null) != scope
+                || definition.parameters().size() != 1
+                || body.expressions().size() != 1) {
+            return null;
+        }
+
+        CanonicalParameter parameter = definition.parameters().get(0);
+        if (parameter.rest()
+                || parameter.defaultValue().isPresent()
+                || !scope.declaredNames().equals(
+                        java.util.Set.of(parameter.name()))
+                || !(body.expressions().get(0) instanceof CanonicalLookup lookup)
+                || !lookup.name().equals(parameter.name())) {
+            return null;
+        }
+
+        CanonicalBindingIdentity parameterIdentity =
+                analysis.identityOf(parameter).orElse(null);
+        CanonicalBindingResolution resolution =
+                analysis.resolutionOf(lookup).orElse(null);
+
+        if (parameterIdentity == null
+                || parameterIdentity.owner() != scope
+                || !parameterIdentity.name().equals(parameter.name())
+                || !(resolution instanceof CanonicalBindingResolution.Resolved resolved)
+                || resolved.identity() != parameterIdentity
+                || requiresPersistentFrameAuthority(
+                        body, definition, analysis, scope)) {
+            return null;
+        }
+
+        return new UnaryNormalEntry(parameter.name());
     }
 
     private static boolean hasArityRejectionRoot(CanonicalClosure activationDefinition) {
@@ -3256,6 +3367,72 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
+
+    /**
+     * I104-B: only a NORMAL root whose required parameters occupy the
+     * initial physical frame-local ordinals can copy their supplied prefix.
+     * The binding analysis, rather than name equality alone, proves ownership.
+     * No default, rest or persistent-authority semantics enter this lane.
+     */
+    private int admitRequiredPrefix(
+            CanonicalClosure definition,
+            CanonicalSequence body,
+            CanonicalLexicalScope scope) {
+        if (profile != ProtosExecutionMode.NORMAL
+                || currentActivationLocal != null
+                || currentInlineCallbackFrameNative
+                || currentRootAnalysis == null
+                || scope == null
+                || currentRootFrameNativeLocals == null
+                || currentRootFrameNativeLayout == null
+                || definition.parameters().size() < 2
+                || currentRootAnalysis.scopeOf(definition).orElse(null) != scope
+                || requiresPersistentFrameAuthority(
+                        body, definition, currentRootAnalysis, scope)) {
+            return 0;
+        }
+
+        int count = 0;
+        boolean suffixStarted = false;
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest() || parameter.defaultValue().isPresent()) {
+                suffixStarted = true;
+            } else if (suffixStarted) {
+                // Required parameters must precede defaults and rest.
+                return 0;
+            } else {
+                count++;
+            }
+        }
+
+        if (count < 2
+                || currentRootFrameNativeLocals.length < count
+                || currentRootFrameNativeLayout.length() < count) {
+            return 0;
+        }
+
+        var declarations = scope.declaredNames().iterator();
+        for (int index = 0; index < count; index++) {
+            CanonicalParameter parameter = definition.parameters().get(index);
+            var identity = currentRootAnalysis.identityOf(parameter).orElse(null);
+
+            if (parameter.rest()
+                    || parameter.defaultValue().isPresent()
+                    || identity == null
+                    || identity.owner() != scope
+                    || !identity.name().equals(parameter.name())
+                    || !declarations.hasNext()
+                    || !declarations.next().equals(parameter.name())
+                    || frameNativeOrdinal(parameter.name()) != index
+                    || !currentRootFrameNativeLayout.nameAt(index)
+                            .equals(parameter.name())) {
+                return 0;
+            }
+        }
+
+        return count;
+    }
+
     private void emitClosureParameterBindings(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
@@ -3263,10 +3440,44 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal defaultPreparedCall,
             BytecodeLocal defaultChildResult,
             BytecodeLocal defaultResumeValue) {
-        int positionalIndex = 0;
+        emitClosureParameterBindings(
+                builder,
+                definition,
+                defaultValue,
+                defaultPreparedCall,
+                defaultChildResult,
+                defaultResumeValue,
+                0);
+    }
+
+    /**
+     * I104-C: the leading required parameters have already been established
+     * by BindRequiredFrameParameter. Resume the normative left-to-right
+     * binding algorithm at the first remaining parameter. Defaults, rest
+     * creation and excess-argument detection retain their original order.
+     */
+    private void emitClosureParameterBindings(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition,
+            BytecodeLocal defaultValue,
+            BytecodeLocal defaultPreparedCall,
+            BytecodeLocal defaultChildResult,
+            BytecodeLocal defaultResumeValue,
+            int alreadyBoundRequired) {
+        if (alreadyBoundRequired < 0
+                || alreadyBoundRequired > definition.parameters().size()) {
+            throw new AssertionError(
+                    "invalid required parameter prefix");
+        }
+
+        int positionalIndex = alreadyBoundRequired;
         boolean hasRest = false;
 
-        for (CanonicalParameter parameter : definition.parameters()) {
+        for (int parameterIndex = alreadyBoundRequired;
+                parameterIndex < definition.parameters().size();
+                parameterIndex++) {
+            CanonicalParameter parameter =
+                    definition.parameters().get(parameterIndex);
             if (parameter.rest()) {
                 int restOrdinal = frameNativeOrdinal(parameter.name());
                 int indexedRestOrdinal = indexedParameterOrdinal(parameter);

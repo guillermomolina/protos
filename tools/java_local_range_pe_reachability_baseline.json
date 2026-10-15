@@ -421,10 +421,15 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "NOT_PE_REACHABLE",
-      "pe_provenance": [],
-      "pe_call_chain": [],
-      "rationale": "no call path from a Bytecode DSL operation root"
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
@@ -457,6 +462,76 @@
       ],
       "pe_call_chain": [
         "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter",
+      "method": "compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter",
+      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
+        "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter",
+      "method": "compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter",
+      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
+        "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     }

@@ -68,7 +68,11 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     ClosureUnderTest plan = closurePlan(fixture, "(value) => value");
                     List<String> names = instructionNames(activationNode(plan));
                     assertNoInstall(names);
-                    assertContains(names, "BindClosureFrameParameter");
+                    assertContains(names, "BindUnaryFrameParameter");
+                    org.junit.jupiter.api.Assertions.assertFalse(
+                            names.stream().anyMatch(
+                                    name -> name.contains("BindClosureFrameParameter")),
+                            names::toString);
                     assertContains(names, "ReadRootFrameLocal");
 
                     ProtosObjectValue argument = newObject();

@@ -384,6 +384,54 @@ class ReachabilityTest(unittest.TestCase):
         self.assertEqual([guard.PROV_OPERATION_CONSTANT], sink.pe_provenance)
         self.assertEqual([root_key("Read")], sink.pe_call_chain)
 
+    def test_generated_specialization_guard_tracks_constant_operand(self):
+        source = """final class Root {
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "locals")
+    @ConstantOperand(type = int.class, name = "ordinal")
+    public static final class Binder {
+        @Specialization(
+                guards = "hasFreeLocal(locals, ordinal, node, frame)")
+        public static void compact(
+                LocalRangeAccessor locals, int ordinal,
+                @Bind("$bytecodeNode") BytecodeNode node,
+                @Bind("$frame") VirtualFrame frame) {}
+
+        @Specialization(
+                guards = "!hasFreeLocal(locals, ordinal, node, frame)")
+        public static void fallback(
+                LocalRangeAccessor locals, int ordinal,
+                @Bind("$bytecodeNode") BytecodeNode node,
+                @Bind("$frame") VirtualFrame frame) {}
+
+        static boolean hasFreeLocal(
+                LocalRangeAccessor locals, int ordinal,
+                BytecodeNode node, VirtualFrame frame) {
+            return locals.isCleared(node, frame, ordinal);
+        }
+    }
+}"""
+        sink = only(reach(source))
+        self.assertEqual(guard.METHOD_PARAMETER, sink.classification)
+        self.assertEqual(
+            guard.PE_REACHABLE_PROVEN_CONSTANT,
+            sink.pe_reachability)
+        self.assertEqual(
+            [guard.PROV_OPERATION_CONSTANT],
+            sink.pe_provenance)
+
+        # Removing the exact constant operand must lose the proof.
+        runtime_source = source.replace(
+            '@ConstantOperand(type = int.class, name = "ordinal")',
+            '')
+        runtime_sink = only(reach(runtime_source))
+        self.assertEqual(
+            guard.PE_REACHABLE_RISK,
+            runtime_sink.pe_reachability)
+        self.assertEqual(
+            [guard.PROV_RUNTIME_OPERAND],
+            runtime_sink.pe_provenance)
+
     def test_02_constant_through_one_helper(self):
         sinks = reach("final class Root {%s%s}" % (HELPER_METHOD, operation(
             "Read", CONSTANT_ORDINAL, "return helper(locals, node, frame, ordinal);")))

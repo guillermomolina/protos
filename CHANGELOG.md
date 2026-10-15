@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.365-SNAPSHOT
+
+- `I104` (#899), slices A/B/C: NORMAL-first Closure parameter entry
+  specialization and pre-lowering required-parameter binding.
+  - Introduce a fused unary frame-parameter binding operation for eligible
+    NORMAL Closures, preserving the five-slot PLAT060-B5 call header and
+    avoiding unnecessary activation and Context materialization.
+  - Establish required multiparameter prefixes through individual Bytecode
+    DSL operations with constant frame-local ordinals, replacing the
+    dynamic-index copying loop.
+  - Integrate required-prefix establishment with invocation-time defaults,
+    rest parameters and the original left-to-right binding sequence.
+  - Preserve authoritative fallback paths, argument presence, arity
+    errors, primitive carriers, lexical authority, Context observation,
+    captures and D179 binding identity.
+  - Retain separate NORMAL and DEBUG lowering behavior and cover rich,
+    host and negative-admission paths with focused conformance tests and
+    independent handwritten Builder oracles.
+  - Extend the LocalRangeAccessor PE guard to recognize generated
+    specialization-guard calls, with constant-operand provenance tests
+    and exact local-index and reachability baseline reconciliation.
+  - Verify the integrated implementation with make test and zero
+    PE-reachable index risks. Tier-2 performance comparison and final
+    I104-D acceptance remain pending.
+
 ## 0.3.364-SNAPSHOT
 
 - `I103` (#897), slice D: reorganize runtime Java production and JUnit

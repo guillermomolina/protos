@@ -76,11 +76,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "CurrentActivation");
             assertNone(names, "InstallFrameLexicalAuthority");
             assertNone(names, "BindClosureParameter");
-            assertContains(names, "BindClosureFrameParameter");
+            assertContains(names, "BindUnaryFrameParameter");
+            assertNone(names, "BindClosureFrameParameter");
             assertContains(names, "ReadRootFrameLocal");
             assertEquals(
                     0,
-                    constantOrdinalOf(identity, "BindClosureFrameParameter"),
+                    constantOrdinalOf(identity, "BindUnaryFrameParameter"),
                     "PERF029: the LocalRangeAccessor index is an instruction constant");
 
             ProtosIntegerValue one = integer(1);
@@ -101,6 +102,340 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         System.out.println("PARAMETER_DIRECT_LOCAL_BINDING=YES");
         System.out.println("IMMEDIATE_METHOD_COMPACT_PATH=PASS");
         System.out.println("DIRECT_SOURCE_CLOSURE_COMPACT_PATH=PASS");
+    }
+
+    @Test
+    void i104UnaryEntryPreservesRichActivationAndArgumentErrors()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue identity =
+                    closure("(value) => { value }", module);
+            ProtosIntegerValue value = integer(42);
+
+            for (int attempt = 0; attempt < 8; attempt++) {
+                ProtosBytecodeRootNode.PreparedClosureCall compact =
+                        fastDirect(identity, module, value);
+                assertSame(value, enter(compact));
+                assertSame(identity, compact.targetArguments()[0]);
+            }
+
+            Object[] publishedArguments =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            identity,
+                            module,
+                            null,
+                            new Object[] {value});
+            ProtosActivation published =
+                    ProtosFrameArguments.activation(publishedArguments);
+            ProtosObjectValue observedContext = published.context();
+
+            assertSame(value, target(identity).call(publishedArguments));
+            assertSame(published, publishedArguments[0]);
+            assertSame(observedContext, published.context());
+            assertSame(
+                    value,
+                    observedContext.readLocalSlot("value").orElseThrow());
+
+            ProtosBytecodeRootNode.PreparedClosureCall missing =
+                    fastDirect(identity, module);
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(missing));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    missing.targetArguments()[0]);
+
+            ProtosBytecodeRootNode.PreparedClosureCall excess =
+                    fastDirect(identity, module, value, integer(99));
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(excess));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    excess.targetArguments()[0]);
+        });
+    }
+
+    @Test
+    void i104UnaryAdmissionExcludesComplexBodiesAndDebug() throws Exception {
+        withCore(module -> {
+            for (String source : List.of(
+                    "(value = 1) => { value }",
+                    "(...value) => { value }",
+                    "(a, b) => { a }",
+                    "(value) => { context\nvalue }",
+                    "(value) => { value + 1 }",
+                    "(value) => { result: value\nresult }",
+                    "(value) => { () => value }")) {
+                ProtosClosureValue closure = closure(source, module);
+                assertNone(
+                        instructionNames(closure),
+                        "BindUnaryFrameParameter");
+            }
+        });
+
+        withCoreDebug(module -> {
+            ProtosClosureValue identity =
+                    closure("(value) => { value }", module);
+            List<String> instructions = instructionNames(identity);
+
+            assertNone(instructions, "BindUnaryFrameParameter");
+            assertContains(instructions, "BindClosureFrameParameter");
+
+            ProtosIntegerValue value = integer(17);
+            assertSame(value, enter(fastDirect(identity, module, value)));
+        });
+    }
+
+
+    @Test
+    void i104RequiredPrefixPreservesCallsAndArity() throws Exception {
+        withCore(module -> {
+            String[] sources = {
+                "(a, b) => { a }",
+                "(a, b, c) => { b }",
+                "(a, b, c, d) => { d }"
+            };
+            int[] selected = {0, 1, 3};
+
+            for (int caseIndex = 0; caseIndex < sources.length; caseIndex++) {
+                ProtosClosureValue closure =
+                        closure(sources[caseIndex], module);
+                int count = caseIndex + 2;
+
+                List<String> instructions = instructionNames(closure);
+                assertContains(instructions, "BindRequiredFrameParameter");
+                assertNone(instructions, "BindClosureFrameParameter");
+                assertNone(instructions, "LoadFrameClosureArgument");
+                assertNone(instructions, "CurrentActivation");
+                assertNone(instructions, "InstallFrameLexicalAuthority");
+
+                Object[] values = new Object[count];
+                for (int index = 0; index < count; index++) {
+                    values[index] = integer(index + 10);
+                }
+
+                for (int repetition = 0; repetition < 8; repetition++) {
+                    var direct = fastDirect(closure, module, values);
+                    assertSame(values[selected[caseIndex]], enter(direct));
+                    assertSame(closure, direct.targetArguments()[0]);
+                }
+
+                Object[] method =
+                        ProtosFrameArguments.compactImmediateMethodCall(
+                                closure,
+                                newObject(),
+                                newObject(),
+                                module,
+                                values);
+                assertSame(
+                        values[selected[caseIndex]],
+                        target(closure).call(method));
+                assertSame(closure, method[0]);
+
+                Object[] published =
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                closure, module, null, values);
+                ProtosActivation activation =
+                        ProtosFrameArguments.activation(published);
+                assertSame(
+                        values[selected[caseIndex]],
+                        target(closure).call(published));
+                assertSame(activation, published[0]);
+
+                for (int supplied = 0; supplied < count; supplied++) {
+                    Object[] missingValues =
+                            java.util.Arrays.copyOf(values, supplied);
+                    var missing = fastDirect(
+                            closure, module, missingValues);
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> enter(missing));
+                    assertInstanceOf(
+                            ProtosActivation.class,
+                            missing.targetArguments()[0]);
+                }
+
+                Object[] tooMany =
+                        java.util.Arrays.copyOf(values, count + 1);
+                tooMany[count] = integer(99);
+                var excess = fastDirect(closure, module, tooMany);
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> enter(excess));
+                assertInstanceOf(
+                        ProtosActivation.class,
+                        excess.targetArguments()[0]);
+            }
+
+            for (String excluded : List.of(
+                    "(a, b = 1) => { b }",
+                    "(a, ...rest) => { a }",
+                    "(a, b) => { context\nb }",
+                    "(a, b) => { () => a }")) {
+                ProtosClosureValue closure = closure(excluded, module);
+                assertNone(
+                        instructionNames(closure),
+                        "BindRequiredFrameParameter");
+            }
+        });
+
+        System.out.println("I104_B_REQUIRED_PREFIX=PASS");
+        System.out.println("I104_B_MISSING_ARGUMENT_PRECEDENCE=PASS");
+        System.out.println("I104_B_EXCESS_ARGUMENT_PRECEDENCE=PASS");
+        System.out.println("I104_B_PUBLISHED_ACTIVATION=PASS");
+        System.out.println("I104_B_NEGATIVE_ADMISSION=PASS");
+    }
+
+
+    @Test
+    void i104RequiredPrefixIntegratesDefaultsRestAndContext() throws Exception {
+        withCore(module -> {
+            ProtosIntegerValue a = integer(11);
+            ProtosIntegerValue b = integer(22);
+            ProtosIntegerValue c = integer(33);
+            ProtosIntegerValue d = integer(44);
+
+            ProtosClosureValue defaults =
+                    closure("(a, b, c = a) => { c }", module);
+            assertContains(
+                    instructionNames(defaults),
+                    "BindRequiredFrameParameter");
+
+            assertSame(
+                    a,
+                    enter(fastDirect(defaults, module, a, b)),
+                    "the default reads the already established first parameter");
+            assertSame(
+                    c,
+                    enter(fastDirect(defaults, module, a, b, c)),
+                    "a supplied value suppresses its default");
+
+            var missing = fastDirect(defaults, module, a);
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(missing));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    missing.targetArguments()[0]);
+
+            var excess = fastDirect(defaults, module, a, b, c, d);
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(excess));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    excess.targetArguments()[0]);
+
+            Object[] published =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            defaults,
+                            module,
+                            null,
+                            new Object[] {a, b});
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(published);
+            assertSame(a, target(defaults).call(published));
+            assertSame(activation, published[0]);
+
+            ProtosClosureValue ordinaryArgs =
+                    closure("(args, b, c = args) => { c }", module);
+            assertContains(
+                    instructionNames(ordinaryArgs),
+                    "BindRequiredFrameParameter");
+            assertSame(
+                    a,
+                    enter(fastDirect(ordinaryArgs, module, a, b)));
+
+            ProtosClosureValue rest =
+                    closure("(a, b, ...tail) => { tail }", module);
+            assertContains(
+                    instructionNames(rest),
+                    "BindRequiredFrameParameter");
+            assertContains(
+                    instructionNames(rest),
+                    "BindClosureFrameRest");
+
+            ProtosArrayValue empty1 =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            enter(fastDirect(rest, module, a, b)));
+            ProtosArrayValue empty2 =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            enter(fastDirect(rest, module, a, b)));
+            assertEquals(0, empty1.indexedSnapshot().size());
+            assertNotSame(empty1, empty2, "rest must be fresh per invocation");
+
+            ProtosArrayValue extras =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            enter(fastDirect(rest, module, a, b, c, d)));
+            assertEquals(
+                    List.of(c, d),
+                    extras.indexedSnapshot(),
+                    "rest contains only the remaining supplied arguments");
+
+            ProtosClosureValue combined =
+                    closure("(a, b, c = a, ...tail) => { tail }", module);
+            assertContains(
+                    instructionNames(combined),
+                    "BindRequiredFrameParameter");
+
+            ProtosArrayValue combinedEmpty =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            enter(fastDirect(combined, module, a, b)));
+            assertEquals(0, combinedEmpty.indexedSnapshot().size());
+
+            ProtosArrayValue combinedExtras =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            enter(fastDirect(combined, module, a, b, c, d)));
+            assertEquals(
+                    List.of(d),
+                    combinedExtras.indexedSnapshot());
+
+            // Defaults can observe Context; these cases retain the
+            // original persistent-authority path, not the compact copy.
+            ProtosClosureValue observed =
+                    closure(
+                            "(a, b, c = context.hasSlot(\"a\")) => { c }",
+                            module);
+            assertNone(
+                    instructionNames(observed),
+                    "BindRequiredFrameParameter");
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    enter(fastDirect(observed, module, a, b)));
+
+            ProtosClosureValue captured =
+                    closure("(a, b, c = () => a) => { c }", module);
+            assertNone(
+                    instructionNames(captured),
+                    "BindRequiredFrameParameter");
+
+            // A Context mutation must not bypass D179 presence rules.
+            ProtosClosureValue removed =
+                    closure(
+                            "(a, b, ...tail) => { "
+                                    + "context.removeSlot(\"a\")\n"
+                                    + "a: b\n"
+                                    + "a }",
+                            module);
+            assertNone(
+                    instructionNames(removed),
+                    "BindRequiredFrameParameter");
+            assertSame(
+                    b,
+                    enter(fastDirect(removed, module, a, b)));
+        });
+
+        System.out.println("I104_C_REQUIRED_PREFIX_DEFAULTS=PASS");
+        System.out.println("I104_C_REQUIRED_PREFIX_REST=PASS");
+        System.out.println("I104_C_REQUIRED_PREFIX_DEFAULT_AND_REST=PASS");
+        System.out.println("I104_C_RICH_ACTIVATION=PASS");
+        System.out.println("I104_C_CONTEXT_D179_EXCLUSIONS=PASS");
     }
 
     @Test

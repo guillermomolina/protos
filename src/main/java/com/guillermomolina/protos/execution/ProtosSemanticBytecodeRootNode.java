@@ -587,6 +587,91 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+
+    /**
+     * I104-B: establish one required parameter per Bytecode DSL
+     * instruction. Each local ordinal is an exact constant operand.
+     */
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "frameBackedLocals")
+    @ConstantOperand(type = ProtosFrameLexicalLayout.class, name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
+    public static final class BindRequiredFrameParameter {
+        @Specialization(
+                guards = "isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void compact(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            Object value =
+                    ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+                            frame.getArguments(), ordinal);
+            frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+        }
+
+        @Specialization(
+                guards = "!isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void authoritative(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind VirtualFrame frame) {
+            slowBind(
+                    frameBackedLocals, frameBackedLayout, ordinal, name,
+                    bytecodeNode, bytecodeIndex, frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean isCompactSuppliedAndUnbound(
+                LocalRangeAccessor frameBackedLocals,
+                int ordinal,
+                BytecodeNode bytecodeNode,
+                VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && ProtosFrameArguments.compactHasSuppliedArgument(
+                            arguments, ordinal)
+                    && frameBackedLocals.isCleared(
+                            bytecodeNode, frame, ordinal);
+        }
+
+        /**
+         * Retain the established rich-activation, missing-argument
+         * and duplicate-binding semantics.
+         */
+        @TruffleBoundary
+        private static void slowBind(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                MaterializedFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame.getArguments());
+            Object value =
+                    ProtosBytecodeRootNode.LoadClosureArgument.perform(
+                            activation, ordinal);
+            ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    ordinal,
+                    activation,
+                    name,
+                    value,
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame);
+        }
+    }
+
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -677,6 +762,104 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     frameBackedLocals, frameBackedLayout, ordinal,
                     ProtosFrameArguments.activation(arguments), name, value,
                     bytecodeNode, bytecodeIndex, frame);
+        }
+    }
+
+    /**
+     * I104-A: fused unary NORMAL entry. The parameter's identity, layout,
+     * ordinal and spelling are compilation constants. Only its supplied
+     * value is dynamic.
+     *
+     * The compact specialization combines the former frame argument load
+     * and frame-local binding into one Bytecode DSL operation. Published or
+     * otherwise non-compact activations retain the original authoritative
+     * operations, including missing-argument and duplicate-binding Errors.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class BindUnaryFrameParameter {
+        @Specialization(
+                guards = "isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void compact(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            Object value = ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+                    frame.getArguments(), 0);
+            frameBackedLocals.setObject(
+                    bytecodeNode, frame, ordinal, value);
+        }
+
+        @Specialization(
+                guards = "!isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+        public static void authoritative(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind VirtualFrame frame) {
+            bindAuthoritatively(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    ordinal,
+                    name,
+                    frame.getArguments(),
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean isCompactSuppliedAndUnbound(
+                LocalRangeAccessor frameBackedLocals,
+                int ordinal,
+                BytecodeNode bytecodeNode,
+                VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && ProtosFrameArguments.compactHasSuppliedArgument(
+                            arguments, 0)
+                    && frameBackedLocals.isCleared(
+                            bytecodeNode, frame, ordinal);
+        }
+
+        @TruffleBoundary
+        private static void bindAuthoritatively(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                String name,
+                Object[] arguments,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                MaterializedFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(arguments);
+            Object value =
+                    ProtosBytecodeRootNode.LoadClosureArgument.perform(
+                            activation, 0);
+            ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    ordinal,
+                    activation,
+                    name,
+                    value,
+                    bytecodeNode,
+                    bytecodeIndex,
+                    frame);
         }
     }
 

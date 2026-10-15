@@ -2328,6 +2328,108 @@ class CallGraph(object):
             node = entry[0]
         return "uncertain call edge"
 
+    def _generated_guard_root_provenances(self, helper, tracked):
+        """Follow exact same-operation Bytecode DSL generated guard calls.
+
+        @Specialization(guards = "...") generates a Java call that is not
+        present in the source-level call graph. Recognize only an exact
+        method name, arity and positional operand mapping. Ambiguous
+        matches cannot establish a constant-index proof.
+        """
+        if tracked is None or helper.owner is None:
+            return []
+
+        overloads = [
+            method for method in helper.owner.methods
+            if method.name == helper.name
+            and len(method.params) == len(helper.params)
+        ]
+
+        results = []
+
+        for root in helper.owner.methods:
+            if not is_pe_root(root):
+                continue
+
+            tokens = root.java.tokens
+
+            for annotation_name, start, end in root.annotations:
+                if annotation_name != "Specialization":
+                    continue
+
+                for index in range(start, end - 1):
+                    if tokens[index].text != "guards":
+                        continue
+                    if tokens[index + 1].text != "=":
+                        continue
+
+                    value = tokens[index + 2]
+
+                    # Only a directly parseable guard expression is
+                    # proof. Other annotation shapes remain unproven.
+                    if value.kind != "str":
+                        continue
+
+                    expression = value.text[1:-1]
+                    needle = helper.name + "("
+                    cursor = 0
+
+                    while True:
+                        found = expression.find(needle, cursor)
+                        if found < 0:
+                            break
+
+                        cursor = found + len(needle)
+
+                        if found and (
+                                expression[found - 1].isalnum()
+                                or expression[found - 1] in "_."):
+                            continue
+
+                        closing = expression.find(")", cursor)
+
+                        if closing < 0:
+                            results.append(
+                                (PROV_UNPROVEN_ARGUMENT, root))
+                            continue
+
+                        argument_text = expression[cursor:closing]
+
+                        if "(" in argument_text:
+                            results.append(
+                                (PROV_UNPROVEN_ARGUMENT, root))
+                            continue
+
+                        arguments = [
+                            part.strip()
+                            for part in argument_text.split(",")
+                        ]
+
+                        if (
+                                len(overloads) != 1
+                                or len(arguments) != len(helper.params)
+                                or tracked >= len(arguments)):
+                            provenance = PROV_UNPROVEN_ARGUMENT
+                        else:
+                            actual = arguments[tracked]
+                            positions = [
+                                position
+                                for position, parameter in enumerate(root.params)
+                                if parameter.name == actual
+                            ]
+
+                            if len(positions) == 1:
+                                provenance = self._root_provenance(
+                                    root, positions[0])
+                            elif actual.isdecimal():
+                                provenance = PROV_DIRECT_CONSTANT
+                            else:
+                                provenance = PROV_UNPROVEN_ARGUMENT
+
+                        results.append((provenance, root))
+
+        return results
+
     def classify(self, sink):
         """Sets the PE reachability fields of one sink."""
         method = sink._method
@@ -2361,6 +2463,15 @@ class CallGraph(object):
         cuts = []
         has_cut = False
         unknown = []
+
+        # The DSL generates calls from @Specialization(guards = "...").
+        # The ordinary Java call graph cannot see these annotations.
+        if sink.classification == METHOD_PARAMETER:
+            for provenance, root in self._generated_guard_root_provenances(
+                    method, start[1]):
+                chain = [method_key(root), method_key(method)]
+                terminals.setdefault(provenance, chain)
+                roots.setdefault(provenance, set()).add(method_key(root))
 
         def add_unknown(reason):
             self.unknown_edges.add(reason.split("; reaches PE root", 1)[0])

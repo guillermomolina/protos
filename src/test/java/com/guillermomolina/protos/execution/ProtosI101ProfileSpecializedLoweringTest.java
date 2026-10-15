@@ -33,6 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
+import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.TagTree;
@@ -80,6 +81,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             LanguageReference.create(ProtosLanguage.class);
 
     private static final String DIRECT = "() => { 1 }";
+    private static final String UNARY = "(value) => { value }";
     private static final String WITNESS = "() => { true.ifTrue() { 1 } }";
 
     @TempDir
@@ -119,6 +121,73 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         activationRoot(compile("() => { true.ifTrue() { 1 + 0 } }", "unfolded"));
                 assertTrue(!unfolded.provablyNonSuspendingBody());
                 System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS");
+            });
+        }
+    }
+
+    /**
+     * I104-A: independent Builder oracles for the previous and fused unary
+     * entries. Neither oracle invokes the production lowering machinery.
+     */
+    @Test
+    void unaryNormalEntryMatchesIndependentBuilderOracle()
+            throws Exception {
+        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+            normal.run(() -> {
+                ProtosSemanticBytecodeRootNode module =
+                        compile(UNARY, "i104-unary");
+                ProtosSemanticBytecodeRootNode production =
+                        activationRoot(module);
+
+                List<String> previous =
+                        completeSignature(handwrittenUnaryIdentityRoot(false));
+                List<String> expected =
+                        completeSignature(handwrittenUnaryIdentityRoot(true));
+                List<String> actual =
+                        completeSignature(production);
+
+                System.out.println("I104_A_PREVIOUS_INSTRUCTIONS=" + previous);
+                System.out.println("I104_A_FUSED_INSTRUCTIONS=" + actual);
+                System.out.println("I104_A_PREVIOUS_COUNT=" + previous.size());
+                System.out.println("I104_A_FUSED_COUNT=" + actual.size());
+
+                assertEquals(
+                        expected,
+                        actual,
+                        "the production root must equal the independent Builder");
+                assertTrue(
+                        expected.size() < previous.size(),
+                        "the new entry must physically reduce instructions");
+                assertTrue(
+                        actual.stream().anyMatch(
+                                item -> item.contains("BindUnaryFrameParameter")));
+                assertTrue(
+                        actual.stream().noneMatch(
+                                item -> item.contains("BindClosureFrameParameter")));
+                assertEquals(2, groupRoots(module).size());
+                assertSame(production, groupRoots(module).get(1));
+                assertTrue(production.arityRejectionTarget() == null);
+
+                var target = production.getCallTarget();
+                var group = production.getRootNodes();
+                group.ensureComplete();
+
+                assertSame(production, groupRoots(module).get(1));
+                assertSame(target, production.getCallTarget());
+            });
+        }
+
+        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+            debug.run(() -> {
+                ProtosSemanticBytecodeRootNode production =
+                        activationRoot(compile(UNARY, "i104-debug"));
+                List<String> instructions = completeSignature(production);
+                assertTrue(
+                        instructions.stream().noneMatch(
+                                item -> item.contains("BindUnaryFrameParameter")));
+                assertTrue(
+                        instructions.stream().anyMatch(
+                                item -> item.contains("BindClosureFrameParameter")));
             });
         }
     }
@@ -501,6 +570,268 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * of the Long carrier of {@code 1}. Source metadata and the arity root remain;
      * ordinary guest-value materialization is handled by the call boundary.
      */
+    /**
+     * I104-A standalone physical oracle. The original and fused variants
+     * intentionally differ only in the parameter-binding operations.
+     * All other obligations, including source tags, runtime arity and
+     * numeric-carrier materialization, are represented identically.
+     */
+    private static ProtosSemanticBytecodeRootNode handwrittenUnaryIdentityRoot(
+            boolean fused) {
+        String characters = UNARY;
+        Source source = Source.newBuilder(
+                        ProtosLanguage.ID,
+                        characters,
+                        "i104-unary-oracle.protos")
+                .build();
+
+        int bodyStart = characters.indexOf('{');
+        int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
+        int readStart = characters.lastIndexOf("value");
+
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        LANGUAGE_REF.get(null),
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginSource(source);
+                            builder.beginSourceSection(bodyStart, bodyLength);
+                            builder.beginRoot();
+
+                            BytecodeLocal local =
+                                    builder.createLocal("value", null);
+                            BytecodeLocal[] locals = {local};
+                            ProtosFrameLexicalLayout layout =
+                                    ProtosFrameLexicalLayout.of(
+                                            new String[] {"value"},
+                                            ProtosFrameLexicalLayout.localOffsetsOf(
+                                                    locals));
+
+                            if (fused) {
+                                builder.emitBindUnaryFrameParameter(
+                                        locals, layout, 0, "value");
+                            } else {
+                                builder.beginBindClosureFrameParameter(
+                                        locals, layout, 0);
+                                builder.emitLoadConstant("value");
+                                builder.beginLoadFrameClosureArgument();
+                                builder.emitLoadConstant(0);
+                                builder.endLoadFrameClosureArgument();
+                                builder.endBindClosureFrameParameter();
+                            }
+
+                            builder.beginCheckFrameClosureArgumentUpperBound();
+                            builder.emitLoadConstant(1);
+                            builder.endCheckFrameClosureArgumentUpperBound();
+
+                            builder.beginSourceSection(
+                                    readStart, "value".length());
+                            builder.beginTag(
+                                    StandardTags.StatementTag.class,
+                                    StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
+
+                            builder.beginReturn();
+                            builder.beginMaterializeReturnCarrier();
+                            builder.beginReadRootFrameLocal(
+                                    local,
+                                    layout.presentContinuityAt(0));
+                            builder.emitLoadConstant("value");
+                            builder.endReadRootFrameLocal();
+                            builder.endMaterializeReturnCarrier();
+                            builder.endReturn();
+
+                            builder.endBlock();
+                            builder.endTag(
+                                    StandardTags.StatementTag.class,
+                                    StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
+
+                            builder.endRoot();
+                            builder.endSourceSection();
+                            builder.endSource();
+                        });
+
+        return nodes.getNode(0);
+    }
+
+
+    /** I104-B: production lowering against an independently written Builder. */
+    @Test
+    void i104RequiredPrefixMatchesIndependentBuilderOracle() throws Exception {
+        final String source = "(a, b, c) => { b }";
+
+        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+            normal.run(() -> {
+                ProtosSemanticBytecodeRootNode module =
+                        compile(source, "i104-b-normal");
+                ProtosSemanticBytecodeRootNode actual =
+                        activationRoot(module);
+
+                List<String> beforeReparse = semanticSignature(actual);
+                var group = module.getRootNodes();
+                var roots = groupRoots(module);
+                var target = actual.getCallTarget();
+
+                List<String> baseline =
+                        completeSignature(handwrittenI104BRoot(false));
+                List<String> handwritten =
+                        completeSignature(handwrittenI104BRoot(true));
+                List<String> compiled = completeSignature(actual);
+
+                System.out.println(
+                        "I104_B_BASELINE_INSTRUCTION_COUNT="
+                                + baseline.size());
+                System.out.println(
+                        "I104_B_COMPACT_INSTRUCTION_COUNT="
+                                + compiled.size());
+                System.out.println(
+                        "I104_B_COMPACT_SIGNATURE=" + compiled);
+
+                assertEquals(
+                        handwritten, compiled,
+                        "the required-prefix root must match independent Builder");
+                assertTrue(
+                        baseline.size() > compiled.size(),
+                        "the compact path must remove physical instructions");
+                assertEquals(2, roots.size());
+                assertSame(module, roots.get(0));
+                assertSame(actual, roots.get(1));
+                assertSame(target, actual.getCallTarget());
+                assertEquals(null, actual.arityRejectionTarget());
+
+                group.ensureComplete();
+                assertSame(actual, group.getNode(1));
+                assertSame(target, actual.getCallTarget());
+                assertEquals(compiled, completeSignature(actual));
+                List<String> afterReparse = semanticSignature(actual);
+                assertTrue(
+                        afterReparse.size() >= beforeReparse.size(),
+                        "I104-B reparse lost original instructions");
+                assertEquals(
+                        beforeReparse,
+                        afterReparse.subList(0, beforeReparse.size()),
+                        "I104-B reparse changed the original instruction prefix");
+                assertEquals(
+                        List.of(
+                                "load.null",
+                                "clear.local LOCAL_OFFSET=0",
+                                "clear.local LOCAL_OFFSET=1",
+                                "clear.local LOCAL_OFFSET=2",
+                                "return"),
+                        afterReparse.subList(
+                                beforeReparse.size(), afterReparse.size()),
+                        "I104-B reparse must append only the expected local cleanup");
+
+                System.out.println("I104_B_BUILDER_ORACLE=PASS");
+                System.out.println("I104_B_REPARSE=PASS");
+            });
+        }
+
+        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+            debug.run(() -> {
+                var root = activationRoot(
+                        compile(source, "i104-b-debug"));
+                List<String> signature = completeSignature(root);
+                assertTrue(
+                        signature.stream().noneMatch(
+                                entry -> entry.contains("BindRequiredFrameParameter")),
+                        signature::toString);
+                assertTrue(
+                        signature.stream().anyMatch(
+                                entry -> entry.contains("BindClosureFrameParameter")),
+                        signature::toString);
+                System.out.println("I104_B_DEBUG_NEGATIVE_CONTROL=PASS");
+            });
+        }
+    }
+
+    private static ProtosSemanticBytecodeRootNode handwrittenI104BRoot(
+            boolean compact) {
+        String characters = "(a, b, c) => { b }";
+        Source source = Source.newBuilder(
+                ProtosLanguage.ID,
+                characters,
+                compact ? "i104-b-builder.protos" : "i104-b-baseline.protos")
+                .build();
+
+        int bodyStart = characters.indexOf('{');
+        int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
+        int lookupStart = characters.lastIndexOf('b');
+
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        LANGUAGE_REF.get(null),
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginSource(source);
+                            builder.beginSourceSection(bodyStart, bodyLength);
+                            builder.beginRoot();
+
+                            BytecodeLocal[] locals = {
+                                builder.createLocal("a", null),
+                                builder.createLocal("b", null),
+                                builder.createLocal("c", null)
+                            };
+                            String[] names = {"a", "b", "c"};
+                            ProtosFrameLexicalLayout layout =
+                                    ProtosFrameLexicalLayout.of(
+                                            names,
+                                            ProtosFrameLexicalLayout.localOffsetsOf(
+                                                    locals));
+
+                            if (compact) {
+                                for (int index = 0; index < names.length; index++) {
+                                    builder.beginBindRequiredFrameParameter(
+                                            locals, layout, index);
+                                    builder.emitLoadConstant(names[index]);
+                                    builder.endBindRequiredFrameParameter();
+                                }
+                            } else {
+                                for (int index = 0; index < names.length; index++) {
+                                    builder.beginBindClosureFrameParameter(
+                                            locals, layout, index);
+                                    builder.emitLoadConstant(names[index]);
+                                    builder.beginLoadFrameClosureArgument();
+                                    builder.emitLoadConstant(index);
+                                    builder.endLoadFrameClosureArgument();
+                                    builder.endBindClosureFrameParameter();
+                                }
+                            }
+
+                            builder.beginCheckFrameClosureArgumentUpperBound();
+                            builder.emitLoadConstant(3);
+                            builder.endCheckFrameClosureArgumentUpperBound();
+
+                            builder.beginSourceSection(lookupStart, 1);
+                            builder.beginTag(
+                                    StandardTags.StatementTag.class,
+                                    StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
+
+                            builder.beginReturn();
+                            builder.beginMaterializeReturnCarrier();
+                            builder.beginReadRootFrameLocal(
+                                    locals[1],
+                                    layout.presentContinuityAt(1));
+                            builder.emitLoadConstant("b");
+                            builder.endReadRootFrameLocal();
+                            builder.endMaterializeReturnCarrier();
+                            builder.endReturn();
+
+                            builder.endBlock();
+                            builder.endTag(
+                                    StandardTags.StatementTag.class,
+                                    StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
+
+                            builder.endRoot();
+                            builder.endSourceSection();
+                            builder.endSource();
+                        });
+        return nodes.getNode(0);
+    }
+
     private static ProtosSemanticBytecodeRootNode handwrittenLiteralOneActivationRoot() {
         String characters = DIRECT;
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i101-a-oracle.protos")
