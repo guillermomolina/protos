@@ -489,11 +489,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 assertTrue(containsLoweredIntegerConstant(candidate, 3L),
                         "lowerer must emit the calculated result as an operand");
             }
-            assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(direct), "TryPrimitiveNumeric");
             // I101-B: proven immutable scalar locals are emitted directly.
             // The mutated alias still requires ordinary numeric dispatch.
-            assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
-            assertContains(instructionNames(aliases), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(locals), "TryPrimitiveNumeric");
+            assertContains(instructionNames(aliases), "TryPrimitiveNumeric");
 
             assertNone(instructionNames(locals), "IsCompactLocalFrame");
             assertContains(instructionNames(aliases), "IsCompactLocalFrame");
@@ -609,13 +609,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                 && tag.getSourceSection().getCharacters().toString().contains("+")));
             }
 
-            assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
-            assertNone(instructionNames(nested), "TryPrimitiveNumericSendOne");
-            assertNone(instructionNames(tree), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(direct), "TryPrimitiveNumeric");
+            assertNone(instructionNames(nested), "TryPrimitiveNumeric");
+            assertNone(instructionNames(tree), "TryPrimitiveNumeric");
             // The proven local path is now physically minimal.
             // Mutation still forces the original guarded alias fallback.
-            assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
-            assertContains(instructionNames(aliases), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(locals), "TryPrimitiveNumeric");
+            assertContains(instructionNames(aliases), "TryPrimitiveNumeric");
             for (var candidate : List.of(locals, aliases)) {
                 assertTrue(loweredIntegerConstantCount(candidate, 3L) >= 1,
                         "a guarded arithmetic candidate must retain its folded operand");
@@ -656,7 +656,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "Proven arithmetic must not retain a runtime descriptor");
                 assertNone(
                         instructionNames(candidate),
-                        "TryPrimitiveNumericSendOne");
+                        "TryPrimitiveNumeric");
                 assertEquals(
                         example[1],
                         integerValue(enter(fastDirect(candidate, module))),
@@ -674,7 +674,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "Non-exact or non-long arithmetic must fail closed: "
                                 + example);
                 assertContains(
-                        instructionNames(candidate), "TryPrimitiveNumericSendOne");
+                        instructionNames(candidate), "TryPrimitiveNumeric");
             }
         });
     }
@@ -797,8 +797,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "3",
                         integerValue(enter(fastDirect(locals, module))));
 
-                assertNone(instructionNames(direct), "TryPrimitiveNumericSendOne");
-                assertNone(instructionNames(locals), "TryPrimitiveNumericSendOne");
+                assertNone(instructionNames(direct), "TryPrimitiveNumeric");
+                assertNone(instructionNames(locals), "TryPrimitiveNumeric");
             });
         }
 
@@ -817,7 +817,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { 1 + 2\n7 }", module);
 
             assertTrue(containsLoweredIntegerConstant(nonTerminal, 3L));
-            assertContains(instructionNames(nonTerminal), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(nonTerminal), "TryPrimitiveNumeric");
             assertEquals(
                     "7",
                     integerValue(enter(fastDirect(nonTerminal, module))));
@@ -826,7 +826,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     closure("() => { (1 + 2) + 3 }", module);
 
             assertTrue(containsLoweredIntegerConstant(nested, 6L));
-            assertNone(instructionNames(nested), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(nested), "TryPrimitiveNumeric");
             assertEquals("6", integerValue(enter(fastDirect(nested, module))));
 
             ProtosClosureValue tree =
@@ -836,7 +836,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "10",
                     integerValue(enter(fastDirect(tree, module))));
             assertTrue(containsLoweredIntegerConstant(tree, 10L));
-            assertNone(instructionNames(tree), "TryPrimitiveNumericSendOne");
+            assertNone(instructionNames(tree), "TryPrimitiveNumeric");
 
             ProtosClosureValue nestedOverflow =
                     closure(
@@ -847,7 +847,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "9223372036854775808",
                     integerValue(enter(fastDirect(nestedOverflow, module))));
             assertTrue(containsLoweredIntegerConstant(nestedOverflow, Long.MAX_VALUE));
-            assertContains(instructionNames(nestedOverflow), "TryPrimitiveNumericSendOne");
+            assertContains(instructionNames(nestedOverflow), "TryPrimitiveNumeric");
 
             ProtosClosureValue dynamic =
                     closure("(value) => { value + 2 }", module);
@@ -930,7 +930,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .map(Instruction.Argument::asConstant)
                 .filter(value ->
                         value instanceof
-                                ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                                ProtosPrimitiveNumericSendFastPathsBase
                                         .FoldedIntegerArithmetic)
                 .count();
     }

@@ -323,7 +323,7 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
 
         assertTrue(
-                position(names, "TryPrimitiveNumericSendOne") >= 0,
+                position(names, "TryPrimitiveNumeric") >= 0,
                 names.toString());
 
         assertInteger(

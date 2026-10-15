@@ -271,12 +271,12 @@ final class CanonicalToBytecodeLowerer {
             java.util.Set.of();
 
     private java.util.Map<CanonicalSend,
-            ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> currentRootArithmeticHints =
             java.util.Map.of();
 
     private CanonicalSend currentRootTerminalIntegerSend;
-    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+    private ProtosPrimitiveNumericSendFastPathsBase
             .FoldedIntegerArithmetic currentRootTerminalIntegerAddition;
 
     /*
@@ -2228,7 +2228,7 @@ final class CanonicalToBytecodeLowerer {
      * PERF043-A: compile-time values are only evidence for a guarded
      * runtime selection. They never replace the CanonicalSend itself.
      */
-    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+    private ProtosPrimitiveNumericSendFastPathsBase
             .FoldedIntegerArithmetic terminalKnownIntegerAddition(
                     CanonicalSequence body, CanonicalSend send) {
         java.util.Map<String, Long> known = new java.util.HashMap<>();
@@ -2297,7 +2297,7 @@ final class CanonicalToBytecodeLowerer {
         return knownSmallInteger(expression, known);
     }
 
-    private ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+    private ProtosPrimitiveNumericSendFastPathsBase
             .FoldedIntegerArithmetic foldedIntegerAddition(
                     CanonicalSend send, java.util.Map<String, Long> known) {
         if (send.arguments().size() != 1) {
@@ -2346,7 +2346,7 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
 
-            return new ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            return new ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic(operation, left, right, result);
         } catch (ArithmeticException overflow) {
             return null;
@@ -2358,11 +2358,11 @@ final class CanonicalToBytecodeLowerer {
      * Every operation still executes via its guarded canonical send.
      */
     private java.util.Map<CanonicalSend,
-            ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+            ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> arithmeticHintsForRoot(
                     CanonicalSequence body, CanonicalLexicalScope scope) {
         java.util.Map<CanonicalSend,
-                ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                ProtosPrimitiveNumericSendFastPathsBase
                         .FoldedIntegerArithmetic> hints =
                 new java.util.IdentityHashMap<>();
         if (currentRootAnalysis == null || scope == null) {
@@ -2425,7 +2425,7 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression,
             java.util.Map<String, Long> known,
             java.util.Map<CanonicalSend,
-                    ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
+                    ProtosPrimitiveNumericSendFastPathsBase
                             .FoldedIntegerArithmetic> hints) {
         if (!(expression instanceof CanonicalSend send)) {
             return;
@@ -8300,8 +8300,8 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * PERF043-A2: recognize literal Integer additions in any send position.
-     * This descriptor never authorizes dispatch by itself. The existing
-     * TryPrimitiveNumericSendOne canonical guard remains authoritative.
+     * This descriptor never authorizes dispatch by itself. The certified
+     * lane of the per-selector numeric operation remains authoritative.
      */
     private Object foldedIntegerAdditionForSend(CanonicalSend send) {
         if (currentRootTerminalIntegerSend == send
@@ -8325,6 +8325,65 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         emitComposedSend(builder, send, result, preparedCall,
                 childResult, resumeValue, false);
+    }
+
+    /**
+     * PERF040-E1: the selector is known here, so the site emits the one
+     * primitive numeric operation that owns it; no operator spelling is
+     * compared at run time. The staged receiver and argument were each
+     * evaluated exactly once. A MISS result keeps the unchanged ordinary
+     * send. Arithmetic sites additionally carry their PERF043 fold candidate.
+     */
+    private void emitPrimitiveNumericAttempt(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal receiverValue,
+            BytecodeLocal argumentValue) {
+        String selector = send.message();
+        switch (selector) {
+            case "+" -> builder.beginTryPrimitiveNumericAdd();
+            case "-" -> builder.beginTryPrimitiveNumericSubtract();
+            case "*" -> builder.beginTryPrimitiveNumericMultiply();
+            case "/" -> builder.beginTryPrimitiveNumericDivide();
+            case "<" -> builder.beginTryPrimitiveNumericLess();
+            case "<=" -> builder.beginTryPrimitiveNumericLessEqual();
+            case ">" -> builder.beginTryPrimitiveNumericGreater();
+            case ">=" -> builder.beginTryPrimitiveNumericGreaterEqual();
+            default -> throw new AssertionError(
+                    "not a primitive numeric selector: " + selector);
+        }
+        builder.emitLoadLocal(receiverValue);
+        emitSendCallerOperand(builder);
+        builder.emitLoadLocal(argumentValue);
+        builder.emitLoadConstant(primitiveNumericCarrierSource(send.receiver()));
+        builder.emitLoadConstant(
+                primitiveNumericCarrierSource(send.arguments().get(0)));
+        switch (selector) {
+            case "+", "-", "*", "/" -> {
+                Object fold = foldedIntegerAdditionForSend(send);
+                builder.emitLoadConstant(fold);
+                builder.emitLoadConstant(
+                        fold instanceof ProtosPrimitiveNumericSendFastPathsBase
+                                        .FoldedIntegerArithmetic known
+                                ? known.result()
+                                : Boolean.FALSE);
+            }
+            default -> {
+                // Ordering has no arithmetic fold candidate.
+            }
+        }
+        switch (selector) {
+            case "+" -> builder.endTryPrimitiveNumericAdd();
+            case "-" -> builder.endTryPrimitiveNumericSubtract();
+            case "*" -> builder.endTryPrimitiveNumericMultiply();
+            case "/" -> builder.endTryPrimitiveNumericDivide();
+            case "<" -> builder.endTryPrimitiveNumericLess();
+            case "<=" -> builder.endTryPrimitiveNumericLessEqual();
+            case ">" -> builder.endTryPrimitiveNumericGreater();
+            case ">=" -> builder.endTryPrimitiveNumericGreaterEqual();
+            default -> throw new AssertionError(
+                    "not a primitive numeric selector: " + selector);
+        }
     }
 
     /*
@@ -9252,22 +9311,8 @@ final class CanonicalToBytecodeLowerer {
         if (tryPrimitiveNumericSend) {
             primitiveNumericAttempt = builder.createLocal("primitiveNumericAttempt", null);
             builder.beginStoreLocal(primitiveNumericAttempt);
-            builder.beginTryPrimitiveNumericSendOne();
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(send.message());
-            emitSendCallerOperand(builder);
-            builder.emitLoadLocal(argumentValues.get(0));
-            builder.emitLoadConstant(primitiveNumericCarrierSource(receiver));
-            builder.emitLoadConstant(
-                    primitiveNumericCarrierSource(send.arguments().get(0)));
-            Object fold = foldedIntegerAdditionForSend(send);
-            builder.emitLoadConstant(fold);
-            builder.emitLoadConstant(
-                    fold instanceof ProtosSemanticBytecodeRootNode.TryPrimitiveNumericSendOne
-                                    .FoldedIntegerArithmetic known
-                            ? known.result()
-                            : Boolean.FALSE);
-            builder.endTryPrimitiveNumericSendOne();
+            emitPrimitiveNumericAttempt(
+                    builder, send, receiverValue, argumentValues.get(0));
             builder.endStoreLocal();
 
             builder.beginIfThenElse();

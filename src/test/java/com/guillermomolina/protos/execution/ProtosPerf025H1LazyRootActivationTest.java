@@ -152,8 +152,10 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertSame(observed, arguments[0], "the root reuses the published activation");
             assertSame(supplied, observed.suppliedArgumentsForRuntime().get(0));
 
+            // PERF040-E1: a certified primitive '+' never observes the
+            // activation; the source-backed 'negated' send does.
             ProtosClosureValue sending =
-                    parsedClosure("(value) => { value + 1 }", "h1-send.protos", module);
+                    parsedClosure("(value) => { 1 - value.negated() }", "h1-send.protos", module);
             ProtosBytecodeRootNode.PreparedClosureCall send =
                     fastDirect(sending, module, integer(1));
             assertEquals("2", integerValue(enter(send)));

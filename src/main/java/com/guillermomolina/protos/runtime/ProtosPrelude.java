@@ -17,7 +17,10 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.execution.ProtosNumericCoreAdmission;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -41,6 +44,14 @@ public final class ProtosPrelude {
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
     private final Map<ProtosModuleKey, ProtosSemanticTransferFamily> semanticTransferFamilies;
+    /*
+     * PERF040-E1 pay-as-you-grow: certified by the first specialized numeric
+     * operation of this Prelude, never by construction. Published once under
+     * this Prelude's monitor (a negative certificate included); volatile makes
+     * the immutable certificate safely visible to every later reader, which
+     * never takes the monitor.
+     */
+    @CompilationFinal private volatile ProtosNumericCoreAdmission numericCoreAdmission;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -266,6 +277,29 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue contextPrototype() {
         return contextPrototype;
+    }
+
+    /**
+     * PERF040-E1: internal certificate of this Prelude's canonical numeric
+     * selections, computed on first use and then always the same instance.
+     */
+    public ProtosNumericCoreAdmission numericCoreAdmission() {
+        ProtosNumericCoreAdmission admission = numericCoreAdmission;
+        if (admission == null) {
+            CompilerDirectives.transferToInterpreterAndInvalidate();
+            admission = certifyNumericCoreAdmission();
+        }
+        return admission;
+    }
+
+    @TruffleBoundary
+    private synchronized ProtosNumericCoreAdmission certifyNumericCoreAdmission() {
+        ProtosNumericCoreAdmission admission = numericCoreAdmission;
+        if (admission == null) {
+            admission = ProtosNumericCoreAdmission.certify(this);
+            numericCoreAdmission = admission;
+        }
+        return admission;
     }
 
     private ProtosObjectValue requiredOrdinaryBinding(String name) {

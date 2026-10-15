@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.360-SNAPSHOT
+
+- `PERF040` (#862), slices E1/E2: per-selector primitive numeric
+  operations with Prelude-certified admission and BigInteger lanes.
+  - Replace `TryPrimitiveNumericSendOne` with eight Truffle DSL operations
+    (`+`, `-`, `*`, `/`, `<`, `<=`, `>`, `>=`) selected at emission time;
+    each has certified positive lanes and one disjoint guarded negative
+    specialization that returns MISS to the unchanged ordinary send and
+    never replaces a numeric lane.
+  - Certify the canonical Integer, Float and Number selections once per
+    Prelude by exact identity of the frozen standard graph, lazily on the
+    first specialized operation (memoized, including negative results),
+    instead of a per-site D013 lookup and Assumption.
+  - `+`, `-` and `*` use GraalPy-style `doLL`/`doLLOvf` pairs for Long
+    carriers and authentic Integers: exact `long` results, overflow
+    rewrites into an exact normalizing generalization that still returns
+    `long` for small results.
+  - Add BigInteger lanes owned by the caller's Prelude for all eight
+    operations: exact arithmetic and D197 division through the existing
+    numeric services, D196 Float mixes in both orders, and exact ordering
+    against Float; zero divisors and non-owned values stay on ordinary
+    dispatch.
+  - Remove the unused `lookupGuardedFloat`, update the generated
+    bytecode BCI PE baseline for the new instructions, and adapt tests
+    that relied on the old operation missing in the uncached tier.
+
 ## 0.3.359-SNAPSHOT
 
 - `I102` (#896), slice A: universal PLAT060-B5 Closure-call ABI.

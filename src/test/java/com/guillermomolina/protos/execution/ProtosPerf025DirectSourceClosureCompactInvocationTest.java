@@ -69,8 +69,11 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
             context.enter();
             try {
                 ProtosActivation module = coreModule();
+                // PERF040-E1: a certified primitive '+' never observes the
+                // activation; the source-backed 'negated' send does.
                 ProtosClosureValue add =
-                        parsedClosure("(a, b) => { a + b }", "perf025-add.protos", module);
+                        parsedClosure(
+                                "(a, b) => { b - a.negated() }", "perf025-add.protos", module);
                 ProtosDynamicControlState callerControl = module.dynamicControlState();
 
                 ProtosIntegerValue two = integer(2);
@@ -231,8 +234,13 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
             context.enter();
             try {
                 ProtosActivation module = coreModule();
+                // PERF040-E1: a certified primitive '+' never observes the
+                // activation; the source-backed 'negated' send does.
                 ProtosClosureValue add =
-                        parsedClosure("(a, b) => { a + b }", "perf025-task-add.protos", module);
+                        parsedClosure(
+                                "(a, b) => { b - a.negated() }",
+                                "perf025-task-add.protos",
+                                module);
                 AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> preparedRef =
                         new AtomicReference<>();
 

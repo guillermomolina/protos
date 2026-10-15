@@ -146,7 +146,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
                 for (String instruction : actual) {
                     for (String forbidden : List.of(
-                            "TryPrimitiveNumericSendOne",
+                            "TryPrimitiveNumeric",
                             "PrepareSendOne",
                             "TryDirectSendOne",
                             "MaterializePrimitiveNumericCarrier",
@@ -294,7 +294,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     List<String> emitted = completeSignature(root);
                     for (String operation : emitted) {
                         assertTrue(
-                                !operation.contains("TryPrimitiveNumericSendOne")
+                                !operation.contains("TryPrimitiveNumeric")
                                         && !operation.contains("PrepareSendOne")
                                         && !operation.contains("TryDirectSendOne"),
                                 () -> "Dispatch survived: " + testCase.body()
@@ -500,7 +500,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     for (String instruction : instructions) {
                         assertTrue(
                                 !instruction.contains(
-                                        "TryPrimitiveNumericSendOne")
+                                        "TryPrimitiveNumeric")
                                 && !instruction.contains(
                                         "PrepareSendOne")
                                 && !instruction.contains(

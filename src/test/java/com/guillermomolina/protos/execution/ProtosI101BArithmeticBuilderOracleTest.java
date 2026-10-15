@@ -115,7 +115,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                                     + "literal root's bytecode: " + expression);
                     assertTrue(actual.stream().noneMatch(
                                     instruction ->
-                                            instruction.contains("TryPrimitiveNumericSendOne")
+                                            instruction.contains("TryPrimitiveNumeric")
                                                     || instruction.contains("PrepareSendOne")
                                                     || instruction.contains("TryDirectSendOne")),
                             "Constant operation unexpectedly emitted dispatch: "
