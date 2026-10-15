@@ -32,7 +32,7 @@ import java.util.Set;
  * D048 recognition bridge for the ordinary frozen IpAddress prototype/data shape.
  *
  * <p>Construction ({@code call}), structural equality ({@code ==}) and {@code hash} are
- * source closures of {@code lib/core/IpAddress.protos}. Only {@code recognizes} is native: it
+ * source closures of {@code lib/core/network/IpAddress.protos}. Only {@code recognizes} is native: it
  * inspects the candidate's internal shape directly and never dispatches guest behavior.
  */
 public final class ProtosStandardIpAddressProtocol {

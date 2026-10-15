@@ -70,18 +70,35 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "import.protos",
                     "prelude.protos");
 
+    private static final Set<String> NETWORK_SOURCE_NAMES =
+            Set.of(
+                    "IpAddress.protos",
+                    "IpEndpoint.protos",
+                    "Network.protos",
+                    "TcpConnection.protos",
+                    "TcpListener.protos");
+
+    private static Path sourcePath(String name) {
+        return NETWORK_SOURCE_NAMES.contains(name)
+                ? CORE.resolve("network").resolve(name)
+                : CORE.resolve(name);
+    }
+
     @Test
     void everyCoreSourceNameIsEitherCanonicalOneOwnerOrExplicitlyReviewed()
             throws IOException {
-        Set<String> expected = new HashSet<>(CANONICAL_ONE_OWNER_SOURCES);
+        Set<String> expected = new HashSet<>();
+        for (String name : CANONICAL_ONE_OWNER_SOURCES) {
+            expected.add(CORE.relativize(sourcePath(name)).toString());
+        }
         expected.addAll(REVIEWED_RESPONSIBILITY_SOURCES);
 
         Set<String> actual;
-        try (var paths = Files.list(CORE)) {
+        try (var paths = Files.walk(CORE)) {
             actual =
                     paths.filter(Files::isRegularFile)
-                            .map(path -> path.getFileName().toString())
-                            .filter(name -> name.endsWith(".protos"))
+                            .filter(path -> path.getFileName().toString().endsWith(".protos"))
+                            .map(path -> CORE.relativize(path).toString())
                             .collect(Collectors.toSet());
         }
 
@@ -93,7 +110,7 @@ class ProtosCoreSourceNamingArchitectureTest {
         String required =
                 "// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE";
         for (String name : CANONICAL_ONE_OWNER_SOURCES) {
-            String source = Files.readString(CORE.resolve(name), StandardCharsets.UTF_8);
+            String source = Files.readString(sourcePath(name), StandardCharsets.UTF_8);
             assertTrue(source.startsWith(required), name);
         }
     }

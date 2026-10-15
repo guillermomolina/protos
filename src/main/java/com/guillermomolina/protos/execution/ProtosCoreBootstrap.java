@@ -181,19 +181,19 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Path.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("IpAddress.protos"))
+                .load(coreDirectory.resolve("network/IpAddress.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("IpEndpoint.protos"))
+                .load(coreDirectory.resolve("network/IpEndpoint.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("Network.protos"))
+                .load(coreDirectory.resolve("network/Network.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("TcpConnection.protos"))
+                .load(coreDirectory.resolve("network/TcpConnection.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("TcpListener.protos"))
+                .load(coreDirectory.resolve("network/TcpListener.protos"))
                 .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))

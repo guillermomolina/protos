@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.363-SNAPSHOT
+
+- `I103` (#897), slice C: reorganize five canonical Core network/TCP
+  sources into `protos/lib/core/network/` under the 30-file direct limit.
+  - Preserve all five source files byte-for-byte, canonical Core identities,
+    bootstrap activation and exact source load order; reconcile the five
+    bootstrap paths and two maintained Java protocol path references.
+  - Make the Core source-naming and Part 5 license test recognize nested
+    sources while preserving the exact required canonical source set.
+  - Keep packaged Core Truffle resource layout and embedding unchanged;
+    Core root now has 29 direct files and network has five. Strict
+    directory-guard activation in make check and CI remains I103-H.
+
 ## 0.3.362-SNAPSHOT
 
 - `I103` (#897), slice B: increase the tracked regular-file directory limit
