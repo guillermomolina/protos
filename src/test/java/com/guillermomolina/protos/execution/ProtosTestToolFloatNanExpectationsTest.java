@@ -36,7 +36,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
     void semanticNanPolicyAndNormalMismatchesAreOwnedByProtos()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c1-float-nan.protos", false);
+                execute("numeric/tool002-d3c1-float-nan.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -45,7 +45,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
     void detachedFreshProcessNanRetainsSemanticFloatIdentity()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c1-detached-float-nan.protos", true);
+                execute("numeric/tool002-d3c1-detached-float-nan.protos", true);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -55,7 +55,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute("tool002-d3c1-malformed-float-nan.protos", false)
+                execute("numeric/tool002-d3c1-malformed-float-nan.protos", false)
                         .state());
     }
 
@@ -63,7 +63,7 @@ final class ProtosTestToolFloatNanExpectationsTest {
     void sequentialRunnerSelectsNanButStillSkipsFloatBits()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c1-runner-selection.protos", false);
+                execute("numeric/tool002-d3c1-runner-selection.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }

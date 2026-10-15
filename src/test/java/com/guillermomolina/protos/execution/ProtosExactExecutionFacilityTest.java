@@ -46,7 +46,7 @@ final class ProtosExactExecutionFacilityTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d1-execution-facility.protos");
+                    "execution/tool002-d1-execution-facility.protos");
     private static final Path ACTOR_ROOT =
             Path.of("protos", "tests", "conformance", "actor");
     private static final Path GROUP_ROOT =

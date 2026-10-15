@@ -36,7 +36,7 @@ final class ProtosTestToolFloatBitsExpectationsTest {
     void exactFloatBitsPolicyAndNormalMismatchesAreOwnedByProtos()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2c-float-bits.protos", false);
+                execute("numeric/tool002-d3c2c-float-bits.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -45,7 +45,7 @@ final class ProtosTestToolFloatBitsExpectationsTest {
     void detachedFreshProcessPreservesExactFloatBitsIncludingSignedZero()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2c-detached-float-bits.protos", true);
+                execute("numeric/tool002-d3c2c-detached-float-bits.protos", true);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -55,7 +55,7 @@ final class ProtosTestToolFloatBitsExpectationsTest {
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute("tool002-d3c2c-nan-raw-rejected.protos", false)
+                execute("numeric/tool002-d3c2c-nan-raw-rejected.protos", false)
                         .state());
     }
 
@@ -63,7 +63,7 @@ final class ProtosTestToolFloatBitsExpectationsTest {
     void sequentialRunnerSelectsFloatBitsButStillSkipsUnsupportedExpectation()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2c-runner-selection.protos", false);
+                execute("numeric/tool002-d3c2c-runner-selection.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }

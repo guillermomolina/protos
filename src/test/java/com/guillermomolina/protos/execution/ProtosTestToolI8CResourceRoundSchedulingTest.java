@@ -37,7 +37,7 @@ final class ProtosTestToolI8CResourceRoundSchedulingTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-i8c-resource-round-scheduling.protos");
+                    "scheduling/tool002-i8c-resource-round-scheduling.protos");
     private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
 
     @Test

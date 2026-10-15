@@ -50,7 +50,7 @@ final class ProtosTestToolI8D5CPublicCutoverTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-i8d5c-public-cutover.protos");
+                    "results-reporting/tool002-i8d5c-public-cutover.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
 
     @Test

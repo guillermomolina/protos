@@ -37,7 +37,7 @@ final class ProtosTestToolTool004CProgressPresentationTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool004-c-progress-presentation.protos");
+                    "results-reporting/tool004-c-progress-presentation.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
     private static final Path PROGRESS = TOOL_ROOT.resolve("Progress.protos");
 

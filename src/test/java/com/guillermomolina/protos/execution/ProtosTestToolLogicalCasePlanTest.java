@@ -41,13 +41,13 @@ final class ProtosTestToolLogicalCasePlanTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool009-logical-case-plan.protos");
+                    "logical-cases/tool009-logical-case-plan.protos");
     private static final Path DISCOVERY_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool009-discovery-logical-case-plan.protos");
+                    "logical-cases/tool009-discovery-logical-case-plan.protos");
 
     @Test
     void discoveryProjectsOnlyInertLogicalCasePlanData() throws Exception {

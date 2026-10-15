@@ -27,7 +27,7 @@ import subprocess
 import sys
 
 
-LIMIT = 25
+LIMIT = 30
 UPSTREAM_PREFIX = (
     "protos/tests/conformance/library/toml/"
     "official/upstream/v2.2.0/"

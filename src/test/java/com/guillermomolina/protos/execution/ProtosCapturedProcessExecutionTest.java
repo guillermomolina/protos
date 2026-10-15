@@ -33,7 +33,7 @@ final class ProtosCapturedProcessExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE =
-            Path.of("protos", "tests", "tooling", "tool002-c-single-case.protos");
+            Path.of("protos", "tests", "tooling", "discovery/tool002-c-single-case.protos");
 
     @Test
     void exactProtosCaseGetsPrivateStdoutAndStderrPerExecution() throws Exception {

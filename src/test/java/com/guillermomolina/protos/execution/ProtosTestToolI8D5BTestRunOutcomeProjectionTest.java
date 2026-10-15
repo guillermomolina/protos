@@ -39,7 +39,7 @@ final class ProtosTestToolI8D5BTestRunOutcomeProjectionTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-i8d5b-test-run-outcome.protos");
+                    "results-reporting/tool002-i8d5b-test-run-outcome.protos");
     private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
 

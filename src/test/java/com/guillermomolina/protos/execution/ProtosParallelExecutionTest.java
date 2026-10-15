@@ -61,7 +61,7 @@ class ProtosParallelExecutionTest{
   try(var h=ProtosHostedExecutionTestFixture.open(p)){
    var d=h.activation().executionDomain();
    var source=java.nio.file.Files.readString(
-       Path.of("protos","tests","tooling","parallel-execution-ip-data-transfer.protos"),
+       Path.of("protos","tests","tooling","scheduling/parallel-execution-ip-data-transfer.protos"),
        java.nio.charset.StandardCharsets.UTF_8);
    var f=assertInstanceOf(ProtosFutureValue.class,evalHosted(h,source));
    while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}

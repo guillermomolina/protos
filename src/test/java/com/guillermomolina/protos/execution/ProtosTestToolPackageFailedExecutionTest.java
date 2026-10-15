@@ -43,7 +43,7 @@ final class ProtosTestToolPackageFailedExecutionTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-e2a2b-package-failed-fixture.protos");
+                    "packages/tool002-e2a2b-package-failed-fixture.protos");
 
     @Test
     void failedPackageFixtureArrivesAsCallerPreludeError() throws Exception {

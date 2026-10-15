@@ -36,7 +36,7 @@ final class ProtosTestToolFutureStoredExpectationRecognitionTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-f3c1b1-future-stored-recognition.protos");
+                    "future/stored-inspection/tool002-f3c1b1-future-stored-recognition.protos");
 
     @Test
     void bundledProtosRecognizesOnlyExactStoredObservationCaseSpec()

@@ -43,7 +43,7 @@ final class ProtosTestToolPackageExecutionEnvironmentTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-e2a1-package-resolved-execution.protos");
+                    "packages/tool002-e2a1-package-resolved-execution.protos");
 
     @Test
     void packageExecutionUsesExactBundledPackageResolverInFreshProcess()

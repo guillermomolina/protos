@@ -44,7 +44,7 @@ final class ProtosTestToolH2B1BoundedSimpleSchedulingTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-h2b1-bounded-simple-scheduling.protos");
+                    "scheduling/tool002-h2b1-bounded-simple-scheduling.protos");
 
     @SuppressWarnings("try")
     @Test

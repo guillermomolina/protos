@@ -38,7 +38,7 @@ final class ProtosTestToolTool009ALifecycleReporterTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool009-a-lifecycle-reporter.protos");
+                    "results-reporting/tool009-a-lifecycle-reporter.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
     private static final Path PROGRESS = TOOL_ROOT.resolve("Progress.protos");
     private static final Path LOGICAL_CASE_RUNNER =

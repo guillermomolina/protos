@@ -61,40 +61,53 @@ class DirectoryFileLimitTest(unittest.TestCase):
     def counts(self):
         return guard.inventory(self.root)
 
-    def test_24_passes(self):
-        self.create("domain", 24)
+    def test_29_passes(self):
+        self.create("domain", 29)
         self.assertEqual([], guard.violations(self.counts()))
 
-    def test_25_passes(self):
-        self.create("domain", 25)
+    def test_30_passes(self):
+        self.create("domain", 30)
         self.assertEqual([], guard.violations(self.counts()))
 
-    def test_26_fails(self):
-        self.create("domain", 26)
-        self.assertEqual([("domain", 26)],
+    def test_31_fails(self):
+        self.create("domain", 31)
+        self.assertEqual([("domain", 31)],
                          guard.violations(self.counts()))
 
     def test_parent_does_not_accumulate_descendants(self):
-        self.create("parent", 25)
-        self.create("parent/child", 26)
+        self.create("parent", 30)
+        self.create("parent/child", 31)
         counts = self.counts()
-        self.assertEqual(25, counts["parent"])
-        self.assertEqual(26, counts["parent/child"])
+        self.assertEqual(30, counts["parent"])
+        self.assertEqual(31, counts["parent/child"])
         self.assertEqual(
-            [("parent/child", 26)], guard.violations(counts)
+            [("parent/child", 31)], guard.violations(counts)
         )
 
-    def test_parent_and_child_each_25_pass(self):
-        self.create("parent", 25)
-        self.create("parent/child", 25)
+    def test_parent_and_child_each_30_pass(self):
+        self.create("parent", 30)
+        self.create("parent/child", 30)
+        self.assertEqual([], guard.violations(self.counts()))
+
+    def test_parent_31_and_child_30_only_parent_fails(self):
+        self.create("parent", 31)
+        self.create("parent/child", 30)
+        counts = self.counts()
+        self.assertEqual(31, counts["parent"])
+        self.assertEqual(30, counts["parent/child"])
+        self.assertEqual([("parent", 31)], guard.violations(counts))
+
+    def test_parent_29_and_child_30_both_pass(self):
+        self.create("parent", 29)
+        self.create("parent/child", 30)
         self.assertEqual([], guard.violations(self.counts()))
 
     def test_multiple_offenders_sorted_and_reported(self):
-        self.create("zeta", 26)
-        self.create("alpha", 27)
+        self.create("zeta", 31)
+        self.create("alpha", 32)
         counts = self.counts()
         self.assertEqual(
-            [("alpha", 27), ("zeta", 26)],
+            [("alpha", 32), ("zeta", 31)],
             guard.violations(counts),
         )
         output = io.StringIO()
@@ -125,33 +138,33 @@ class DirectoryFileLimitTest(unittest.TestCase):
         self.assertEqual(1, self.counts()["bin"])
 
     def test_symlink_does_not_count(self):
-        self.create("domain", 25)
+        self.create("domain", 30)
         link = self.root / "domain/link"
         try:
             os.symlink("file-000.txt", link)
         except (OSError, NotImplementedError) as exc:
             self.skipTest(f"symlink unsupported: {exc}")
         self.git("add", "--", "domain/link")
-        self.assertEqual(25, self.counts()["domain"])
+        self.assertEqual(30, self.counts()["domain"])
 
     def test_untracked_does_not_count(self):
-        self.create("domain", 25)
+        self.create("domain", 30)
         untracked = self.root / "domain/untracked.txt"
         untracked.write_text("new", encoding="utf-8")
-        self.assertEqual(25, self.counts()["domain"])
+        self.assertEqual(30, self.counts()["domain"])
 
     def test_upstream_exemption_is_exact(self):
         parent = (
             "protos/tests/conformance/library/toml/official"
         )
-        self.create(parent + "/upstream/v2.2.0/fixtures", 26)
-        self.create(parent + "/suite", 26)
+        self.create(parent + "/upstream/v2.2.0/fixtures", 31)
+        self.create(parent + "/suite", 31)
         counts = self.counts()
         self.assertNotIn(
             parent + "/upstream/v2.2.0/fixtures", counts
         )
         self.assertEqual(
-            [(parent + "/suite", 26)],
+            [(parent + "/suite", 31)],
             guard.violations(counts),
         )
 

@@ -42,7 +42,7 @@ final class ProtosTestToolSourceLoaderTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a1-read-source.protos");
+                    "execution/tool002-d3a1-read-source.protos");
 
     @Test
     void bundledProtosLoaderReadsCompleteUtf8SourceAcrossReadBatchBoundary()

@@ -88,7 +88,7 @@ class ValidationImpactTest(unittest.TestCase):
 
     def test_tool002_fixture_is_local(self):
         self.assert_test_tool([
-            "protos/tests/tooling/tool002-d3a3-sequential-runner.protos"
+            "protos/tests/tooling/execution/tool002-d3a3-sequential-runner.protos"
         ])
 
     def test_test_tool_java_owned_test_is_local(self):
@@ -241,6 +241,16 @@ class ValidationImpactTest(unittest.TestCase):
 
     def test_shared_library_requires_full(self):
         self.assert_full(["protos/lib/core/Object.protos"])
+
+    def test_relocated_tool002_fixture_still_test_tool_local(self):
+        self.assert_test_tool([
+            "protos/tests/tooling/numeric/tool002-d3c2b-exact-binary64.protos"
+        ])
+
+    def test_relocated_foreign_fixture_still_requires_full(self):
+        self.assert_full([
+            "protos/tests/tooling/scheduling/parallel-execution-ip-data-transfer.protos"
+        ])
 
     def test_unknown_tooling_fixture_requires_full(self):
         self.assert_full(["protos/tests/tooling/tool003-future.protos"])

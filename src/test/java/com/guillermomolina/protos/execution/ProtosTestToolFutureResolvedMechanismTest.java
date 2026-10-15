@@ -36,13 +36,13 @@ final class ProtosTestToolFutureResolvedMechanismTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
     private static final Path SAMPLE_SOURCE_ROOT =
-            Path.of("protos", "tests", "tooling");
+            Path.of("protos", "tests", "tooling", "future", "lifecycle");
     private static final Path FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-f1-future-resolved-mechanism.protos");
+                    "future/lifecycle/tool002-f1-future-resolved-mechanism.protos");
 
     @Test
     void resolvedFutureExpectationsStayInsideFreshChildProcess()

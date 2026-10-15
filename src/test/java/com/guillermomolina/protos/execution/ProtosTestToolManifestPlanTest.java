@@ -52,19 +52,19 @@ final class ProtosTestToolManifestPlanTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d2-manifest-plan.protos");
+                    "discovery/tool002-d2-manifest-plan.protos");
     private static final Path PACKAGE_TOML_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-e1a-package-toml-manifest-plan.protos");
+                    "packages/tool002-e1a-package-toml-manifest-plan.protos");
     private static final Path PACKAGE_TOML_FILESYSTEM_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-e1b-package-toml-filesystem.protos");
+                    "packages/tool002-e1b-package-toml-filesystem.protos");
 
     @Test
     void bundledManifestModuleCompilesBeforeAnyFilesystemPolicyRuns()

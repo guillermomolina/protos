@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.362-SNAPSHOT
+
+- `I103` (#897), slice B: increase the tracked regular-file directory limit
+  from 25 to 30 and regroup 94 JUnit-owned Test Tool fixtures by responsibility.
+  - Preserve all fixture bytes, TSV case identities and negative expectations;
+    reconcile Java consumer paths and filesystem-backed Future F1/F2 roots.
+  - Cover the 29/30/31 boundary, direct parent/child counts and the exact
+    TOML upstream exemption without changing the IO or TOML 28-file suites.
+  - Retain Test Tool impact classification and manual-only guard invocation;
+    defer the repository-wide mandatory gate to I103-H.
+
 ## 0.3.361-SNAPSHOT
 
 - `I102` (#896), slice B: B5 caller-slot invariant reconciliation and

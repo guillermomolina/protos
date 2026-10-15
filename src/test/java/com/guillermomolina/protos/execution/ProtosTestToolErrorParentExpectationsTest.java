@@ -36,7 +36,7 @@ final class ProtosTestToolErrorParentExpectationsTest {
     void standardTaxonomyAndImmediateParentPolicyAreOwnedByProtos()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3b2-error-parent.protos", false);
+                execute("expectations/tool002-d3b2-error-parent.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -45,7 +45,7 @@ final class ProtosTestToolErrorParentExpectationsTest {
     void detachedFreshProcessErrorsRetainStandardImmediateParentIdentity()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3b2-detached-error-parent.protos", true);
+                execute("expectations/tool002-d3b2-detached-error-parent.protos", true);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -56,7 +56,7 @@ final class ProtosTestToolErrorParentExpectationsTest {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
                 execute(
-                                "tool002-d3b2-unknown-error-parent.protos",
+                                "expectations/tool002-d3b2-unknown-error-parent.protos",
                                 false)
                         .state());
     }
@@ -65,7 +65,7 @@ final class ProtosTestToolErrorParentExpectationsTest {
     void sequentialRunnerSelectsErrorParentButStillSkipsFloat()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3b2-runner-selection.protos", false);
+                execute("discovery/tool002-d3b2-runner-selection.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }

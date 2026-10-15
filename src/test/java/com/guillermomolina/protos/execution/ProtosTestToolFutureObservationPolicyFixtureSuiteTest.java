@@ -39,13 +39,13 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
-    private static final Path TOOLING_ROOT = Path.of("protos", "tests", "tooling");
+    private static final Path TOOLING_ROOT = Path.of("protos", "tests", "tooling", "future", "observation");
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3e-integration-fixtures.tsv");
     private static final Path RETAINED_STORED_SOURCE =
-            TOOLING_ROOT.resolve("tool002-future-shape-stored.protos");
+            TOOLING_ROOT.getParent().resolve("common/tool002-future-shape-stored.protos");
     private static final Path RETAINED_FRESH_SOURCE =
-            TOOLING_ROOT.resolve("tool002-future-shape-fresh.protos");
+            TOOLING_ROOT.getParent().resolve("common/tool002-future-shape-fresh.protos");
 
     @TestFactory
     Stream<DynamicTest> futureObservationPolicyFixtures() throws IOException {

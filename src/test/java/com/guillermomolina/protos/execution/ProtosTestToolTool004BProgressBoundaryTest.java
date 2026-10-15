@@ -26,7 +26,7 @@ final class ProtosTestToolTool004BProgressBoundaryTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool004-b-progress-boundary.protos");
+                    "results-reporting/tool004-b-progress-boundary.protos");
     private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
 

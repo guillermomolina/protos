@@ -40,7 +40,7 @@ final class ProtosTestToolLogicalCaseResultTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool009-logical-case-result.protos");
+                    "results-reporting/tool009-logical-case-result.protos");
 
     @Test
     void projectsD155TerminalStatePolicy() throws Exception {

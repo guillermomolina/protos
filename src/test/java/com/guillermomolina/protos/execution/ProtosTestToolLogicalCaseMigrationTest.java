@@ -40,7 +40,7 @@ final class ProtosTestToolLogicalCaseMigrationTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool009-logical-case-migration.protos");
+                    "logical-cases/tool009-logical-case-migration.protos");
 
     @Test
     void preservesSingleOwnershipSelectionAndD155OutcomePrecedence()

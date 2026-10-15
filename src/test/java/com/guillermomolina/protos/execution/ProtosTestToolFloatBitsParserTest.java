@@ -36,7 +36,7 @@ final class ProtosTestToolFloatBitsParserTest {
     void strictSixteenHexPayloadParsesToExactUnboundedInteger()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2a-float-bits-parser.protos");
+                execute("numeric/tool002-d3c2a-float-bits-parser.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -46,7 +46,7 @@ final class ProtosTestToolFloatBitsParserTest {
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute("tool002-d3c2a-float-bits-bad-length.protos").state());
+                execute("numeric/tool002-d3c2a-float-bits-bad-length.protos").state());
     }
 
     @Test
@@ -54,14 +54,14 @@ final class ProtosTestToolFloatBitsParserTest {
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute("tool002-d3c2a-float-bits-bad-char.protos").state());
+                execute("numeric/tool002-d3c2a-float-bits-bad-char.protos").state());
     }
 
     @Test
     void parserRemainsAvailableAfterFloatBitsActivation()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2a-float-bits-still-unsupported.protos");
+                execute("numeric/tool002-d3c2a-float-bits-still-unsupported.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }

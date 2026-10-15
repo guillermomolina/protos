@@ -41,13 +41,13 @@ final class ProtosTestToolSequentialRunnerTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a3-sequential-runner.protos");
+                    "execution/tool002-d3a3-sequential-runner.protos");
     private static final Path WRAPPER_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a3-wrapper-integration.protos");
+                    "execution/tool002-d3a3-wrapper-integration.protos");
 
     @Test
     void sequentialDependencyChainPreservesOrderSkipsUnsupportedAndIsStackBounded()

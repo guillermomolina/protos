@@ -36,19 +36,19 @@ final class ProtosTestToolSimpleExpectationsTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a2-simple-expectations.protos");
+                    "expectations/tool002-d3a2-simple-expectations.protos");
     private static final Path UNSUPPORTED_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a2-unsupported-expectation.protos");
+                    "expectations/tool002-d3a2-unsupported-expectation.protos");
     private static final Path MALFORMED_FIXTURE =
             Path.of(
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-d3a2-malformed-expected.protos");
+                    "expectations/tool002-d3a2-malformed-expected.protos");
 
     @Test
     void simpleExpectationPolicyAndNormalMismatchesAreOwnedByProtos()

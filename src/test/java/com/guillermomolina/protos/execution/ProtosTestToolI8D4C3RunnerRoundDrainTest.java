@@ -39,7 +39,7 @@ final class ProtosTestToolI8D4C3RunnerRoundDrainTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-i8d4c3-runner-round-drain.protos");
+                    "scheduling/tool002-i8d4c3-runner-round-drain.protos");
     private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
     private static final Path BINDING = TOOL_ROOT.resolve("ResourceBinding.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");

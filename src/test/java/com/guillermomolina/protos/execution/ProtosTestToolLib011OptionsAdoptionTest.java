@@ -39,7 +39,7 @@ final class ProtosTestToolLib011OptionsAdoptionTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-lib011-options-adoption.protos");
+                    "packages/tool002-lib011-options-adoption.protos");
 
     @Test
     void toolOwnedPolicyConformsThroughLib011InProtos() throws Exception {

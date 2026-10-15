@@ -44,7 +44,7 @@ final class ProtosTestToolH2B2BoundedDCaseSchedulingTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool002-h2b2-bounded-d-scheduling.protos");
+                    "scheduling/tool002-h2b2-bounded-d-scheduling.protos");
 
     @SuppressWarnings("try")
     @Test

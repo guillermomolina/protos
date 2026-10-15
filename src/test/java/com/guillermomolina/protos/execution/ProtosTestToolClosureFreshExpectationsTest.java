@@ -36,7 +36,7 @@ final class ProtosTestToolClosureFreshExpectationsTest {
     void closureFreshPolicyStaysInsideFreshChildProcess()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d4-closure-fresh.protos");
+                execute("execution/tool002-d4-closure-fresh.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -46,14 +46,14 @@ final class ProtosTestToolClosureFreshExpectationsTest {
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute("tool002-d4-malformed-closure-fresh.protos").state());
+                execute("execution/tool002-d4-malformed-closure-fresh.protos").state());
     }
 
     @Test
     void sequentialRunnerSelectsClosureFreshButSkipsUnsupportedExpectation()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d4-runner-selection.protos");
+                execute("discovery/tool002-d4-runner-selection.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }

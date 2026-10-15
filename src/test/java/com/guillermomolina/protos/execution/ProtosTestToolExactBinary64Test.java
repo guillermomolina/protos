@@ -36,7 +36,7 @@ final class ProtosTestToolExactBinary64Test {
     void exactBinary64ConstructionAndSemanticIdentityAreOwnedByProtos()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2b-exact-binary64.protos");
+                execute("numeric/tool002-d3c2b-exact-binary64.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
@@ -44,32 +44,32 @@ final class ProtosTestToolExactBinary64Test {
     @Test
     void positiveNanRawPatternFailsClosed()
             throws Exception {
-        assertFailed("tool002-d3c2b-positive-nan-bits-rejected.protos");
+        assertFailed("numeric/tool002-d3c2b-positive-nan-bits-rejected.protos");
     }
 
     @Test
     void negativeNanRawPatternFailsClosed()
             throws Exception {
-        assertFailed("tool002-d3c2b-negative-nan-bits-rejected.protos");
+        assertFailed("numeric/tool002-d3c2b-negative-nan-bits-rejected.protos");
     }
 
     @Test
     void rawPatternBelowUnsigned64DomainFailsClosed()
             throws Exception {
-        assertFailed("tool002-d3c2b-negative-raw-bits-rejected.protos");
+        assertFailed("numeric/tool002-d3c2b-negative-raw-bits-rejected.protos");
     }
 
     @Test
     void rawPatternAboveUnsigned64DomainFailsClosed()
             throws Exception {
-        assertFailed("tool002-d3c2b-overflow-raw-bits-rejected.protos");
+        assertFailed("numeric/tool002-d3c2b-overflow-raw-bits-rejected.protos");
     }
 
     @Test
     void mechanismRemainsAvailableAfterFloatBitsActivation()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2b-still-unsupported.protos");
+                execute("numeric/tool002-d3c2b-still-unsupported.protos");
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
