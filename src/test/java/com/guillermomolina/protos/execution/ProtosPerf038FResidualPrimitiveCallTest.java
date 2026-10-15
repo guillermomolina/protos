@@ -55,9 +55,9 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
     private static final int WARM_UP_CALLS = 40;
 
     /**
-     * For every full header the split forms accept exactly the arrays the
-     * general inherited-provenance query answers non-null for, with the same
-     * caller; minimal headers are left to the general query.
+     * For every B5 header, including zero-argument ones (I102), the split
+     * forms accept exactly the arrays the general inherited-provenance query
+     * answers non-null for, with the same caller.
      */
     @Test
     void fullHeaderProvenanceSplitMatchesGeneralDecision() throws Exception {
@@ -74,7 +74,9 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                         new Object[] {integer(1)});
                 Object[] direct = ProtosFrameArguments.compactDirectClosureCall(
                         closure, module, null, new Object[] {integer(1)});
-                for (Object[] arguments : List.of(method, direct)) {
+                Object[] zeroDirect = ProtosFrameArguments.compactDirectClosureCall(
+                        closure, module, null, new Object[0]);
+                for (Object[] arguments : List.of(method, direct, zeroDirect)) {
                     assertTrue(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));
                     assertSame(module, ProtosFrameArguments.unmaterializedFullHeaderCaller(arguments));
                     boolean split =
@@ -89,9 +91,6 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                                         arguments));
                     }
                 }
-                Object[] minimal = ProtosFrameArguments.compactDirectClosureCall(
-                        closure, module, null, new Object[0]);
-                assertFalse(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(minimal));
                 ProtosFrameArguments.activation(method);
                 assertFalse(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(method),
                         "a published frame is never a compact caller");
@@ -126,25 +125,17 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
             for (Object[] supplied : suppliedCases) {
                 Object[] method = ProtosFrameArguments.compactImmediateMethodCall(
                         closure, receiver, home, module, supplied);
-                boolean minimalMethod =
-                        supplied.length == 0
-                                && ProtosFrameArguments.compactReturnHome(method)
-                                        == com.guillermomolina.protos.runtime.ProtosReturnHome
-                                                .unobservable();
 
                 assertEquals(
-                        minimalMethod ? 4 : 5 + supplied.length,
+                        ProtosFrameArguments.HEADER_LENGTH + supplied.length,
                         method.length);
                 assertSame(closure, method[0]);
                 assertSame(receiver, method[1]);
                 assertSame(home, method[2]);
                 assertSame(module, method[3]);
-
-                if (!minimalMethod) {
-                    assertInstanceOf(
-                            com.guillermomolina.protos.runtime.ProtosReturnHome.class,
-                            method[4]);
-                }
+                assertInstanceOf(
+                        com.guillermomolina.protos.runtime.ProtosReturnHome.class,
+                        method[4]);
                 assertEquals(supplied.length,
                         ProtosFrameArguments.compactSuppliedArgumentCount(method));
                 for (int index = 0; index < supplied.length; index++) {
@@ -166,9 +157,12 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
         });
     }
 
-    /** PERF038-H: an unobservable zero-argument method needs no home slot. */
+    /**
+     * PERF038-H / I102: an unobservable zero-argument method keeps the
+     * unobservable marker in the fixed home slot of the B5 header.
+     */
     @Test
-    void minimalImmediateMethodHeaderPublishesExactActivation() throws Exception {
+    void zeroArgumentImmediateMethodHeaderPublishesExactActivation() throws Exception {
         withCore(module -> {
             ProtosClosureValue closure = parsedClosure(
                     "() => { 1 }",
@@ -185,11 +179,14 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                     com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
                     new Object[0]);
 
-            assertEquals(4, arguments.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
             assertSame(closure, arguments[0]);
             assertSame(receiver, arguments[1]);
             assertSame(home, arguments[2]);
             assertSame(module, arguments[3]);
+            assertSame(
+                    com.guillermomolina.protos.runtime.ProtosReturnHome.unobservable(),
+                    arguments[4]);
             assertEquals(0,
                     ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
             assertSame(module, ProtosFrameArguments.compactCaller(arguments));
@@ -202,6 +199,8 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
             ProtosActivation activation = ProtosFrameArguments.activation(arguments);
             assertSame(activation, arguments[0]);
             assertSame(activation, ProtosFrameArguments.activation(arguments));
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
+            assertSame(module, arguments[3], "publication rewrites argument 0 only");
         });
     }
 
@@ -361,9 +360,9 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
         return evaluate("reader()\n", "perf038f-reader-" + call + ".protos", module);
     }
 
+    /** The general, fully validating inherited-provenance query. */
     private static ProtosActivation inherited(Object[] arguments) {
-        return ProtosSemanticBytecodeRootNode.PrepareSendArguments
-                .inheritedProvenanceCallerOrNull(arguments);
+        return ProtosFrameArguments.compactInheritedProvenanceCaller(arguments);
     }
 
     private static ProtosClosureValue withPrelude(ProtosClosureValue source, ProtosPrelude prelude) {

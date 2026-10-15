@@ -292,9 +292,11 @@ final class ProtosPerf038EResidualCallGraphTest {
                 closure, closure, new ProtosObjectValue(closure), caller, new Object[] {integer(1)});
     }
 
+    /** The non-materializing inherited-provenance caller of a compact caller operand. */
     private static ProtosActivation inherited(Object[] arguments) {
-        return ProtosSemanticBytecodeRootNode.PrepareSendArguments
-                .inheritedProvenanceCallerOrNull(arguments);
+        return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                ? ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(arguments)
+                : null;
     }
 
     /*

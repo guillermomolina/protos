@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.debug.Breakpoint;
@@ -47,8 +48,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 /**
  * PERF032: the immutable NORMAL/DEBUG execution mode, not instrumentation or debugger state,
- * selects the host-entry ABI of the eligible literal Closure. NORMAL enters it headerless and
- * rejects debugger scopes on that frame explicitly; DEBUG carries provenance from the first call.
+ * selects the lowering of a Context's executables. I102 (PLAT060-B5): the mode never selects the
+ * host-entry frame-argument ABI; NORMAL and DEBUG enter the same Closure through the same
+ * five-slot header, and DEBUG keeps exact scopes for a debugger attached later.
  */
 final class ProtosPerf032ExecutionModeTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -132,16 +134,17 @@ final class ProtosPerf032ExecutionModeTest {
     }
 
     @Test
-    void normalModeEntersTheEligibleClosureHeaderless() throws Exception {
+    void normalModeEntersTheClosureWithTheB5Header() throws Exception {
         try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.NORMAL)) {
             assertFalse(session.runtimeHostForTesting().isDebugMode());
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                     session.prepareTopLevel("run");
+            ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
             assertEquals(1, prepared.executable().execute().asInt());
-            assertEquals(0, arguments(session, prepared.hostExecutableForTesting()).length);
+            assertB5ZeroArgumentHeader(adapter, arguments(session, adapter));
             assertNoTask(session);
         }
-        System.out.println("PERF032_NORMAL_HEADERLESS=PASS");
+        System.out.println("I102_NORMAL_B5_HEADER=PASS");
     }
 
     @Test
@@ -152,10 +155,7 @@ final class ProtosPerf032ExecutionModeTest {
                     session.prepareTopLevel("run");
             ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
             assertEquals(1, prepared.executable().execute().asInt());
-            Object[] arguments = arguments(session, adapter);
-            assertEquals(2, arguments.length, "DEBUG uses the ordinary compact header");
-            assertSame(adapter.closure, arguments[0]);
-            assertSame(adapter.caller, arguments[1]);
+            assertB5ZeroArgumentHeader(adapter, arguments(session, adapter));
             assertNoTask(session);
         }
         System.out.println("PERF032_DEBUG_HEADER=PASS");
@@ -194,7 +194,7 @@ final class ProtosPerf032ExecutionModeTest {
             ProtosBytecodeRootNode.OrdinarySourceCall prepared =
                     session.processContextForTesting()
                             .callForRuntime(() -> prepareNoArguments(adapter));
-            assertEquals(2, prepared.targetArguments().length);
+            assertB5ZeroArgumentHeader(adapter, prepared.targetArguments());
 
             ScopeObservation observation = new ScopeObservation();
             try (DebuggerSession debugSession = startSession(session, observation)) {
@@ -216,12 +216,12 @@ final class ProtosPerf032ExecutionModeTest {
     }
 
     @Test
-    void normalModeScopeRequestFailsExplicitly() throws Exception {
+    void normalModeToolingFrameIsNotRecognizedByItsArgumentShape() throws Exception {
         try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.NORMAL)) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
 
-            // The Protos-controlled boundary: a headerless frame has a scope that cannot be built.
+            // I102: tooling sees the same B5 frame as DEBUG; no profile is inferred from it.
             session.processContextForTesting()
                     .callForRuntime(
                             () -> {
@@ -233,26 +233,53 @@ final class ProtosPerf032ExecutionModeTest {
                                         (TagTreeNode) root.getBytecodeNode().getTagTree();
                                 assertNotNull(location);
                                 Object[] arguments = prepareNoArguments(adapter).targetArguments();
-                                assertEquals(0, arguments.length, "tags do not change the ABI");
+                                assertB5ZeroArgumentHeader(adapter, arguments);
                                 var frame =
                                         Truffle.getRuntime()
                                                 .createVirtualFrame(
                                                         arguments, root.getFrameDescriptor());
                                 assertTrue(ProtosBytecodeTagTreeNodeExports.hasScope(location, frame));
-                                IllegalStateException rejected =
-                                        assertThrows(
-                                                IllegalStateException.class,
-                                                () ->
-                                                        ProtosBytecodeTagTreeNodeExports.getScope(
-                                                                location, frame, true));
-                                assertTrue(
-                                        rejected.getMessage().contains("NORMAL execution mode"),
-                                        rejected.getMessage());
+                                assertSame(
+                                        adapter.closure,
+                                        arguments[0],
+                                        "hasScope does not materialize the activation");
+                                /*
+                                 * Synthetic frame: this projects a scope whose information the
+                                 * B5 frame already carries. It is not a NORMAL late-attach
+                                 * guarantee, and no DEBUG instrumentation is enabled.
+                                 */
+                                InteropLibrary interop = InteropLibrary.getUncached();
+                                try {
+                                    Object first =
+                                            ProtosBytecodeTagTreeNodeExports.getScope(
+                                                    location, frame, true);
+                                    Object second =
+                                            ProtosBytecodeTagTreeNodeExports.getScope(
+                                                    location, frame, true);
+                                    assertTrue(interop.isScope(first));
+                                    assertTrue(interop.isScope(second));
+                                    var published =
+                                            ProtosFrameArguments.activation(frame);
+                                    assertSame(published, arguments[0],
+                                            "the scope projects the invocation's activation");
+                                    assertSame(published, ProtosFrameArguments.activation(arguments),
+                                            "a second observation reuses that activation");
+                                    assertSame(ProtosReturnHome.unobservable(),
+                                            published.returnHome().orElseThrow());
+                                    assertTrue(published.task().isEmpty());
+                                    assertEquals(ProtosFrameArguments.HEADER_LENGTH,
+                                            arguments.length);
+                                    assertSame(adapter.caller, arguments[3]);
+                                    assertTrue(interop.isMemberReadable(first, "marker"));
+                                    assertEquals("perf032-marker",
+                                            interop.asString(interop.readMember(first, "marker")));
+                                } catch (Exception unexpected) {
+                                    throw new AssertionError(unexpected);
+                                }
                                 return null;
                             });
 
             // NORMAL does not require debugger breakpoints or suspension.
-            // The explicit getScope rejection above tests the runtime contract.
             assertEquals(
                     1,
                     session.prepareTopLevel("run")
@@ -261,7 +288,7 @@ final class ProtosPerf032ExecutionModeTest {
                             .asInt());
             assertNoTask(session);
         }
-        System.out.println("PERF032_NORMAL_SCOPE_REJECTED=PASS");
+        System.out.println("I102_NORMAL_TOOLING_FRAME=PASS");
     }
 
     @Test
@@ -457,9 +484,12 @@ final class ProtosPerf032ExecutionModeTest {
             for (int index = 0; index < 3; index++) {
                 assertEquals(1, normalRun.executable().execute().asInt());
                 assertEquals(1, debugRun.executable().execute().asInt());
-                assertEquals(
-                        0, arguments(normal, normalRun.hostExecutableForTesting()).length);
-                assertEquals(2, arguments(debug, debugRun.hostExecutableForTesting()).length);
+                assertB5ZeroArgumentHeader(
+                        normalRun.hostExecutableForTesting(),
+                        arguments(normal, normalRun.hostExecutableForTesting()));
+                assertB5ZeroArgumentHeader(
+                        debugRun.hostExecutableForTesting(),
+                        arguments(debug, debugRun.hostExecutableForTesting()));
             }
             assertFalse(normal.runtimeHostForTesting().isDebugMode());
             assertTrue(debug.runtimeHostForTesting().isDebugMode());
@@ -542,6 +572,21 @@ final class ProtosPerf032ExecutionModeTest {
             ProtosStandaloneHostedSession session, ProtosHostExecutableClosure adapter) {
         return session.processContextForTesting()
                 .callForRuntime(() -> prepareNoArguments(adapter).targetArguments());
+    }
+
+    /**
+     * I102: the zero-argument host entry of {@code adapter}'s unobservable-home Closure, identical
+     * in NORMAL and DEBUG: the Closure, no explicit Task, the adapter's exact caller and the
+     * unobservable marker, with no supplied value.
+     */
+    private static void assertB5ZeroArgumentHeader(
+            ProtosHostExecutableClosure adapter, Object[] arguments) {
+        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
+        assertSame(adapter.closure, arguments[0]);
+        assertNull(arguments[2], "no explicit Task");
+        assertSame(adapter.caller, arguments[3]);
+        assertSame(ProtosReturnHome.unobservable(), arguments[4]);
+        assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
     }
 
     private static ProtosBytecodeRootNode.OrdinarySourceCall prepareNoArguments(

@@ -113,14 +113,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                  * not inferred from equal instructions: the witness gets those of the literal.
                  */
                 assertTrue(direct.provablyNonSuspendingBody());
-                assertTrue(direct.headerlessEntryBody());
                 assertTrue(folded.provablyNonSuspendingBody());
-                assertTrue(folded.headerlessEntryBody());
-                // An unfolded site (its callback body is a send) keeps neither capability.
+                // An unfolded site (its callback body is a send) does not keep the capability.
                 ProtosSemanticBytecodeRootNode unfolded =
                         activationRoot(compile("() => { true.ifTrue() { 1 + 0 } }", "unfolded"));
                 assertTrue(!unfolded.provablyNonSuspendingBody());
-                assertTrue(!unfolded.headerlessEntryBody());
                 System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS");
             });
         }
@@ -174,7 +171,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                 // Unfolded in DEBUG: the ordinary send keeps no literal-body capability.
                 assertTrue(!roots.get(1).provablyNonSuspendingBody());
-                assertTrue(!roots.get(1).headerlessEntryBody());
                 List<String> activation = completeSignature(roots.get(1));
                 assertNotEquals(
                         completeSignature(handwrittenLiteralOneActivationRoot()), activation);

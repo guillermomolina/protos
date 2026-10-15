@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.359-SNAPSHOT
+
+- `I102` (#896), slice A: universal PLAT060-B5 Closure-call ABI.
+  - Every ordinary Closure call into a CallTarget, in NORMAL and DEBUG,
+    uses one fixed five-slot header (Closure or published activation,
+    receiver or direct-call tag, method home or explicit Task, caller,
+    exact ReturnHome) followed by the supplied arguments.
+  - Remove the PERF032-G7 minimal direct headers, the four-slot
+    zero-argument method header, the NORMAL headerless host entry and
+    the rich `[activation]` ordinary entry; rich entries now use the
+    same header with their exact activation already published.
+  - Simplify frame-argument readers to fixed offsets and remove the
+    send specializations that only served minimal headers, keeping the
+    full-header inherited-provenance paths, lazy activation
+    publication, scalar locals, PICs and arity-rejection selection.
+  - Tooling no longer infers the execution mode from the frame shape;
+    NORMAL projects scopes whose information is already available and
+    DEBUG keeps exact scopes and late attach.
+  - Require the invocation's exact ReturnHome when building a published
+    entry instead of filling the slot with an absent home.
+
 ## 0.3.358-SNAPSHOT
 
 - `I101` (#892), slice C1: aggressive compile-time folding of

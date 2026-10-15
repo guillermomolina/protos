@@ -2731,9 +2731,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /**
      * The lean, pay-only-when-used representation of an ordinary source-backed
-     * Closure call. It carries exactly a selected target, the compact frame
-     * arguments (or, for the pre-target rich-activation shape, the activation
-     * itself), and the return-home/ownership state that non-local return
+     * Closure call. It carries exactly a selected target, the B5 frame
+     * arguments (for the pre-target rich-activation shape, with that
+     * activation already published in argument 0), and the
+     * return-home/ownership state that non-local return
      * completion actually requires. It never carries native-body, structured-
      * control-capability, or module-initialization state.
      *
@@ -2762,7 +2763,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
                             activation.suppliedArgumentCountForRuntime());
             this.activation = activation;
-            this.targetArguments = new Object[] {activation};
+            // I102: a rich entry enters through the same B5 header, already published.
+            this.targetArguments = ProtosFrameArguments.publishedInvocation(activation);
         }
 
         OrdinarySourceCall(RootCallTarget bodyTarget, Object[] compactTargetArguments) {

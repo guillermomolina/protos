@@ -237,20 +237,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         return directScalarLocalCarrierBody;
     }
 
-    /*
-     * PERF032: the body never consults its activation, so a NORMAL-mode host entry may omit the
-     * frame header. Not a general source-call ABI contract; the execution mode decides its use.
-     */
-    private boolean headerlessEntryBody;
-
-    final void recordHeaderlessEntryBody(boolean proven) {
-        this.headerlessEntryBody = proven;
-    }
-
-    final boolean headerlessEntryBody() {
-        return headerlessEntryBody;
-    }
-
     final void recordFrameNativeBindings(
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout) {
@@ -357,8 +343,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * its frame-argument array itself. It never materializes; {@link
      * PrepareSendArguments} resolves it through {@link
      * PrepareSendArguments#exactCaller} wherever the exact activation is
-     * needed, and through {@link
-     * PrepareSendArguments#inheritedProvenanceCallerOrNull} where a
+     * needed, and through its full-header caller slot ({@link
+     * ProtosFrameArguments#unmaterializedFullHeaderCaller}) where a
      * provenance-equivalent caller suffices.
      */
     @Operation
@@ -4201,7 +4187,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * form carries only the provenance path it has observed:
          *
          *   guardedOrdinarySend           a published caller activation;
-         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *   guardedOrdinarySendInherited* a compact caller whose callee
          *                                 inherits all provenance from its own
          *                                 caller, passed in its place without
          *                                 materialization;
@@ -4252,9 +4238,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
          *                                 no prelude of its own;
          *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
-         *                                 is its caller's;
-         *   guardedOrdinarySendInherited  a minimal direct header, decided by
-         *                                 the general provenance query.
+         *                                 is its caller's.
+         *
+         * I102: every unmaterialized frame carries the full B5 header, so
+         * these two forms cover every inherited relation.
          *
          * A Closure with a different prelude or an explicit Task satisfies
          * none of the inherited guards and takes the materializing form, as
@@ -4318,36 +4305,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, selector, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller),
                     supplied, enteredContext, cachedReceiver, cachedSelector, cachedContext,
                     cachedSend);
-        }
-
-        @Specialization(
-                guards = {
-                    "inherited != null",
-                    "!isInheritingFullHeader(caller)",
-                    "receiver == cachedReceiver",
-                    "selector.equals(cachedSelector)",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedSend != null"
-                },
-                assumptions = "cachedSend.stability()",
-                limit = "3")
-        public static PreparedClosureCall guardedOrdinarySendInherited(
-                Object receiver,
-                String selector,
-                Object[] caller,
-                @Variadic Object[] supplied,
-                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("selector") String cachedSelector,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
-                        GuardedSendTarget cachedSend) {
-            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySend(
-                    receiver, selector, inherited, supplied, enteredContext,
-                    cachedReceiver, cachedSelector, cachedContext, cachedSend);
         }
 
         @Specialization(
@@ -4447,7 +4404,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     "guardedOrdinarySend",
                     "guardedOrdinarySendInheritedOwnPreludeAbsent",
                     "guardedOrdinarySendInheritedSamePrelude",
-                    "guardedOrdinarySendInherited",
                     "guardedOrdinarySendMaterializing",
                     "fastOrdinarySend",
                     "guardedStructuredSend"
@@ -4505,25 +4461,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return activation;
             }
             return ProtosFrameArguments.activation((Object[]) caller);
-        }
-
-        /**
-         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
-         * for the callee header of a guarded ordinary send, whose callee uses
-         * its caller only for the prelude, actor module state, current module
-         * key, execution domain and Task or dynamic-control state it would
-         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
-         * the own caller of a still-compact root that inherits all of them,
-         * else {@code null}. It never materializes. The frame-argument array
-         * may be published between executions, so this is re-evaluated on
-         * every execution.
-         */
-        @NonIdempotent
-        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
-            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
-                return null;
-            }
-            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
         }
 
         /**
@@ -4637,7 +4574,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * form carries only the provenance path it has observed:
          *
          *   guardedOrdinarySend           a published caller activation;
-         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *   guardedOrdinarySendInherited* a compact caller whose callee
          *                                 inherits all provenance from its own
          *                                 caller, passed in its place without
          *                                 materialization;
@@ -4687,9 +4624,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
          *                                 no prelude of its own;
          *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
-         *                                 is its caller's;
-         *   guardedOrdinarySendInherited  a minimal direct header, decided by
-         *                                 the general provenance query.
+         *                                 is its caller's.
+         *
+         * I102: every unmaterialized frame carries the full B5 header, so
+         * these two forms cover every inherited relation.
          *
          * A Closure with a different prelude or an explicit Task satisfies
          * none of the inherited guards and takes the materializing form, as
@@ -4749,35 +4687,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                         GuardedSendTarget cachedSend) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), cachedSend);
-        }
-
-        @Specialization(
-                guards = {
-                    "inherited != null",
-                    "!isInheritingFullHeader(caller)",
-                    "receiver == cachedReceiver",
-                    "selector.equals(cachedSelector)",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedSend != null"
-                },
-                assumptions = "cachedSend.stability()",
-                limit = "3")
-        public static PreparedClosureCall guardedOrdinarySendInherited(
-                Object receiver,
-                String selector,
-                Object[] caller,
-
-                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("selector") String cachedSelector,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
-                        GuardedSendTarget cachedSend) {
-            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendZero(
-                    receiver, inherited, cachedSend);
         }
 
         @Specialization(
@@ -4877,7 +4786,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     "guardedOrdinarySend",
                     "guardedOrdinarySendInheritedOwnPreludeAbsent",
                     "guardedOrdinarySendInheritedSamePrelude",
-                    "guardedOrdinarySendInherited",
                     "guardedOrdinarySendMaterializing",
                     "fastOrdinarySend",
                     "guardedStructuredSend"
@@ -4935,25 +4843,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return activation;
             }
             return ProtosFrameArguments.activation((Object[]) caller);
-        }
-
-        /**
-         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
-         * for the callee header of a guarded ordinary send, whose callee uses
-         * its caller only for the prelude, actor module state, current module
-         * key, execution domain and Task or dynamic-control state it would
-         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
-         * the own caller of a still-compact root that inherits all of them,
-         * else {@code null}. It never materializes. The frame-argument array
-         * may be published between executions, so this is re-evaluated on
-         * every execution.
-         */
-        @NonIdempotent
-        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
-            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
-                return null;
-            }
-            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
         }
 
         /**
@@ -5066,7 +4955,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * form carries only the provenance path it has observed:
          *
          *   guardedOrdinarySend           a published caller activation;
-         *   guardedOrdinarySendInherited  a compact caller whose callee
+         *   guardedOrdinarySendInherited* a compact caller whose callee
          *                                 inherits all provenance from its own
          *                                 caller, passed in its place without
          *                                 materialization;
@@ -5116,9 +5005,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          *   guardedOrdinarySendInheritedOwnPreludeAbsent  the root Closure has
          *                                 no prelude of its own;
          *   guardedOrdinarySendInheritedSamePrelude  the root Closure's prelude
-         *                                 is its caller's;
-         *   guardedOrdinarySendInherited  a minimal direct header, decided by
-         *                                 the general provenance query.
+         *                                 is its caller's.
+         *
+         * I102: every unmaterialized frame carries the full B5 header, so
+         * these two forms cover every inherited relation.
          *
          * A Closure with a different prelude or an explicit Task satisfies
          * none of the inherited guards and takes the materializing form, as
@@ -5178,35 +5068,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                         GuardedSendTarget cachedSend) {
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), supplied0, cachedSend);
-        }
-
-        @Specialization(
-                guards = {
-                    "inherited != null",
-                    "!isInheritingFullHeader(caller)",
-                    "receiver == cachedReceiver",
-                    "selector.equals(cachedSelector)",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedSend != null"
-                },
-                assumptions = "cachedSend.stability()",
-                limit = "3")
-        public static PreparedClosureCall guardedOrdinarySendInherited(
-                Object receiver,
-                String selector,
-                Object[] caller,
-                Object supplied0,
-                @Bind("inheritedProvenanceCallerOrNull(caller)") ProtosActivation inherited,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("selector") String cachedSelector,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedSend(receiver, selector, inherited, enteredContext)")
-                        GuardedSendTarget cachedSend) {
-            return ProtosBytecodeRootNode.PrepareSendArguments.guardedOrdinarySendOne(
-                    receiver, inherited, supplied0, cachedSend);
         }
 
         @Specialization(
@@ -5307,7 +5168,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     "guardedOrdinarySend",
                     "guardedOrdinarySendInheritedOwnPreludeAbsent",
                     "guardedOrdinarySendInheritedSamePrelude",
-                    "guardedOrdinarySendInherited",
                     "guardedOrdinarySendMaterializing",
                     "fastOrdinarySend",
                     "guardedStructuredSend"
@@ -5369,25 +5229,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return activation;
             }
             return ProtosFrameArguments.activation((Object[]) caller);
-        }
-
-        /**
-         * PERF038-D/E: a caller that is provenance-equivalent to the exact one
-         * for the callee header of a guarded ordinary send, whose callee uses
-         * its caller only for the prelude, actor module state, current module
-         * key, execution domain and Task or dynamic-control state it would
-         * inherit (see {@link ProtosFrameArguments#compactInheritedProvenanceCaller}):
-         * the own caller of a still-compact root that inherits all of them,
-         * else {@code null}. It never materializes. The frame-argument array
-         * may be published between executions, so this is re-evaluated on
-         * every execution.
-         */
-        @NonIdempotent
-        static ProtosActivation inheritedProvenanceCallerOrNull(Object[] caller) {
-            if (!ProtosFrameArguments.isUnmaterializedCompactCall(caller)) {
-                return null;
-            }
-            return ProtosFrameArguments.unmaterializedInheritedProvenanceCaller(caller);
         }
 
         /**

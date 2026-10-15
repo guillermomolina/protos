@@ -50,10 +50,11 @@ import com.oracle.truffle.api.library.ExportMessage;
  * callback's PRESENT block-local bindings to a durable authority on the
  * activation before it is projected; no additional frame is fabricated.</p>
  *
- * <p>PERF032: a scope request on a NORMAL-mode headerless frame fails with an
- * explicit error. Protos cannot refuse the creation of a Truffle {@code
- * DebuggerSession}, which the framework owns; this export is the boundary
- * Protos controls.</p>
+ * <p>I102 (PLAT060-B5): every ordinary Closure frame carries the same
+ * argument header in NORMAL and DEBUG, so the frame layout says nothing about
+ * the execution profile. Which scopes a Context guarantees is a property of
+ * its immutable {@link ProtosExecutionMode} and of the lowering it selected,
+ * never of the physical frame-argument structure.</p>
  */
 @ExportLibrary(value = NodeLibrary.class, receiverType = TagTreeNode.class)
 final class ProtosBytecodeTagTreeNodeExports {
@@ -66,9 +67,7 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (frame == null) {
             return false;
         }
-        // PERF032: answered so that getScope reports the explicit NORMAL-mode rejection.
-        return isHeaderlessFrame(frame)
-                || inlineCallbackCall(node, frame.materialize()) != null
+        return inlineCallbackCall(node, frame.materialize()) != null
                 || ProtosFrameArguments.hasActivation(frame);
     }
 
@@ -80,9 +79,6 @@ final class ProtosBytecodeTagTreeNodeExports {
             throws UnsupportedMessageException {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
-        }
-        if (isHeaderlessFrame(frame)) {
-            throw headerlessScopeRejection();
         }
         PreparedInlineLiteralCall inline = inlineCallbackCall(node, frame.materialize());
         if (inline != null) {
@@ -269,24 +265,6 @@ final class ProtosBytecodeTagTreeNodeExports {
             }
         }
         return null;
-    }
-
-    /**
-     * PERF032: only a NORMAL-mode headerless entry produces a Protos Bytecode frame without
-     * arguments. It carries no Closure or caller provenance, so its scope cannot be reconstructed;
-     * the request fails explicitly instead of appearing to have no scope.
-     */
-    private static boolean isHeaderlessFrame(Frame frame) {
-        return frame.getArguments().length == 0;
-    }
-
-    @TruffleBoundary
-    private static IllegalStateException headerlessScopeRejection() {
-        return new IllegalStateException(
-                "Protos debugger scopes are not supported in NORMAL execution mode: this"
-                        + " activation was entered without provenance. Run the Context in DEBUG"
-                        + " execution mode (protos debug, or the protos.Debug option) to debug"
-                        + " scopes.");
     }
 
     @TruffleBoundary

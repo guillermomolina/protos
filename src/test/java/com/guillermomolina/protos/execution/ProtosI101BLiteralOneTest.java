@@ -133,7 +133,6 @@ final class ProtosI101BLiteralOneTest {
                         "The oracle must contain the literal-one carrier");
 
                 assertTrue(actual.provablyNonSuspendingBody());
-                assertTrue(actual.headerlessEntryBody());
 
                 // No generic execution machinery in the literal root.
                 // Instrumentation instructions are printed, not filtered.

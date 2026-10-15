@@ -48,14 +48,15 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF032-G7 minimal direct Closure call headers.
+ * I102 (PLAT060-B5) uniform header for the former PERF032-G7 minimal shapes.
  *
- * <p>A direct source Closure call with zero supplied arguments carries only
- * the slots it needs: {@code [closure, caller]} (A), {@code [closure, caller,
- * returnHome]} (B), {@code [closure, task, caller]} (C) or {@code [closure,
- * task, caller, returnHome]} (D). Calls with supplied arguments and immediate
- * method calls retain their required metadata; unobservable zero-argument
- * immediate methods use a four-slot header.
+ * <p>The four zero-argument direct Closure call shapes PERF032-G7 once
+ * shortened (A: no Task, unobservable home; B: no Task, physical home; C:
+ * explicit Task, unobservable home; D: explicit Task, physical home), the
+ * zero-argument immediate method call, and the rich entry that already owns
+ * its activation all use the single five-slot header
+ * {@code [closure|activation, receiver|direct, methodHome|task, caller,
+ * returnHome, supplied...]}. Publication replaces argument 0 only.
  */
 final class ProtosPerf032G7MinimalDirectHeaderTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -67,9 +68,11 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(literal, module);
             Object[] arguments = prepared.targetArguments();
 
-            assertEquals(2, arguments.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
             assertSame(literal, arguments[0]);
-            assertSame(module, arguments[1]);
+            assertNull(arguments[2], "no explicit Task");
+            assertSame(module, arguments[3]);
+            assertSame(ProtosReturnHome.unobservable(), arguments[4]);
             assertSame(ProtosReturnHome.unobservable(),
                     ProtosFrameArguments.compactReturnHome(arguments));
             assertTrue(ProtosFrameArguments.compactOwnsReturnHome(arguments));
@@ -87,7 +90,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             ProtosActivation callee = ProtosFrameArguments.activation(arguments);
             assertSame(callee, arguments[0], "the activation is published into argument 0");
             assertSame(callee, ProtosFrameArguments.activation(arguments));
-            assertEquals(2, arguments.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
+            assertSame(module, arguments[3], "publication rewrites argument 0 only");
             assertSame(ProtosReturnHome.unobservable(), callee.returnHome().orElseThrow());
             assertTrue(callee.task().isEmpty());
             assertEquals(0, callee.suppliedArgumentCountForRuntime());
@@ -108,10 +112,11 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(returning, module);
             Object[] arguments = prepared.targetArguments();
 
-            assertEquals(3, arguments.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
             assertSame(returning, arguments[0]);
-            assertSame(module, arguments[1]);
-            ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[2]);
+            assertNull(arguments[2], "no explicit Task");
+            assertSame(module, arguments[3]);
+            ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[4]);
             assertNotSame(ProtosReturnHome.unobservable(), home);
             assertSame(home, ProtosFrameArguments.compactReturnHome(arguments));
             assertSame(home, ProtosFrameArguments.compactReturnHome(arguments),
@@ -139,10 +144,11 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                                         literal, List.of(), module, current);
                         Object[] arguments = prepared.targetArguments();
                         argumentsRef.set(arguments);
-                        assertEquals(3, arguments.length);
+                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
                         assertSame(literal, arguments[0]);
-                        assertSame(current, arguments[1]);
-                        assertSame(module, arguments[2]);
+                        assertSame(current, arguments[2]);
+                        assertSame(module, arguments[3]);
+                        assertSame(ProtosReturnHome.unobservable(), arguments[4]);
                         assertSame(current, ProtosFrameArguments.compactTask(arguments));
                         assertSame(module, ProtosFrameArguments.compactCaller(arguments));
                         assertSame(ProtosReturnHome.unobservable(),
@@ -180,12 +186,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                                         returning, List.of(), module, current);
                         Object[] arguments = prepared.targetArguments();
                         argumentsRef.set(arguments);
-                        assertEquals(4, arguments.length);
+                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
                         assertSame(returning, arguments[0]);
-                        assertSame(current, arguments[1]);
-                        assertSame(module, arguments[2]);
+                        assertSame(current, arguments[2]);
+                        assertSame(module, arguments[3]);
                         ProtosReturnHome home =
-                                assertInstanceOf(ProtosReturnHome.class, arguments[3]);
+                                assertInstanceOf(ProtosReturnHome.class, arguments[4]);
                         assertNotSame(ProtosReturnHome.unobservable(), home);
                         assertSame(home, ProtosFrameArguments.compactReturnHome(arguments));
                         assertTrue(home.isActive());
@@ -211,7 +217,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
                             literal, module, null, new Object[0]);
-            assertEquals(2, arguments.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
 
             ProtosActivation observed = observeScopeTwice(literal, arguments);
             assertSame(module, ProtosFrameArguments.compactCaller(arguments));
@@ -232,13 +238,13 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                         Object[] arguments =
                                 ProtosFrameArguments.compactDirectClosureCall(
                                         returning, module, current, new Object[0]);
-                        assertEquals(4, arguments.length);
+                        assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
                         argumentsRef.set(arguments);
                     });
             assertTrue(module.executionDomain().dispatchOne());
 
             Object[] arguments = argumentsRef.get();
-            ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[3]);
+            ProtosReturnHome home = assertInstanceOf(ProtosReturnHome.class, arguments[4]);
             ProtosActivation observed = observeScopeTwice(returning, arguments);
             assertSame(module, ProtosFrameArguments.compactCaller(arguments));
             assertSame(task, observed.task().orElseThrow());
@@ -249,7 +255,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     }
 
     /**
-     * Observes the NodeLibrary scope of a minimal-header frame twice and
+     * Observes the NodeLibrary scope of a zero-argument B5 frame twice and
      * returns the one activation both observations published.
      */
     private static ProtosActivation observeScopeTwice(
@@ -284,8 +290,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
                             escaped, module, null, new Object[0]);
-            assertEquals(3, arguments.length);
-            assertSame(captured, arguments[2]);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, arguments.length);
+            assertSame(captured, arguments[4]);
             assertSame(captured, ProtosFrameArguments.compactReturnHome(arguments));
             assertFalse(ProtosFrameArguments.compactOwnsReturnHome(arguments));
             assertSame(captured,
@@ -294,7 +300,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     }
 
     @Test
-    void suppliedArgumentsAndImmediateMethodsKeepTheFullHeader() throws Exception {
+    void suppliedArgumentsAndImmediateMethodsUseTheSameHeader() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "g7-full.protos", module);
@@ -314,11 +320,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosFrameArguments.compactImmediateMethodCall(
                             literal, literal, methodHome, module, new Object[0]);
 
-            assertEquals(4, method.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, method.length);
             assertSame(literal, method[0]);
             assertSame(literal, method[1]);
             assertSame(methodHome, method[2]);
             assertSame(module, method[3]);
+            assertSame(ProtosReturnHome.unobservable(), method[4]);
             assertSame(module, ProtosFrameArguments.compactCaller(method));
             assertSame(
                     ProtosReturnHome.unobservable(),
@@ -329,7 +336,9 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertSame(literal, published.receiver());
             assertSame(published, method[0]);
             assertSame(published, ProtosFrameArguments.activation(method));
-            assertEquals(4, method.length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, method.length);
+            assertSame(literal, method[1]);
+            assertSame(methodHome, method[2]);
             assertSame(module, ProtosFrameArguments.compactCaller(method));
             assertSame(
                     ProtosReturnHome.unobservable(),
@@ -351,9 +360,10 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             literal, target, module);
 
             assertSame(target, zero.bodyTarget());
-            assertEquals(2, zero.targetArguments().length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, zero.targetArguments().length);
             assertSame(literal, zero.targetArguments()[0]);
-            assertSame(module, zero.targetArguments()[1]);
+            assertNull(zero.targetArguments()[2]);
+            assertSame(module, zero.targetArguments()[3]);
             assertSame(
                     ProtosReturnHome.unobservable(),
                     ProtosFrameArguments.compactReturnHome(
@@ -391,11 +401,11 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosBytecodeRootNode.finishDirectClosureCallZero(
                             returning, returningTarget, module);
 
-            assertEquals(3, owned.targetArguments().length);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH, owned.targetArguments().length);
             ProtosReturnHome physicalHome =
                     assertInstanceOf(
                             ProtosReturnHome.class,
-                            owned.targetArguments()[2]);
+                            owned.targetArguments()[4]);
             assertNotSame(ProtosReturnHome.unobservable(), physicalHome);
             assertTrue(
                     assertInstanceOf(
@@ -427,7 +437,72 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
             assertTrue(ProtosFrameArguments.hasActivation(rich));
             assertSame(module, ProtosFrameArguments.activation(rich));
             assertThrows(IllegalStateException.class,
-                    () -> ProtosFrameArguments.compactReturnHome(rich));
+                    () -> ProtosFrameArguments.compactOwnsReturnHome(rich));
+        });
+    }
+
+    /**
+     * I102: an ordinary entry that already owns its activation uses the same
+     * B5 header, published from the start: no synthesized caller, the exact
+     * return home, and the supplied values at the fixed offset.
+     */
+    @Test
+    void richOrdinaryEntryUsesThePublishedB5Header() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue identity =
+                    parsedClosure("(value) => { value }", "i102-rich.protos", module);
+            ProtosIntegerValue seven = integer(7);
+            ProtosBytecodeRootNode.PreparedClosureCall compact =
+                    fastDirect(identity, module, seven);
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(
+                            ProtosFrameArguments.compactDirectClosureCall(
+                                    identity, module, null, new Object[] {seven}));
+
+            ProtosBytecodeRootNode.PreparedClosureCall rich =
+                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+                            compact.bodyTarget(), activation);
+            Object[] arguments = rich.targetArguments();
+
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
+            assertSame(activation, arguments[0]);
+            assertTrue(ProtosFrameArguments.hasPublishedActivation(arguments));
+            assertFalse(ProtosFrameArguments.isUnmaterializedCompactCall(arguments));
+            assertNull(arguments[3], "no caller is synthesized for a published entry");
+            assertSame(activation.returnHome().orElseThrow(), arguments[4]);
+            assertEquals(1, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
+            assertSame(seven, ProtosFrameArguments.compactSuppliedArgument(arguments, 0));
+            if (activation.methodHome().isPresent()) {
+                assertSame(activation.receiver(), arguments[1]);
+                assertSame(activation.methodHome().orElseThrow(), arguments[2]);
+            } else {
+                assertNull(arguments[2], "no explicit Task is claimed");
+            }
+            assertSame(activation, ProtosFrameArguments.activation(arguments));
+            assertNull(activation.materializedContextOrNullForRuntime(),
+                    "building the header materializes no Context");
+
+            // Published-state readers take the activation, never the null caller slot.
+            assertSame(activation.preludeOrNullForRuntime(),
+                    ProtosFrameArguments.preludeOrNull(arguments));
+            assertSame(activation.task().orElse(null),
+                    ProtosFrameArguments.compactTask(arguments));
+            assertNull(ProtosFrameArguments.compactInheritedProvenanceCaller(arguments));
+            assertFalse(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));
+            assertThrows(IllegalStateException.class,
+                    () -> ProtosFrameArguments.compactCaller(arguments),
+                    "the absent caller is never treated as a caller");
+
+            assertEquals("7", integerValue(enter(rich)));
+            assertSame(activation, arguments[0], "the activation identity is preserved");
+            assertSame(activation.returnHome().orElseThrow(), arguments[4],
+                    "the invocation's exact return home is kept");
+
+            // A module activation is a real activation but not a Closure invocation.
+            IllegalStateException rejected =
+                    assertThrows(IllegalStateException.class,
+                            () -> ProtosFrameArguments.publishedInvocation(module));
+            assertTrue(rejected.getMessage().contains("return home"), rejected.getMessage());
         });
     }
 

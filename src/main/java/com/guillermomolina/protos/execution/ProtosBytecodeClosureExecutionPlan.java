@@ -327,8 +327,9 @@ final class ProtosBytecodeClosureExecutionPlan {
     }
 
     /**
-     * Execute with the same activation calling convention as every existing
-     * Protos AST root: frame argument 0 is the exact invocation activation.
+     * Execute through the PLAT060-B5 ordinary Closure-call ABI with the
+     * exact invocation activation already published in frame argument 0
+     * ({@link ProtosFrameArguments#publishedInvocation}).
      * PERF032-G6: the entered target is selected exactly as for an ordinary
      * source call, so a Closure declaring no parameters still rejects
      * supplied arguments.
@@ -340,7 +341,7 @@ final class ProtosBytecodeClosureExecutionPlan {
                     ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
                                     activationTarget,
                                     activation.suppliedArgumentCountForRuntime())
-                            .call(activation));
+                            .call(ProtosFrameArguments.publishedInvocation(activation)));
         } catch (ProtosBytecodeControlTransferException bridged) {
             throw bridged.transfer();
         }

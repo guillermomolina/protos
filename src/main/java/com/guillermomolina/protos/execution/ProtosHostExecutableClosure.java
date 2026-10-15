@@ -20,7 +20,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain.HostEntryExtent;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
-import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -77,9 +76,9 @@ import java.util.Objects;
  * body or non-canonical {@code call}) runs through the shared C-prime entry root and suspends the
  * same way.
  *
- * <p>PERF032: in a Context running in the NORMAL {@link ProtosExecutionMode}, a call to a root
- * proven eligible by lowering enters with an empty argument array instead of the compact header.
- * The selection is fixed when the adapter is prepared; a DEBUG Context always uses the header.
+ * <p>I102 (PLAT060-B5): every execution on the compact path enters through the single ordinary
+ * Closure-call ABI, whatever the Context's {@link ProtosExecutionMode}; the mode selects only the
+ * lowering of the entered root, never the frame-argument layout.
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosHostExecutableClosure implements TruffleObject {
@@ -92,12 +91,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
     final RootCallTarget target;
     /** The standard-embedding Process whose RootActor each execution enters; null for sessions. */
     final ProtosEmbeddedProcess embedding;
-    /**
-     * PERF032: true only when the owning Context runs in the immutable NORMAL execution mode and
-     * {@link #target} is a root proven eligible for the headerless entry ABI. Fixed at
-     * construction from the Context mode; never derived from instrumentation or debugger state.
-     */
-    final boolean headerlessEntry;
 
     private ProtosHostExecutableClosure(
             ProtosClosureValue closure,
@@ -110,11 +103,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         this.owner = owner;
         this.target = target;
         this.embedding = embedding;
-        this.headerlessEntry =
-                owner.executionMode() == ProtosExecutionMode.NORMAL
-                        && target != null
-                        && target.getRootNode() instanceof ProtosSemanticBytecodeRootNode root
-                        && root.headerlessEntryBody();
     }
 
     /**
@@ -210,12 +198,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 Object[] arguments,
                 @Bind("$node") Node node,
                 @Cached("receiver.target") RootCallTarget cachedTarget,
-                /*
-                 * PERF032: a function of the target root and its Context's immutable mode. A
-                 * root belongs to exactly one Context (exclusive context policy), so the cached
-                 * target guard already fixes it.
-                 */
-                @Cached("receiver.headerlessEntry") boolean headerlessEntry,
                 @Cached("create(cachedTarget)") DirectCallNode call,
                 @Shared("indirectCall") @Cached IndirectCallNode rejectionCall)
                 throws ArityException, UnsupportedTypeException {
@@ -226,7 +208,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared =
-                        receiver.prepare(supplied, headerlessEntry);
+                        receiver.prepare(supplied);
                 if (prepared.bodyTarget() != cachedTarget) {
                     /*
                      * PERF032-G6: arguments supplied to a Closure declaring no parameters select
@@ -270,7 +252,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared =
-                        receiver.prepare(supplied, receiver.headerlessEntry);
+                        receiver.prepare(supplied);
                 return finishEntry(
                         embedding,
                         prepared,
@@ -385,31 +367,17 @@ final class ProtosHostExecutableClosure implements TruffleObject {
     ProtosBytecodeRootNode.OrdinarySourceCall prepare(Object[] arguments, Node node)
             throws ArityException {
         try {
-            return prepare(admitArguments(arguments, node), headerlessEntry);
+            return prepare(admitArguments(arguments, node));
         } catch (UnsupportedTypeException unexpected) {
             throw new IllegalStateException("session adapter rejected a Protos argument", unexpected);
         }
     }
 
     /**
-     * PERF032: in NORMAL mode an eligible root with no supplied arguments and an unobservable
-     * return home is entered with an empty argument array: no Closure and no caller provenance. A
-     * DEBUG Context never selects it, so its frames always carry the ordinary compact header.
+     * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance, in
+     * NORMAL and DEBUG alike; the target selection keeps the arity-rejection entry.
      */
-    private ProtosBytecodeRootNode.OrdinarySourceCall prepare(
-            Object[] supplied, boolean headerlessEntry) {
-        if (headerlessEntry && supplied.length == 0) {
-            ProtosReturnHome home = closure.invocationReturnHomeForRuntime();
-            if (home == ProtosReturnHome.unobservable()) {
-                return (ProtosBytecodeRootNode.OrdinarySourceCall)
-                        ProtosBytecodeRootNode.PreparedClosureCall
-                                .ordinaryCompactSelected(
-                                        target,
-                                        NO_SUPPLIED_ARGUMENTS,
-                                        home,
-                                        closure.returnHome().isEmpty());
-            }
-        }
+    private ProtosBytecodeRootNode.OrdinarySourceCall prepare(Object[] supplied) {
         return (ProtosBytecodeRootNode.OrdinarySourceCall)
                 ProtosBytecodeRootNode.finishDirectClosureCall(closure, target, supplied, caller);
     }

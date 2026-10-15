@@ -20,10 +20,12 @@ package com.guillermomolina.protos.execution;
  * PERF032 execution mode of one RuntimeHost and of every Context it hosts.
  *
  * <p>The mode is selected when the host or Context is created and never changes afterwards. A
- * {@link #NORMAL} execution does not support debugging its scopes: an eligible source call may be
- * entered without the activation provenance header, and a debugger scope request on such a frame
- * fails explicitly. A {@link #DEBUG} execution transports provenance on every call from the first
- * one, so a debugger attached at any later point observes exact scopes.
+ * {@link #NORMAL} execution does not guarantee debugger scopes: its lowering may omit the
+ * information they need. A {@link #DEBUG} execution keeps that information from the first call,
+ * so a debugger attached at any later point observes exact scopes.
+ *
+ * <p>I102 (PLAT060-B5): both modes use the same ordinary Closure-call frame-argument ABI. The mode
+ * never selects a physical argument layout.
  *
  * <p>I101-A (PLAT058-D): the mode is also the immutable physical compilation profile of every
  * executable owned by the Context. It is passed explicitly to {@link CanonicalToBytecodeLowerer},

@@ -305,7 +305,10 @@ final class ProtosPerf025H1LazyRootActivationTest {
             RootCallTarget target =
                     ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
                             identity, ProtosLanguageContext.currentIfEnteredForRuntime());
-            Object[] arguments = new Object[] {activation};
+            // I102: a rich ordinary entry uses the B5 header with its activation published.
+            Object[] arguments = ProtosFrameArguments.publishedInvocation(activation);
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, arguments.length);
+            assertSame(supplied, ProtosFrameArguments.compactSuppliedArgument(arguments, 0));
 
             assertSame(supplied, target.call(arguments));
             assertSame(activation, arguments[0]);

@@ -139,11 +139,13 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                         assertSame(adapter.target, call.bodyTarget());
                                         return call.targetArguments();
                                     });
-            // PERF032: a NORMAL-mode session enters the eligible literal root headerless.
+            // I102: NORMAL enters through the same B5 header as DEBUG, never materialized.
             assertEquals(
-                    0,
+                    ProtosFrameArguments.HEADER_LENGTH,
                     arguments.length,
-                    "headerless literal call must not transport closure or caller");
+                    "NORMAL literal call uses the B5 header");
+            assertSame(adapter.closure, arguments[0], "no rich callee activation was published");
+            assertSame(adapter.caller, arguments[3]);
             assertEquals(
                     0,
                     rootDomain(session).liveTaskCount(),
@@ -188,9 +190,9 @@ final class ProtosPerf033CanonicalCallableInteropTest {
 
                                 // DEBUG mode carries provenance before any tag tree exists.
                                 assertEquals(
-                                        2,
+                                        ProtosFrameArguments.HEADER_LENGTH,
                                         prepareNoArguments(adapter).targetArguments().length,
-                                        "DEBUG literal call carries the compact header");
+                                        "DEBUG literal call carries the B5 header");
 
                                 // Simulates the Bytecode DSL tooling reparse.
                                 root.getRootNodes().ensureComplete();
@@ -210,11 +212,11 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                 Object[] arguments = prepared.targetArguments();
 
                                 assertEquals(
-                                        2,
+                                        ProtosFrameArguments.HEADER_LENGTH,
                                         arguments.length,
-                                        "DEBUG root must retain the compact header");
+                                        "DEBUG root must retain the B5 header");
                                 assertSame(adapter.closure, arguments[0]);
-                                assertSame(adapter.caller, arguments[1]);
+                                assertSame(adapter.caller, arguments[3]);
 
                                 VirtualFrame frame =
                                         Truffle.getRuntime()

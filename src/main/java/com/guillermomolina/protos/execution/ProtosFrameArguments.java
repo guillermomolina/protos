@@ -32,41 +32,34 @@ import java.util.Objects;
 
 final class ProtosFrameArguments {
     /*
-     * PLAT040 / I072-B compact ordinary source-call ABI.
+     * PLAT060-B5 universal ordinary Closure-call ABI (I102).
      *
      * Captured lexical state and executable identity remain owned by the
      * Closure. Caller-owned module/domain/control provenance is referenced,
-     * rather than copied into another rich per-call aggregate. User arguments
-     * follow the fixed runtime header directly, as in mature Truffle frame
-     * argument conventions.
+     * rather than copied into another rich per-call aggregate. Every ordinary
+     * Closure call into a CallTarget, in NORMAL and DEBUG alike, carries this
+     * one fixed five-slot header followed by the supplied positional values:
      *
-     * Two invocation kinds share the header layout:
+     *   [0] the invoked ProtosClosureValue, or the exact published
+     *       ProtosActivation of this invocation
+     *   [1] receiver (immediate method call) | DIRECT_CLOSURE_CALL
+     *   [2] methodHome (immediate method call) | explicit ProtosTask or null
+     *   [3] caller ProtosActivation
+     *   [4] the exact ProtosReturnHome of the invocation, including the
+     *       unobservable and primitive-accepting markers
+     *   [5...] supplied positional arguments
      *
-     *   immediate method call: closure, receiver, methodHome, caller, returnHome
-     *   direct Closure call:   closure, DIRECT_CLOSURE_CALL, task|null, caller, returnHome
+     * Slots 1 and 2 are a tagged union inside this single layout, not layout
+     * variants. A direct Closure call (PERF025) takes its receiver and method
+     * home from the Closure's captures, exactly as
+     * ProtosActivation.forClosureInvocation does; its task slot carries an
+     * explicit owning Task for a Task-owned entry, and null means the callee
+     * inherits the caller's Task or dynamic-control state.
      *
-     * A direct Closure call (PERF025) takes its receiver and method home from
-     * the Closure's captures, exactly as ProtosActivation.forClosureInvocation
-     * does. Its task slot carries an explicit owning Task for a Task-owned
-     * entry (whose creator is not the Task's own activation); null means the
-     * callee inherits the caller's Task or dynamic-control state.
-     *
-     * The returnHome slot always holds a ProtosReturnHome; for an owning call
-     * of a plan proven return-home-unobservable it is the non-materialized
-     * ProtosReturnHome.unobservable() marker (PERF025).
-     *
-     * PERF032-G7: a direct Closure call with zero supplied arguments uses a
-     * minimal header instead, distinguished by length and slot types:
-     *
-     *   A: closure, caller                    (no Task, unobservable home)
-     *   B: closure, caller, returnHome        (no Task, physical home)
-     *   C: closure, task, caller              (explicit Task, unobservable home)
-     *   D: closure, task, caller, returnHome  (explicit Task, physical home)
-     *
-     * The omitted unobservable home is the identity-stable shared marker, so
-     * it is reconstructed rather than recomputed. Argument 0 is replaced by
-     * the published activation exactly as for the full header; every other
-     * slot and the array length stay unchanged after publication.
+     * Publication replaces only argument 0 by the materialized activation;
+     * the length, the offsets and every other slot stay unchanged. Arity,
+     * Task, ReturnHome, method reception, execution profile and
+     * materialization never change any offset.
      */
     private static final int CLOSURE_INDEX = 0;
     private static final int RECEIVER_INDEX = 1;
@@ -74,14 +67,8 @@ final class ProtosFrameArguments {
     private static final int TASK_INDEX = 2;
     private static final int CALLER_INDEX = 3;
     private static final int RETURN_HOME_INDEX = 4;
-    private static final int USER_ARGUMENT_OFFSET = 5;
-
-    /* PERF032-G7 minimal direct-header layouts; 0 is "not minimal". */
-    private static final int MINIMAL_NONE = 0;
-    private static final int MINIMAL_A = 1;
-    private static final int MINIMAL_B = 2;
-    private static final int MINIMAL_C = 3;
-    private static final int MINIMAL_D = 4;
+    static final int HEADER_LENGTH = 5;
+    static final int SUPPLIED_ARGUMENT_OFFSET = HEADER_LENGTH;
 
     /** Private kind marker; never a guest value, so never a method receiver. */
     private static final Object DIRECT_CLOSURE_CALL = new Object();
@@ -132,42 +119,24 @@ final class ProtosFrameArguments {
             ProtosReturnHome returnHome,
             Object[] supplied) {
         if (supplied.length == 0) {
-            if (returnHome == ProtosReturnHome.unobservable()) {
-                return new Object[] {
-                    closure, receiver, methodHome, caller
-                };
-            }
-            return new Object[] {
-                closure, receiver, methodHome, caller, returnHome
-            };
+            return new Object[] {closure, receiver, methodHome, caller, returnHome};
         }
         if (supplied.length == 1) {
             return new Object[] {
                 closure, receiver, methodHome, caller, returnHome, supplied[0]
             };
         }
-        Object[] arguments = new Object[USER_ARGUMENT_OFFSET + supplied.length];
-        arguments[CLOSURE_INDEX] = closure;
-        arguments[RECEIVER_INDEX] = receiver;
-        arguments[METHOD_HOME_INDEX] = methodHome;
-        arguments[CALLER_INDEX] = caller;
-        arguments[RETURN_HOME_INDEX] = returnHome;
-        System.arraycopy(supplied, 0, arguments, USER_ARGUMENT_OFFSET, supplied.length);
-        return arguments;
+        return headerWithSupplied(closure, receiver, methodHome, caller, returnHome, supplied);
     }
 
-    /**
-     * PERF038-H: guarded Send0, without supplied argument vector.
-     */
+    /** PERF038-H: guarded Send0, without supplied argument vector. */
     static Object[] compactImmediateMethodCallZero(
             ProtosClosureValue closure,
             Object receiver,
             ProtosObjectValue methodHome,
             ProtosActivation caller,
             ProtosReturnHome returnHome) {
-        return returnHome == ProtosReturnHome.unobservable()
-                ? new Object[] {closure, receiver, methodHome, caller}
-                : new Object[] {closure, receiver, methodHome, caller, returnHome};
+        return new Object[] {closure, receiver, methodHome, caller, returnHome};
     }
 
     /**
@@ -199,25 +168,19 @@ final class ProtosFrameArguments {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(supplied, "supplied");
-        if (supplied.length != 0) {
-            return compactCall(closure, DIRECT_CLOSURE_CALL, task, caller, supplied);
-        }
         ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
-        boolean unobservable = returnHome == ProtosReturnHome.unobservable();
-        if (task == null) {
-            return unobservable
-                    ? new Object[] {closure, caller}
-                    : new Object[] {closure, caller, returnHome};
+        if (supplied.length == 0) {
+            return new Object[] {closure, DIRECT_CLOSURE_CALL, task, caller, returnHome};
         }
-        return unobservable
-                ? new Object[] {closure, task, caller}
-                : new Object[] {closure, task, caller, returnHome};
+        if (supplied.length == 1) {
+            return new Object[] {
+                closure, DIRECT_CLOSURE_CALL, task, caller, returnHome, supplied[0]
+            };
+        }
+        return headerWithSupplied(
+                closure, DIRECT_CLOSURE_CALL, task, caller, returnHome, supplied);
     }
 
-    /**
-     * PERF038-H: one-argument direct Closure invocation.
-     * No intermediate supplied-argument array is constructed.
-     */
     /**
      * PERF038-H: admitted direct Call0 with an already-selected return home.
      * There is no explicit Task on an ordinary guest call.
@@ -226,9 +189,7 @@ final class ProtosFrameArguments {
             ProtosClosureValue closure,
             ProtosActivation caller,
             ProtosReturnHome returnHome) {
-        return returnHome == ProtosReturnHome.unobservable()
-                ? new Object[] {closure, caller}
-                : new Object[] {closure, caller, returnHome};
+        return new Object[] {closure, DIRECT_CLOSURE_CALL, null, caller, returnHome};
     }
 
     /**
@@ -241,15 +202,14 @@ final class ProtosFrameArguments {
             ProtosReturnHome returnHome,
             Object supplied0) {
         return new Object[] {
-            closure,
-            DIRECT_CLOSURE_CALL,
-            null,
-            caller,
-            returnHome,
-            supplied0
+            closure, DIRECT_CLOSURE_CALL, null, caller, returnHome, supplied0
         };
     }
 
+    /**
+     * PERF038-H: one-argument direct Closure invocation.
+     * No intermediate supplied-argument array is constructed.
+     */
     static Object[] compactDirectClosureCallOne(
             ProtosClosureValue closure,
             ProtosActivation caller,
@@ -257,30 +217,29 @@ final class ProtosFrameArguments {
             Object supplied0) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
-
-        ProtosReturnHome returnHome =
-                closure.invocationReturnHomeForRuntime();
-
         return new Object[] {
             closure,
             DIRECT_CLOSURE_CALL,
             task,
             caller,
-            returnHome,
+            closure.invocationReturnHomeForRuntime(),
             supplied0
         };
     }
 
     /**
-     * PERF038-H: minimal direct Call0 frame after a guarded proof
-     * that this invocation has no observable ReturnHome.
+     * PERF038-H: direct Call0 frame after a guarded proof that this
+     * invocation has no observable ReturnHome; the home slot holds the
+     * identity-stable unobservable marker.
      */
     static Object[] compactDirectClosureCallZeroNoHome(
             ProtosClosureValue closure,
             ProtosActivation caller) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(caller, "caller");
-        return new Object[] {closure, caller};
+        return new Object[] {
+            closure, DIRECT_CLOSURE_CALL, null, caller, ProtosReturnHome.unobservable()
+        };
     }
 
     /**
@@ -321,43 +280,78 @@ final class ProtosFrameArguments {
         };
     }
 
-    private static Object[] compactCall(
+    /**
+     * I102: the B5 frame arguments of an ordinary Closure entry whose exact
+     * activation already exists (the generic, rich invocation path). The
+     * activation is published in argument 0 from the start, so every reader
+     * takes its published path and that activation remains the invocation's
+     * single identity.
+     *
+     * <p>No caller, receiver or return home is synthesized. Slots 1 and 2
+     * carry the activation's own receiver and method home when it has a method
+     * home, otherwise the direct-call tag and no explicit Task (the activation
+     * owns its Task state). The caller slot is {@code null}: the activation
+     * already holds every provenance field, so no caller is ever consulted in
+     * published state. The return-home slot is the activation's exact home,
+     * and the supplied values follow at {@link #SUPPLIED_ARGUMENT_OFFSET}.
+     *
+     * <p>Published-state contract: the caller slot is read only behind an
+     * "argument 0 is still the Closure" guard ({@link
+     * #isUnmaterializedCompactCall} or the full {@link #hasCompactHeader}
+     * validation), so {@code null} there is never taken for a caller nor
+     * dereferenced; prelude, Task, receiver, method home and arguments of a
+     * published invocation are read from its activation. Copying the supplied
+     * values reads the activation's deferred value list (or its existing
+     * guest Array) and never creates the guest Array or the Context.
+     */
+    static Object[] publishedInvocation(ProtosActivation activation) {
+        Objects.requireNonNull(activation, "activation");
+        /*
+         * Every Closure invocation activation receives its home from
+         * ProtosClosureValue#invocationReturnHomeForRuntime (never null) or
+         * from a validated compact header; only non-invocation activations
+         * (module, bootstrap, top-level) have none, and they never enter
+         * through this ABI.
+         */
+        ProtosReturnHome returnHome =
+                activation.returnHome()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "ordinary Closure entry requires the invocation's"
+                                                        + " return home; this activation is not a"
+                                                        + " Closure invocation"));
+        List<?> supplied = activation.suppliedArgumentsForRuntime();
+        Object[] arguments = new Object[SUPPLIED_ARGUMENT_OFFSET + supplied.size()];
+        arguments[CLOSURE_INDEX] = activation;
+        ProtosObjectValue methodHome = activation.methodHome().orElse(null);
+        if (methodHome != null) {
+            arguments[RECEIVER_INDEX] = activation.receiver();
+            arguments[METHOD_HOME_INDEX] = methodHome;
+        } else {
+            arguments[RECEIVER_INDEX] = DIRECT_CLOSURE_CALL;
+        }
+        arguments[RETURN_HOME_INDEX] = returnHome;
+        for (int index = 0; index < supplied.size(); index++) {
+            arguments[SUPPLIED_ARGUMENT_OFFSET + index] = supplied.get(index);
+        }
+        return arguments;
+    }
+
+    private static Object[] headerWithSupplied(
             ProtosClosureValue closure,
             Object kindOrReceiver,
             Object methodHomeOrTask,
             ProtosActivation caller,
+            ProtosReturnHome returnHome,
             Object[] supplied) {
-        Objects.requireNonNull(closure, "closure");
-        Objects.requireNonNull(caller, "caller");
-        Objects.requireNonNull(supplied, "supplied");
-
-        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
-
-        if (supplied.length == 0) {
-            return new Object[] {
-                closure, kindOrReceiver, methodHomeOrTask, caller, returnHome
-            };
-        }
-        if (supplied.length == 1) {
-            return new Object[] {
-                closure, kindOrReceiver, methodHomeOrTask, caller, returnHome,
-                supplied[0]
-            };
-        }
-
-        Object[] arguments =
-                new Object[USER_ARGUMENT_OFFSET + supplied.length];
+        Object[] arguments = new Object[SUPPLIED_ARGUMENT_OFFSET + supplied.length];
         arguments[CLOSURE_INDEX] = closure;
         arguments[RECEIVER_INDEX] = kindOrReceiver;
         arguments[METHOD_HOME_INDEX] = methodHomeOrTask;
         arguments[CALLER_INDEX] = caller;
         arguments[RETURN_HOME_INDEX] = returnHome;
-        System.arraycopy(
-                supplied,
-                0,
-                arguments,
-                USER_ARGUMENT_OFFSET,
-                supplied.length);
+        System.arraycopy(supplied, 0, arguments, SUPPLIED_ARGUMENT_OFFSET, supplied.length);
         return arguments;
     }
 
@@ -384,10 +378,11 @@ final class ProtosFrameArguments {
 
     /**
      * PERF038-C: true when argument 0 already holds the exact activation of
-     * this invocation (a rich call, or a compact call whose activation was
-     * published by {@link #materializeCompactActivation}). Exactly the first
-     * branch of {@link #activation(Object[])}, so a caller that guards on it
-     * may read {@link #publishedActivation} without the materialization path.
+     * this invocation (a published B5 entry, or a compact call whose
+     * activation was published by {@link #materializeCompactActivation}).
+     * Exactly the first branch of {@link #activation(Object[])}, so a caller
+     * that guards on it may read {@link #publishedActivation} without the
+     * materialization path.
      */
     static boolean hasPublishedActivation(Object[] arguments) {
         return arguments.length > CLOSURE_INDEX
@@ -426,27 +421,18 @@ final class ProtosFrameArguments {
 
         ProtosClosureValue closure =
                 (ProtosClosureValue) arguments[CLOSURE_INDEX];
-        int minimal = minimalLayout(arguments);
-        if (minimal != MINIMAL_NONE) {
-            return materializeMinimalDirectActivation(arguments, closure, minimal);
-        }
         ProtosActivation caller =
                 (ProtosActivation) arguments[CALLER_INDEX];
-        boolean minimalMethod = isMinimalImmediateMethodCall(arguments);
-        ProtosReturnHome returnHome =
-                minimalMethod
-                        ? ProtosReturnHome.unobservable()
-                        : normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
+        ProtosReturnHome returnHome = normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
         /*
          * The supplied values stay backed by this frame-argument array: the
-         * user-argument range is written once by compactCall and never
+         * user-argument range is written once by its constructor and never
          * mutated, so the activation adopts it as a read-only view rather
          * than copying it.
          */
         List<?> supplied =
                 ProtosActivation.frameBackedSuppliedArgumentsForRuntime(
-                        arguments,
-                        minimalMethod ? arguments.length : USER_ARGUMENT_OFFSET);
+                        arguments, SUPPLIED_ARGUMENT_OFFSET);
 
         ProtosActivation materialized;
         ProtosTask explicitTask = null;
@@ -526,35 +512,6 @@ final class ProtosFrameArguments {
                 executionPlanCell.plan());
     }
 
-    /** PERF032-G7 materialization of a minimal direct header (zero supplied). */
-    private static ProtosActivation materializeMinimalDirectActivation(
-            Object[] arguments, ProtosClosureValue closure, int minimal) {
-        ProtosActivation caller = minimalCaller(arguments, minimal);
-        ProtosReturnHome returnHome = minimalReturnHome(arguments, minimal);
-        ProtosTask explicitTask = minimalTask(arguments, minimal);
-        List<?> supplied =
-                ProtosActivation.frameBackedSuppliedArgumentsForRuntime(
-                        arguments, arguments.length);
-        ProtosActivation materialized =
-                ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime(
-                        closure,
-                        supplied,
-                        caller.prelude().orElse(null),
-                        caller.actorModuleState(),
-                        caller.currentModuleKey().orElse(null),
-                        caller.executionDomain(),
-                        returnHome);
-        if (explicitTask != null) {
-            materialized.attachTask(explicitTask);
-        } else if (caller.task().isPresent()) {
-            materialized.attachTask(caller.task().orElseThrow());
-        } else {
-            materialized.inheritDynamicControlState(caller);
-        }
-        arguments[CLOSURE_INDEX] = materialized;
-        return materialized;
-    }
-
     /**
      * PERF025-H1: true while {@code arguments} are still in compact
      * source-call form, i.e. no rich activation has been materialized and
@@ -565,16 +522,16 @@ final class ProtosFrameArguments {
      *
      * <p>PERF038-B: this is the compact/materialized discriminator of an
      * already admitted Closure-root (or inline-callback carrier) argument
-     * array, not an ABI validator. Every such array is either a rich
-     * {@code {activation}} array or a compact array built by
-     * {@link #compactImmediateMethodCall} or {@link #compactDirectClosureCall}
-     * and validated by its {@code OrdinarySourceCall} or
-     * {@code PreparedInlineLiteralCall} carrier before entry; the only later
-     * write of argument 0 is {@link #materializeCompactActivation}, which
-     * replaces the Closure with the published activation. Argument 0 alone
-     * therefore distinguishes the two states, and the full header
-     * re-validation is not repeated at every root-level frame operation.
-     * The materialization slow path still runs the full validation.
+     * array, not an ABI validator. Every such array is a B5 array whose
+     * argument 0 is either the invoked Closure or the published activation,
+     * built by one of this class's constructors and validated by its
+     * {@code OrdinarySourceCall} or {@code PreparedInlineLiteralCall} carrier
+     * before entry; the only later write of argument 0 is {@link
+     * #materializeCompactActivation}, which replaces the Closure with the
+     * published activation. Argument 0 alone therefore distinguishes the two
+     * states, and the full header re-validation is not repeated at every
+     * root-level frame operation. The materialization slow path still runs
+     * the full validation.
      */
     static boolean isUnmaterializedCompactCall(Object[] arguments) {
         return arguments.length > CLOSURE_INDEX
@@ -587,22 +544,11 @@ final class ProtosFrameArguments {
      * is a {@link ProtosClosureValue} (for example {@code {closure}}) yields
      * {@code true}.
      *
-     * <p>Precondition: {@code arguments} are the frame arguments of a Closure
-     * root admitted by the PERF034-C scalar-local lowering, entered either
-     * with a rich array whose argument 0 is a {@link ProtosActivation} or
-     * with a compact array built by {@link #compactImmediateMethodCall} or
-     * {@link #compactDirectClosureCall}. Every compact source entry is
-     * carried by {@code OrdinarySourceCall} or
-     * {@code PreparedInlineLiteralCall}, whose construction already runs the
-     * full {@link #requireCompactCall} validation (through
-     * {@link #compactOwnsReturnHome}) outside the callee. The only later
-     * write of argument 0 is {@link #materializeCompactActivation}, which
-     * replaces the Closure with the published activation, so argument 0
-     * alone distinguishes the two states. It is re-read at every use so a
-     * materialization between two instructions is observed. The length test
-     * subsumes the array bounds check of the read. Since PERF038-B this is
-     * the same discriminator as {@link #isUnmaterializedCompactCall}, under
-     * the same precondition.
+     * <p>Precondition: {@code arguments} are the B5 frame arguments of a
+     * Closure root admitted by the PERF034-C scalar-local lowering. It is
+     * re-read at every use so a materialization between two instructions is
+     * observed. Since PERF038-B this is the same discriminator as {@link
+     * #isUnmaterializedCompactCall}, under the same precondition.
      */
     static boolean isUnmaterializedCompactScalarLocalCall(Object[] arguments) {
         return isUnmaterializedCompactCall(arguments);
@@ -635,59 +581,46 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * Supplied positional argument count of a compact source call.
-     *
-     * <p>PERF038-B: every minimal direct header (PERF032-G7) is shorter than
-     * the full header and every full header is at least
-     * {@code USER_ARGUMENT_OFFSET} long; the length never changes on
-     * publication. The length alone therefore selects the layout of a
-     * compact array, before or after materialization, without re-deriving
-     * the minimal variant.
+     * Supplied positional argument count of a B5 call, before or after
+     * publication: the length never changes and the supplied values always
+     * start at {@link #SUPPLIED_ARGUMENT_OFFSET}.
      */
     static int compactSuppliedArgumentCount(Object[] arguments) {
-        if (arguments.length < USER_ARGUMENT_OFFSET) {
-            return 0;
-        }
-        return arguments.length - USER_ARGUMENT_OFFSET;
+        return arguments.length - SUPPLIED_ARGUMENT_OFFSET;
     }
 
     /**
      * PERF038-E: {@link #compactSuppliedArgument} for an {@code index} already
      * proven below {@link #compactSuppliedArgumentCount} of the same array by
-     * the caller's guard; that proof implies a full header, so the layout test
-     * is not repeated.
+     * the caller's guard.
      */
     static Object compactSuppliedArgumentWithinCount(Object[] arguments, int index) {
-        return arguments[USER_ARGUMENT_OFFSET + index];
+        return arguments[SUPPLIED_ARGUMENT_OFFSET + index];
     }
 
     /**
      * PERF038-F: exactly {@code index < compactSuppliedArgumentCount(arguments)}
-     * for a non-negative {@code index}, without the layout branch: a minimal
-     * header is shorter than {@code USER_ARGUMENT_OFFSET}, so it never
-     * satisfies the length test, exactly as its zero supplied count would not.
+     * for a non-negative {@code index}.
      */
     static boolean compactHasSuppliedArgument(Object[] arguments, int index) {
-        return arguments.length > USER_ARGUMENT_OFFSET + index;
+        return arguments.length > SUPPLIED_ARGUMENT_OFFSET + index;
     }
 
     /**
      * PERF038-F: exactly {@code compactSuppliedArgumentCount(arguments) <=
-     * maximum} for a non-negative {@code maximum}, without the layout branch:
-     * every minimal header is shorter than {@code USER_ARGUMENT_OFFSET} and
-     * therefore satisfies the length bound, as its zero supplied count does.
+     * maximum} for a non-negative {@code maximum}.
      */
     static boolean compactSuppliedArgumentCountAtMost(Object[] arguments, int maximum) {
-        return arguments.length <= USER_ARGUMENT_OFFSET + maximum;
+        return arguments.length <= SUPPLIED_ARGUMENT_OFFSET + maximum;
     }
 
-    /** Supplied positional argument {@code index} of a compact source call. */
+    /** Supplied positional argument {@code index} of a B5 call. */
     static Object compactSuppliedArgument(Object[] arguments, int index) {
-        if (arguments.length < USER_ARGUMENT_OFFSET) {
+        if (index < 0) {
             /* Never expose a header slot as a guest argument. */
             throw new ArrayIndexOutOfBoundsException(index);
         }
-        return arguments[USER_ARGUMENT_OFFSET + index];
+        return arguments[SUPPLIED_ARGUMENT_OFFSET + index];
     }
 
     /** The callee Closure of a compact source call that is still unmaterialized. */
@@ -699,12 +632,13 @@ final class ProtosFrameArguments {
     /**
      * PERF025 slice 3: the compact caller of a still-unmaterialized direct
      * Closure call (or, since PERF038-D, compact immediate method call) whose
-     * callee would inherit every provenance field from it, or {@code null}. {@link #activation(Object[])} materializes such a call
-     * with exactly this caller's prelude (the Closure has none of its own, or
-     * the same one), actor module state, current module key, execution domain
-     * and Task or dynamic-control state (no explicit Task). A child invocation
-     * prepared with this caller therefore materializes exactly as it would
-     * with the not-yet-materialized callee activation as its caller.
+     * callee would inherit every provenance field from it, or {@code null}.
+     * {@link #activation(Object[])} materializes such a call with exactly this
+     * caller's prelude (the Closure has none of its own, or the same one),
+     * actor module state, current module key, execution domain and Task or
+     * dynamic-control state (no explicit Task). A child invocation prepared
+     * with this caller therefore materializes exactly as it would with the
+     * not-yet-materialized callee activation as its caller.
      *
      * <p>A compact immediate method call never carries an explicit Task, and
      * its materialization ({@link
@@ -739,53 +673,41 @@ final class ProtosFrameArguments {
     /**
      * PERF038-D: exactly {@link #compactInheritedProvenanceCaller} for the
      * still-unmaterialized frame arguments of an admitted Closure root (the
-     * {@link #isUnmaterializedCompactCall} precondition), with the full
-     * header decided by its fixed slots instead of re-validating the ABI.
-     * Every full header is at least {@code USER_ARGUMENT_OFFSET} long and
-     * every minimal one shorter; in a full header the receiver slot is the
-     * direct-call marker exactly for a direct Closure call, whose task slot
-     * is then its explicit Task or {@code null}. Minimal headers take the
-     * general form.
+     * {@link #isUnmaterializedCompactCall} precondition), decided by the
+     * fixed B5 slots instead of re-validating the ABI: the receiver slot is
+     * the direct-call marker exactly for a direct Closure call, whose task
+     * slot is then its explicit Task or {@code null}.
      */
     static ProtosActivation unmaterializedInheritedProvenanceCaller(Object[] arguments) {
-        if (arguments.length >= USER_ARGUMENT_OFFSET
-                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue closure
-                && arguments[CALLER_INDEX] instanceof ProtosActivation caller) {
-            if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
-                    && arguments[TASK_INDEX] != null) {
-                return null;
-            }
-            return callerIfPreludeInherited(closure, caller);
+        if (arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
+                && arguments[TASK_INDEX] != null) {
+            return null;
         }
-        return compactInheritedProvenanceCaller(arguments);
+        return callerIfPreludeInherited(
+                (ProtosClosureValue) arguments[CLOSURE_INDEX],
+                (ProtosActivation) arguments[CALLER_INDEX]);
     }
 
     /**
-     * PERF038-F: true when the still-unmaterialized frame arguments of an
-     * admitted Closure root (the {@link #isUnmaterializedCompactCall}
-     * precondition) carry a full compact header whose callee inherits its
-     * Task or dynamic-control state from the caller: an immediate method call,
-     * or a direct Closure call without an explicit Task. Minimal headers are
-     * excluded; they take {@link #unmaterializedInheritedProvenanceCaller}.
-     * Together with {@link #unmaterializedFullHeaderOwnPrelude} {@code ==}
-     * the caller's prelude, this is exactly the non-null case of {@link
-     * #unmaterializedInheritedProvenanceCaller} for a full header, decided
-     * without re-deriving the ABI.
+     * PERF038-F: true when the frame arguments of an admitted Closure root
+     * are still unmaterialized and their callee inherits its Task or
+     * dynamic-control state from the caller: an immediate method call, or a
+     * direct Closure call without an explicit Task. Together with {@link
+     * #unmaterializedFullHeaderOwnPrelude} {@code ==} the caller's prelude,
+     * this is exactly the non-null case of {@link
+     * #unmaterializedInheritedProvenanceCaller}, decided without re-deriving
+     * the ABI.
      */
     static boolean isUnmaterializedInheritingFullHeader(Object[] arguments) {
-        return (isMinimalImmediateMethodCall(arguments)
-                        && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue)
-                || (arguments.length >= USER_ARGUMENT_OFFSET
-                        && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                        && (arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
-                                || arguments[TASK_INDEX] == null));
+        return isUnmaterializedCompactCall(arguments)
+                && (arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
+                        || arguments[TASK_INDEX] == null);
     }
 
     /**
-     * PERF038-F: the caller slot of a full compact header. Precondition:
-     * {@link #isUnmaterializedInheritingFullHeader}; every such header was
-     * built by {@link #compactCall} or the guarded immediate-method form with
-     * a non-null caller activation, and that slot is never rewritten.
+     * PERF038-F: the caller slot of a B5 header. Precondition: {@link
+     * #isUnmaterializedInheritingFullHeader}; every such header was built
+     * with a non-null caller activation, and that slot is never rewritten.
      */
     static ProtosActivation unmaterializedFullHeaderCaller(Object[] arguments) {
         return (ProtosActivation) arguments[CALLER_INDEX];
@@ -799,20 +721,11 @@ final class ProtosFrameArguments {
         return ((ProtosClosureValue) arguments[CLOSURE_INDEX]).preludeOrNullForRuntime();
     }
 
+    /**
+     * The invocation's exact return home, read from the fixed home slot. The
+     * slot survives publication, so this is valid before and after it.
+     */
     static ProtosReturnHome compactReturnHome(Object[] arguments) {
-        /*
-         * PERF038-H: a minimal Send0 retains its four-slot layout
-         * after argument zero is replaced by the published activation.
-         * Its omitted return home is always the unobservable marker.
-         */
-        if (isMinimalImmediateMethodCall(arguments)) {
-            return ProtosReturnHome.unobservable();
-        }
-        requireCompactCall(arguments);
-        int minimal = minimalLayout(arguments);
-        if (minimal != MINIMAL_NONE) {
-            return minimalReturnHome(arguments, minimal);
-        }
         return normalizedReturnHome(arguments[RETURN_HOME_INDEX]);
     }
 
@@ -825,8 +738,10 @@ final class ProtosFrameArguments {
 
     /**
      * I091: whether the caller of this invocation accepts a primitive numeric
-     * result. Only a fused direct source call or send writes the private marker, and
-     * only into a full compact header; argument 0 publication keeps it.
+     * result. Only a fused direct source call or send writes the private
+     * marker into the home slot; argument 0 publication keeps it. The length
+     * test admits the frame arguments of non-Closure roots, whose entry
+     * contracts are not B5.
      */
     static boolean acceptsPrimitiveResult(Object[] arguments) {
         return arguments.length > RETURN_HOME_INDEX
@@ -842,16 +757,7 @@ final class ProtosFrameArguments {
     }
 
     static ProtosActivation compactCaller(Object[] arguments) {
-        if (isMinimalImmediateMethodCall(arguments)) {
-            return (ProtosActivation) arguments[CALLER_INDEX];
-        }
-        int minimal = minimalLayout(arguments);
-        if (minimal != MINIMAL_NONE) {
-            return minimalCaller(arguments, minimal);
-        }
-        if (arguments == null
-                || arguments.length < USER_ARGUMENT_OFFSET
-                || !(arguments[CALLER_INDEX] instanceof ProtosActivation caller)) {
+        if (!(arguments[CALLER_INDEX] instanceof ProtosActivation caller)) {
             throw new IllegalStateException(
                     "Invalid compact source-call caller frame argument");
         }
@@ -876,10 +782,6 @@ final class ProtosFrameArguments {
 
     /** The explicit owning Task of a direct Closure call, or {@code null}. */
     private static ProtosTask explicitDirectTask(Object[] arguments) {
-        int minimal = minimalLayout(arguments);
-        if (minimal != MINIMAL_NONE) {
-            return minimalTask(arguments, minimal);
-        }
         if (isDirectClosureCall(arguments)
                 && arguments[TASK_INDEX] instanceof ProtosTask task) {
             return task;
@@ -887,102 +789,29 @@ final class ProtosFrameArguments {
         return null;
     }
 
-    /**
-     * PERF032-G7 structural discriminator of the four minimal direct headers.
-     * Argument 0 is the Closure before publication and the published
-     * activation afterwards; the remaining slots and the length never change,
-     * so the layout stays recognizable in both states. Rich arrays carry a
-     * single activation and are never minimal.
-     */
-    private static int minimalLayout(Object[] arguments) {
-        if (arguments == null
-                || arguments.length < 2
-                || arguments.length > 4
-                || !(arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                        || arguments[CLOSURE_INDEX] instanceof ProtosActivation)) {
-            return MINIMAL_NONE;
-        }
-        Object first = arguments[1];
-        switch (arguments.length) {
-            case 2:
-                return first instanceof ProtosActivation ? MINIMAL_A : MINIMAL_NONE;
-            case 3:
-                if (first instanceof ProtosActivation
-                        && arguments[2] instanceof ProtosReturnHome) {
-                    return MINIMAL_B;
-                }
-                return first instanceof ProtosTask
-                                && arguments[2] instanceof ProtosActivation
-                        ? MINIMAL_C
-                        : MINIMAL_NONE;
-            default:
-                return first instanceof ProtosTask
-                                && arguments[2] instanceof ProtosActivation
-                                && arguments[3] instanceof ProtosReturnHome
-                        ? MINIMAL_D
-                        : MINIMAL_NONE;
-        }
-    }
-
-    private static ProtosActivation minimalCaller(Object[] arguments, int minimal) {
-        return (ProtosActivation) arguments[minimal <= MINIMAL_B ? 1 : 2];
-    }
-
-    private static ProtosTask minimalTask(Object[] arguments, int minimal) {
-        return minimal <= MINIMAL_B ? null : (ProtosTask) arguments[1];
-    }
-
-    private static ProtosReturnHome minimalReturnHome(Object[] arguments, int minimal) {
-        switch (minimal) {
-            case MINIMAL_B:
-                return (ProtosReturnHome) arguments[2];
-            case MINIMAL_D:
-                return (ProtosReturnHome) arguments[3];
-            default:
-                return ProtosReturnHome.unobservable();
-        }
-    }
-
     private static boolean isCompactCall(Object[] arguments) {
         return isCompactImmediateMethodCall(arguments)
                 || isDirectClosureCall(arguments);
     }
 
-    private static boolean isMinimalImmediateMethodCall(Object[] arguments) {
-        return arguments != null
-                && arguments.length == RETURN_HOME_INDEX
-                && (arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                        || arguments[CLOSURE_INDEX] instanceof ProtosActivation)
+    private static boolean isCompactImmediateMethodCall(Object[] arguments) {
+        return hasCompactHeader(arguments)
                 && arguments[RECEIVER_INDEX] != null
                 && arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
-                && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue
-                && arguments[CALLER_INDEX] instanceof ProtosActivation;
-    }
-
-    private static boolean isCompactImmediateMethodCall(Object[] arguments) {
-        return isMinimalImmediateMethodCall(arguments)
-                || (hasCompactHeader(arguments)
-                        && arguments[RECEIVER_INDEX] != null
-                        && arguments[RECEIVER_INDEX] != DIRECT_CLOSURE_CALL
-                        && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue);
+                && arguments[METHOD_HOME_INDEX] instanceof ProtosObjectValue;
     }
 
     private static boolean isDirectClosureCall(Object[] arguments) {
-        if (arguments != null
-                && arguments.length > 0
-                && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
-                && minimalLayout(arguments) != MINIMAL_NONE) {
-            return true;
-        }
         return hasCompactHeader(arguments)
                 && arguments[RECEIVER_INDEX] == DIRECT_CLOSURE_CALL
                 && (arguments[TASK_INDEX] == null
                         || arguments[TASK_INDEX] instanceof ProtosTask);
     }
 
+    /** Full validation of an unpublished B5 header (slow and carrier paths only). */
     private static boolean hasCompactHeader(Object[] arguments) {
         return arguments != null
-                && arguments.length >= USER_ARGUMENT_OFFSET
+                && arguments.length >= HEADER_LENGTH
                 && arguments[CLOSURE_INDEX] instanceof ProtosClosureValue
                 && arguments[CALLER_INDEX] instanceof ProtosActivation
                 && arguments[RETURN_HOME_INDEX] instanceof ProtosReturnHome;
