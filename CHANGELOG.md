@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.370-SNAPSHOT
+
+- `I107` (#906): implement PLAT061-B compositional non-suspension facts
+  and emission planning (D204-A).
+  - Add `CanonicalNonSuspensionAnalysis`, a bounded linear analysis with
+    explicit `UNKNOWN`/`PROVEN_NO_SUSPENSION` results for the independent
+    subjects canonical body, effective root, complete invocation and guarded
+    call site; presence is order-sensitive and every dynamic form stays
+    `UNKNOWN`.
+  - `CanonicalCompilationFacts` gains the query/publish/refine/consume/
+    invalidate contract with explicit rejection of incompatible, consumed or
+    invalidated contributions. Canonical-body facts are selection-independent.
+  - The lowerer prepares an immutable root emission plan before each builder
+    section opens and replaces the late `provesNonSuspendingBody` predicate:
+    the published root capability is the consumed effective-root proof
+    (entry, defaults and effective body), refused whenever the root
+    physically emitted a continuation composition.
+  - The NORMAL constant Boolean-control fold now composes across nested
+    sites, removing the ordinary send, continuation composition and callback
+    roots of fully selected nests. Dynamic selections, DEBUG, the B5 ABI
+    and observable semantics are unchanged.
+
 ## 0.3.369-SNAPSHOT
 
 - `I106` (#904): implement PLAT061-B composable canonical compilation facts.

@@ -174,8 +174,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @CompilationFinal private boolean guestExceptionCrossed;
 
     /*
-     * PERF038-H: conservative source-root execution capability.
-     * Unknown and dynamically selected operations remain general.
+     * PERF038-H / I107: conservative source-root execution capability. It is
+     * the consumed EFFECTIVE_ROOT non-suspension proof of this emitted root
+     * (CanonicalCompilationFacts): parameter binding, every default that may
+     * be evaluated and the effective body after authorized lowerer
+     * transformations, never the canonical body alone. It does not prove a
+     * complete invocation: receiver evaluation, Object.call selection,
+     * Context and ReturnHome remain the run-time guards of its consumers.
+     * Recorded once per parse, before the root is published; never consulted
+     * as a per-call compiler check beyond these guards.
      */
     private boolean provablyNonSuspendingBody;
 

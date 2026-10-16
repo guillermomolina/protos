@@ -210,6 +210,14 @@ final class CanonicalToBytecodeLowerer {
     private final CanonicalCompilationFacts compilationFacts =
             new CanonicalCompilationFacts();
     /*
+     * I107: generic prepared invocations (each carrying the continuation
+     * composition) emitted so far into the genuine root being lowered. A root
+     * planned as non-suspending emits none; an emitted one invalidates the
+     * plan before publication instead of publishing an unsound capability.
+     * Saved and restored per root.
+     */
+    private boolean currentRootEmittedContinuationPath;
+    /*
      * I091: exact host descriptors of the number literals of this lowering, parsed once per
      * literal node however many lowering decisions consult it.
      */
@@ -505,6 +513,130 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
+     * I107 (PLAT061-B) immutable emission plan of one root, prepared before
+     * its builder section opens ({@code create()} for a group root, {@code
+     * beginRoot()} for a nested one). It holds only canonical decisions:
+     * the root facts, the authorized terminal fold, the identity of the
+     * effective root and the proofs of the canonical body and of the
+     * effective root under this lowerer's immutable profile and publication
+     * snapshot. Every parse of the group consumes the same decisions.
+     */
+    record RootEmissionPlan(
+            CanonicalCompilationFacts.RootFacts rootFacts,
+            CanonicalLiteral foldedTerminal,
+            CanonicalCompilationFacts.EffectiveRoot effectiveRoot,
+            CanonicalNonSuspensionAnalysis.Result canonicalBody,
+            CanonicalNonSuspensionAnalysis.Result plannedEffectiveRoot) {}
+
+    /**
+     * The control-admission state of one emission point; at a root's entry
+     * it is fully determined by the root's analysis and scope (its frame
+     * locals are exactly its declared names, see {@link #emitRootBody}).
+     */
+    private record ControlSiteContext(
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope topScope,
+            java.util.Set<String> frameNames,
+            boolean hasFrameLayout,
+            boolean inlineCallbackFrameNative,
+            boolean activationLocalPresent) {
+
+        static ControlSiteContext rootEntry(
+                CanonicalBindingAnalysis analysis, CanonicalLexicalScope scope) {
+            java.util.Set<String> names = scope.declaredNames();
+            return new ControlSiteContext(
+                    analysis, scope, names, !names.isEmpty(), false, false);
+        }
+    }
+
+    private ControlSiteContext currentControlSiteContext() {
+        return new ControlSiteContext(
+                currentRootAnalysis,
+                currentRootTopScope,
+                currentRootFrameLocals.keySet(),
+                currentRootFrameLayout != null,
+                currentInlineCallbackFrameNative,
+                currentActivationLocal != null);
+    }
+
+    private RootEmissionPlan prepareRootPlan(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            CanonicalBindingAnalysis analysis) {
+        CanonicalCompilationFacts.RootFacts rootFacts =
+                prepareRootFacts(sequence, activationDefinition, analysis);
+        CanonicalLexicalScope scope = rootFacts.scope();
+        ControlSiteContext entry = ControlSiteContext.rootEntry(analysis, scope);
+        CanonicalLiteral foldedTerminal =
+                sequence.expressions().isEmpty()
+                        ? null
+                        : foldedConstantControlResult(
+                                sequence.expressions().get(sequence.expressions().size() - 1),
+                                entry);
+        CanonicalNonSuspensionAnalysis.SendSelection selection =
+                (send, ownerAnalysis, ownerScope) ->
+                        selectedControlSend(
+                                send, ControlSiteContext.rootEntry(ownerAnalysis, ownerScope));
+        CanonicalNonSuspensionAnalysis.Result canonicalBody =
+                compilationFacts.canonicalBodyNonSuspension(
+                        sequence, activationDefinition, analysis, scope);
+        Object canonicalRoot = activationDefinition == null ? sequence : activationDefinition;
+        CanonicalCompilationFacts.EffectiveRoot effectiveRoot =
+                compilationFacts.effectiveRoot(canonicalRoot, analysis, scope, foldedTerminal);
+        CanonicalNonSuspensionAnalysis.Result planned =
+                compilationFacts.newAnalysis(analysis, scope, activationDefinition, selection)
+                        .proveEffectiveRoot(
+                                effectiveRoot,
+                                activationDefinition,
+                                effectiveBody(sequence, foldedTerminal),
+                                activationDefinition != null
+                                        && compilationFacts.mayObserveReturnHome(
+                                                activationDefinition),
+                                foldedTerminal == null
+                                        ? "planned effective root"
+                                        : "planned effective root after constant-control fold");
+        compilationFacts.publishNonSuspension(planned);
+        return new RootEmissionPlan(
+                rootFacts, foldedTerminal, effectiveRoot, canonicalBody, planned);
+    }
+
+    /**
+     * I107 selection producer: a NORMAL Boolean-control send whose receiver
+     * is a canonical Boolean literal is statically selected by the frozen
+     * standard root ({@link #normalBooleanControlSite}); it evaluates its
+     * non-Closure arguments and runs exactly its INLINE callback. A dynamic
+     * receiver can take the ordinary send on MISS and stays unselected.
+     */
+    private CanonicalNonSuspensionAnalysis.SelectedSend selectedControlSend(
+            CanonicalSend send, ControlSiteContext context) {
+        if (!(send.receiver() instanceof CanonicalLiteral receiver)) {
+            return null;
+        }
+        NormalBooleanControlSite site = normalBooleanControlSite(send, context);
+        if (site == null) {
+            return null;
+        }
+        boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
+        java.util.List<CanonicalExpression> evaluated = new java.util.ArrayList<>();
+        for (CanonicalExpression argument : send.arguments()) {
+            if (!(argument instanceof CanonicalClosure)) {
+                evaluated.add(argument);
+            }
+        }
+        java.util.List<CanonicalClosure> bodies =
+                site.path(value) == NormalBooleanControlPath.INLINE
+                        ? java.util.List.of((CanonicalClosure)
+                                send.arguments().get(site.control().selectedIndex(value)))
+                        : java.util.List.of();
+        return new CanonicalNonSuspensionAnalysis.SelectedSend(
+                java.util.List.copyOf(evaluated),
+                bodies,
+                java.util.EnumSet.of(
+                        CanonicalNonSuspensionAnalysis.Precondition.NORMAL_PROFILE,
+                        CanonicalNonSuspensionAnalysis.Precondition.STANDARD_OBJECT_PUBLISHED));
+    }
+
+    /**
      * PERF013 Slice A/A2: construction path for a Closure reached while
      * emitting an already-open enclosing root's own body — including a
      * parameter default-value Closure, which (since Slice A2) is reached the
@@ -647,8 +779,8 @@ final class CanonicalToBytecodeLowerer {
          * enclosing root (emitInlineObjectConstruction) and contributes no
          * root to the group.
          */
-        CanonicalCompilationFacts.RootFacts rootFacts =
-                prepareRootFacts(
+        RootEmissionPlan rootPlan =
+                prepareRootPlan(
                         sequence,
                         activationDefinition,
                         bindingAnalysisFor(sequence, activationDefinition));
@@ -678,7 +810,7 @@ final class CanonicalToBytecodeLowerer {
                                             builder,
                                             sequence,
                                             activationDefinition,
-                                            rootFacts);
+                                            rootPlan);
                                     builder.endSource();
                                 } finally {
                                     closureRootsLoweredThisParse = savedLoweredThisParse;
@@ -716,14 +848,15 @@ final class CanonicalToBytecodeLowerer {
      * those plans would conservatively re-analyze nested Closures in
      * isolation and lose their captured owner/depth metadata.
      *
-     * <p>I106: {@code rootFacts} was prepared by the caller before this
+     * <p>I106/I107: {@code rootPlan} was prepared by the caller before this
      * root's builder section opened and is not proven again here.
      */
     private ProtosSemanticBytecodeRootNode lowerRootInto(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            CanonicalCompilationFacts.RootFacts rootFacts) {
+            RootEmissionPlan rootPlan) {
+        CanonicalCompilationFacts.RootFacts rootFacts = rootPlan.rootFacts();
         CanonicalBindingAnalysis analysisForThisRoot = rootFacts.bindingAnalysis();
         CanonicalLexicalScope scopeForThisRoot = rootFacts.scope();
         validateSupported(sequence);
@@ -763,9 +896,11 @@ final class CanonicalToBytecodeLowerer {
         java.util.Set<CanonicalClosure> savedMaterializedClosures =
                 currentRootMaterializedClosures;
         boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
+        boolean savedContinuationPath = currentRootEmittedContinuationPath;
         boolean openedRootScope = openRootScopes.add(scopeForThisRoot);
         try {
             currentInlineClosureCallBody = false;
+            currentRootEmittedContinuationPath = false;
             /*
              * I096-B1: a Closure created by a module root owns a fresh
              * ReturnHome, which the carrier never admits, so a module root
@@ -800,8 +935,9 @@ final class CanonicalToBytecodeLowerer {
                     builder,
                     sequence,
                     activationDefinition,
-                    rootFacts);
+                    rootPlan);
         } finally {
+            currentRootEmittedContinuationPath = savedContinuationPath;
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
@@ -848,8 +984,8 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         validateSupportedDefaults(definition);
-        CanonicalCompilationFacts.RootFacts rootFacts =
-                prepareRootFacts(
+        RootEmissionPlan rootPlan =
+                prepareRootPlan(
                         definition.body(),
                         definition,
                         bindingAnalysisForNestedClosure(definition));
@@ -857,14 +993,15 @@ final class CanonicalToBytecodeLowerer {
                 builder,
                 definition.body(),
                 definition,
-                rootFacts);
+                rootPlan);
     }
 
     private ProtosSemanticBytecodeRootNode emitRootBody(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            CanonicalCompilationFacts.RootFacts rootFacts) {
+            RootEmissionPlan rootPlan) {
+        CanonicalCompilationFacts.RootFacts rootFacts = rootPlan.rootFacts();
         CanonicalLexicalScope scopeForThisRoot = rootFacts.scope();
         boolean requiresPersistentFrameAuthority =
                 rootFacts.requiresPersistentFrameAuthority();
@@ -1050,20 +1187,18 @@ final class CanonicalToBytecodeLowerer {
          * I101-A: the emission plan of an admitted constant Boolean-control
          * terminal is its proven effective result. The canonical sequence is
          * not rewritten: every analysis keeps inspecting the original
-         * statement, which also owns the statement's source section. The
-         * decision is a function of the canonical tree, the profile and the
-         * publication snapshot, so every reparse repeats it.
+         * statement, which also owns the statement's source section. I107:
+         * the decision was taken by the pre-builder plan, a function of the
+         * canonical tree, the profile and the publication snapshot, so every
+         * reparse consumes the same one.
          */
-        CanonicalLiteral foldedTerminal =
-                sequence.expressions().isEmpty()
-                        ? null
-                        : foldedConstantControlResult(
-                                sequence.expressions().get(
-                                        sequence.expressions().size() - 1));
+        CanonicalLiteral foldedTerminal = rootPlan.foldedTerminal();
 
-        boolean emittedMinimalIntegerBody = false;
+        boolean loweringRefinementAccepted = true;
         if (directScalarLocalBody) {
             emitNormalDirectScalarLocalBody(builder, sequence);
+            loweringRefinementAccepted = acceptsLoweringRefinement(
+                    publishLoweringRefinement(rootPlan, "I101-B direct scalar local body"));
         } else {
             CanonicalExpression minimalTerminal =
                     sequence.expressions().size() == 1
@@ -1084,10 +1219,11 @@ final class CanonicalToBytecodeLowerer {
 
             if (constant instanceof Long
                     || constant instanceof ProtosBooleanValue) {
-                emittedMinimalIntegerBody = true;
                 builder.beginReturn();
                 builder.emitLoadConstant(constant);
                 builder.endReturn();
+                loweringRefinementAccepted = acceptsLoweringRefinement(
+                        publishLoweringRefinement(rootPlan, "I101 minimal constant body"));
             } else if (sequence.expressions().isEmpty()) {
                 builder.beginReturn();
                 builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -1240,22 +1376,39 @@ final class CanonicalToBytecodeLowerer {
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
         /*
-         * I101-A: both capabilities are proved over the root's effective body:
-         * its original canonical statements, except that a folded terminal is
-         * its proven result ({@link #foldedConstantControlResult}). That proof
-         * already establishes that the whole site evaluates to exactly that
-         * literal with no effect, failure, suspension, activation, Context,
-         * capture or ReturnHome observation, so each capability rule below
-         * judges the literal by its own unchanged criteria.
+         * I107: the root publishes the EFFECTIVE_ROOT proof consumed from the
+         * facts: the planner's proof of entry plus effective body (a folded
+         * terminal is its proven result, I101-A), possibly refined above by
+         * this lowerer's own transformations. Publication cannot authorize
+         * anything already emitted: a root that nevertheless emitted a generic
+         * prepared invocation invalidates the unconsumed proof first.
          */
-        java.util.List<CanonicalExpression> effectiveBody =
-                effectiveBody(sequence, foldedTerminal);
-        // I101-B: capability follows the emitted root, not a folded-away send.
+        CanonicalCompilationFacts.EffectiveRoot effectiveRoot = rootPlan.effectiveRoot();
+        boolean emittedGenericInvocation = currentRootEmittedContinuationPath;
+        if (emittedGenericInvocation) {
+            // A consumed result is kept (REJECTED_CONSUMED is not an error).
+            compilationFacts.invalidateNonSuspension(
+                    CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
+                    effectiveRoot,
+                    rootFacts.bindingAnalysis(),
+                    scopeForThisRoot,
+                    "generic invocation emitted");
+        }
+        /*
+         * The physical evidence of this parse always wins: a root that
+         * emitted a generic invocation is never published as non-suspending,
+         * whatever an earlier parse consumed.
+         */
         result.recordProvablyNonSuspendingBody(
-                directScalarLocalBody
-                        || emittedMinimalIntegerBody
-                        || provesNonSuspendingBody(
-                                activationDefinition, currentRootAnalysis, effectiveBody));
+                !emittedGenericInvocation
+                        && compilationFacts.consumeNonSuspension(
+                                        CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
+                                        effectiveRoot,
+                                        rootFacts.bindingAnalysis(),
+                                        scopeForThisRoot)
+                                .proven()
+                        && (loweringRefinementAccepted
+                                || rootPlan.plannedEffectiveRoot().proven()));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
@@ -1825,21 +1978,6 @@ final class CanonicalToBytecodeLowerer {
      * algorithm unchanged.
      */
     /**
-     * PERF038-H: proof of non-suspending source execution for the
-     * simplest Closure bodies.
-     *
-     * Admitted operations:
-     * - binding supplied positional arguments without defaults/rest;
-     * - loading a parameter resolved by this exact lexical analysis;
-     * - evaluating literals.
-     *
-     * Calls, sends, dynamic or captured lookups, mutations, returns,
-     * nested Closures and all unknown forms fail closed.
-     *
-     * A canonical binding identity is compared by Java identity:
-     * coincidentally equal names never establish this proof.
-     */
-    /**
      * I101-A: the statements the root actually evaluates; the original
      * sequence, with a folded terminal replaced by its proven result.
      */
@@ -1855,57 +1993,36 @@ final class CanonicalToBytecodeLowerer {
         return java.util.List.copyOf(effective);
     }
 
-    private static boolean provesNonSuspendingBody(
-            CanonicalClosure definition,
-            CanonicalBindingAnalysis analysis,
-            java.util.List<CanonicalExpression> effectiveBody) {
-        if (definition == null || analysis == null) {
-            return false;
-        }
-
-        for (CanonicalParameter parameter : definition.parameters()) {
-            if (parameter.rest()
-                    || parameter.defaultValue().isPresent()
-                    || analysis.identityOf(parameter).isEmpty()) {
-                return false;
-            }
-        }
-
-        for (CanonicalExpression expression : effectiveBody) {
-            if (expression instanceof CanonicalLiteral) {
-                continue;
-            }
-
-            if (expression instanceof CanonicalLookup lookup) {
-                CanonicalBindingResolution resolution =
-                        analysis.resolutionOf(lookup).orElse(null);
-
-                if (!(resolution
-                        instanceof CanonicalBindingResolution.Resolved resolved)) {
-                    return false;
-                }
-
-                boolean localParameter = false;
-
-                for (CanonicalParameter parameter :
-                        definition.parameters()) {
-                    if (analysis.identityOf(parameter).orElse(null)
-                            == resolved.identity()) {
-                        localParameter = true;
-                        break;
-                    }
-                }
-
-                if (localParameter) {
-                    continue;
-                }
-            }
-
-            return false;
-        }
-
-        return true;
+    /**
+     * I107: publishes a proof this lowerer's own transformation established
+     * for the effective root it is emitting (a refinement of the planner's
+     * UNKNOWN). Valid only for this root's effective identity, analysis and
+     * scope, under the NORMAL profile that admitted the transformation.
+     */
+    private CanonicalCompilationFacts.Publication publishLoweringRefinement(
+            RootEmissionPlan rootPlan, String provenance) {
+        CanonicalCompilationFacts.RootFacts rootFacts = rootPlan.rootFacts();
+        return compilationFacts.publishNonSuspension(
+                new CanonicalNonSuspensionAnalysis.Result(
+                        CanonicalNonSuspensionAnalysis.Proof.PROVEN_NO_SUSPENSION,
+                        CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
+                        rootPlan.effectiveRoot(),
+                        rootFacts.bindingAnalysis(),
+                        rootFacts.scope(),
+                        java.util.EnumSet.of(
+                                CanonicalNonSuspensionAnalysis.Precondition.NORMAL_PROFILE),
+                        provenance));
     }
+
+    private static boolean acceptsLoweringRefinement(
+            CanonicalCompilationFacts.Publication publication) {
+        return switch (publication) {
+            case RECORDED, REFINED, UNCHANGED -> true;
+            case REJECTED_INCOMPATIBLE, REJECTED_CONSUMED,
+                    REJECTED_INVALIDATED, INVALIDATED -> false;
+        };
+    }
+
 
     /**
      * I104-A: immutable pre-lowering proof for the one-required-parameter
@@ -5952,6 +6069,7 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
+
         if (inlineWhile != null) {
             builder.beginIfThenElse();
             builder.beginAdmitsInlineLiteralWhile();
@@ -6327,7 +6445,7 @@ final class CanonicalToBytecodeLowerer {
      * structured-dispatch helper boundary; an ordinary fallback retains the
      * existing scoped completion discipline.
      */
-    private static void emitInlineLiteralFallbackInvocation(
+    private void emitInlineLiteralFallbackInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal child,
@@ -6400,7 +6518,7 @@ final class CanonicalToBytecodeLowerer {
      * call enters the untagged structured root (PLAT042), any other call is
      * invoked locally.
      */
-    private static void emitDispatchedPreparedInvocation(
+    private void emitDispatchedPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6423,7 +6541,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endIfThenElse();
     }
 
-    private static void emitNestedStructuredInvocation(
+    private void emitNestedStructuredInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6444,7 +6562,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitOrdinaryPreparedInvocation(
+    private void emitOrdinaryPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6820,11 +6938,12 @@ final class CanonicalToBytecodeLowerer {
      * with, until the child completes (PLAT014; no replay, no new
      * continuation kind).
      */
-    private static void emitContinuationComposition(
+    private void emitContinuationComposition(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        currentRootEmittedContinuationPath = true;
         builder.beginWhile();
         builder.beginIsContinuationForCall();
         builder.emitLoadLocal(preparedCall);
@@ -8385,15 +8504,34 @@ final class CanonicalToBytecodeLowerer {
      */
     private NormalBooleanControlSite normalBooleanControlSite(
             CanonicalSend send) {
+        return normalBooleanControlSite(send, currentControlSiteContext());
+    }
+
+    /**
+     * I107: the selection row of an admissible site, or {@code null}; the
+     * shared precondition of admission ({@link #normalBooleanControlSite})
+     * and of the constant fold ({@link #foldedConstantControlResult}).
+     */
+    private NormalBooleanControl normalBooleanControlRow(
+            CanonicalSend send, ControlSiteContext context) {
         NormalBooleanControl control =
                 NormalBooleanControl.of(send.message());
         if (control == null
                 || profile != ProtosExecutionMode.NORMAL
                 || !standardObjectPublished
-                || currentInlineCallbackFrameNative
-                || currentActivationLocal != null
+                || context.inlineCallbackFrameNative()
+                || context.activationLocalPresent()
                 || send.arguments().size() != control.arity
                 || hasSpreadArgument(send.arguments())) {
+            return null;
+        }
+        return control;
+    }
+
+    private NormalBooleanControlSite normalBooleanControlSite(
+            CanonicalSend send, ControlSiteContext context) {
+        NormalBooleanControl control = normalBooleanControlRow(send, context);
+        if (control == null) {
             return null;
         }
 
@@ -8419,7 +8557,7 @@ final class CanonicalToBytecodeLowerer {
                     selectable
                             && send.arguments().get(position)
                                     instanceof CanonicalClosure closure
-                            && admitsNormalInlineControlBody(closure));
+                            && admitsNormalInlineControlBody(closure, context));
         }
         NormalBooleanControlSite site = new NormalBooleanControlSite(
                 control, java.util.List.copyOf(inlineCallbacks));
@@ -8450,7 +8588,8 @@ final class CanonicalToBytecodeLowerer {
      *
      * A failed proof retains the established B-prime path.
      */
-    private boolean admitsNormalInlineControlBody(CanonicalClosure closure) {
+    private boolean admitsNormalInlineControlBody(
+            CanonicalClosure closure, ControlSiteContext context) {
         if (!closure.parameters().isEmpty()
                 || compilationFacts.mayObserveReturnHome(closure)) {
             return false;
@@ -8471,21 +8610,21 @@ final class CanonicalToBytecodeLowerer {
         boolean noOwnBindingsAndProvenCaptures =
                 scope.declaredNames().isEmpty()
                         && analysis.admitsDirectParentCaptures(
-                                currentRootAnalysis,
-                                currentRootTopScope,
-                                currentRootFrameLocals.keySet(),
-                                currentRootFrameLayout != null);
+                                context.analysis(),
+                                context.topScope(),
+                                context.frameNames(),
+                                context.hasFrameLayout());
 
         boolean mixedOwnBindingsAndParentCaptures =
                 !scope.declaredNames().isEmpty()
                         && admitsNormalMixedCallbackOwnCreations(
                                 closure.body(), analysis, scope)
                         && analysis.admitsOwnBindingsAndDirectParentCaptures(
-                                currentRootAnalysis,
+                                context.analysis(),
                                 scope,
-                                currentRootTopScope,
-                                currentRootFrameLocals.keySet(),
-                                currentRootFrameLayout != null);
+                                context.topScope(),
+                                context.frameNames(),
+                                context.hasFrameLayout());
 
         return (ownScalarBindings
                         || noOwnBindingsAndProvenCaptures
@@ -8621,35 +8760,59 @@ final class CanonicalToBytecodeLowerer {
      * fail, suspend or observe any Context, and its value does not depend on
      * the activation evaluating it. The site therefore evaluates exactly to
      * that literal, which is emitted in place of the whole send.
+     *
+     * <p>I107: the fold composes. When the selected callback's only
+     * statement is itself a foldable site, the callback evaluates exactly to
+     * that site's literal with no effect; the callback is then as
+     * unobservable as a literal-bodied one (no parameters, no own bindings,
+     * unobservable ReturnHome, and none of its nested literals is ever
+     * materialized), so the outer site folds to the same literal at any
+     * nesting depth. The planner computes the fold before the builder opens,
+     * under the root-entry control context.
      */
     private CanonicalLiteral foldedConstantControlResult(
-            CanonicalExpression expression) {
+            CanonicalExpression expression, ControlSiteContext context) {
         if (!(expression instanceof CanonicalSend send)
                 || !(send.receiver() instanceof CanonicalLiteral receiver)
                 || !send.arguments().stream()
                         .allMatch(CanonicalClosure.class::isInstance)) {
             return null;
         }
-        NormalBooleanControlSite site = normalBooleanControlSite(send);
-        if (site == null) {
+        NormalBooleanControl control = normalBooleanControlRow(send, context);
+        if (control == null
+                || control.selectedResult != NormalBooleanControl.SelectedResult.EXACT
+                || (receiver.kind() != CanonicalLiteral.Kind.TRUE
+                        && receiver.kind() != CanonicalLiteral.Kind.FALSE)) {
             return null;
         }
         boolean value = receiver.kind() == CanonicalLiteral.Kind.TRUE;
-        if (site.path(value) != NormalBooleanControlPath.INLINE
-                || site.control().selectedResult
-                        != NormalBooleanControl.SelectedResult.EXACT) {
+        int selectedIndex = control.selectedIndex(value);
+        if (selectedIndex < 0) {
             return null;
         }
-        CanonicalClosure selected = (CanonicalClosure)
-                send.arguments().get(site.control().selectedIndex(value));
+        CanonicalClosure selected = (CanonicalClosure) send.arguments().get(selectedIndex);
         java.util.List<CanonicalExpression> body =
                 selected.body().expressions();
-        if (body.size() == 1
-                && body.get(0) instanceof CanonicalLiteral literal
-                && isNormalPureControlExpression(literal)) {
-            return literal;
+        if (body.size() != 1) {
+            return null;
         }
-        return null;
+        if (body.get(0) instanceof CanonicalLiteral literal) {
+            NormalBooleanControlSite site = normalBooleanControlSite(send, context);
+            return site != null
+                            && site.path(value) == NormalBooleanControlPath.INLINE
+                            && isNormalPureControlExpression(literal)
+                    ? literal
+                    : null;
+        }
+        if (!selected.parameters().isEmpty()
+                || compilationFacts.mayObserveReturnHome(selected)
+                || !compilationFacts.isolatedClosureAnalysis(selected)
+                        .scopeOf(selected)
+                        .map(scope -> scope.declaredNames().isEmpty())
+                        .orElse(false)) {
+            return null;
+        }
+        return foldedConstantControlResult(body.get(0), context);
     }
 
     private boolean isNormalPureControlExpression(
@@ -10001,6 +10164,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal result,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+
         BytecodeLocal child =
                 builder.createLocal("inlineClosureLiteralCall", null);
 

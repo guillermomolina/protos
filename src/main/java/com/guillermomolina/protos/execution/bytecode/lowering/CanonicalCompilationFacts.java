@@ -55,13 +55,16 @@ import java.util.Set;
  * unit and retained Bytecode parser; it is never shared between lowerers or
  * Contexts.
  *
- * <p>It answers exactly four families of questions the lowerer already asked:
+ * <p>It answers these families of questions:
  * <ol>
  *   <li>the isolated lexical analysis of one Closure definition;</li>
  *   <li>whether a root must install persistent frame authority ({@link
  *       RootFacts});</li>
  *   <li>whether a Closure definition may observe its ReturnHome;</li>
- *   <li>the static binding Closure-call candidates of one Closure root.</li>
+ *   <li>the static binding Closure-call candidates of one Closure root;</li>
+ *   <li>I107: non-suspension proofs ({@link CanonicalNonSuspensionAnalysis})
+ *       for the independent subjects canonical body, effective emitted root,
+ *       complete invocation and guarded call site.</li>
  * </ol>
  *
  * <p>Validity scopes are kept apart. The isolated analysis and ReturnHome
@@ -70,9 +73,20 @@ import java.util.Set;
  * CanonicalBindingAnalysis} and {@link CanonicalLexicalScope} they were
  * proven under: the same definition analyzed in the whole lexical tree and in
  * isolation receives two distinct answers, and neither substitutes for the
- * other. Facts of the emitted root (effective body after authorized folds,
- * non-suspension, physical layout, carriers, {@code BytecodeLocal}s and the
- * root group) are not canonical facts and stay with emission.
+ * other.
+ *
+ * <p>Non-suspension facts follow one small contract: a phase {@link
+ * #queryNonSuspension queries}, {@link #publishNonSuspension publishes} a
+ * contribution (refining UNKNOWN with new evidence), {@link
+ * #consumeNonSuspension consumes} an immutable result, or {@link
+ * #invalidateNonSuspension invalidates} one. A consumed result is never
+ * silently replaced, and two positive contributions with different
+ * preconditions for the same subject are rejected as incompatible. Canonical
+ * body facts are produced before the lowerer opens a builder; effective-root
+ * facts are keyed by an {@link EffectiveRoot} identity distinct from the
+ * canonical body, so a lowerer transformation never reuses the proof of the
+ * body it replaced. Physical state (layout, carriers, {@code
+ * BytecodeLocal}s, CallTargets) is never stored here.
  *
  * <p>Every key is an AST node, analysis or scope compared by identity, so two
  * structurally equal definitions, or a reparsed definition, never share a
@@ -93,6 +107,84 @@ final class CanonicalCompilationFacts {
     private record CallCandidates(
             CanonicalLexicalScope scope,
             Map<CanonicalCall, CanonicalClosure> candidates) {}
+
+    /**
+     * I107: identity of one effective emitted root: the canonical root
+     * ({@code definition}, or the module body) and the authorized lowerer
+     * transformation it carries ({@code foldedTerminal}, or {@code null}).
+     * Compared by Java identity; one instance per root, analysis and scope.
+     */
+    static final class EffectiveRoot {
+        private final Object canonicalRoot;
+        private final CanonicalLiteral foldedTerminal;
+
+        private EffectiveRoot(Object canonicalRoot, CanonicalLiteral foldedTerminal) {
+            this.canonicalRoot = canonicalRoot;
+            this.foldedTerminal = foldedTerminal;
+        }
+
+        Object canonicalRoot() { return canonicalRoot; }
+        CanonicalLiteral foldedTerminal() { return foldedTerminal; }
+    }
+
+    /** Outcome of a contribution to the non-suspension facts. */
+    enum Publication {
+        RECORDED,
+        UNCHANGED,
+        REFINED,
+        INVALIDATED,
+        REJECTED_INCOMPATIBLE,
+        REJECTED_CONSUMED,
+        REJECTED_INVALIDATED
+    }
+
+    /** Identity key of one non-suspension subject. */
+    private static final class FactKey {
+        private final CanonicalNonSuspensionAnalysis.Subject subject;
+        private final Object identity;
+        private final CanonicalBindingAnalysis analysis;
+        private final CanonicalLexicalScope scope;
+
+        FactKey(CanonicalNonSuspensionAnalysis.Subject subject, Object identity,
+                CanonicalBindingAnalysis analysis, CanonicalLexicalScope scope) {
+            this.subject = subject;
+            this.identity = identity;
+            this.analysis = analysis;
+            this.scope = scope;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof FactKey key
+                    && key.subject == subject
+                    && key.identity == identity
+                    && key.analysis == analysis
+                    && key.scope == scope;
+        }
+
+        @Override
+        public int hashCode() {
+            int hash = subject.hashCode();
+            hash = 31 * hash + System.identityHashCode(identity);
+            hash = 31 * hash + System.identityHashCode(analysis);
+            return 31 * hash + System.identityHashCode(scope);
+        }
+    }
+
+    private static final class FactEntry {
+        CanonicalNonSuspensionAnalysis.Result result;
+        boolean consumed;
+        boolean invalidated;
+
+        FactEntry(CanonicalNonSuspensionAnalysis.Result result) {
+            this.result = result;
+        }
+    }
+
+    private final java.util.HashMap<FactKey, FactEntry> nonSuspensionFacts =
+            new java.util.HashMap<>();
+    private final java.util.HashMap<FactKey, EffectiveRoot> effectiveRoots =
+            new java.util.HashMap<>();
 
     private final IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
             isolatedClosureAnalyses = new IdentityHashMap<>();
@@ -210,6 +302,183 @@ final class CanonicalCompilationFacts {
                         new IdentityHashMap<>(collectCandidates(body, analysis, scope)));
         byDefinition.put(definition, new CallCandidates(scope, candidates));
         return candidates;
+    }
+
+    /**
+     * I107 producer that runs before any builder opens: the {@link
+     * CanonicalNonSuspensionAnalysis.Subject#CANONICAL_BODY} proof of {@code
+     * body} under {@code analysis} and {@code scope}, published once and
+     * returned unchanged by every later query (including a reparse of the
+     * same canonical tree). A body outside its definition's own scope proves
+     * nothing.
+     */
+    CanonicalNonSuspensionAnalysis.Result canonicalBodyNonSuspension(
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        CanonicalNonSuspensionAnalysis.Subject subject =
+                CanonicalNonSuspensionAnalysis.Subject.CANONICAL_BODY;
+        if (analysis == null
+                || scope == null
+                || (definition != null
+                        && (body != definition.body()
+                                || analysis.scopeOf(definition).orElse(null) != scope))) {
+            return CanonicalNonSuspensionAnalysis.Result.unknown(
+                    subject, body, analysis, scope, "incompatible body or scope");
+        }
+        FactKey key = new FactKey(subject, body, analysis, scope);
+        FactEntry existing = nonSuspensionFacts.get(key);
+        if (existing != null) {
+            return existing.result;
+        }
+        CanonicalNonSuspensionAnalysis.Result result =
+                newAnalysis(analysis, scope, definition,
+                        CanonicalNonSuspensionAnalysis.SendSelection.NONE)
+                        .proveBody(body, definition);
+        publishNonSuspension(result);
+        return result;
+    }
+
+    /**
+     * The analysis of one root's subjects. Own creations and assignments
+     * count as direct only when the root keeps its bindings in frame locals
+     * ({@link RootFacts}); selected callback bodies are analyzed under their
+     * isolated analysis, which the NORMAL inline control lowering uses too.
+     */
+    CanonicalNonSuspensionAnalysis newAnalysis(
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            CanonicalClosure definition,
+            CanonicalNonSuspensionAnalysis.SendSelection selection) {
+        boolean direct = definition != null
+                && !rootFacts(definition.body(), definition, analysis, scope)
+                        .requiresPersistentFrameAuthority();
+        return new CanonicalNonSuspensionAnalysis(
+                analysis, scope, direct, selection, this::callbackScope);
+    }
+
+    private CanonicalNonSuspensionAnalysis.CallbackScope callbackScope(
+            CanonicalClosure callback) {
+        CanonicalBindingAnalysis isolated = isolatedClosureAnalysis(callback);
+        CanonicalLexicalScope callbackScope = isolated.scopeOf(callback).orElse(null);
+        if (callbackScope == null) {
+            return null;
+        }
+        return new CanonicalNonSuspensionAnalysis.CallbackScope(
+                isolated,
+                callbackScope,
+                !rootFacts(callback.body(), callback, isolated, callbackScope)
+                        .requiresPersistentFrameAuthority());
+    }
+
+    /**
+     * The identity of the effective root of {@code canonicalRoot} under
+     * {@code analysis} and {@code scope}: the same instance for the same
+     * transformation (so a reparse reuses its facts), a new one whenever the
+     * transformation differs.
+     */
+    EffectiveRoot effectiveRoot(
+            Object canonicalRoot,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            CanonicalLiteral foldedTerminal) {
+        FactKey key = new FactKey(
+                CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
+                canonicalRoot, analysis, scope);
+        EffectiveRoot existing = effectiveRoots.get(key);
+        if (existing != null && existing.foldedTerminal == foldedTerminal) {
+            return existing;
+        }
+        EffectiveRoot created = new EffectiveRoot(canonicalRoot, foldedTerminal);
+        effectiveRoots.put(key, created);
+        return created;
+    }
+
+    /** The current result of one subject, without consuming it. */
+    Optional<CanonicalNonSuspensionAnalysis.Result> queryNonSuspension(
+            CanonicalNonSuspensionAnalysis.Subject subject,
+            Object identity,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        FactEntry entry = nonSuspensionFacts.get(new FactKey(subject, identity, analysis, scope));
+        return entry == null ? Optional.empty() : Optional.of(entry.result);
+    }
+
+    /**
+     * Publishes one phase's contribution. UNKNOWN never replaces a proof
+     * (absence of proof is not counter-evidence); a proof refines UNKNOWN
+     * unless that UNKNOWN was already consumed or invalidated; an identical
+     * proof is idempotent; a proof under different preconditions is
+     * rejected.
+     */
+    Publication publishNonSuspension(CanonicalNonSuspensionAnalysis.Result contribution) {
+        FactKey key = new FactKey(
+                contribution.subject(),
+                contribution.identity(),
+                contribution.analysis(),
+                contribution.scope());
+        FactEntry entry = nonSuspensionFacts.get(key);
+        if (entry == null) {
+            nonSuspensionFacts.put(key, new FactEntry(contribution));
+            return Publication.RECORDED;
+        }
+        if (!contribution.proven()) {
+            return Publication.UNCHANGED;
+        }
+        if (entry.invalidated) {
+            return Publication.REJECTED_INVALIDATED;
+        }
+        if (entry.result.proven()) {
+            return entry.result.preconditions().equals(contribution.preconditions())
+                    ? Publication.UNCHANGED
+                    : Publication.REJECTED_INCOMPATIBLE;
+        }
+        if (entry.consumed) {
+            return Publication.REJECTED_CONSUMED;
+        }
+        entry.result = contribution;
+        return Publication.REFINED;
+    }
+
+    /**
+     * Consumes the immutable current result of one subject (UNKNOWN when no
+     * phase contributed). Once consumed, the result is never replaced.
+     */
+    CanonicalNonSuspensionAnalysis.Result consumeNonSuspension(
+            CanonicalNonSuspensionAnalysis.Subject subject,
+            Object identity,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        FactKey key = new FactKey(subject, identity, analysis, scope);
+        FactEntry entry = nonSuspensionFacts.computeIfAbsent(
+                key,
+                ignored -> new FactEntry(CanonicalNonSuspensionAnalysis.Result.unknown(
+                        subject, identity, analysis, scope, "no contribution")));
+        entry.consumed = true;
+        return entry.result;
+    }
+
+    /**
+     * Invalidates an unconsumed result: it becomes UNKNOWN and rejects every
+     * later positive contribution. A consumed result cannot be invalidated.
+     */
+    Publication invalidateNonSuspension(
+            CanonicalNonSuspensionAnalysis.Subject subject,
+            Object identity,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            String reason) {
+        FactKey key = new FactKey(subject, identity, analysis, scope);
+        FactEntry entry = nonSuspensionFacts.get(key);
+        if (entry != null && entry.consumed) {
+            return Publication.REJECTED_CONSUMED;
+        }
+        FactEntry invalidated = new FactEntry(CanonicalNonSuspensionAnalysis.Result.unknown(
+                subject, identity, analysis, scope, "invalidated: " + reason));
+        invalidated.invalidated = true;
+        nonSuspensionFacts.put(key, invalidated);
+        return Publication.INVALIDATED;
     }
 
     /**

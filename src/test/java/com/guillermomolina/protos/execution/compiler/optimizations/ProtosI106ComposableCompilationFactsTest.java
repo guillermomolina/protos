@@ -342,6 +342,87 @@ class ProtosI106ComposableCompilationFactsTest {
                 facts.bindingClosureCallCandidates(closure.body(), closure, analysis, scope));
     }
 
+    /**
+     * I107: non-suspension facts respect the I106 identities and validity
+     * scopes, never promote a candidate, and are never shared across analyses
+     * or owners.
+     */
+    @Test
+    void nonSuspensionFactsRespectI106IdentitiesAndScopes() {
+        CanonicalSequence program =
+                canonicalize(
+                        """
+                        run: () => {
+                            f: (value) => { value }
+                            f(1)
+                        }
+                        """);
+        CanonicalClosure run =
+                assertInstanceOf(
+                        CanonicalClosure.class,
+                        assertInstanceOf(CanonicalCreate.class, program.expressions().get(0))
+                                .value());
+        CanonicalCall callF = assertInstanceOf(CanonicalCall.class, run.body().expressions().get(1));
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalLexicalScope scope = analysis.scopeOf(run).orElseThrow();
+        CanonicalCompilationFacts facts = new CanonicalCompilationFacts();
+
+        // A Candidate is an expectation, not a safe binding: the call stays unknown.
+        assertSame(
+                run.body().expressions().get(0) instanceof CanonicalCreate create
+                        ? create.value()
+                        : null,
+                facts.bindingClosureCallCandidates(run.body(), run, analysis, scope).get(callF));
+        CanonicalNonSuspensionAnalysis.Result body =
+                facts.canonicalBodyNonSuspension(run.body(), run, analysis, scope);
+        assertFalse(body.proven());
+        assertSame(analysis, body.analysis());
+        assertSame(scope, body.scope());
+        assertTrue(
+                facts.queryNonSuspension(
+                                CanonicalNonSuspensionAnalysis.Subject.COMPLETE_INVOCATION,
+                                callF, analysis, scope)
+                        .isEmpty());
+
+        // A proof is never derived for another body or scope.
+        CanonicalClosure f =
+                assertInstanceOf(
+                        CanonicalClosure.class,
+                        assertInstanceOf(CanonicalCreate.class, run.body().expressions().get(0))
+                                .value());
+        CanonicalLexicalScope fScope = analysis.scopeOf(f).orElseThrow();
+        assertTrue(facts.canonicalBodyNonSuspension(f.body(), f, analysis, fScope).proven());
+        assertFalse(facts.canonicalBodyNonSuspension(f.body(), run, analysis, scope).proven());
+        assertFalse(facts.canonicalBodyNonSuspension(f.body(), f, analysis, scope).proven());
+
+        // A shared proof is not silently invalidated once consumed.
+        CanonicalNonSuspensionAnalysis.Result shared =
+                facts.consumeNonSuspension(
+                        CanonicalNonSuspensionAnalysis.Subject.CANONICAL_BODY,
+                        f.body(), analysis, fScope);
+        assertTrue(shared.proven());
+        assertEquals(
+                CanonicalCompilationFacts.Publication.REJECTED_CONSUMED,
+                facts.invalidateNonSuspension(
+                        CanonicalNonSuspensionAnalysis.Subject.CANONICAL_BODY,
+                        f.body(), analysis, fScope, "test"));
+        // The same analysis (a reparse of the same canonical tree) reuses it.
+        assertSame(shared, facts.canonicalBodyNonSuspension(f.body(), f, analysis, fScope));
+
+        // Another analysis or another owner (Context/lowerer) never sees it.
+        CanonicalBindingAnalysis isolated = facts.isolatedClosureAnalysis(f);
+        assertNotSame(
+                shared,
+                facts.canonicalBodyNonSuspension(
+                        f.body(), f, isolated, isolated.scopeOf(f).orElseThrow()));
+        assertTrue(
+                new CanonicalCompilationFacts()
+                        .queryNonSuspension(
+                                CanonicalNonSuspensionAnalysis.Subject.CANONICAL_BODY,
+                                f.body(), analysis, fScope)
+                        .isEmpty());
+    }
+
     private void assertPersistent(String source) {
         CanonicalClosure closure =
                 assertInstanceOf(CanonicalClosure.class, canonicalize(source).expressions().get(0));
