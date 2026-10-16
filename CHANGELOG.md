@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.368-SNAPSHOT
+
+- `I101` (#892): complete PLAT058-D profile-specialized minimal
+  Bytecode lowering and independent Builder-oracle acceptance.
+  - Complete I101-C NORMAL/DEBUG cross-family acceptance for
+    Boolean control, Closure calls, D203 flexible arguments,
+    lexical capture, non-local return, Error and ensure.
+  - Verify cooperative cancellation, cleanup Error identity,
+    suspension and pay-as-you-grow RootTask boundaries.
+  - Add independent full-instruction Builder oracles for
+    guarded Boolean dispatch and inline Closure calls,
+    including their physical fallback paths.
+  - Verify root/CallTarget topology, source tags, reparse
+    stability, Context isolation and negative controls.
+  - Close I101-A/B/C1/C acceptance without asserting
+    unmeasured runtime performance improvements.
+
 ## 0.3.367-SNAPSHOT
 
 - `I105` (#902): implement D203 flexible Closure argument semantics.

@@ -556,6 +556,698 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
+     * I101-C/D203 cross-profile acceptance. This is a semantic and root-topology
+     * integration test, not a claim of a new physically minimal encoding.
+     */
+    @Test
+    void i101CD203BindingsRetainRootTopologyAcrossProfiles() throws Exception {
+        record Case(String definition, String arguments, Object expected) {}
+
+        List<Case> cases = List.of(
+                new Case(
+                        "(first, second: first, third) => { second }",
+                        "9", 9L),
+                new Case(
+                        "(first, second: 7, third) => { second }",
+                        "9, null", ProtosNullValue.INSTANCE),
+                new Case(
+                        "(first: 7, second, third: second) => { second }",
+                        "", ProtosNullValue.INSTANCE),
+                new Case(
+                        "(first, second: 7, third) => { third }",
+                        "9, 8, 42, 100", 42L),
+                new Case(
+                        "(first: 7, ...tail) => { tail.size() }",
+                        "9, 8, 42", 2L));
+
+        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+            try (Harness harness = new Harness(mode, null)) {
+                harness.run(() -> {
+                    for (int index = 0; index < cases.size(); index++) {
+                        Case example = cases.get(index);
+                        String label = "d203-" + mode + "-" + index;
+
+                        ProtosSemanticBytecodeRootNode module =
+                                compile(example.definition(), label);
+
+                        BytecodeRootNodes<?> group = module.getRootNodes();
+                        List<ProtosSemanticBytecodeRootNode> roots =
+                                groupRoots(module);
+
+                        assertEquals(2, roots.size(),
+                                "D203 must not create an arity-rejection root");
+
+                        ProtosSemanticBytecodeRootNode body = roots.get(1);
+                        RootCallTarget target = body.getCallTarget();
+
+                        group.ensureComplete();
+                        List<String> complete = signature(body);
+                        group.ensureComplete();
+
+                        assertSame(group, module.getRootNodes());
+                        assertEquals(roots, groupRoots(module));
+                        assertSame(body, group.getNode(1));
+                        assertSame(target, body.getCallTarget());
+                        assertEquals(complete, signature(body));
+
+                        assertNotNull(body.getSourceSection());
+                        assertTrue(hasRootTag(
+                                body.getBytecodeNode().getTagTree()));
+
+                        ProtosClosureValue closure = assertInstanceOf(
+                                ProtosClosureValue.class,
+                                module.getCallTarget().call(
+                                        harness.moduleActivation()));
+
+                        ProtosClosureExecutionPlan plan =
+                                closure.executionPlan().orElseThrow();
+
+                        assertEquals(mode, plan.bytecodeProfileForTesting());
+                        assertSame(target,
+                                plan.bytecodeActivationTargetForComposition());
+
+                        ProtosActivation caller = harness.moduleActivation();
+                        caller.context().createLocalSlot("candidate", closure);
+
+                        ProtosSemanticBytecodeRootNode invocation =
+                                compile(
+                                        "candidate(" + example.arguments() + ")",
+                                        label + "-call");
+
+                        for (int repetition = 0; repetition < 2; repetition++) {
+                            assertGuestValue(
+                                    example.expected(),
+                                    invocation.getCallTarget().call(caller),
+                                    mode + " " + example.definition());
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    /**
+     * I101-C integration of lexical authority and structured control with
+     * NORMAL/DEBUG root identity, reparse and real hosted execution.
+     */
+    @Test
+    void i101CCrossFamilyControlAndCaptureAcceptance() throws Exception {
+        record Case(String name, String program, int expected) {}
+
+        List<Case> cases = List.of(
+                new Case("late-capture", """
+                        run: () => {
+                            outer: () => {
+                                value: 40
+                                middle: () => {
+                                    reader: () => value
+                                    first: reader()
+                                    value: 2
+                                    first + reader()
+                                }
+                                middle()
+                            }
+                            outer()
+                        }
+                        0
+                        """, 42),
+                new Case("nonlocal-ensure", """
+                        cleaned: 0
+                        run: () => {
+                            (() => {
+                                ^42
+                            }).ensure(() => {
+                                cleaned = 7
+                            })
+                            0
+                        }
+                        verifyCleanup: () => { cleaned }
+                        0
+                        """, 42),
+                new Case("error-identity", """
+                        run: () => {
+                            original: Error()
+                            cleaned: false
+                            result: original.handle(() => {
+                                (() => original.signal()).ensure(() => {
+                                    cleaned = true
+                                })
+                            }, (caught) => {
+                                (caught === original) && cleaned
+                            })
+                            result.ifTrueIfFalse(
+                                () => { 1 },
+                                () => { 0 })
+                        }
+                        0
+                        """, 1),
+                new Case("suspendible-ensure", """
+                        run: () => {
+                            work: () => {
+                                count: 0
+                                dependency: (() => 7).future()
+                                (() => {
+                                    count = count + 1
+                                    dependency.value()
+                                    count = count + 10
+                                }).ensure(() => {
+                                    count = count + 100
+                                })
+                                count
+                            }
+                            work.future().value()
+                        }
+                        0
+                        """, 111));
+
+        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+            for (Case example : cases) {
+                Path file = directory.resolve(
+                        "i101-c-" + mode + "-" + example.name() + ".protos");
+
+                Files.writeString(
+                        file, example.program(), StandardCharsets.UTF_8);
+
+                try (ProtosStandaloneHostedSession session =
+                        ProtosStandaloneHostedSession.openForTesting(
+                                CORE, file, mode)) {
+
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            session.initialOutcome().state());
+
+                    ProtosStandaloneHostedSession.PreparedTopLevel run =
+                            session.prepareTopLevel("run");
+
+                    ProtosClosureExecutionPlan plan =
+                            run.closureForTesting()
+                                    .executionPlan().orElseThrow();
+
+                    assertEquals(mode, plan.bytecodeProfileForTesting());
+
+                    ProtosSemanticBytecodeRootNode root =
+                            plan.bytecodeActivationRootForTesting();
+
+                    BytecodeRootNodes<?> group = root.getRootNodes();
+                    List<ProtosSemanticBytecodeRootNode> roots =
+                            groupRoots(root);
+                    RootCallTarget target = root.getCallTarget();
+
+                    group.ensureComplete();
+
+                    assertSame(group, root.getRootNodes());
+                    assertEquals(roots, groupRoots(root));
+                    assertSame(target, root.getCallTarget());
+                    assertNotNull(root.getSourceSection());
+                    assertTrue(hasRootTag(
+                            root.getBytecodeNode().getTagTree()));
+
+                    for (int repetition = 0; repetition < 2; repetition++) {
+                        if ("suspendible-ensure".equals(example.name())) {
+                            ProtosExecutionOutcome outcome = run.invoke();
+                            assertEquals(
+                                    ProtosExecutionOutcome.State.COMPLETED,
+                                    outcome.state(),
+                                    mode + " " + example.name());
+                            assertEquals(
+                                    String.valueOf(example.expected()),
+                                    ProtosNumericValueSupport.integerDecimalText(
+                                            outcome.value()),
+                                    mode + " " + example.name());
+                        } else {
+                            assertEquals(
+                                    example.expected(),
+                                    run.executable().execute().asInt(),
+                                    mode + " " + example.name());
+                        }
+                    }
+
+                    if (example.name().equals("nonlocal-ensure")) {
+                        assertEquals(
+                                7,
+                                session.prepareTopLevel("verifyCleanup")
+                                        .executable().execute().asInt(),
+                                mode + " NLR cleanup");
+                    }
+                }
+            }
+        }
+    }
+
+
+    /**
+     * I101-C: guarded NORMAL specializations must retain their actual MISS
+     * path. NORMAL/I095 has a specialized physical Boolean-control selection
+     * with a fallback; DEBUG may retain the pre-existing I092/PERF041
+     * canonical ifTrue classifier, so the absence of
+     * {@code IsCanonicalBooleanFalseClass} is the appropriate negative
+     * control for the Boolean witness. I096 keeps a NORMAL-only inline
+     * Closure-call guard that DEBUG must not emit. Reparse may materialize
+     * instrumentation but must not change the semantic instruction stream,
+     * root identities, CallTargets or the selected guest behavior.
+     *
+     * This test checks the complete typed instruction signatures for reparse
+     * stability. It does not claim a minimum-Builder equality for a guarded
+     * root: the MISS path is semantically necessary.
+     */
+    @Test
+    void i101CGuardedFallbackPreservesPhysicalPathsAndReparse()
+            throws Exception {
+        record Family(
+                String name,
+                String source,
+                String guard,
+                String fallback,
+                long expected) {}
+
+        List<Family> families = List.of(
+                new Family(
+                        "boolean",
+                        """
+                        select: (receiver) => {
+                            receiver.ifTrue(() => { 1 })
+                        }
+                        run: () => {
+                            custom: {
+                                ifTrue: (callback) => { 7 }
+                            }
+                            select(true) * 10 + select(custom)
+                        }
+                        0
+                        """,
+                        "TryCompactCanonicalBooleanOne",
+                        "PrepareSendOne",
+                        17),
+                new Family(
+                        "closure-call",
+                        """
+                        run: () => {
+                            f: (value) => { value }
+                            first: f(2)
+                            f.call: (value) => { value + 10 }
+                            second: f(3)
+                            first * 10 + second
+                        }
+                        0
+                        """,
+                        "AdmitsInlineClosureLiteralCall",
+                        "LoadInlineLiteralFallbackCall",
+                        33));
+
+        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+            for (Family family : families) {
+                Path folder = Files.createDirectories(
+                        directory.resolve(
+                                "i101-guard-" + mode + "-" + family.name()));
+                Path file = folder.resolve("fixture.protos");
+                Files.writeString(
+                        file, family.source(), StandardCharsets.UTF_8);
+
+                try (ProtosStandaloneHostedSession session =
+                        ProtosStandaloneHostedSession.openForTesting(
+                                CORE, file, mode)) {
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            session.initialOutcome().state(),
+                            mode + " " + family.name());
+
+                    ProtosStandaloneHostedSession.PreparedTopLevel run =
+                            session.prepareTopLevel("run");
+
+                    ProtosClosureExecutionPlan plan =
+                            run.closureForTesting()
+                                    .executionPlan().orElseThrow();
+                    assertEquals(mode, plan.bytecodeProfileForTesting());
+
+                    ProtosSemanticBytecodeRootNode activation =
+                            plan.bytecodeActivationRootForTesting();
+                    BytecodeRootNodes<?> group = activation.getRootNodes();
+                    List<ProtosSemanticBytecodeRootNode> roots =
+                            groupRoots(activation);
+
+                    List<RootCallTarget> targets = roots.stream()
+                            .map(RootNode::getCallTarget)
+                            .toList();
+
+                    List<List<String>> before = roots.stream()
+                            .map(ProtosI101ProfileSpecializedLoweringTest
+                                    ::semanticSignature)
+                            .toList();
+
+                    group.ensureComplete();
+
+                    List<List<String>> complete = roots.stream()
+                            .map(ProtosI101ProfileSpecializedLoweringTest
+                                    ::signature)
+                            .toList();
+
+                    group.ensureComplete();
+
+                    assertSame(group, activation.getRootNodes());
+                    assertEquals(roots, groupRoots(activation));
+
+                    for (int index = 0; index < roots.size(); index++) {
+                        ProtosSemanticBytecodeRootNode root =
+                                roots.get(index);
+
+                        assertSame(
+                                root, group.getNode(index),
+                                mode + " " + family.name());
+                        assertSame(
+                                targets.get(index), root.getCallTarget(),
+                                mode + " " + family.name());
+
+                        assertReparsePrefixAndCleanup(
+                                before.get(index),
+                                semanticSignature(root),
+                                mode + " " + family.name()
+                                        + " root " + index);
+
+                        assertEquals(
+                                complete.get(index),
+                                signature(root),
+                                mode + " " + family.name()
+                                        + " root " + index);
+
+                        assertNotNull(
+                                root.getSourceSection(),
+                                mode + " " + family.name());
+                    }
+
+                    List<ProtosSemanticBytecodeRootNode> guarded =
+                            roots.stream()
+                                    .filter(root -> signature(root).stream()
+                                            .anyMatch(instruction ->
+                                                    instruction.contains(
+                                                            family.guard())))
+                                    .toList();
+
+                    if (mode == ProtosExecutionMode.NORMAL) {
+                        assertEquals(
+                                1, guarded.size(),
+                                "one NORMAL guarded site: "
+                                        + family.name());
+
+                        List<String> instructions =
+                                signature(guarded.get(0));
+
+                        int guardIndex = -1;
+                        int fallbackIndex = -1;
+
+                        for (int index = 0;
+                                index < instructions.size();
+                                index++) {
+                            String instruction =
+                                    instructions.get(index);
+
+                            if (instruction.contains(family.guard())
+                                    && guardIndex < 0) {
+                                guardIndex = index;
+                            }
+
+                            if (instruction.contains(family.fallback())
+                                    && fallbackIndex < 0) {
+                                fallbackIndex = index;
+                            }
+                        }
+
+                        assertTrue(
+                                instructions.stream().noneMatch(
+                                        instruction -> instruction.contains(
+                                                "IsNormalExecutionMode")),
+                                "NORMAL must not contain a runtime mode branch");
+                        assertTrue(
+                                guardIndex >= 0,
+                                "missing guard: " + instructions);
+                        assertTrue(
+                                fallbackIndex > guardIndex,
+                                "missing or misplaced MISS fallback: "
+                                        + instructions);
+                    } else if ("boolean".equals(family.name())) {
+                        assertTrue(
+                                guarded.stream().anyMatch(root ->
+                                        signature(root).stream().anyMatch(instruction ->
+                                                instruction.contains(
+                                                        "TryCompactCanonicalBooleanOne"))),
+                                "DEBUG retains the pre-existing I092/PERF041 "
+                                        + "canonical ifTrue classifier");
+
+                        assertTrue(
+                                roots.stream().noneMatch(root ->
+                                        signature(root).stream().anyMatch(instruction ->
+                                                instruction.contains(
+                                                        "IsCanonicalBooleanFalseClass"))),
+                                "DEBUG must not emit the NORMAL I095 "
+                                        + "Boolean-control selection");
+
+                        assertTrue(
+                                roots.stream().anyMatch(root ->
+                                        signature(root).stream().anyMatch(instruction ->
+                                                instruction.contains("PrepareSendOne"))),
+                                "DEBUG must retain the ordinary ifTrue send");
+                    } else {
+                        assertTrue(
+                                guarded.isEmpty(),
+                                "DEBUG must not emit the NORMAL I096 "
+                                        + "inline Closure-call guard");
+                    }
+
+                    for (int repetition = 0; repetition < 2;
+                            repetition++) {
+                        assertEquals(
+                                family.expected(),
+                                run.executable().execute().asLong(),
+                                mode + " " + family.name());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * I101-C: a cancellation request reaching a real suspension must unwind
+     * through ensure. This test explicitly checks that the pending
+     * cancellation is observed at the cooperative {@code dependency.value()}
+     * boundary, that code after {@code dependency.value()} never runs
+     * ({@code afterAwait} stays 0), that ensure runs exactly once
+     * ({@code cleaned} is 1), that the handler receives the identical
+     * cleanup Error ({@code caught === cleanupError}), that the cleanup
+     * Error takes precedence over the original cancellation transfer, and
+     * that NORMAL and DEBUG produce the same result.
+     *
+     * The operation is entered through a cooperative RootTask only because
+     * it contains a real suspension; ordinary synchronous calls elsewhere
+     * remain task-free.
+     */
+    @Test
+    void i101CCancellationEnsureAndTaskRetainProfileParity()
+            throws Exception {
+        String source = """
+                run: () => {
+                    cleaned: 0
+                    afterAwait: 0
+                    cleanupError: Error()
+
+                    producer: (() => {
+                        dependency: Future.all().then(
+                            (values) => { 7 })
+
+                        Error.handle(
+                            () => {
+                                (() => {
+                                    producer.cancel()
+                                    dependency.value()
+                                    afterAwait = 1
+                                    41
+                                }).ensure(() => {
+                                    cleaned = cleaned + true.ifTrue(() => { 1 })
+                                    cleanupError.signal()
+                                })
+                            },
+                            (caught) => {
+                                (caught === cleanupError).ifTrueIfFalse(
+                                    () => { 42 },
+                                    () => { 90 }
+                                )
+                            }
+                        )
+                    }).future()
+
+                    value: producer.value()
+                    cleaned * 100 + value + afterAwait * 1000
+                }
+                0
+                """;
+
+        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+            Path folder = Files.createDirectories(
+                    directory.resolve("i101-cancellation-" + mode));
+            Path file = folder.resolve("fixture.protos");
+            Files.writeString(file, source, StandardCharsets.UTF_8);
+
+            try (ProtosStandaloneHostedSession session =
+                    ProtosStandaloneHostedSession.openForTesting(
+                            CORE, file, mode)) {
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        session.initialOutcome().state(),
+                        mode.toString());
+
+                ProtosStandaloneHostedSession.PreparedTopLevel run =
+                        session.prepareTopLevel("run");
+
+                ProtosClosureExecutionPlan plan =
+                        run.closureForTesting()
+                                .executionPlan().orElseThrow();
+
+                assertEquals(mode, plan.bytecodeProfileForTesting());
+
+                for (int repetition = 0; repetition < 2; repetition++) {
+                    ProtosExecutionOutcome result = run.invoke();
+
+                    assertEquals(
+                            ProtosExecutionOutcome.State.COMPLETED,
+                            result.state(),
+                            mode + " cancellation / ensure");
+                    assertInteger(142, result.value());
+                }
+            }
+        }
+    }
+
+
+    /**
+     * Reparse may append the root's unreachable local-cleanup epilogue.
+     * The epilogue may be empty, contain only {@code return}, or be the
+     * complete cleanup epilogue ({@code load.null}, zero or more
+     * {@code clear.local}, {@code return}). The pre-existing semantic instruction prefix must remain identical.
+     * Bytecode indices are normalized by semanticSignature.
+     */
+    private static void assertReparsePrefixAndCleanup(
+            List<String> before, List<String> after, String message) {
+        assertTrue(
+                after.size() >= before.size(),
+                () -> message + ": instructions disappeared");
+
+        assertEquals(
+                before,
+                after.subList(0, before.size()),
+                message + ": semantic prefix changed");
+
+        List<String> epilogue = after.subList(before.size(), after.size());
+        if (epilogue.isEmpty() || epilogue.equals(List.of("return"))) {
+            return;
+        }
+        assertTrue(
+                epilogue.size() >= 2,
+                () -> message + ": incomplete reparse epilogue " + epilogue);
+        assertEquals(
+                "load.null", epilogue.get(0),
+                message + ": reparse epilogue must start with load.null " + epilogue);
+        assertEquals(
+                "return", epilogue.get(epilogue.size() - 1),
+                message + ": reparse epilogue must end with return " + epilogue);
+        for (String instruction : epilogue.subList(1, epilogue.size() - 1)) {
+            assertTrue(
+                    instruction.startsWith("clear.local "),
+                    () -> message
+                            + ": unexpected reparse epilogue instruction "
+                            + instruction + " in " + epilogue);
+        }
+    }
+
+
+    /**
+     * I101-C/D203: defaults, rest parameters and spread arguments are
+     * intentionally outside the admitted I096 direct-binding inline shapes.
+     * They must keep ordinary argument binding and invocation semantics,
+     * including in NORMAL. DEBUG must not acquire a NORMAL-only guard.
+     */
+    @Test
+    void i101CD203ExcludedCallsKeepOrdinaryTopology()
+            throws Exception {
+        String program = """
+                run: () => {
+                    withDefault: (a: 2) => { a + 3 }
+                    withRest: (...items) => { items.size() }
+                    withSpread: (a) => { a }
+                    values: [9]
+
+                    first: withDefault()
+                    second: withRest(1, 2)
+                    third: withSpread(...values)
+
+                    first * 100 + second * 10 + third
+                }
+                0
+                """;
+
+        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+            Path folder = Files.createDirectories(
+                    directory.resolve("i101-d203-negative-" + mode));
+            Path file = folder.resolve("fixture.protos");
+            Files.writeString(file, program, StandardCharsets.UTF_8);
+
+            try (ProtosStandaloneHostedSession session =
+                    ProtosStandaloneHostedSession.openForTesting(
+                            CORE, file, mode)) {
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        session.initialOutcome().state(),
+                        mode.toString());
+
+                ProtosStandaloneHostedSession.PreparedTopLevel run =
+                        session.prepareTopLevel("run");
+
+                ProtosClosureExecutionPlan plan =
+                        run.closureForTesting()
+                                .executionPlan().orElseThrow();
+
+                assertEquals(mode, plan.bytecodeProfileForTesting());
+
+                ProtosSemanticBytecodeRootNode root =
+                        plan.bytecodeActivationRootForTesting();
+
+                List<String> instructions = completeSignature(root);
+
+                assertTrue(
+                        instructions.stream().noneMatch(
+                                instruction -> instruction.contains(
+                                        "AdmitsInlineClosureLiteralCall")),
+                        mode + " must not inline D203-excluded calls");
+
+                // The three exclusions keep their ordinary physical invocations.
+                for (String operation : List.of(
+                        "PrepareClosureCall",
+                        "PrepareClosureCallArguments",
+                        "PrepareClosureCallVector")) {
+                    assertTrue(
+                            instructions.stream().anyMatch(instruction -> {
+                                String name = instruction.split(" ", 2)[0];
+                                return name.equals(operation)
+                                        || name.equals("c." + operation);
+                            }),
+                            () -> mode + " missing " + operation + " in "
+                                    + instructions);
+                }
+
+                assertTrue(
+                        instructions.stream().noneMatch(
+                                instruction -> instruction.contains(
+                                        "IsNormalExecutionMode")),
+                        mode + " must not contain runtime profile dispatch");
+
+                for (int repetition = 0; repetition < 2; repetition++) {
+                    assertEquals(
+                            529L,
+                            run.executable().execute().asLong(),
+                            mode + " D203 ordinary calls");
+                }
+            }
+        }
+    }
+
+    /**
      * I104-A standalone physical oracle. The original and fused variants
      * intentionally differ only in the parameter-binding operations.
      * All other obligations, including source tags and numeric-carrier
