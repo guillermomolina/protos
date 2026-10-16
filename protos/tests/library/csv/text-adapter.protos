@@ -153,11 +153,6 @@ tests: [
             Assertions.signals(Error, () => { invalidOutput.feed(Array("later")) })
             Assertions.require(invalidWriterCalls == 0)
 
-            Assertions.signals(Error, () => { CSV.readRows() })
-            Assertions.signals(Error, () => { CSV.readRows({}, (row) => { null }, 1) })
-            Assertions.signals(Error, () => { CSV.writeRows() })
-            Assertions.signals(Error, () => { CSV.writeRows({}, {}) })
-
             true
         }
         Assertions.require(tool009LegacyCase())

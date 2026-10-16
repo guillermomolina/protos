@@ -106,7 +106,7 @@ Within a bound project the analysis is deliberately narrow:
   them. It never offers slots, members, module names, or Standard Library
   names, and every list is complete (`isIncomplete` is `false`).
 - **Signature help** works only when the callee is a literal Closure, for
-  example `((a, b = 1) => { a + b })(`, showing source-text parameter labels.
+  example `((a, b: 1) => { a + b })(`, showing source-text parameter labels.
   Calls through a name get no signature help.
 - **Workspace symbols** search the project's own sources; dependencies and
   `std:` modules are excluded, and at most 100 results are returned.

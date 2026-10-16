@@ -391,7 +391,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
                     bytecodeClosure(
                             language,
                             harness.activation(),
-                            "(value = defaultProducer()) => {\n"
+                            "(value: defaultProducer()) => {\n"
                                     + "    f.value()\n"
                                     + "    value\n"
                                     + "}",

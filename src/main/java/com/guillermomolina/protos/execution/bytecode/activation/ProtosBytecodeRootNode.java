@@ -209,8 +209,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int positionalIndex) {
             List<?> arguments =
                     closureArguments(activation);
+            // D203: an unsupplied parameter without a default binds canonical null.
             if (positionalIndex >= arguments.size()) {
-                throw closureArgumentCountError(activation);
+                return ProtosNullValue.INSTANCE;
             }
             return arguments.get(positionalIndex);
         }
@@ -263,19 +264,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 supplied.subList(
                         restStart,
                         supplied.size()));
-    }
-
-    @Operation
-    public static final class CheckClosureArgumentUpperBound {
-        @Specialization
-        public static void perform(
-                ProtosActivation activation,
-                int maximumPositionalArguments) {
-            if (closureArguments(activation).size()
-                    > maximumPositionalArguments) {
-                throw closureArgumentCountError(activation);
-            }
-        }
     }
 
     private static List<?> closureArguments(
@@ -366,12 +354,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ordinal,
                 name,
                 closureRestArray(activation, positionalParametersBeforeRest));
-    }
-
-    private static ProtosSignalException closureArgumentCountError(
-            ProtosActivation activation) {
-        return new ProtosSignalException(
-                ProtosCoreErrors.newError(activation));
     }
 
     @Operation
@@ -2737,12 +2719,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * return-home/ownership state that non-local return
      * completion actually requires. It never carries native-body, structured-
      * control-capability, or module-initialization state.
-     *
-     * <p>PERF032-G6: every ordinary source call is constructed here, so this
-     * is where the entered target is selected ({@link
-     * ProtosSemanticBytecodeRootNode#selectSourceEntryTarget}): a call
-     * supplying arguments to a Closure declaring no parameters enters that
-     * Closure's arity-rejection root with the same frame arguments.
      */
     static final class OrdinarySourceCall extends ReturnHomeOwningCall {
         private final RootCallTarget bodyTarget;
@@ -2758,10 +2734,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                             new IllegalStateException(
                                                     "Closure invocation requires a return home")),
                     activation.ownsReturnHome());
-            this.bodyTarget =
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
-                            activation.suppliedArgumentCountForRuntime());
+            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
             this.activation = activation;
             // I102: a rich entry enters through the same B5 header, already published.
             this.targetArguments = ProtosFrameArguments.publishedInvocation(activation);
@@ -2773,20 +2746,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             java.util.Objects.requireNonNull(
                                     compactTargetArguments, "compactTargetArguments")),
                     ProtosFrameArguments.compactOwnsReturnHome(compactTargetArguments));
-            this.bodyTarget =
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
-                            ProtosFrameArguments.compactSuppliedArgumentCount(
-                                    compactTargetArguments));
+            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
             this.activation = null;
             this.targetArguments = compactTargetArguments;
         }
 
-        /**
-         * PERF038-H: the guarded PIC has already selected the exact
-         * source entry target. No arity-based target selection remains
-         * necessary inside this carrier constructor.
-         */
+        /** PERF038-H: the guarded PIC has already selected the exact source entry target. */
         OrdinarySourceCall(
                 RootCallTarget selectedEntryTarget,
                 Object[] compactTargetArguments,
@@ -2806,16 +2771,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean ownsReturnHome,
                 int suppliedArgumentCount) {
             super(returnHome, ownsReturnHome);
-            /*
-             * PERF038-H: a zero-argument call cannot require the
-             * excess-argument rejection entry. Preserve the general
-             * selection for calls carrying supplied arguments.
-             */
-            this.bodyTarget =
-                    suppliedArgumentCount == 0
-                            ? bodyTarget
-                            : ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                                    bodyTarget, suppliedArgumentCount);
+            this.bodyTarget = bodyTarget;
             this.activation = null;
             this.targetArguments = compactTargetArguments;
         }
@@ -2830,7 +2786,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         /**
          * PERF038-H: read the capability of the actual selected
-         * source entry. Arity rejection and unknown targets
+         * source entry. Unknown targets
          * retain the general continuation protocol.
          */
 
@@ -8234,21 +8190,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosActivation caller) {
         ProtosReturnHome returnHome =
                 closure.invocationReturnHomeForRuntime();
-        RootCallTarget selectedEntry =
-                ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                        target, 1);
         return PreparedClosureCall.ordinaryCompactSelected(
-                selectedEntry,
+                target,
                 ProtosFrameArguments.compactDirectClosureCallOnePrepared(
                         closure, caller, returnHome, supplied0),
                 returnHome,
                 closure.returnHome().isEmpty());
     }
 
-    /**
-     * PERF038-H: admitted direct Call0 needs no arity-rejection
-     * selection and no compact-header revalidation.
-     */
+    /** PERF038-H: admitted direct Call0 needs no compact-header revalidation. */
     static PreparedClosureCall finishDirectClosureCallZero(
             ProtosClosureValue closure,
             RootCallTarget target,
@@ -8820,7 +8770,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             caller,
                             returnHome);
             return PreparedClosureCall.ordinaryCompactSelected(
-                    cachedSend.entryTarget(0),
+                    cachedSend.target(),
                     arguments,
                     returnHome,
                     cachedSend.ownsReturnHome());
@@ -8844,7 +8794,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             returnHome,
                             supplied0);
             return PreparedClosureCall.ordinaryCompactSelected(
-                    cachedSend.entryTarget(1),
+                    cachedSend.target(),
                     arguments,
                     returnHome,
                     cachedSend.ownsReturnHome());
@@ -8874,17 +8824,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Assumption stability,
                 ProtosReturnHome sharedInvocationHome,
                 boolean freshInvocationHome,
-                boolean ownsReturnHome,
-                RootCallTarget suppliedEntryTarget) {
-
-            /**
-             * PERF038-H: source entry selection depends only on the
-             * immutable target and whether arguments were supplied.
-             * Resolve both possibilities when the PIC is established.
-             */
-            RootCallTarget entryTarget(int suppliedCount) {
-                return suppliedCount == 0 ? target : suppliedEntryTarget;
-            }
+                boolean ownsReturnHome) {
 
             /** Exactly {@code closure().invocationReturnHomeForRuntime()}. */
             ProtosReturnHome invocationHome() {
@@ -9183,7 +9123,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             returnHome,
                             supplied);
             return PreparedClosureCall.ordinaryCompactSelected(
-                    cachedSend.entryTarget(supplied.length),
+                    cachedSend.target(),
                     frameArguments,
                     returnHome,
                     cachedSend.ownsReturnHome());
@@ -9250,9 +9190,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     lookup.stability(),
                     sharedHome,
                     sharedHome == null && closure.executionPlan().isPresent(),
-                    closure.returnHome().isEmpty(),
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            target, 1));
+                    closure.returnHome().isEmpty());
         }
 
         /**
@@ -9291,12 +9229,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosReturnHome returnHome =
                     closure.invocationReturnHomeForRuntime();
 
-            RootCallTarget selectedEntry =
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                            target, 1);
-
             return PreparedClosureCall.ordinaryCompactSelected(
-                    selectedEntry,
+                    target,
                     ProtosFrameArguments.compactImmediateMethodCallOne(
                             closure, receiver, methodHome, caller,
                             returnHome, supplied0),

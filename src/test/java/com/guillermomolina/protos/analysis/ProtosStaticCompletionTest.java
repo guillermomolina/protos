@@ -79,17 +79,17 @@ class ProtosStaticCompletionTest {
 
     @Test
     void defaultsSeeOnlyEarlierEstablishedParametersOnEveryPath() {
-        assertEquals(List.of("first"), provenAtEndOf("f: (first, second = fi", ") => 1"));
-        assertEquals(List.of("first"), provenAtEndOf("f: (first, second = se", ") => 1"));
+        assertEquals(List.of("first"), provenAtEndOf("f: (first, second: fi", ") => 1"));
+        assertEquals(List.of("first"), provenAtEndOf("f: (first, second: se", ") => 1"));
         assertEquals(
                 List.of("first", "second"),
-                provenAtEndOf("f: (first, second = 1, third = th", ") => 1"));
+                provenAtEndOf("f: (first, second: 1, third: th", ") => 1"));
 
         // The invocation in second's default invalidates first on the default
         // path; the path intersection keeps only second.
         assertEquals(
                 List.of("second"),
-                provenAtEndOf("f: (first, second = g(1), third = fi", ") => 1"));
+                provenAtEndOf("f: (first, second: g(1), third: fi", ") => 1"));
     }
 
     @Test

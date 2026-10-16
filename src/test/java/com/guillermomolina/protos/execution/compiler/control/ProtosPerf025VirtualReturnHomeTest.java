@@ -61,12 +61,12 @@ final class ProtosPerf025VirtualReturnHomeTest {
             assertUnobservable(module, "() => 42");
             assertUnobservable(module, "(value) => value");
             assertUnobservable(module, "() => {\n    () => 42\n}");
-            assertUnobservable(module, "(x = () => 1) => x");
+            assertUnobservable(module, "(x: () => 1) => x");
             assertUnobservable(module, "() => {\n    Object {\n        m: () => 1\n    }\n}");
 
             assertObservable(module, "() => ^42");
-            assertObservable(module, "(x = ^42) => x");
-            assertObservable(module, "(x = () => ^42) => x");
+            assertObservable(module, "(x: ^42) => x");
+            assertObservable(module, "(x: () => ^42) => x");
             assertObservable(module, "() => {\n    () => ^42\n}");
             assertObservable(module, "() => {\n    () => {\n        () => ^42\n    }\n}");
             assertObservable(
@@ -129,7 +129,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
             assertInteger(42, enter(call));
             assertFalse(home.isActive(), "the owned physical home completes with the call");
 
-            ProtosClosureValue defaulted = parsedClosure("(x = ^42) => x", module);
+            ProtosClosureValue defaulted = parsedClosure("(x: ^42) => x", module);
             ProtosBytecodeRootNode.PreparedClosureCall defaultCall =
                     fastDirect(defaulted, module);
             ProtosReturnHome defaultHome = assertPhysicalActiveHome(defaultCall);

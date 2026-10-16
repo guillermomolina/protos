@@ -8,11 +8,9 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: Array(
-    Test("array reduce bad reducer arity error", () => {
-        Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
-            Arrays.reduce(Array(1, 2), (accumulator) => { accumulator })
-        })
+    Test("array reduce ignores arguments beyond the reducer parameters", () => {
+        Arrays: import("std:collections/Array")
+        Assertions.require(Arrays.reduce(Array(1, 2), (accumulator) => { accumulator }) == 1)
     }),
     Test("array reduce fold start boundaries", () => {
         tool009LegacyCase: () => {

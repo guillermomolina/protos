@@ -56,7 +56,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                             invoke(
                                     language,
                                     module,
-                                    "(required, fallback = required) => fallback",
+                                    "(required, fallback: required) => fallback",
                                     List.of(token));
 
                     assertSame(token, run.result());
@@ -85,7 +85,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                             invoke(
                                     language,
                                     module,
-                                    "(value = missingDefault) => value",
+                                    "(value: missingDefault) => value",
                                     List.of(ProtosNullValue.INSTANCE));
 
                     assertSame(ProtosNullValue.INSTANCE, run.result());
@@ -115,7 +115,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                             invoke(
                                     language,
                                     module,
-                                    "(value = value) => value",
+                                    "(value: value) => value",
                                     List.of());
 
                     assertSame(outer, run.result());
@@ -143,7 +143,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                             invoke(
                                     language,
                                     module,
-                                    "(first = later, later = marker) => first",
+                                    "(first: later, later: marker) => first",
                                     List.of());
 
                     assertSame(outerLater, run.result());

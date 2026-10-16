@@ -118,11 +118,9 @@ tests: [
                 ANSI.render(text, flag)
             })
         })
+        // D203: an absent flag binds null and fails validation.
         Assertions.signals(Error, () => {
             ANSI.render(text)
-        })
-        Assertions.signals(Error, () => {
-            ANSI.render(text, true, true)
         })
         null
     }),

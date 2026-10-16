@@ -996,11 +996,11 @@ final class ProtosI092CompactBooleanTest {
     @Test
     void defaultParameterIfTrueBehavior() throws Exception {
         assertInteger(41, evaluate("""
-                run: (answer = true.ifTrue(() => { 41 })) => { answer }
+                run: (answer: true.ifTrue(() => { 41 })) => { answer }
                 run()
                 """));
         assertSame(ProtosNullValue.INSTANCE, evaluate("""
-                run: (answer = false.ifTrue(() => { ^99 })) => { answer }
+                run: (answer: false.ifTrue(() => { ^99 })) => { answer }
                 run()
                 """));
     }
@@ -1015,7 +1015,7 @@ final class ProtosI092CompactBooleanTest {
                 ProtosTestExecutionSupport.evaluate(
                         "i092-default.protos",
                         """
-                        run: (answer = true.ifTrue(() => { 41 })) => { answer }
+                        run: (answer: true.ifTrue(() => { 41 })) => { answer }
                         run
                         """,
                         module));

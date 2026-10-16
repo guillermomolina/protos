@@ -54,7 +54,6 @@ tests: [
             IntegerMath: import("std:math/Integer")
 
             Assertions.signals(Error, () => { IntegerMath.factorial() })
-            Assertions.signals(Error, () => { IntegerMath.factorial(1, 2) })
 
             true
         }

@@ -19,7 +19,14 @@
 // through private bootstrap anchors, which survive removal of the public
 // IpAddress and IpEndpoint bindings.
 IpEndpoint: {
-    call: (address, port) => {
+    // D203: the standard factory arity of exactly two is checked explicitly.
+    call: (...args) => {
+        (args.size() == 2).ifFalse(() => {
+            Error().signal()
+        })
+        address: args[0]
+        port: args[1]
+
         (this === _coreIpEndpointCanonical).ifFalse(() => {
             Error().signal()
         })

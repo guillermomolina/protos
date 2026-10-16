@@ -19,13 +19,13 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: Array(
-    Test("identity set each bad arity error", () => {
-        Assertions.signals(Error, () => {
-            IdentitySet: import("std:collections/IdentitySet")
-            IdentitySet.each(IdentitySet(1), (element, marker) => {
-                null
-            })
+    Test("identity set each extra callback parameter binds null", () => {
+        IdentitySet: import("std:collections/IdentitySet")
+        nullMarkers: 0
+        IdentitySet.each(IdentitySet(1), (element, marker) => {
+            (marker === null).ifTrue(() => { nullMarkers = nullMarkers + 1 })
         })
+        Assertions.require(nullMarkers == 1)
     }),
     Test("identity set each noninvokable error", () => {
         Assertions.signals(Error, () => {

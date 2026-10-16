@@ -104,12 +104,9 @@ final class ProtosI101BLiteralOneTest {
                                 .map(ProtosSemanticBytecodeRootNode.class::cast)
                                 .toList();
 
-                // Module, ordinary Closure and separate arity rejection.
-                assertEquals(3, roots.size());
+                // Module and ordinary Closure; D203/I105 lowers no arity rejection.
+                assertEquals(2, roots.size());
                 assertSame(roots.get(1), actual);
-                assertSame(
-                        roots.get(2).getCallTarget(),
-                        actual.arityRejectionTarget());
 
                 printInstructions(
                         "I101_B_LITERAL1_BEFORE_COMPLETE",

@@ -39,7 +39,7 @@ tests: [
                 value: 0
             }
 
-            inspect: (head = (() => {
+            inspect: (head: (() => {
                 trace.value = trace.value + 1
                 41
             })(), ...rest) => {

@@ -142,7 +142,7 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "(x = () => token) => x",
+                            "(x: () => token) => x",
                             "b6a3b-closure-default-entry.protos"));
 
             ProtosClosureValue nested =

@@ -379,7 +379,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
 
-                String characters = "f: (x, g = () => x) => g()\n" + "f(42)";
+                String characters = "f: (x, g: () => x) => g()\n" + "f(42)";
                 Source source =
                         Source.newBuilder(ProtosLanguage.ID, characters, "perf013-b1-default-closure.protos")
                                 .build();

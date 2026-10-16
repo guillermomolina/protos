@@ -19,7 +19,14 @@
 // The closures reach the canonical prototype through the private bootstrap
 // anchor below, which survives removal of the public IpAddress binding.
 IpAddress: {
-    call: (version, bits) => {
+    // D203: the standard factory arity of exactly two is checked explicitly.
+    call: (...args) => {
+        (args.size() == 2).ifFalse(() => {
+            Error().signal()
+        })
+        version: args[0]
+        bits: args[1]
+
         (this === _coreIpAddressCanonical).ifFalse(() => {
             Error().signal()
         })

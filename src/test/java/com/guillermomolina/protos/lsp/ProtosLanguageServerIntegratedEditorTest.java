@@ -137,7 +137,7 @@ class ProtosLanguageServerIntegratedEditorTest {
         connection = connect(project);
         String uri = project.source().toUri().toString();
 
-        connection.open(uri, 1, "f: (value, limit = 3) => {\n  value\n}\n");
+        connection.open(uri, 1, "f: (value, limit: 3) => {\n  value\n}\n");
         Hover proven = connection.hover(uri, 1, 3);
         assertEquals(
                 "Proven binding\nClosure parameter: value",
@@ -178,15 +178,15 @@ class ProtosLanguageServerIntegratedEditorTest {
         SignatureHelp onParen = connection.signatureHelp(uri, 0, opened.length(), "(");
         assertEquals("(a)", onParen.getSignatures().get(0).getLabel());
 
-        String representative = "((first, second = 2, ...rest) => first)(1, ";
+        String representative = "((first, second: 2, ...rest) => first)(1, ";
         connection.change(uri, 2, representative);
         SignatureHelp onComma = connection.signatureHelp(uri, 0, representative.length(), ",");
         assertEquals(1, onComma.getSignatures().size());
         assertEquals(0, onComma.getActiveSignature());
         assertEquals(1, onComma.getActiveParameter());
-        assertEquals("(first, second = 2, ...rest)", onComma.getSignatures().get(0).getLabel());
+        assertEquals("(first, second: 2, ...rest)", onComma.getSignatures().get(0).getLabel());
         assertEquals(
-                List.of("first", "second = 2", "...rest"),
+                List.of("first", "second: 2", "...rest"),
                 onComma.getSignatures().get(0).getParameters().stream()
                         .map(ParameterInformation::getLabel)
                         .map(label -> label.getLeft())

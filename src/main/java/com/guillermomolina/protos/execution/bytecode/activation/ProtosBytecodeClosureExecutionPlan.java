@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
@@ -282,7 +283,7 @@ final class ProtosBytecodeClosureExecutionPlan {
                 ProtosArrayValue rest =
                         prelude.newFrozenArray(
                                 supplied.subList(
-                                        suppliedIndex,
+                                        Math.min(suppliedIndex, supplied.size()),
                                         supplied.size()));
                 createParameterSlot(
                         activation,
@@ -292,19 +293,14 @@ final class ProtosBytecodeClosureExecutionPlan {
                 continue;
             }
 
-            if (suppliedIndex >= supplied.size()) {
-                throw argumentCountError(activation);
-            }
-
+            // D203: an unsupplied position binds canonical null; excess is ignored.
             createParameterSlot(
                     activation,
                     parameter.name(),
-                    supplied.get(suppliedIndex));
+                    suppliedIndex < supplied.size()
+                            ? supplied.get(suppliedIndex)
+                            : ProtosNullValue.INSTANCE);
             suppliedIndex++;
-        }
-
-        if (suppliedIndex < supplied.size()) {
-            throw argumentCountError(activation);
         }
     }
 
@@ -320,28 +316,17 @@ final class ProtosBytecodeClosureExecutionPlan {
         }
     }
 
-    private static ProtosSignalException argumentCountError(
-            ProtosActivation activation) {
-        return new ProtosSignalException(
-                ProtosCoreErrors.newError(activation));
-    }
-
     /**
      * Execute through the PLAT060-B5 ordinary Closure-call ABI with the
      * exact invocation activation already published in frame argument 0
      * ({@link ProtosFrameArguments#publishedInvocation}).
-     * PERF032-G6: the entered target is selected exactly as for an ordinary
-     * source call, so a Closure declaring no parameters still rejects
-     * supplied arguments.
      */
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         try {
             return ProtosNumericValueSupport.guestValue(
-                    ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                                    activationTarget,
-                                    activation.suppliedArgumentCountForRuntime())
-                            .call(ProtosFrameArguments.publishedInvocation(activation)));
+                    activationTarget.call(
+                            ProtosFrameArguments.publishedInvocation(activation)));
         } catch (ProtosBytecodeControlTransferException bridged) {
             throw bridged.transfer();
         }

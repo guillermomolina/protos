@@ -286,7 +286,7 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "(x = obj.value = token) => x",
+                            "(x: obj.value = token) => x",
                             "b6a2-mutating-default.protos"));
 
             Object result = executeBytecode(

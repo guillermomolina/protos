@@ -23,6 +23,29 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.460] - 2026-10-16
+
+### D203 — Flexible Closure arity and `:` parameter defaults
+- `spec/semantics/CALLABLES.md`: the normative parameter-binding algorithm
+  pairs each non-rest parameter with its supplied position. An absent
+  argument evaluates the parameter's default, if any, exactly once in the
+  real activation, otherwise binds canonical `null`; a supplied `null` never
+  runs the default. Excess supplied arguments are evaluated and ignored when
+  no rest parameter exists, and rest receives only supplied excess values.
+  Ordinary Closure binding never signals an argument-count Error; standard
+  behaviors whose owners require exact counts enforce them independently.
+  Sequential slot establishment, default visibility and failure/control
+  precedence are otherwise unchanged.
+- `spec/PROTOS_GRAMMAR.md`: `default-parameter = identifier, ":", expression`;
+  plain and defaulted parameters may appear in any order, rest stays final,
+  and `=`/`:=` are not default declarators. Outside signatures `:` and `=`
+  keep their slot-creation and assignment meanings.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` and
+  `spec/concurrency/PARALLEL_EXECUTION.md`: remove references to Closure
+  argument-count failures in loop callbacks and `Closure.parallel`.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): reconcile
+  `bindParametersLeftToRight` and P submission with D203.
+
 ## [0.1.459] - 2026-10-13
 
 ### D201 — `whileTrue` returns its last body result; standard `while`

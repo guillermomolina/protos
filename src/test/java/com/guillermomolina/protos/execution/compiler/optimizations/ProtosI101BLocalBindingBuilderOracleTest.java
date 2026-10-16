@@ -92,14 +92,13 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                 // Observe the real Protos lowering and its real source-Closure topology.
                 ProtosSemanticBytecodeRootNode module = parse(program, caseName);
                 List<ProtosSemanticBytecodeRootNode> actualRoots = roots(module);
-                assertEquals(3, actualRoots.size(),
-                        "production module, Closure activation, arity rejection");
+                // D203/I105: no arity-rejection root accompanies the Closure root.
+                assertEquals(2, actualRoots.size(),
+                        "production module and Closure activation");
                 assertSame(module, actualRoots.get(0));
                 ProtosSemanticBytecodeRootNode actual = actualRoots.get(1);
-                assertSame(actualRoots.get(2).getCallTarget(),
-                        actual.arityRejectionTarget());
 
-                // Independent reference: there must be *no* Protos arity root,
+                // Independent reference: there must be *no* Protos
                 // layout, activation, guards, tags or fallback inside this builder.
                 ProtosSemanticBytecodeRootNode minimal = independentBuilder.get();
                 assertEquals(1, roots(minimal).size(),

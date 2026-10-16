@@ -459,29 +459,34 @@ lookup exactly like any other identifier.
 
 ### Normative parameter-binding algorithm
 
-Let `i = 0`. Process the declared parameters strictly from left to right. Parameter
-names are already unique by the grammar/signature rules.
+Process the declared parameters strictly from left to right. Parameter names
+are already unique by the grammar/signature rules. Let `k` be the position of a
+non-rest parameter among the non-rest parameters, starting at `0`; positional
+binding pairs that parameter with `supplied[k]`. Parameters with and without a
+default may appear in any order.
 
 For each parameter:
 
-1. If it is the trailing rest parameter, create its local parameter slot with a
-   fresh frozen standard Array containing exactly `supplied[i]` through
-   `supplied[N - 1]` in order, or an empty Array when `i == N`. Then set `i = N`.
-   No default applies to a rest parameter.
-2. Otherwise, if `i < N`, take `supplied[i]` as the parameter value and increment
-   `i` by one. A default expression on that parameter is not evaluated at all.
-3. Otherwise, if the parameter has a default expression, evaluate that expression
-   exactly once in the current invocation activation. Do **not** increment `i`.
-   If evaluation completes normally, its exact resulting value becomes the
-   parameter value.
-4. Otherwise, signal an argument-count Error immediately. No later parameter,
-   default expression, rest binding, or body expression is evaluated.
+1. If it is the trailing rest parameter, let `m` be the number of non-rest
+   parameters. Create its local parameter slot with a fresh frozen standard Array
+   containing exactly `supplied[m]` through `supplied[N - 1]` in order, or an
+   empty Array when `m >= N`. No default applies to a rest parameter.
+2. Otherwise, if `k < N`, the argument is **supplied**: take `supplied[k]` as the
+   parameter value. A default expression on that parameter is not evaluated at
+   all, even when `supplied[k]` is canonical `null`.
+3. Otherwise, the argument is **absent**. If the parameter has a default
+   expression, evaluate that expression exactly once in the current invocation
+   activation; if evaluation completes normally, its exact resulting value
+   becomes the parameter value.
+4. Otherwise (absent, no default), the parameter value is canonical `null`.
 5. After a non-rest parameter value has been obtained normally, create that
    parameter name as a local slot of the activation context with the exact value.
 
-After the final parameter, if `i < N`, signal an argument-count Error. A trailing
-rest parameter necessarily consumes the complete remaining suffix, so such an
-extra-argument failure cannot occur when rest is present.
+Ordinary Closure parameter binding never signals an argument-count Error. When
+`N` exceeds the number of non-rest parameters and there is no rest parameter, the
+excess supplied values were evaluated normally (see above) and are then ignored.
+A standard behavior whose owning specification requires an exact argument count
+states and enforces that requirement independently of this algorithm.
 
 Binding a parameter is ordinary local-slot establishment on the activation
 context. There is no parameter hoisting, predeclaration, temporal-dead-zone
@@ -489,13 +494,19 @@ object, hidden `uninitialized` Protos value, or second parameter namespace.
 Consequently, a parameter name becomes a local binding only after its supplied or
 default value has been obtained normally and its slot has been created.
 
+A Closure with flexible arity is the same single Closure kind; the algorithm
+introduces no ambient argument counter, `args` intrinsic, `undefined`-like value,
+or second Closure category. Supplying canonical `null` explicitly and omitting the
+argument both bind `null` when the parameter has no default, but only an absent
+argument evaluates a default expression.
+
 A default expression can therefore read every earlier successfully bound
 parameter through ordinary bare-name lookup. The parameter currently being
 bound and every later parameter are not yet local bindings. A bare reference to
 one of those names follows the ordinary unqualified lookup algorithm in
 `EXECUTION_AND_CONTROL.md`: it may resolve in a captured lexical context or, when
 applicable, on `this` and its delegation chain; if no such binding exists, the
-ordinary lookup Error is signaled. In particular, `(a = b, b = 1)` does not read
+ordinary lookup Error is signaled. In particular, `(a: b, b: 1)` does not read
 the later parameter's future value `1` merely because `b` appears in the
 signature.
 
@@ -514,7 +525,7 @@ caller-supplied vector. Values produced by defaults are never inserted into
 rest. Each rest binding is a fresh frozen standard Array and is shallow: the
 argument objects themselves retain their ordinary identities and aliasing.
 
-For example, for `(a = 1, ...rest)`:
+For example, for `(a: 1, ...rest)`:
 
 ```text
 call()        -> a = 1,  rest = []
@@ -524,21 +535,13 @@ call(10, 20)  -> a = 10, rest = [20]
 
 ### Failure and control-transfer precedence
 
-The observable precedence is the order of the algorithm above, not a separate
+The observable precedence is the order of the algorithm above; there is no
 arity preflight:
 
 - receiver/target evaluation and argument/spread evaluation happen before
-  invocation and therefore before every arity, parameter-binding, or default
-  failure;
-- a missing required parameter is detected when left-to-right binding reaches
-  that parameter, so defaults and effects of earlier parameters may already have
-  occurred;
-- an excess-argument failure is detected only after all non-rest parameters have
-  consumed their supplied values; when excess supplied arguments exist, every
-  non-rest parameter necessarily receives a supplied value, so no default is
-  evaluated merely before discovering the excess;
+  invocation and therefore before every parameter-binding or default failure;
 - a default-expression Error or other control transfer stops binding immediately
-  and takes precedence over every later missing-parameter/default/body outcome;
+  and takes precedence over every later parameter/default/body outcome;
 - a parameter-slot creation failure likewise stops binding before later
   parameters or the body.
 

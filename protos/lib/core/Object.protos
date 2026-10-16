@@ -13,7 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-_coreObjectInit: () => {
+// D203: Closure binding accepts any argument count, so the independent standard
+// arities below are checked explicitly before any other effect.
+_coreObjectInit: (...args) => {
+    (args.size() == 0).ifFalse(() => { _coreArgumentCountError() })
     this
 }
 
@@ -26,7 +29,9 @@ _coreObjectMatch: (subject) => {
 }
 
 /// Invokes `block()` exactly when the receiver is canonical `null`.
-ifNull: (block) => {
+ifNull: (...args) => {
+    (args.size() == 1).ifFalse(() => { _coreArgumentCountError() })
+    block: args[0]
     (this === null).ifTrueIfFalse(
         () => { block() },
         () => { this }
@@ -34,7 +39,9 @@ ifNull: (block) => {
 }
 
 /// Invokes `block(this)` exactly when the receiver is not canonical `null`.
-ifNotNull: (block) => {
+ifNotNull: (...args) => {
+    (args.size() == 1).ifFalse(() => { _coreArgumentCountError() })
+    block: args[0]
     (this === null).ifTrueIfFalse(
         () => { null },
         () => { block(this) }

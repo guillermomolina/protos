@@ -160,7 +160,7 @@ class CanonicalBindingAnalyzerTest {
          * reference is exercised as a defaulted parameter's default referring to itself:
          * its identity must already exist (to be a valid reference target at all) while
          * establishment/PRESENT happens only once its own binding point is reached. */
-        CanonicalSequence program = canonicalizeProgram("(a = a) => a");
+        CanonicalSequence program = canonicalizeProgram("(a: a) => a");
 
         CanonicalClosure closure = assertInstanceOf(CanonicalClosure.class, program.expressions().get(0));
         CanonicalParameter parameterA = closure.parameters().get(0);

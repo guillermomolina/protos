@@ -66,7 +66,7 @@ class ProtosLanguageServerHoverTest {
                         .getHoverProvider()
                         .getLeft());
 
-        String source = "f: (value, limit = 3) => {\n  value\n}\n";
+        String source = "f: (value, limit: 3) => {\n  value\n}\n";
         String uri = project.source().toUri().toString();
         server.textDocuments().didOpen(open(uri, 1, source));
 
@@ -80,11 +80,11 @@ class ProtosLanguageServerHoverTest {
         Hover declaration = hover(server, uri, 0, 11);
         assertEquals(
                 "Syntax\nClosure parameter declaration: limit\nDefault value present\n"
-                        + "Closure parameters: (value, limit = <default>)",
+                        + "Closure parameters: (value, limit: <default>)",
                 declaration.getContents().getRight().getValue());
         assertEquals(range(0, 11, 0, 16), declaration.getRange());
 
-        Hover literal = hover(server, uri, 0, 19);
+        Hover literal = hover(server, uri, 0, 18);
         assertEquals("Syntax\nNumber literal", literal.getContents().getRight().getValue());
 
         current.set(Optional.empty());
@@ -157,13 +157,12 @@ class ProtosLanguageServerHoverTest {
         String uri = project.source().toUri().toString();
 
         // U+1F600 occupies two UTF-16 code units.
-        // Required parameters precede defaulted ones, so the declaration after
-        // the non-BMP default is itself defaulted.
-        String source = "f: (value, a = \"😀\", b = 0) => {\r\n  \"😀\"\r\n  value\r\n}\r\n";
+        // The declaration after the non-BMP default is itself defaulted.
+        String source = "f: (value, a: \"😀\", b: 0) => {\r\n  \"😀\"\r\n  value\r\n}\r\n";
         server.textDocuments().didOpen(open(uri, 1, source));
 
-        Hover declaration = hover(server, uri, 0, 21);
-        assertEquals(range(0, 21, 0, 22), declaration.getRange());
+        Hover declaration = hover(server, uri, 0, 20);
+        assertEquals(range(0, 20, 0, 21), declaration.getRange());
 
         Hover string = hover(server, uri, 1, 4);
         assertEquals("Syntax\nString literal", string.getContents().getRight().getValue());

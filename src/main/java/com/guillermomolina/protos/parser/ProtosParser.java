@@ -491,20 +491,6 @@ public final class ProtosParser {
             consumeNewlines();
         }
 
-        boolean sawDefaultedParameter = false;
-        for (SurfaceParameter parameter : parameters) {
-            if (!parameter.rest()
-                    && parameter.defaultValue().isEmpty()
-                    && sawDefaultedParameter) {
-                throw new ParseError(
-                        "Required non-rest Closure parameters must precede defaulted parameters",
-                        parameter.span());
-            }
-            if (parameter.defaultValue().isPresent()) {
-                sawDefaultedParameter = true;
-            }
-        }
-
         cursor.consume(TokenType.RPAREN, "')'");
         cursor.consume(TokenType.FAT_ARROW, "'=>'");
         SurfaceClosure closure =
@@ -522,7 +508,8 @@ public final class ProtosParser {
     private SurfaceParameter parseParameter() {
         TokenOccurrence name = cursor.consume(TokenType.IDENTIFIER, "a parameter name");
 
-        if (!cursor.at(TokenType.EQUALS)) {
+        // D203: within a signature, ':' introduces the default initializer.
+        if (!cursor.at(TokenType.COLON)) {
             return new SurfaceParameter(
                     name.token().lexeme(),
                     Optional.empty(),

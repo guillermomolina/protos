@@ -77,11 +77,9 @@ tests: [
         Assertions.signals(Error, () => {
             Style(Style("red"))
         })
+        // D203: Style() binds null and fails validation; excess is ignored.
         Assertions.signals(Error, () => {
             Style()
-        })
-        Assertions.signals(Error, () => {
-            Style("red", "blue")
         })
     }),
     Test("style construction answers fresh identities", () => {

@@ -349,7 +349,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         withFixture(
                 fixture -> {
                     ClosureUnderTest plan =
-                            closurePlan(fixture, "r: 0\n" + "f: (x, y = (x = 99)) => x\n" + "r = f(1)\n" + "f");
+                            closurePlan(fixture, "r: 0\n" + "f: (x, y: (x = 99)) => x\n" + "r = f(1)\n" + "f");
                     assertCurrentFrameLocalWritePath(activationNode(plan));
 
                     assertEquals(99L, unwrapNumber(slot(fixture.module, "r")));

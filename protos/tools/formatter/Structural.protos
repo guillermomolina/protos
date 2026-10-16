@@ -997,7 +997,7 @@ formatParameter: (parameter, level, layout) => {
     (parameter.defaultValue === null).ifFalse(() => {
         result =
             parameter.name +
-            " = " +
+            ": " +
             formatExpression(
                 parameter.defaultValue,
                 level,

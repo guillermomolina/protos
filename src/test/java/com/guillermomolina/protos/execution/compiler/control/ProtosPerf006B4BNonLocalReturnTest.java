@@ -258,7 +258,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosActivation module = activation(prelude, domain);
 
-            String closureCharacters = "(x = ^41) => 99";
+            String closureCharacters = "(x: ^41) => 99";
             CanonicalClosure definition = closureDefinition(closureCharacters);
             ProtosClosureExecutionPlan plan =
                     ProtosClosureExecutionPlan.bytecode(

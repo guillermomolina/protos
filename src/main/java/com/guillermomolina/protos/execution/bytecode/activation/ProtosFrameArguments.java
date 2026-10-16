@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
@@ -613,6 +614,17 @@ final class ProtosFrameArguments {
      */
     static boolean compactSuppliedArgumentCountAtMost(Object[] arguments, int maximum) {
         return arguments.length <= SUPPLIED_ARGUMENT_OFFSET + maximum;
+    }
+
+    /**
+     * D203: supplied positional argument {@code index} of a B5 call, or
+     * canonical null when the call supplied fewer arguments. The B5 header is
+     * unchanged; only the supplied suffix length is consulted.
+     */
+    static Object compactSuppliedArgumentOrNull(Object[] arguments, int index) {
+        return arguments.length > SUPPLIED_ARGUMENT_OFFSET + index
+                ? arguments[SUPPLIED_ARGUMENT_OFFSET + index]
+                : ProtosNullValue.INSTANCE;
     }
 
     /** Supplied positional argument {@code index} of a B5 call. */

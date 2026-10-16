@@ -353,7 +353,7 @@ final class ProtosPerf006B2D4BComposedSendReceiverTest {
                                 (activation, supplied) -> receiver));
 
                 String characters =
-                        "(value = entry().pick()) => { value }";
+                        "(value: entry().pick()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -407,7 +407,7 @@ final class ProtosPerf006B2D4BComposedSendReceiverTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 String characters =
-                        "(value = holder.capture(...items)) => { value }";
+                        "(value: holder.capture(...items)) => { value }";
                 CanonicalClosure definition =
                         closureDefinition(characters);
                 Source source =

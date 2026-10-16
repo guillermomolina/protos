@@ -29,7 +29,6 @@ import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
-import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.interop.ArityException;
 import com.oracle.truffle.api.interop.InteropLibrary;
@@ -63,7 +62,7 @@ import java.util.Objects;
  * {@link #embedding} Process. Each execution is then a RootActor host entry (concurrent entry is
  * rejected, an Error escaping an outermost entry fails the RootActor), and it accepts Protos values
  * and exact Java integer and String scalars (PLAT054-3B) as arguments, which ordinary binding
- * applies with its defaults, rest, and arity Errors. A Closure
+ * applies with its defaults and rest (D203 flexible arity). A Closure
  * without a compact Bytecode target (a native body, or a non-standard {@code call} selection) runs
  * through ordinary generic invocation ({@link ProtosInvocation#invoke}); no second call engine
  * exists.
@@ -198,8 +197,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 Object[] arguments,
                 @Bind("$node") Node node,
                 @Cached("receiver.target") RootCallTarget cachedTarget,
-                @Cached("create(cachedTarget)") DirectCallNode call,
-                @Shared("indirectCall") @Cached IndirectCallNode rejectionCall)
+                @Cached("create(cachedTarget)") DirectCallNode call)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
@@ -209,17 +207,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             try {
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared =
                         receiver.prepare(supplied);
-                if (prepared.bodyTarget() != cachedTarget) {
-                    /*
-                     * PERF032-G6: arguments supplied to a Closure declaring no parameters select
-                     * its arity-rejection root, which the cached direct call must not enter.
-                     */
-                    return finishEntry(
-                            embedding,
-                            prepared,
-                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                                    prepared, rejectionCall));
-                }
                 return finishEntry(
                         embedding,
                         prepared,
@@ -243,7 +230,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
                 @Bind("$node") Node node,
-                @Shared("indirectCall") @Cached IndirectCallNode call)
+                @Cached IndirectCallNode call)
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
@@ -300,7 +287,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * Validates the owning Context and returns the supplied Protos arguments. A session adapter
      * admits only zero arguments. An embedding adapter admits Protos values unchanged and, in
      * PLAT054-3B, the exact Java scalars {@link #admitHostScalar} converts, preserving argument
-     * order; arity is then checked by ordinary binding as a guest Error. The supplied array is
+     * order; ordinary binding then applies D203 flexible arity. The supplied array is
      * copied only when some argument requires conversion.
      */
     Object[] admitArguments(Object[] arguments, Node node)
@@ -375,7 +362,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
 
     /**
      * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance, in
-     * NORMAL and DEBUG alike; the target selection keeps the arity-rejection entry.
+     * NORMAL and DEBUG alike.
      */
     private ProtosBytecodeRootNode.OrdinarySourceCall prepare(Object[] supplied) {
         return (ProtosBytecodeRootNode.OrdinarySourceCall)

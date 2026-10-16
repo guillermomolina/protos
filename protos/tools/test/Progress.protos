@@ -127,7 +127,7 @@ beginPlan: (phaseName, plan, emitLine) => {
 // invocation, plus the display reference produced by the caller's renderer.
 // It never formats, bounds, schedules or writes a diagnostic itself, and it
 // never writes per-Case terminal output.
-beginLifecycle: (sink = null) => {
+beginLifecycle: (sink) => {
     Array(
         Array(),
         Array(),
@@ -148,7 +148,7 @@ inFlightSnapshot: (state) => {
 // `displayReference` renders one caseRef into a human-identifiable reference.
 // Each execution path supplies its own renderer because the caseRef shape is
 // owned by that path; the tracker deliberately does not inspect caseRef.
-lifecycleObserver: (state, displayReference = null) => {
+lifecycleObserver: (state, displayReference) => {
     // An attached watchdog can only be fed display references, so the renderer
     // is mandatory exactly when a sink is present.
     (state[3] === null).ifFalse(() => {
@@ -256,7 +256,7 @@ lifecycleObserver: (state, displayReference = null) => {
 // BUG020: `caseReference`, when supplied, is the exact logical Case reference
 // a failure line names instead of the source-level `Manifest.caseId(spec)`.
 observer: (state) => {
-    (spec, evaluation, infrastructureFailed, caseReference = null) => {
+    (spec, evaluation, infrastructureFailed, caseReference) => {
         (phaseName, total): state
         completed: state[2] + 1
         failed: infrastructureFailed

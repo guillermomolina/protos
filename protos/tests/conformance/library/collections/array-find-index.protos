@@ -19,13 +19,12 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: Array(
-    Test("array find index bad callback arity error", () => {
-        Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
-            Arrays.findIndex(Array(1), (element, index) => {
-                false
-            })
+    Test("array find index extra callback parameter binds null", () => {
+        Arrays: import("std:collections/Array")
+        found: Arrays.findIndex(Array(1), (element, index) => {
+            index === null
         })
+        Assertions.require(found == 0)
     }),
     Test("array find index invalid predicate result error", () => {
         Assertions.signals(InvalidPredicateResult, () => {

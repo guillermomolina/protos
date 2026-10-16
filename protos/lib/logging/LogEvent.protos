@@ -53,7 +53,7 @@
 /// object that delegates to `Error`, or `null`. `timestamp` must be an instant
 /// recognized by `std:datetime/Instant`, or `null`, the default, for an event
 /// without a time. Any other argument signals an Error.
-call: ((facility) => (level, message, fields, error, timestamp = null) => {
+call: ((facility) => (level, message, fields, error, timestamp) => {
     LogEvent: import("std:logging/LogEvent")
     Instant: import("std:datetime/Instant")
     Level: import("std:logging/Level")

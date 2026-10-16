@@ -477,14 +477,14 @@ standard behavior validates, in order, that the original receiver is a semantic
 Closure, that exactly one argument was supplied, and that the resulting `body`
 value is a semantic Closure. If any validation fails, neither Closure is invoked.
 
-This validation is Closure-domain validation only. It does not preflight either
-Closure's declared parameter arity, evaluate defaults, or execute user code.
+This validation is Closure-domain validation only. It does not inspect either
+Closure's declared parameters, evaluate defaults, or execute user code.
 Each actual loop callback activation below supplies zero positional arguments;
-ordinary Closure parameter binding therefore reports any incompatible declared
-arity only when that particular activation is reached. In particular, a body
-whose parameter binding would fail is not activated when the first condition
-result is `false`, even though the body value itself was already validated as a
-Closure before the first condition activation.
+ordinary Closure parameter binding (`CALLABLES.md`) evaluates defaults or binds
+canonical `null` for declared parameters only when that particular activation is
+reached. In particular, a body's defaults are not evaluated when the first
+condition result is `false`, even though the body value itself was already
+validated as a Closure before the first condition activation.
 
 After successful validation either operation repeats this exact pre-test algorithm:
 

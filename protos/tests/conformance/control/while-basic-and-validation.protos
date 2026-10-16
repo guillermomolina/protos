@@ -150,8 +150,8 @@ tests: [
                 bodyDefaultCalls = bodyDefaultCalls + 1
                 99
             }
-            condition: (value = nextCondition()) => value
-            result: condition.whileTrue((ignored = bodyDefault()) => {
+            condition: (value: nextCondition()) => value
+            result: condition.whileTrue((ignored: bodyDefault()) => {
                 bodyCalls = bodyCalls + 1
             })
             (result == 1) &&

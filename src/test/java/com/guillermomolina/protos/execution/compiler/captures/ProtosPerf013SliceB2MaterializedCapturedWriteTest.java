@@ -531,7 +531,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
 
-                String characters = "f: (x, y = (x = 99)) => x\n" + "f(1)";
+                String characters = "f: (x, y: (x = 99)) => x\n" + "f(1)";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID, characters, "perf013-b2-default-assign.protos")

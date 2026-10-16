@@ -19,13 +19,12 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: Array(
-    Test("array map bad callback arity error", () => {
-        Assertions.signals(Error, () => {
-            Arrays: import("std:collections/Array")
-            Arrays.map(Array(1), (element, index) => {
-                element
-            })
+    Test("array map extra callback parameter binds null", () => {
+        Arrays: import("std:collections/Array")
+        mapped: Arrays.map(Array(1), (element, index) => {
+            index
         })
+        Assertions.require((mapped.size() == 1) && (mapped[0] === null))
     }),
     Test("array map noninvokable error", () => {
         Assertions.signals(Error, () => {

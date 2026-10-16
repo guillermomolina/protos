@@ -55,7 +55,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 ProtosClosureValue child = semanticClosure(childDef, ProtosClosureExecutionPlan.bytecode(childDef, language, childSource, childRoot, ProtosExecutionMode.NORMAL), module);
                 module.context().createLocalSlot("child", child);
 
-                String chars = "(first = child(), second = first) => { second }";
+                String chars = "(first: child(), second: first) => { second }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-call.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
                 ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source, ProtosExecutionMode.NORMAL), module);
@@ -95,7 +95,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 CanonicalClosure methodDef = closureDefinition(methodChars);
                 receiver.createLocalSlot("pick", semanticClosure(methodDef, ProtosClosureExecutionPlan.bytecode(methodDef, language, methodSource, ProtosExecutionMode.NORMAL), module));
 
-                String chars = "(head, fallback = head.pick()) => { fallback }";
+                String chars = "(head, fallback: head.pick()) => { fallback }";
                 Source source = Source.newBuilder(ProtosLanguage.ID, chars, "perf006-b2c3b3-default-send.protos").build();
                 CanonicalClosure def = closureDefinition(chars);
                 ProtosClosureValue semantic = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, source, ProtosExecutionMode.NORMAL), module);

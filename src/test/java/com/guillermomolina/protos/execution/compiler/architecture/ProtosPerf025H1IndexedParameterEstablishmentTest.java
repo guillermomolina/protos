@@ -73,7 +73,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
 
             ProtosClosureValue defaults =
                     closure("probe: (c) => 3\n"
-                            + "(a, b = a, c = probe(context)) => { here: context\nc }", module);
+                            + "(a, b: a, c: probe(context)) => { here: context\nc }", module);
             List<String> defaultNames = instructionNames(defaults);
             assertContains(defaultNames, INSTALL);
             assertNone(defaultNames, NAMED);
@@ -131,9 +131,9 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                             "value: 5\n"
                                     + "later: 6\n"
                                     + "marker: 7\n"
-                                    + "pair: (a, b = a) => { here: context\nb }\n"
-                                    + "own: (value = value) => { here: context\nvalue }\n"
-                                    + "ahead: (first = later, later = marker) => { here: context\n[first, later] }\n"
+                                    + "pair: (a, b: a) => { here: context\nb }\n"
+                                    + "own: (value: value) => { here: context\nvalue }\n"
+                                    + "ahead: (first: later, later: marker) => { here: context\n[first, later] }\n"
                                     + "[pair(1), pair(1, 2), own(), ahead()]",
                             module));
             assertEquals(1L, integer(results.get(0)));
@@ -156,9 +156,9 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                                     + "plant: (c) => { seen.ctx = c\nc.b: 1\n0 }\n"
                                     + "plantNull: (c) => { c.b: null\n0 }\n"
                                     + "cycle: (c) => { c.b: 1\nc.removeSlot(\"b\")\nc.w: 3\n0 }\n"
-                                    + "planted: (a = plant(context), b = 2) => { here: context\nb }\n"
-                                    + "plantedNull: (a = plantNull(context), b = 2) => { here: context\nb }\n"
-                                    + "recreated: (a = cycle(context), b = 2) => {\n"
+                                    + "planted: (a: plant(context), b: 2) => { here: context\nb }\n"
+                                    + "plantedNull: (a: plantNull(context), b: 2) => { here: context\nb }\n"
+                                    + "recreated: (a: cycle(context), b: 2) => {\n"
                                     + "    here: context\n"
                                     + "    [b, here.hasSlot(\"b\"), here.slotNames()]\n"
                                     + "}\n"
@@ -183,7 +183,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
             ProtosClosureValue cycled =
                     // Same module activation as above: a fresh module-level name.
                     closure("cycleAgain: (c) => { c.b: 1\nc.removeSlot(\"b\")\nc.w: 3\n0 }\n"
-                            + "(a = cycleAgain(context), b = 2) => { here: context\nb }", module);
+                            + "(a: cycleAgain(context), b: 2) => { here: context\nb }", module);
             assertContains(instructionNames(cycled), INDEXED);
             ProtosActivation activation = invocation(cycled, module, List.of());
             assertEquals(2L, integer(plan(cycled).executeBytecodeActivationForTesting(activation)));
@@ -210,8 +210,8 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                     array(evaluate(
                             "closeIt: (c) => { c.close()\n0 }\n"
                                     + "freezeIt: (c) => { c.freeze()\n0 }\n"
-                                    + "closing: (a = 1, b = closeIt(context), c = 3) => { here: context\nc }\n"
-                                    + "freezing: (a = 1, b = freezeIt(context), c = 3) => { here: context\nc }\n"
+                                    + "closing: (a: 1, b: closeIt(context), c: 3) => { here: context\nc }\n"
+                                    + "freezing: (a: 1, b: freezeIt(context), c: 3) => { here: context\nc }\n"
                                     + "closedFailed: false\n"
                                     + "frozenFailed: false\n"
                                     + "Error.handle(() => { closing()\nnull }, (error) => { closedFailed = true\nnull })\n"
@@ -281,7 +281,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
             List<Object> reflected =
                     array(evaluate(
                             "pairOf: (x, y) => [x, y]\n"
-                                    + "f: (a, b = pairOf(context.hasSlot(\"a\"), context.hasSlot(\"b\"))) => {\n"
+                                    + "f: (a, b: pairOf(context.hasSlot(\"a\"), context.hasSlot(\"b\"))) => {\n"
                                     + "    here: context\n"
                                     + "    [b, here.hasSlot(\"b\"), here.slotValue(\"a\"), here.slotNames()]\n"
                                     + "}\n"

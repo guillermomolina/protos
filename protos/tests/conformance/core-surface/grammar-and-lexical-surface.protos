@@ -107,7 +107,7 @@ tests: [
         tool009LegacyCase: () => {
             count: 0
 
-            ignore: (tail = null) => {
+            ignore: (tail: null) => {
                 count = count + 1
                 40
             }

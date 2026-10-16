@@ -385,7 +385,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
             for (String callback :
                     List.of(
                             "(key, value) => {\n        probe()\n        step: () => { 1 }\n        step.call()\n    }",
-                            "(key, value = 7) => { probe() }",
+                            "(key, value: 7) => { probe() }",
                             "(key, ...rest) => { probe() }",
                             "(...rest) => { probe() }")) {
                 assertStructuredEachPreserved(
@@ -402,14 +402,12 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
     }
 
     /**
-     * A zero-, one- or three-parameter literal keeps its ordinary arity
-     * failure at the actual callback invocation: over a non-empty receiver
-     * the probing body never runs, and over an empty receiver no invocation
-     * happens, so no early arity validation signals and the receiver is the
-     * result.
+     * D203/I105: a zero-, one- or three-parameter literal binds flexibly at
+     * each actual callback invocation, so its body runs once per entry; over
+     * an empty receiver no invocation happens. No arity prevalidation exists.
      */
     @Test
-    void mismatchedArityLiteralsKeepOrdinaryInvocationTimeArityErrors() throws Exception {
+    void mismatchedArityLiteralsBindFlexiblyAtInvocation() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -421,18 +419,18 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                                 "(key, value, extra) => { probe() }")) {
                     for (String receiver : RECEIVERS) {
                         Probe probe = new Probe();
-                        assertInteger(
-                                42,
+                        assertSame(
+                                ProtosBooleanValue.TRUE,
                                 lowerRoot(
                                                 "run: () => {\n"
                                                         + "    m: " + receiver + "\n"
                                                         + "    m[1] = 2\n"
-                                                        + "    m.each(" + callback + ")\n"
+                                                        + "    m.each(" + callback + ") === m\n"
                                                         + "}\n"
-                                                        + "Error.handle(() => { run() }, (caught) => { 42 })\n")
+                                                        + "run()\n")
                                         .getCallTarget()
                                         .call(probe.module()));
-                        assertEquals(0, probe.calls.get(), receiver + " " + callback);
+                        assertEquals(1, probe.calls.get(), receiver + " " + callback);
 
                         Probe empty = new Probe();
                         assertSame(
@@ -453,7 +451,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
                 context.leave();
             }
         }
-        System.out.println("PERF026_D2_UNSUPPORTED_ARITY_FALLBACK=YES");
+        System.out.println("PERF026_D2_MISMATCHED_ARITY_FLEXIBLE=YES");
         System.out.println("PERF026_D2_ARITY_PREVALIDATION_INTRODUCED=NO");
     }
 

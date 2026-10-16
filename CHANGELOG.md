@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.367-SNAPSHOT
+
+- `I105` (#902): implement D203 flexible Closure argument semantics.
+  - Ordinary Closure binding no longer rejects argument counts: an absent
+    parameter without a default binds canonical `null`, an explicitly
+    supplied `null` never runs the default, excess arguments are evaluated
+    and ignored, and `...rest` holds only supplied excess values in a fresh
+    frozen Array. Parameter slots are still created sequentially.
+  - Parameter defaults use `name: expression`; `=` is no longer a default
+    declarator, and plain and defaulted parameters may appear in any order.
+    Parser, formatter, hover, sources, tutorials and fixtures are migrated,
+    and redundant `: null` defaults are removed.
+  - Remove the Closure upper-bound check operations and the PERF032-G6
+    arity-rejection root, entry-target selection and P arity preflight;
+    compact, rich, inline-callback, host and Java binding paths bind absent
+    positions to `null` without extra materialization. The PLAT060-B5
+    header is unchanged.
+  - Preserve the normative exact arities of `Object.init`, `ifNull`,
+    `ifNotNull`, `fail()`, `real`/`imaginary`, the `IpAddress`/`IpEndpoint`
+    factories, `std:interop` and `Math.sqrt` through explicit checks or
+    facility forwarding; other Standard Library functions follow D203.
+  - Update tests, Builder oracles and PE/BCI guard baselines accordingly.
+
 ## 0.3.366-SNAPSHOT
 
 - `I103` (#897), slices E/F/G/H: complete the execution Java

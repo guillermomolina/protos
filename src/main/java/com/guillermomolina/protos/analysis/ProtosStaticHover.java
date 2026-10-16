@@ -243,7 +243,7 @@ final class ProtosStaticHover {
             if (parameter.rest()) {
                 rendered.add("..." + parameter.name());
             } else if (parameter.defaultValue().isPresent()) {
-                rendered.add(parameter.name() + " = <default>");
+                rendered.add(parameter.name() + ": <default>");
             } else {
                 rendered.add(parameter.name());
             }

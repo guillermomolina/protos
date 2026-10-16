@@ -29,7 +29,7 @@ frozen: (entries) => {
 }
 
 // A frozen object with exactly the event slots under `prototype`.
-shaped: (prototype, level, message, fields, error, timestamp = null) => {
+shaped: (prototype, level, message, fields, error, timestamp) => {
     candidate: (prototype) {
         level: level
         message: message

@@ -161,11 +161,10 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                         group,
                         methodRoot.getRootNodes(),
                         "Closure declared in object body must share owner's BytecodeRootNodes group");
-                assertRejectionRootsInGroup(group, methodRoot);
                 assertEquals(
-                        3,
+                        2,
                         group.count(),
-                        () -> "expected owner + method Closure + arity root, got "
+                        () -> "expected owner + method Closure, got "
                                 + group.count());
 
                 ProtosClosureValue bound = method.bindMethod(object, object);
@@ -264,11 +263,10 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                 BytecodeRootNodes<?> group = root.getRootNodes();
                 assertSame(group, methodRoot.getRootNodes());
                 assertSame(group, innerRoot.getRootNodes());
-                assertRejectionRootsInGroup(group, methodRoot, innerRoot);
                 assertEquals(
-                        5,
+                        3,
                         group.count(),
-                        () -> "expected three lexical roots + two arity roots, got "
+                        () -> "expected three lexical roots, got "
                                 + group.count());
 
                 ProtosActivation innerInvocation =
@@ -302,24 +300,6 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
         throw new AssertionError("no object literal bound to '" + name + "' found");
     }
 
-    /**
-     * PERF032-G6: each zero-parameter Closure has a cold arity-rejection
-     * root in the same BytecodeRootNodes group as its lexical owner.
-     */
-    private static void assertRejectionRootsInGroup(
-            BytecodeRootNodes<?> group,
-            ProtosSemanticBytecodeRootNode... closureRoots) {
-        for (ProtosSemanticBytecodeRootNode closureRoot : closureRoots) {
-            ProtosSemanticBytecodeRootNode rejectionRoot =
-                    assertInstanceOf(
-                            ProtosSemanticBytecodeRootNode.class,
-                            closureRoot.arityRejectionTarget().getRootNode());
-            assertSame(
-                    group,
-                    rejectionRoot.getRootNodes(),
-                    "arity-rejection root must preserve lexical group identity");
-        }
-    }
 
     private static CanonicalSequence canonicalize(String characters) {
         return (CanonicalSequence)

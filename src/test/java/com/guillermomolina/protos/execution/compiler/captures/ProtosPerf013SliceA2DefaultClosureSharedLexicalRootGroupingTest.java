@@ -68,7 +68,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 ProtosActivation module = moduleActivation();
 
                 String characters =
-                        "f: (x, g = () => x) => g\n"
+                        "f: (x, g: () => x) => g\n"
                                 + "result: f(42)\n"
                                 + "result()";
                 Source source =
@@ -117,11 +117,10 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                         "default-value Closure must share the same BytecodeRootNodes "
                                 + "group as its lexical owner instead of opening an "
                                 + "independent create() call");
-                assertRejectionRootsInGroup(group, rootDefault);
                 assertEquals(
-                        4,
+                        3,
                         group.count(),
-                        () -> "expected module + f + default Closure + arity root, got "
+                        () -> "expected module + f + default Closure, got "
                                 + group.count());
 
                 assertNotSame(root.getFrameDescriptor(), rootF.getFrameDescriptor());
@@ -148,7 +147,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 ProtosActivation module = moduleActivation();
 
                 String characters =
-                        "f: (x, g = () => { () => x }) => g\n"
+                        "f: (x, g: () => { () => x }) => g\n"
                                 + "h: f(42)\n"
                                 + "i: h()\n"
                                 + "i()";
@@ -207,11 +206,10 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                         rootNested.getRootNodes(),
                         "a Closure nested inside a default-value Closure's body must "
                                 + "still share the same owner group");
-                assertRejectionRootsInGroup(group, rootDefault, rootNested);
                 assertEquals(
-                        6,
+                        4,
                         group.count(),
-                        () -> "expected four lexical roots + two arity roots, got "
+                        () -> "expected four lexical roots, got "
                                 + group.count());
 
                 assertNotSame(root.getFrameDescriptor(), rootF.getFrameDescriptor());
@@ -226,24 +224,6 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
         System.out.println("DEFAULT_CLOSURE_MULTI_DEPTH_SHARED_GROUP=PASS");
     }
 
-    /**
-     * PERF032-G6: each zero-parameter Closure has a cold arity-rejection
-     * root in the same BytecodeRootNodes group as its lexical owner.
-     */
-    private static void assertRejectionRootsInGroup(
-            BytecodeRootNodes<?> group,
-            ProtosSemanticBytecodeRootNode... closureRoots) {
-        for (ProtosSemanticBytecodeRootNode closureRoot : closureRoots) {
-            ProtosSemanticBytecodeRootNode rejectionRoot =
-                    assertInstanceOf(
-                            ProtosSemanticBytecodeRootNode.class,
-                            closureRoot.arityRejectionTarget().getRootNode());
-            assertSame(
-                    group,
-                    rejectionRoot.getRootNodes(),
-                    "arity-rejection root must preserve lexical group identity");
-        }
-    }
 
     private static CanonicalSequence canonicalize(String characters) {
         return (CanonicalSequence)

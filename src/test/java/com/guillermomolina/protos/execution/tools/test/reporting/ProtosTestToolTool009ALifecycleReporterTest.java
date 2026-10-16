@@ -74,10 +74,10 @@ final class ProtosTestToolTool009ALifecycleReporterTest {
     @Test
     void bothExecutionPathsReportThroughOneInvocationWideLifecycleTracker() throws Exception {
         String progress = Files.readString(PROGRESS, StandardCharsets.UTF_8);
-        assertTrue(progress.contains("beginLifecycle: (sink = null) => {"));
+        assertTrue(progress.contains("beginLifecycle: (sink) => {"));
         assertTrue(
                 progress.contains(
-                        "lifecycleObserver: (state, displayReference = null) => {"));
+                        "lifecycleObserver: (state, displayReference) => {"));
         assertTrue(progress.contains("inFlightCount: (state) => {"));
         assertTrue(progress.contains("inFlightSnapshot: (state) => {"));
 

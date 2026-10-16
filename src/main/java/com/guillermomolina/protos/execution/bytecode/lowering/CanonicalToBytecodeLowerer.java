@@ -200,19 +200,6 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNode root,
             ProtosClosureExecutionPlanCell cell) {}
 
-    /**
-     * PERF032-G6: the arity-rejection roots lowered in the group currently
-     * being built by the top-level {@link #lowerRoot} call, paired with the
-     * Closure root each belongs to. As with {@link #pendingGroupClosures},
-     * their targets are attached only once that group's {@code create()} has
-     * returned; saved and restored around each {@link #lowerRoot} call.
-     */
-    private java.util.List<PendingArityRejection> pendingArityRejections;
-
-    private record PendingArityRejection(
-            ProtosSemanticBytecodeRootNode root,
-            ProtosSemanticBytecodeRootNode rejectionRoot) {}
-
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
@@ -642,10 +629,7 @@ final class CanonicalToBytecodeLowerer {
          */
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
-        java.util.List<PendingArityRejection> savedPendingArityRejections =
-                pendingArityRejections;
         pendingGroupClosures = new java.util.ArrayList<>();
-        pendingArityRejections = new java.util.ArrayList<>();
         try {
             BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                     ProtosSemanticBytecodeRootNodeGen.create(
@@ -675,20 +659,6 @@ final class CanonicalToBytecodeLowerer {
                                 }
                             });
 
-            /*
-             * getCallTarget() may notify instrumentation, which can replay
-             * this group's parser; detach the list first so such a replay
-             * never records into it (see emitRootBody).
-             */
-            java.util.List<PendingArityRejection> arityRejections =
-                    pendingArityRejections;
-            pendingArityRejections = null;
-            for (PendingArityRejection pending : arityRejections) {
-                pending.root()
-                        .attachArityRejectionTarget(
-                                pending.rejectionRoot().getCallTarget());
-            }
-
             for (PendingGroupClosure pending : pendingGroupClosures) {
                 pending.cell()
                         .freeze(
@@ -704,7 +674,6 @@ final class CanonicalToBytecodeLowerer {
             return roots.getNode(0);
         } finally {
             pendingGroupClosures = savedPendingGroupClosures;
-            pendingArityRejections = savedPendingArityRejections;
         }
     }
 
@@ -1009,17 +978,6 @@ final class CanonicalToBytecodeLowerer {
          */
 
         /*
-         * PERF032-G6: a Closure declaring no parameters has no argument
-         * check in this root (see emitClosureParameterBindings); its
-         * arity-rejection root is nested here, once per lowering, so every
-         * reparse replays it at the same group index.
-         */
-        ProtosSemanticBytecodeRootNode arityRejectionRoot =
-                hasArityRejectionRoot(activationDefinition)
-                        ? emitArityRejectionRoot(builder, rootSpan)
-                        : null;
-
-        /*
          * PLAT036 Candidate D, I068 Slice 4: every statically
          * declared binding owned by this genuine execution-context
          * root, including Closure parameters, receives one stable
@@ -1166,11 +1124,6 @@ final class CanonicalToBytecodeLowerer {
                         currentRootFrameNativeLayout,
                         ordinal,
                         unaryEntry.name());
-
-                // Preserve the original ordering: bind first, then reject excess.
-                builder.beginCheckFrameClosureArgumentUpperBound();
-                builder.emitLoadConstant(1);
-                builder.endCheckFrameClosureArgumentUpperBound();
             } else {
                 emitClosureParameterBindings(
                         builder,
@@ -1393,17 +1346,6 @@ final class CanonicalToBytecodeLowerer {
                         || provesNonSuspendingBody(
                                 activationDefinition, currentRootAnalysis, effectiveBody));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
-        /*
-         * A reparse replays the group onto the same root identities, whose
-         * rejection targets are attached by the create() that first built
-         * them; a replay outside that create() records nothing.
-         */
-        if (arityRejectionRoot != null
-                && pendingArityRejections != null
-                && result.arityRejectionTarget() == null) {
-            pendingArityRejections.add(
-                    new PendingArityRejection(result, arityRejectionRoot));
-        }
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
                     result,
@@ -2109,40 +2051,6 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return new UnaryNormalEntry(parameter.name());
-    }
-
-    private static boolean hasArityRejectionRoot(CanonicalClosure activationDefinition) {
-        return activationDefinition != null
-                && activationDefinition.parameters().isEmpty();
-    }
-
-    /**
-     * PERF032-G6: lowers the arity-rejection root of a Closure declaring no
-     * parameters, nested in that Closure's own open root so it belongs to the
-     * same {@code BytecodeRootNodes} group with the same source section. It
-     * is entered only by a call supplying arguments: the unchanged {@code
-     * CheckFrameClosureArgumentUpperBound} materializes that call's exact
-     * activation and signals the argument-count Error, and the ordinary root
-     * exception interception selects guest handlers and records the
-     * diagnostic origin. It never evaluates the Closure body; the trailing
-     * return only keeps the root well formed.
-     */
-    private static ProtosSemanticBytecodeRootNode emitArityRejectionRoot(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            SourceSpan rootSpan) {
-        builder.beginSourceSection(
-                rootSpan.startOffset(),
-                rootSpan.length());
-        builder.beginRoot();
-        builder.beginCheckFrameClosureArgumentUpperBound();
-        builder.emitLoadConstant(0);
-        builder.endCheckFrameClosureArgumentUpperBound();
-        builder.beginReturn();
-        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-        builder.endReturn();
-        ProtosSemanticBytecodeRootNode rejectionRoot = builder.endRoot();
-        builder.endSourceSection();
-        return rejectionRoot;
     }
 
     /**
@@ -3369,10 +3277,12 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * I104-B: only a NORMAL root whose required parameters occupy the
-     * initial physical frame-local ordinals can copy their supplied prefix.
-     * The binding analysis, rather than name equality alone, proves ownership.
-     * No default, rest or persistent-authority semantics enter this lane.
+     * I104-B: only a NORMAL root whose leading parameters without a default
+     * occupy the initial physical frame-local ordinals can copy that prefix
+     * (an unsupplied position binds canonical null, D203). The binding
+     * analysis, rather than name equality alone, proves ownership. No
+     * default, rest or persistent-authority semantics enter this lane; the
+     * first default or rest parameter ends the prefix.
      */
     private int admitRequiredPrefix(
             CanonicalClosure definition,
@@ -3393,16 +3303,11 @@ final class CanonicalToBytecodeLowerer {
         }
 
         int count = 0;
-        boolean suffixStarted = false;
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest() || parameter.defaultValue().isPresent()) {
-                suffixStarted = true;
-            } else if (suffixStarted) {
-                // Required parameters must precede defaults and rest.
-                return 0;
-            } else {
-                count++;
+                break;
             }
+            count++;
         }
 
         if (count < 2
@@ -3451,10 +3356,14 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I104-C: the leading required parameters have already been established
-     * by BindRequiredFrameParameter. Resume the normative left-to-right
-     * binding algorithm at the first remaining parameter. Defaults, rest
-     * creation and excess-argument detection retain their original order.
+     * I104-C: the leading parameters without a default may already have been
+     * established by BindRequiredFrameParameter. Resume the normative
+     * left-to-right binding algorithm at the first remaining parameter.
+     *
+     * <p>D203: parameter {@code k} reads supplied position {@code k}; an
+     * unsupplied position evaluates its default, if any, or binds canonical
+     * null. Each slot is created only when its turn comes. Excess supplied
+     * arguments are ignored without rest, so no upper-bound check is emitted.
      */
     private void emitClosureParameterBindings(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -3471,7 +3380,6 @@ final class CanonicalToBytecodeLowerer {
         }
 
         int positionalIndex = alreadyBoundRequired;
-        boolean hasRest = false;
 
         for (int parameterIndex = alreadyBoundRequired;
                 parameterIndex < definition.parameters().size();
@@ -3505,7 +3413,6 @@ final class CanonicalToBytecodeLowerer {
                     builder.emitLoadConstant(positionalIndex);
                     builder.endBindClosureRest();
                 }
-                hasRest = true;
                 continue;
             }
 
@@ -3583,33 +3490,6 @@ final class CanonicalToBytecodeLowerer {
             }
 
             positionalIndex++;
-        }
-
-        /*
-         * PERF032-G6: a genuine root with an empty signature leaves this
-         * check to its arity-rejection root (see emitArityRejectionRoot).
-         */
-        boolean checkedBeforeEntry =
-                currentActivationLocal == null
-                        && hasArityRejectionRoot(definition);
-        if (!hasRest && !checkedBeforeEntry) {
-            if (currentActivationLocal == null) {
-                builder.beginCheckFrameClosureArgumentUpperBound();
-                builder.emitLoadConstant(positionalIndex);
-                builder.endCheckFrameClosureArgumentUpperBound();
-            } else if (currentInlineCallbackFrameNative) {
-                builder.beginCheckInlineClosureArgumentUpperBound(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(positionalIndex);
-                builder.endCheckInlineClosureArgumentUpperBound();
-            } else {
-                builder.beginCheckClosureArgumentUpperBound();
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(positionalIndex);
-                builder.endCheckClosureArgumentUpperBound();
-            }
         }
     }
 
@@ -10286,8 +10166,7 @@ final class CanonicalToBytecodeLowerer {
      * its value may be another instance of the same definition.
      *
      * <p>Every parameter is ordinary required positional and the supplied
-     * count matches exactly, so the selected entry is the body entry, never a
-     * default, rest or arity-rejection entry. Any such arity up to {@link
+     * count matches exactly, so no default or rest binding is involved. Any such arity up to {@link
      * #MAX_INLINE_CLOSURE_CALL_ARGUMENTS} is admitted through the same
      * variadic carrier and positional parameter binding: the staged
      * arguments, evaluated once left to right, become the compact supplied

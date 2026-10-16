@@ -74,21 +74,21 @@ class ProtosStaticSignatureHelpTest {
 
     @Test
     void defaultAndRestParametersKeepOrderAndSourceText() {
-        String marked = "((first, second = 2 + 1, ...rest) => first)(|)";
+        String marked = "((first, second: 2 + 1, ...rest) => first)(|)";
         String source = marked.replace("|", "");
         ProtosStaticSignatureHelpResult result = help(marked).orElseThrow();
 
-        assertEquals("(first, second = 2 + 1, ...rest)", result.label());
+        assertEquals("(first, second: 2 + 1, ...rest)", result.label());
         assertEquals(
                 List.of(
                         new Parameter("first", "first", false, false, span(source, "first")),
-                        new Parameter("second", "second = 2 + 1", true, false,
-                                span(source, "second = 2 + 1")),
+                        new Parameter("second", "second: 2 + 1", true, false,
+                                span(source, "second: 2 + 1")),
                         new Parameter("rest", "...rest", false, true, span(source, "...rest"))),
                 result.parameters());
         assertEquals(OptionalInt.of(0), result.activeParameter());
 
-        assertActive("((first, second = 2) => first)(1, |)", 1, OptionalInt.of(1));
+        assertActive("((first, second: 2) => first)(1, |)", 1, OptionalInt.of(1));
         assertActive("((first, ...rest) => first)(1, |2)", 1, OptionalInt.of(1));
         assertActive("((first, ...rest) => first)(1, 2, 3|)", 2, OptionalInt.of(1));
         assertActive("((...rest) => rest)(|)", 0, OptionalInt.of(0));

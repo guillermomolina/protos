@@ -101,7 +101,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter",
-      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -149,7 +149,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter",
-      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",

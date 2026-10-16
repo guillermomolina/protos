@@ -332,7 +332,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                 module.context().createLocalSlot("target", target);
 
                 String characters =
-                        "(value = target()) => { value }";
+                        "(value: target()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

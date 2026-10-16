@@ -98,7 +98,6 @@ tests: [
             }
 
             Assertions.signals(Error, () => { Uri.format() })
-            Assertions.signals(Error, () => { Uri.format(validBase(), validBase()) })
             Assertions.signals(Error, () => { Uri.format("a/b") })
             Assertions.signals(Error, () => { Uri.format(null) })
 

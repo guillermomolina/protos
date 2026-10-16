@@ -1009,7 +1009,7 @@ evaluateSimple: (spec, source, executor) => {
     resultTuple(passed, observation)
 }
 
-evaluateDCase: (spec, source, executor, inspectorExecutor = null) => {
+evaluateDCase: (spec, source, executor, inspectorExecutor) => {
     evaluation: null
 
     isFutureResolvedExpectation(spec).ifTrue(() => {
@@ -1080,7 +1080,7 @@ runAllPassed: (run) => {
     runPassedCount(run) == runSelectedCount(run)
 }
 
-runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor = null) => {
+runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
     cases: Manifest.planCases(plan)
 
     resultChunks: Map()
@@ -1819,7 +1819,7 @@ scheduleD108CaseAsync: (
     inspectorExecutorAsync,
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
-    caseAuthorityExecutorAsync = null
+    caseAuthorityExecutorAsync
 ) => {
     resourceful: bindings.size() > 0
     descriptor: Manifest.caseAuthorityDescriptor(spec)
@@ -1909,9 +1909,9 @@ runD108WithResourcesWithLoader: (
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
     maxInFlight,
-    terminalObserver = null,
-    caseAuthorityExecutorAsync = null,
-    lifecycleObserver = null
+    terminalObserver,
+    caseAuthorityExecutorAsync,
+    lifecycleObserver
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         policyError()
@@ -2290,9 +2290,9 @@ runD108WithResources: (
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
     maxInFlight,
-    terminalObserver = null,
-    caseAuthorityExecutorAsync = null,
-    lifecycleObserver = null
+    terminalObserver,
+    caseAuthorityExecutorAsync,
+    lifecycleObserver
 ) => {
     runD108WithResourcesWithLoader(
         plan,
@@ -2539,7 +2539,7 @@ runBounded: (
     )
 }
 
-runSimple: (plan, filesystem, executor, inspectorExecutor = null) => {
+runSimple: (plan, filesystem, executor, inspectorExecutor) => {
     runSimpleWithLoader(
         plan,
         (spec) => { readSource(spec, filesystem) },

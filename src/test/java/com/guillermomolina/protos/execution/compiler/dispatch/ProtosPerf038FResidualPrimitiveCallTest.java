@@ -263,11 +263,12 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                                     + " Error.handle(() => { one(1, 2) }, (caught) => { 77 }),"
                                     + " middle.forward(leaf, 4)]\n",
                             "perf038f-guest.protos", module));
-            assertIntegers(results, 2, 3, 11, 11, 4, 3, 5, 0, 77, 5);
+            // D203/I105: one(1, 2) ignores the excess argument.
+            assertIntegers(results, 2, 3, 11, 11, 4, 3, 5, 0, 1, 5);
         });
         System.out.println("PERF038F_GUEST_SENDS=PASS");
         System.out.println("PERF038F_RETURN_HOME=PASS");
-        System.out.println("PERF038F_ARITY_ERROR=PASS");
+        System.out.println("PERF038F_EXCESS_ARGUMENT_IGNORED=PASS");
     }
 
     /**

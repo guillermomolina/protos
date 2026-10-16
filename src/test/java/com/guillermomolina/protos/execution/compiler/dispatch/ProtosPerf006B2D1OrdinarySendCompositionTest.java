@@ -199,7 +199,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 String characters =
-                        "(value = factory().echo(...items)) => { value }";
+                        "(value: factory().echo(...items)) => { value }";
                 CanonicalClosure definition =
                         closureDefinition(characters);
                 Source source =

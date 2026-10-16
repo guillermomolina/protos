@@ -101,7 +101,7 @@ final class ProtosPerf006B6A3ASuperSendCanonicalCoverageTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "(x = super.defaultValue()) => x",
+                            "(x: super.defaultValue()) => x",
                             "b6a3a-child-default.protos"));
             module.context().createLocalSlot("obj", child);
 

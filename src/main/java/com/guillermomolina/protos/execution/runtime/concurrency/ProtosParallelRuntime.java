@@ -99,7 +99,6 @@ public final class ProtosParallelRuntime {
         if(object.hasLocalSlot("parallel"))return;
         object.createLocalSlot("parallel",ProtosClosureValue.nativeClosure((a,args)->{
             if(!(a.receiver() instanceof ProtosClosureValue closure))throw error(a);
-            validateClosureArity(closure,args.size(),a);
             Snapshot snapshot=Snapshot.capture(closure,args,a);
             return ownedFuture(a,c->submit(()->run(snapshot,c)));
         }));
@@ -677,17 +676,6 @@ public final class ProtosParallelRuntime {
         static void state(ProtosObjectValue x,ProtosObjectValue y){if(x.isFrozen())y.freeze();else if(x.isClosed())y.close();}
     }
 
-    private static void validateClosureArity(ProtosClosureValue c,int n,ProtosActivation a){
-        if(c.definition()==null)return;
-        var parameters=c.definition().parameters();
-        int required=0;boolean rest=false;int total=parameters.size();
-        for(int index=0;index<total;index++){
-            var p=parameters.get(index);
-            if(p.rest())rest=true;
-            else if(p.defaultValue().isEmpty())required++;
-        }
-        if(n<required||(!rest&&n>total))throw error(a);
-    }
     private static ProtosObjectValue occ(ProtosActivation a,ProtosCoreErrors.StandardError e){return ProtosCoreErrors.newOccurrence(a,e);}
     private static ProtosObjectValue nonParallel(ProtosActivation a){return occ(a,ProtosCoreErrors.StandardError.NON_PARALLEL_VALUE);}
     private static ProtosSignalException error(ProtosActivation a){return new ProtosSignalException(ProtosCoreErrors.newError(a));}

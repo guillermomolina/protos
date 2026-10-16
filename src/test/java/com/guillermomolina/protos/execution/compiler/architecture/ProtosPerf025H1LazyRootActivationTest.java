@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -95,7 +96,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
     void defaultParameterPathsStayCompact() throws Exception {
         withCore(module -> {
             ProtosClosureValue defaulted =
-                    parsedClosure("(value = 7) => { value }", "h1-default.protos", module);
+                    parsedClosure("(value: 7) => { value }", "h1-default.protos", module);
 
             ProtosBytecodeRootNode.PreparedClosureCall omitted = fastDirect(defaulted, module);
             assertEquals("7", integerValue(enter(omitted)));
@@ -219,21 +220,23 @@ final class ProtosPerf025H1LazyRootActivationTest {
     }
 
     @Test
-    void arityErrorsMaterializeOnTheErrorPathOnly() throws Exception {
+    void flexibleArityStaysCompact() throws Exception {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-arity.protos", module);
 
+            // D203/I105: excess is ignored and an absent argument binds null, compactly.
+            ProtosIntegerValue first = integer(1);
             ProtosBytecodeRootNode.PreparedClosureCall tooMany =
-                    fastDirect(identity, module, integer(1), integer(2));
-            assertThrows(ProtosSignalException.class, () -> enter(tooMany));
-            assertInstanceOf(ProtosActivation.class, tooMany.targetArguments()[0]);
+                    fastDirect(identity, module, first, integer(2));
+            assertSame(first, enter(tooMany));
+            assertSame(identity, tooMany.targetArguments()[0]);
 
             ProtosBytecodeRootNode.PreparedClosureCall tooFew = fastDirect(identity, module);
-            assertThrows(ProtosSignalException.class, () -> enter(tooFew));
-            assertInstanceOf(ProtosActivation.class, tooFew.targetArguments()[0]);
+            assertSame(ProtosNullValue.INSTANCE, enter(tooFew));
+            assertSame(identity, tooFew.targetArguments()[0]);
         });
-        System.out.println("ARITY_ERROR_PATH=PASS");
+        System.out.println("FLEXIBLE_ARITY_COMPACT_PATH=PASS");
     }
 
     @Test
@@ -323,8 +326,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
     /**
      * I102-B: already-materialized ordinary invocations enter the same
      * five-position B5 argument layout, with their activation published
-     * from the beginning. Arity rejection still selects the proper entry
-     * instead of mistaking header fields for user arguments.
+     * from the beginning. Binding never mistakes header fields for user
+     * arguments: excess supplied values are ignored (D203/I105).
      */
     @Test
     void i102BRichDirectEntryPreservesB5AndArity() throws Exception {
@@ -414,7 +417,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                     excessArguments.length);
             assertEquals(2, ProtosFrameArguments.compactSuppliedArgumentCount(
                     excessArguments));
-            assertThrows(ProtosSignalException.class, () -> enter(excessCall));
+            assertSame(supplied, enter(excessCall));
             assertSame(excessActivation, excessArguments[0]);
         });
         System.out.println("I102_B_RICH_DIRECT_B5=PASS");

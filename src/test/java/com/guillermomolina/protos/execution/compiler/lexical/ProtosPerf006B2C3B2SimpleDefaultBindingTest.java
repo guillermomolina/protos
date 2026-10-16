@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -30,7 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -58,7 +57,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
 
                 String characters =
-                        "(head, literalDefault = \"fallback\", inherited = head) => { inherited }";
+                        "(head, literalDefault: \"fallback\", inherited: head) => { inherited }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -137,7 +136,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 module.context().createLocalSlot("third", third);
 
                 String closureCharacters =
-                        "(head, fallback = missingDefault, finalValue = missingFinal) => { finalValue }";
+                        "(head, fallback: missingDefault, finalValue: missingFinal) => { finalValue }";
                 Source closureSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -196,7 +195,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
 
                 String characters =
-                        "(head, fallback = head, ...tail) => { tail }";
+                        "(head, fallback: head, ...tail) => { tail }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -261,7 +260,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
     }
 
     @Test
-    void requiredArityAndSpreadDefaultLoweringCoexist()
+    void missingArgumentAndSpreadDefaultLoweringCoexist()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -271,7 +270,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 ProtosActivation module = moduleActivation();
 
                 String requiredCharacters =
-                        "(head, fallback = head) => { fallback }";
+                        "(head, fallback: head) => { fallback }";
                 Source requiredSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -301,12 +300,13 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                 requiredDefinition,
                                 language,
                                 requiredSource, ProtosExecutionMode.NORMAL);
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> requiredPlan.executeActivation(missing));
+                // D203/I105: head binds null, then the default reads it.
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        requiredPlan.executeActivation(missing));
 
                 String complexCharacters =
-                        "(head, fallback = child(...items)) => { fallback }";
+                        "(head, fallback: child(...items)) => { fallback }";
                 Source complexSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -324,7 +324,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
             }
         }
 
-        System.out.println("PERF006_B2C3B2_REQUIRED_ARITY_ERROR=PASS");
+        System.out.println("PERF006_B2C3B2_MISSING_ARGUMENT_BINDS_NULL=PASS");
         System.out.println("PERF006_B2C3B2_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 

@@ -45,7 +45,7 @@ class ProtosStaticDefinitionsTest {
 
     @Test
     void appliesLeftToRightParameterInstallationInsideDefaults() {
-        String source = "f: (first, second = first) => { second }";
+        String source = "f: (first, second: first) => { second }";
         int firstDefaultReference = source.indexOf("first", source.indexOf("second"));
 
         ProtosStaticDefinitionResult result = definition(source, firstDefaultReference).orElseThrow();
@@ -53,8 +53,8 @@ class ProtosStaticDefinitionsTest {
                 new SourceSpan(source.indexOf("first"), source.indexOf("first") + "first".length()),
                 result.targets().get(0).span());
 
-        String selfDefault = "f: (value = value) => { value }";
-        int selfReference = selfDefault.indexOf("value", selfDefault.indexOf("=") + 1);
+        String selfDefault = "f: (value: value) => { value }";
+        int selfReference = selfDefault.indexOf("value", selfDefault.indexOf("value:") + "value:".length());
         assertTrue(definition(selfDefault, selfReference).isEmpty());
     }
 

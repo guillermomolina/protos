@@ -434,8 +434,8 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
 
                 for (String characters :
                         List.of(
-                                "(value = target(...items)) => { value }",
-                                "(value = receiver.capture(...items)) => { value }")) {
+                                "(value: target(...items)) => { value }",
+                                "(value: receiver.capture(...items)) => { value }")) {
                     CanonicalClosure definition =
                             closureDefinition(characters);
                     Source source =

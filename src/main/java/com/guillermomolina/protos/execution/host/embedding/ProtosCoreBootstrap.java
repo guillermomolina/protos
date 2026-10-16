@@ -19,10 +19,12 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSemanticTransferFamily;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -817,12 +819,28 @@ public final class ProtosCoreBootstrap {
     }
 
 
+    private static final String OBJECT_ARGUMENT_COUNT_ERROR = "_coreArgumentCountError";
+
     private void installSourceBackedObjectBehavior(Path coreDirectory)
             throws IOException {
         ProtosObjectValue sourceContext =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosActivation sourceActivation =
                 new ProtosActivation(sourceContext, List.of(), sourceContext);
+        /*
+         * D203/I105: Closure binding no longer rejects argument counts, so the
+         * independent standard arities of init, ifNull and ifNotNull are checked
+         * explicitly. Object.protos is loaded before Error exists and its lexical
+         * context has no Error binding; this private helper signals the ordinary
+         * fresh argument-count Error and stays in the frozen source context.
+         */
+        sourceContext.createLocalSlot(
+                OBJECT_ARGUMENT_COUNT_ERROR,
+                ProtosClosureValue.nativeClosure(
+                        (activation, arguments) -> {
+                            throw new ProtosSignalException(
+                                    ProtosCoreErrors.newError(activation));
+                        }));
 
         sourceLoader
                 .load(coreDirectory.resolve("Object.protos"))
@@ -844,7 +862,8 @@ public final class ProtosCoreBootstrap {
         sourceContext.removeLocalSlot("_coreObjectMatch");
         sourceContext.removeLocalSlot("ifNull");
         sourceContext.removeLocalSlot("ifNotNull");
-        if (!sourceContext.localSlotsSnapshot().isEmpty()) {
+        if (!sourceContext.localSlotsSnapshot().keySet().equals(
+                java.util.Set.of(OBJECT_ARGUMENT_COUNT_ERROR))) {
             throw new IllegalStateException(
                     "Core object source left unexpected bootstrap bindings");
         }

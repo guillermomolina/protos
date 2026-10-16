@@ -72,9 +72,6 @@ tests: [
         Assertions.signals(Error, () => {
             LogEvent(Level.INFO, "m", null, null, Instant)
         })
-        Assertions.signals(Error, () => {
-            LogEvent(Level.INFO, "m", null, null, Instant(0), "extra")
-        })
     }),
     Test("null fields yield an empty frozen Map", () => {
         event: LogEvent(Level.INFO, "started", null, null)

@@ -35,33 +35,34 @@
 /// Explicitly executes the foreign target of `target` with `arguments` and
 /// answers its admitted result. This is foreign execution, not ordinary
 /// `call`: it applies even when the target is also instantiable.
-invoke: ((facility) => (target, ...arguments) => {
-    facility.invoke(target, ...arguments)
+invoke: ((facility) => (...arguments) => {
+    facility.invoke(...arguments)
 })(_interopFacility)
 
 /// Explicitly instantiates the foreign target of `target` with `arguments`
 /// and answers its admitted result. This is distinct from `invoke`; it applies
 /// even when the target is also executable.
-instantiate: ((facility) => (target, ...arguments) => {
-    facility.instantiate(target, ...arguments)
+instantiate: ((facility) => (...arguments) => {
+    facility.instantiate(...arguments)
 })(_interopFacility)
 
 /// Answers the admitted value of the foreign member `name`, which must be a
 /// String, of the foreign target of `target`. Ordinary Protos precedence is
 /// bypassed for this operation only, so foreign members such as `call`, `at`,
 /// `each`, `==`, or `hash` are reachable; `target.name` is unchanged.
-readMember: ((facility) => (target, name) => {
-    facility.readMember(target, name)
+readMember: ((facility) => (...arguments) => {
+    facility.readMember(...arguments)
 })(_interopFacility)
 
 /// Sets the foreign member `name`, which must be a String, of the foreign
 /// target of `target` to `value` and answers exactly `value`. Nothing is read
 /// back. Ordinary assignment `target.name = value` never writes a foreign
 /// member.
-writeMember: ((facility) => (target, name, value) => {
-    facility.writeMember(target, name, value)
+writeMember: ((facility) => (...arguments) => {
+    facility.writeMember(...arguments)
 })(_interopFacility)
 
 // The runtime-provisioned facility is captured privately above; it is not
-// module surface.
+// module surface. D203: each wrapper forwards the complete supplied vector so
+// the facility keeps enforcing the exact standard arity.
 context.removeSlot("_interopFacility")

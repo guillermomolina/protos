@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -29,7 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
@@ -112,23 +111,24 @@ final class ProtosPerf038BCompactMethodCallTest {
     }
 
     @Test
-    void wrongArityAfterCompactCallsStillSignals() throws Exception {
+    void flexibleArityAfterCompactCallsBindsNullAndIgnoresExcess() throws Exception {
         withCore(module -> {
             evaluate(
                     "receiver: { identity: (value) => { value } }\n"
                             + "run: (n) => { receiver.identity(n) }\n"
                             + "run(1)\nrun(2)\n",
                     "perf038b-arity-warm.protos", module);
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> evaluate("receiver.identity()\n", "perf038b-arity-few.protos", module));
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> evaluate(
-                            "receiver.identity(1, 2)\n", "perf038b-arity-many.protos", module));
+            // D203/I105: a warm compact method binds null and ignores excess.
+            assertSame(
+                    ProtosNullValue.INSTANCE,
+                    evaluate("receiver.identity()\n", "perf038b-arity-few.protos", module));
+            assertEquals(
+                    "1",
+                    integerValue(evaluate(
+                            "receiver.identity(1, 2)\n", "perf038b-arity-many.protos", module)));
             assertEquals("5", integerValue(evaluate("run(5)\n", "perf038b-arity-after.protos", module)));
         });
-        System.out.println("PERF038B_WRONG_ARITY=PASS");
+        System.out.println("PERF038B_FLEXIBLE_ARITY=PASS");
     }
 
     /**
@@ -142,7 +142,7 @@ final class ProtosPerf038BCompactMethodCallTest {
         withCore(module -> {
             List<Object> results =
                     elements(evaluate(
-                            "probe: { m: (a, b = context, c = b) => { [a, b, c, context] } }\n"
+                            "probe: { m: (a, b: context, c: b) => { [a, b, c, context] } }\n"
                                     + "warm: [probe.m(1, 2), probe.m(3, 4)]\n"
                                     + "late: probe.m(5)\n"
                                     + "again: probe.m(6, 7)\n"

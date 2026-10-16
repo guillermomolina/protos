@@ -405,7 +405,7 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
         assertStructuredEachPreserved(
                 """
                 run: () => {
-                    Array(1).each((element = 7) => { probe() })
+                    Array(1).each((element: 7) => { probe() })
                 }
                 run()
                 """);
@@ -420,9 +420,9 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
         System.out.println("PERF026_D1_DEFAULT_REST_PARAMETER_FALLBACK=YES");
     }
 
-    /** A zero- or two-parameter literal keeps its ordinary arity failure. */
+    /** D203/I105: a zero- or two-parameter literal binds flexibly and runs per element. */
     @Test
-    void mismatchedArityLiteralsKeepOrdinaryArityErrors() throws Exception {
+    void mismatchedArityLiteralsBindFlexibly() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -432,25 +432,23 @@ final class ProtosPerf026D1IndexedEachInlineCallbackTest {
                     for (String receiver :
                             List.of("Array(1, 2)", "Encoding.UTF8.encode(\"ab\")")) {
                         Probe probe = new Probe();
-                        assertInteger(
-                                42,
-                                lowerRoot(
-                                                "run: () => {\n    "
-                                                        + receiver
-                                                        + ".each("
-                                                        + callback
-                                                        + ")\n}\n"
-                                                        + "Error.handle(() => { run() }, (caught) => { 42 })\n")
-                                        .getCallTarget()
-                                        .call(probe.module()));
-                        assertEquals(0, probe.calls.get(), receiver + " " + callback);
+                        lowerRoot(
+                                        "run: () => {\n    "
+                                                + receiver
+                                                + ".each("
+                                                + callback
+                                                + ")\n}\n"
+                                                + "run()\n")
+                                .getCallTarget()
+                                .call(probe.module());
+                        assertEquals(2, probe.calls.get(), receiver + " " + callback);
                     }
                 }
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF026_D1_UNSUPPORTED_ARITY_ORDINARY_ERROR=YES");
+        System.out.println("PERF026_D1_MISMATCHED_ARITY_FLEXIBLE=YES");
     }
 
     @Test

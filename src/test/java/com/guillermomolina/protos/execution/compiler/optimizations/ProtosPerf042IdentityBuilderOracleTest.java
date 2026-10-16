@@ -93,7 +93,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     ProtosNumericValueSupport.integerDecimalText(result));
 
             // PERF042 remains an independent physical lower bound.
-            // It does not implement full Closure arity, lexical-presence
+            // It does not implement D203 missing-argument, lexical-presence
             // or primitive-carrier semantics, so exact equality with the
             // production root is not a valid acceptance criterion.
             report("BOUND_ARGUMENT", bound, actual);
@@ -114,14 +114,13 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     List.of(
                             "c.BindUnaryFrameParameter",
                             "load.constant",
-                            "c.CheckFrameClosureArgumentUpperBound",
-                            "load.constant",
                             "c.ReadRootFrameLocal",
                             "c.MaterializeReturnCarrier",
                             "return"),
                     executionPrefixNames(actual),
-                    "I104-A must retain its fused unary entry, arity "
-                            + "check and semantically correct local read");
+                    "I104-A must retain its fused unary entry and "
+                            + "semantically correct local read; D203/I105 "
+                            + "emits no excess-argument check");
 
             System.out.println("PERF042_BOUND_ARGUMENT_LOWER_BOUND=PASS");
             System.out.println("PERF042_I104_A_BYTECODE_SHAPE=PASS");

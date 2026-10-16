@@ -55,7 +55,7 @@ final class ProtosPerf038CCompactCallSpecializationTest {
         withCore(module -> {
             List<Object> results =
                     elements(evaluate(
-                            "probe: { m: (a, b = context, c = 5) => { [a, c] } }\n"
+                            "probe: { m: (a, b: context, c: 5) => { [a, c] } }\n"
                                     + "warm: [probe.m(1, 2, 3), probe.m(4, 6, 7)]\n"
                                     + "late: probe.m(8)\n"
                                     + "again: probe.m(9, 10, 11)\n"
@@ -84,7 +84,7 @@ final class ProtosPerf038CCompactCallSpecializationTest {
                             "outer: (seed) => {\n"
                                     + "    x: seed\n"
                                     + "    middle: () => {\n"
-                                    + "        reader: (c = context) => { x }\n"
+                                    + "        reader: (c: context) => { x }\n"
                                     + "        before: [reader(0), reader()]\n"
                                     + "        x: \"middle\"\n"
                                     + "        [before[0], before[1], reader(0), reader()]\n"
@@ -108,9 +108,10 @@ final class ProtosPerf038CCompactCallSpecializationTest {
 
     /**
      * Guest Errors cross callee and caller roots that already ran without
-     * any Error: an arity Error from a warm compact callee, an explicit
-     * signal from a method, and a non-local return through a handled body,
-     * after which the same sites still run ordinarily.
+     * any Error: an explicit signal from a method and a non-local return
+     * through a handled body, after which the same sites still run
+     * ordinarily. D203/I105: an excess argument to the warm compact callee
+     * is ignored, not an Error.
      */
     @Test
     void guestErrorsCrossWarmRootsAndAreHandled() throws Exception {
@@ -136,14 +137,14 @@ final class ProtosPerf038CCompactCallSpecializationTest {
                                     + " Error.handle(() => { signalling.fail(1) }, (caught) => { 77 }),\n"
                                     + " guarded(5), early(6), receiver.identity(7)]\n",
                             "perf038c-errors.protos", module));
-            long[] expected = {1, 2, 99, 99, 77, 5, 6, 7};
+            long[] expected = {1, 2, 3, 4, 77, 5, 6, 7};
             assertEquals(expected.length, results.size());
             for (int index = 0; index < expected.length; index++) {
                 assertEquals(Long.toString(expected[index]), integerValue(results.get(index)));
             }
         });
         System.out.println("PERF038C_ERROR_INTERCEPTION=PASS");
-        System.out.println("PERF038C_WRONG_ARITY=PASS");
+        System.out.println("PERF038C_EXCESS_ARGUMENT_IGNORED=PASS");
         System.out.println("PERF038C_NON_LOCAL_RETURN=PASS");
     }
 

@@ -128,7 +128,7 @@ final class ProtosPerf006B6A3CObjectComposeCanonicalCoverageTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "(x = { local: true }) => x",
+                            "(x: { local: true }) => x",
                             "b6a3c-object-default-entry.protos"));
 
             ProtosObjectValue result =

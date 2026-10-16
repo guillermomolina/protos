@@ -26,7 +26,7 @@ completedObservation: (value) => {
     }
 }
 
-completion: (guestObservation, infrastructureFailed, capacitySafe, message = null) => {
+completion: (guestObservation, infrastructureFailed, capacitySafe, message) => {
     failures: Array()
     (message === null).ifFalse(() => {
         failures = Array(message)

@@ -216,16 +216,10 @@ tests: [
             Assertions.require(flushed[0] == "final")
             Assertions.require(flushed[1] == "row")
 
-            Assertions.signals(Error, () => { CSV.rowParser() })
-            Assertions.signals(Error, () => { CSV.rowParser((row) => { null }, (row) => { null }) })
-
+            // D203: library arity is flexible; only domain failures remain.
             wrongFeed: CSV.rowParser((row) => { null })
             Assertions.signals(Error, () => { wrongFeed.feed() })
-            Assertions.signals(Error, () => { wrongFeed.feed("a", "b") })
             Assertions.signals(Error, () => { wrongFeed.feed(42) })
-
-            wrongFinish: CSV.rowParser((row) => { null })
-            Assertions.signals(Error, () => { wrongFinish.finish("x") })
 
             true
         }

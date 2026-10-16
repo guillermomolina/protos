@@ -70,7 +70,7 @@
 /// - `with(fields)`: a derived logger with the same minimum level, sink, and
 ///   time source whose context is this logger's context overridden by a
 ///   snapshot of the Map `fields`. The receiver is unchanged.
-call: (minimumLevel, sink, timeSource = null) => {
+call: (minimumLevel, sink, timeSource) => {
     Level: import("std:logging/Level")
     LogEvent: import("std:logging/LogEvent")
     Instant: import("std:datetime/Instant")

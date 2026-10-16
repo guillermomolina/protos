@@ -62,7 +62,7 @@ class CanonicalizerClosureTest {
         CanonicalClosure closure =
                 assertInstanceOf(
                         CanonicalClosure.class,
-                        canonicalizeOnly("(a, b = fallback, ...rest) => a"));
+                        canonicalizeOnly("(a, b: fallback, ...rest) => a"));
 
         assertEquals(3, closure.parameters().size());
 

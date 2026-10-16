@@ -227,7 +227,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                 module.context().createLocalSlot("callable", callable);
 
                 String characters =
-                        "(value = callable()) => { value }";
+                        "(value: callable()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

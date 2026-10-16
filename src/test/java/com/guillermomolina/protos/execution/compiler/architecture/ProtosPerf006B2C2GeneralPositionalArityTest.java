@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -28,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -138,8 +137,9 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         System.out.println("PERF006_B2C2_SOURCE_LEVEL_GENERAL_ARITY=PASS");
     }
 
+    /** D203/I105: missing arguments bind canonical null; excess arguments are ignored. */
     @Test
-    void tooFewAndTooManyArgumentsRetainGuestArityError()
+    void tooFewAndTooManyArgumentsBindFlexibly()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -147,8 +147,14 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
+                ProtosObjectValue first =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue third =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("first", first);
+                module.context().createLocalSlot("third", third);
 
-                String closureCharacters = "(a, b, c) => { b }";
+                String closureCharacters = "(a, b, c) => { c }";
                 Source closureSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -167,23 +173,27 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                         closureSource, ProtosExecutionMode.NORMAL),
                                 module));
 
-                assertGuestArityError(
-                        language,
-                        module,
-                        "entry(null, null)",
-                        "perf006-b2c2-too-few.protos");
-                assertGuestArityError(
-                        language,
-                        module,
-                        "entry(null, null, null, null)",
-                        "perf006-b2c2-too-many.protos");
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        callTop(
+                                language,
+                                module,
+                                "entry(first, null)",
+                                "perf006-b2c2-too-few.protos"));
+                assertSame(
+                        third,
+                        callTop(
+                                language,
+                                module,
+                                "entry(first, null, third, first)",
+                                "perf006-b2c2-too-many.protos"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2C2_TOO_FEW_ARITY_ERROR=PASS");
-        System.out.println("PERF006_B2C2_TOO_MANY_ARITY_ERROR=PASS");
+        System.out.println("PERF006_B2C2_TOO_FEW_BINDS_NULL=PASS");
+        System.out.println("PERF006_B2C2_TOO_MANY_IGNORED=PASS");
     }
 
     @Test
@@ -196,7 +206,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
                 String defaultCharacters =
-                        "(a, b = child(...items)) => { b }";
+                        "(a, b: child(...items)) => { b }";
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
                 Source defaultSource =
@@ -218,7 +228,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
-    private static void assertGuestArityError(
+    private static Object callTop(
             ProtosLanguage language,
             ProtosActivation module,
             String characters,
@@ -233,9 +243,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         ProtosSemanticBytecodeRootNode root =
                 new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                         .lowerRoot(canonicalize(characters));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> root.getCallTarget().call(module));
+        return root.getCallTarget().call(module);
     }
 
     private static ProtosClosureValue semanticClosure(

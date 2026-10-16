@@ -243,7 +243,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
             sub: (a, b) => { a - b }
             id: (x) => { x }
             size: (s) => { s.size() }
-            withDefault: (a, b = 10) => { a + b }
+            withDefault: (a, b: 10) => { a + b }
             restSize: (first, ...rest) => { rest.size() }
             bump: (x) => {
                 count = count + 1
@@ -352,14 +352,13 @@ final class ProtosStandardPolyglotEmbeddingTest {
     }
 
     @Test
-    void javaArgumentArityErrorIsAGuestErrorAndFatal() {
+    void javaExcessArgumentsAreIgnoredByFlexibleBinding() {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
             Value add = context.getBindings(ProtosLanguage.ID).getMember("add");
-            PolyglotException arity =
-                    assertThrows(PolyglotException.class, () -> add.execute(1, 2, 3));
-            assertTrue(arity.isGuestException());
-            assertFalse(embedded(context).isLive(), "an unhandled arity Error is fatal");
+            // D203/I105: ordinary Closure binding ignores the excess argument.
+            assertEquals(3, add.execute(1, 2, 3).asInt());
+            assertTrue(embedded(context).isLive(), "flexible binding signals no Error");
         }
     }
 

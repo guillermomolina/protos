@@ -235,7 +235,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                                 "(value) => { value }",
                                 "perf006-b2d2-default-outer.protos"));
 
-                String characters = "(value = outer(inner())) => { value }";
+                String characters = "(value: outer(inner())) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

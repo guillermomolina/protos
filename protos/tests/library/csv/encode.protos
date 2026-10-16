@@ -49,7 +49,6 @@ tests: [
             CSV: import("std:csv/CSV")
 
             Assertions.signals(Error, () => { CSV.encode() })
-            Assertions.signals(Error, () => { CSV.encode(Array(), Array()) })
             Assertions.signals(Error, () => { CSV.encode("a") })
             Assertions.signals(Error, () => { CSV.encode(Map()) })
             Assertions.signals(Error, () => { CSV.encode(Array("a")) })

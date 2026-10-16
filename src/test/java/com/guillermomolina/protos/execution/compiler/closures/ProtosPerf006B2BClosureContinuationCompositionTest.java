@@ -277,7 +277,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 String characters =
-                        "(value = entry(...items)) => { value }";
+                        "(value: entry(...items)) => { value }";
                 CanonicalClosure definition =
                         closureDefinition(characters);
                 Source source =

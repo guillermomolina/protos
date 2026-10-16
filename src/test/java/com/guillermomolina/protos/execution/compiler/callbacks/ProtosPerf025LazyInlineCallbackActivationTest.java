@@ -112,7 +112,6 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run()
                         """);
-        assertContains(names, "CheckInlineClosureArgumentUpperBound");
         assertContains(names, "CreateInlineCurrentFrameLocal");
         assertContains(names, "ReadInlineFrameLocal");
         assertContains(names, "ResolveInlineFrameLocalWriteTarget");
@@ -670,7 +669,6 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 host.getRootNodes().ensureComplete();
                 List<Instruction> instructions = host.getBytecodeNode().getInstructionsAsList();
                 List<String> names = instructions.stream().map(Instruction::getName).toList();
-                assertContains(names, "CheckInlineClosureArgumentUpperBound");
                 assertFalse(
                         names.stream().anyMatch(name -> name.contains(PLAIN_LOAD)),
                         () -> "frame-native region must not use the plain entry load: " + names);
@@ -832,8 +830,9 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
 
         /**
          * The carrier live in {@code frame}: read at the frame's own location
-         * when Truffle can resolve it, otherwise at the index of the region's
-         * entry check (each probed root here holds exactly one region).
+         * when Truffle can resolve it, otherwise at the first instruction where
+         * the region's carrier local is in scope (each probed root here holds
+         * exactly one region; D203/I105 removed the former entry check).
          */
         private static PreparedInlineLiteralCall liveCarrier(
                 FrameInstance frame,
@@ -856,9 +855,6 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 return null;
             }
             for (Instruction instruction : bytecode.getInstructionsAsList()) {
-                if (!instruction.getName().contains("CheckInlineClosureArgumentUpperBound")) {
-                    continue;
-                }
                 int bytecodeIndex = instruction.getBytecodeIndex();
                 Object[] names = bytecode.getLocalNames(bytecodeIndex);
                 for (int offset = names.length - 1; offset >= 0; offset--) {

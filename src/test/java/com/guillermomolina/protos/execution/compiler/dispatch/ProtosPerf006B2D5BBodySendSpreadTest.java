@@ -458,8 +458,8 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 for (String characters :
                         List.of(
-                                "(value = target(...items)) => { value }",
-                                "(value = receiver.capture(...items)) => { value }")) {
+                                "(value: target(...items)) => { value }",
+                                "(value: receiver.capture(...items)) => { value }")) {
                     CanonicalClosure definition =
                             closureDefinition(characters);
                     Source source =

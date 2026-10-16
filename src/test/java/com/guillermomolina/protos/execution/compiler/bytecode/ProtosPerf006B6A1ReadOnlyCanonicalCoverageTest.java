@@ -212,7 +212,7 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "(x = seed === seed) => x",
+                            "(x: seed === seed) => x",
                             "b6a1-default-identity.protos"));
 
             Object result =

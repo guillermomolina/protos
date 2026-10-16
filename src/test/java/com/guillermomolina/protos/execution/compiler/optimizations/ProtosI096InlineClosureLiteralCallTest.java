@@ -463,7 +463,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """
                 run: () => {
                     probe()
-                    ((a = 2) => { a + 3 })()
+                    ((a: 2) => { a + 3 })()
                 }
                 run()
                 """);
@@ -941,7 +941,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 // Default parameter.
                 """
                 run: () => {
-                    f: (a = 2) => { a + 3 }
+                    f: (a: 2) => { a + 3 }
                     probe()
                     f()
                 }
@@ -970,7 +970,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 // parameter still keeps ordinary binding.
                 """
                 run: () => {
-                    f: (v, w = 0) => {
+                    f: (v, w: 0) => {
                         g: () => v + w
                         g()
                     }

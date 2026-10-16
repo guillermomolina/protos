@@ -50,8 +50,8 @@ run: (
     projections,
     executorAsync,
     maxInFlight,
-    lifecycleObserver = null,
-    completionObserver = null
+    lifecycleObserver,
+    completionObserver
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         fail()

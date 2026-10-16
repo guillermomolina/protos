@@ -26,7 +26,9 @@ _corePreludeBindings: Context {
     Float: Float
     Complex: Complex
     Error: Error
-    fail: () => {
+    // D203: a supplied argument takes the argument-count failure first.
+    fail: (...args) => {
+        (args.size() == 0).ifFalse(() => { Error().signal() })
         Error().signal()
     }
     InvalidReturn: InvalidReturn

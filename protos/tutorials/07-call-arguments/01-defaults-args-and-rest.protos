@@ -5,8 +5,11 @@
  */
 
 // Calls evaluate their supplied positional arguments before parameter binding.
-// A default can read an earlier parameter from the real invocation activation.
-next: (value, fallback = value + 1) => {
+// Inside a signature, `name: expression` declares a default; it runs only when
+// that argument is absent and can read an earlier parameter from the real
+// invocation activation. Arity is flexible: an absent parameter without a
+// default binds `null`, and extra arguments are evaluated and then ignored.
+next: (value, fallback: value + 1) => {
     Array(value, fallback)
 }
 
@@ -15,7 +18,7 @@ explicit: next(10, 99)
 
 // A rest parameter receives only the unconsumed supplied suffix. The spelling
 // `args` below is an ordinary rest-parameter name, not an ambient call binding.
-collect: (head = 1, ...args) => {
+collect: (head: 1, ...args) => {
     Array(head, args.size())
 }
 

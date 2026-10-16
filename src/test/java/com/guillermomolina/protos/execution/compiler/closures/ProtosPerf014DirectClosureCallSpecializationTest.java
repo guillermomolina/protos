@@ -204,7 +204,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
                                 "() => { marker }",
                                 "perf014-default-identity.protos"));
 
-                String characters = "(value = identity()) => { value }";
+                String characters = "(value: identity()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

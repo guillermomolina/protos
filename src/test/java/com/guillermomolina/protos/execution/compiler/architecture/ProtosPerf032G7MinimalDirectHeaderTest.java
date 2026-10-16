@@ -374,13 +374,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosBytecodeRootNode.finishDirectClosureCallOne(
                             literal, target, value, module);
 
-            RootCallTarget rejection =
-                    assertInstanceOf(
-                            ProtosSemanticBytecodeRootNode.class,
-                            target.getRootNode())
-                            .arityRejectionTarget();
-
-            assertSame(rejection, one.bodyTarget());
+            // D203/I105: excess arguments enter the ordinary body root.
+            assertSame(target, one.bodyTarget());
             assertEquals(6, one.targetArguments().length);
             assertSame(literal, one.targetArguments()[0]);
             assertSame(module, one.targetArguments()[3]);
@@ -415,17 +410,15 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     }
 
     @Test
-    void zeroParameterExcessArgumentsSelectTheRejectionRoot() throws Exception {
+    void zeroParameterExcessArgumentsEnterTheBodyRoot() throws Exception {
         withCore(module -> {
             ProtosClosureValue literal = parsedClosure("() => { 1 }", "g7-arity.protos", module);
             RootCallTarget normal = fastDirect(literal, module).bodyTarget();
-            RootCallTarget rejection =
-                    assertInstanceOf(ProtosSemanticBytecodeRootNode.class, normal.getRootNode())
-                            .arityRejectionTarget();
             ProtosBytecodeRootNode.PreparedClosureCall excess =
                     fastDirect(literal, module, integer(1));
             assertEquals(6, excess.targetArguments().length);
-            assertSame(rejection, excess.bodyTarget());
+            // D203/I105: no arity-rejection root exists; the B5 header is unchanged.
+            assertSame(normal, excess.bodyTarget());
         });
     }
 
@@ -669,7 +662,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     }
 
     @Test
-    void perf038HStraightLineRejectsDynamicReturnAndArityEntries()
+    void perf038HStraightLineRejectsDynamicAndReturnEntries()
             throws Exception {
         withCore(module -> {
             ProtosClosureValue dynamic =
@@ -717,7 +710,8 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             "perf038h-straight-line-arity.protos",
                             module);
 
-            assertFalse(
+            // D203/I105: an excess argument enters the same straight-line root.
+            assertTrue(
                     ProtosSemanticBytecodeRootNode
                             .AdmitsStraightLineSourceCall.perform(
                                     assertInstanceOf(
@@ -808,7 +802,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
     }
 
     @Test
-    void perf038HSendAdmissionIsAritySpecific() throws Exception {
+    void perf038HSendAdmissionIgnoresExcessArity() throws Exception {
         withCore(module -> {
             Object receiver = evaluate(
                     "receiver: {\n"
@@ -841,10 +835,10 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                             .TryDirectSendZero.admitted(zero),
                     "zero-argument source method must be admitted");
 
-            assertFalse(
+            assertTrue(
                     ProtosSemanticBytecodeRootNode
                             .TryDirectSendOne.admitted(zero),
-                    "zero-argument source method rejects Send1");
+                    "D203/I105: Send1 to a zero-argument method enters its ordinary root");
 
             assertTrue(
                     ProtosSemanticBytecodeRootNode

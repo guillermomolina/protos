@@ -789,7 +789,7 @@ The runtime may assume validated closure parameter metadata. Defensive implement
 
 The language uses a Smalltalk/Squeak-style **home activation** for `^`.
 
-Every invocation records the caller-supplied positional arguments before default substitution for arity/default/rest binding and other implementation-internal invocation needs. Core exposes no ambient guest intrinsic for that complete vector; `args` is an ordinary identifier.
+Every invocation records the caller-supplied positional arguments before default substitution for default/rest binding and other implementation-internal invocation needs. Core exposes no ambient guest intrinsic for that complete vector; `args` is an ordinary identifier.
 
 ```text
 function createActivation(
@@ -833,29 +833,34 @@ function bindParametersLeftToRight(
     parameters,
     arguments
 ):
+    // Position of the next non-rest parameter among the supplied arguments.
     argumentIndex = 0
 
     for parameter in parameters from left to right:
         if parameter is rest:
-            restValues = arguments[argumentIndex .. end]
+            // Only supplied excess values; never defaults or implicit nulls.
+            restValues = arguments[min(argumentIndex, length(arguments)) .. end]
             createSlot(
                 activation.context,
                 parameter.name,
                 immutableArgumentCollection(restValues)
             )
-            argumentIndex = length(arguments)
             continue
 
         if argumentIndex < length(arguments):
+            // Supplied, even when the supplied value is null: no default runs.
             value = arguments[argumentIndex]
-            argumentIndex += 1
         else if parameter has defaultExpression:
+            // Absent: evaluated once, in the real activation, at this turn.
             value = evaluate(
                 parameter.defaultExpression,
                 activation
             )
         else:
-            signal ArgumentCountError()
+            // Absent without a default.
+            value = null
+
+        argumentIndex += 1
 
         createSlot(
             activation.context,
@@ -863,8 +868,9 @@ function bindParametersLeftToRight(
             value
         )
 
-    if argumentIndex < length(arguments):
-        signal ArgumentCountError()
+    // Excess supplied arguments without a rest parameter were evaluated by
+    // the caller and are ignored; ordinary binding signals no argument-count
+    // Error.
 ```
 
 This is only an informative rendering of the normative algorithm in
@@ -5038,8 +5044,6 @@ non-resumable signaling event; it does not re-enter P execution.
 
 ```text
 function standardClosureParallel(sourceClosure, sourceArguments, creatorActivation):
-    validateArgumentCount(sourceClosure.parameterForm, length(sourceArguments))
-
     root = createParallelRootDescriptor(
         lexicalParent = StandardPrelude,
         thisValue = null,

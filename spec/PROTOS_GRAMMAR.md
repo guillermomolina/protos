@@ -1149,25 +1149,19 @@ parameter-list =
 
 parameter-items =
       rest-parameter
-    | required-parameter-items,
-      [ ",", [ layout ], default-parameter-items ],
-      [ ",", [ layout ], rest-parameter ]
-    | default-parameter-items,
+    | positional-parameter,
+      { ",", [ layout ], positional-parameter },
       [ ",", [ layout ], rest-parameter ] ;
 
-required-parameter-items =
-    required-parameter,
-    { ",", [ layout ], required-parameter } ;
+positional-parameter =
+      plain-parameter
+    | default-parameter ;
 
-default-parameter-items =
-    default-parameter,
-    { ",", [ layout ], default-parameter } ;
-
-required-parameter =
+plain-parameter =
     identifier ;
 
 default-parameter =
-    identifier, "=", expression ;
+    identifier, ":", expression ;
 
 rest-parameter =
     "...", identifier ;
@@ -1179,7 +1173,7 @@ layout =
 
 The `[ lookahead != "{" ]` guard (see the EBNF notation in Scope) expresses the choice between the two body forms formally in the grammar: `braced-closure-body` begins with the literal `{`, and the single-expression alternative may be entered only when the next parser token in the continuing token sequence after `=>` is not `{`. Every braced body therefore begins with `{`, no expression body may begin with `{`, and a body whose first token is `{` has exactly one derivation — the braced form. An `expression` can begin with `{` only as an `object-expression` with no parent (its `object-body`), so the same rule is what excludes a bare object expression from beginning an expression body; an object-expression body is written with ordinary parenthesized grouping (see Composition with the expression grammar).
 
-The parenthesized `parameter-list` is required for a Closure with zero parameters, two or more parameters, a default parameter, or a rest parameter. When a Closure has exactly one parameter and that parameter is neither a default parameter nor a rest parameter, the parentheses may be omitted and the parameter written as a bare `identifier` before `=>`. The bare form is exactly equivalent to a `parameter-list` containing that one parameter:
+The parenthesized `parameter-list` is required for a Closure with zero parameters, two or more parameters, a default parameter, or a rest parameter. When a Closure has exactly one parameter and that parameter is a plain parameter (neither a default parameter nor a rest parameter), the parentheses may be omitted and the parameter written as a bare `identifier` before `=>`. The bare form is exactly equivalent to a `parameter-list` containing that one parameter:
 
 ```text
 x => expression    ==  (x) => expression
@@ -1193,7 +1187,7 @@ x => x * 2
 (x) => x * 2
 () => value
 (a, b) => a + b
-(x = 10) => x
+(x: 10) => x
 (...items) => items
 (first, ...rest) => rest
 ```
@@ -1205,41 +1199,39 @@ and these are invalid:
 
 a, b => a + b
 
-x = 10 => x
+x: 10 => x
 
 ...items => items
 ```
 
 Because a bare parameter is an `identifier`, it must satisfy the ordinary identifier rules; a reserved word is not an `identifier` and remains invalid as a parameter name (`true => value` is not a Closure parameter form). A parser distinguishes a bare-parameter Closure from an ordinary identifier expression purely syntactically: when the parser token immediately following an `identifier` is `=>`, the identifier is the parameter of a `closure-expression`; otherwise it is an ordinary identifier expression. This is ordinary one-token syntactic lookahead over the token stream; it involves no semantic, type-based, or runtime-value interpretation, and it never inspects tokens across a separating logical `NEWLINE` (see Newlines below).
 
-Within a parenthesized parameter list, every required non-rest parameter must
-precede every defaulted parameter. Once a defaulted parameter appears, every
-later non-rest parameter must also have a default expression. An optional rest
-parameter remains final. Therefore these orderings are valid:
+Within a parenthesized parameter list, `:` after a parameter name introduces
+that parameter's default initializer expression. This is signature syntax, not
+slot creation: the expression is evaluated only when the corresponding argument
+is absent, as defined by the parameter-binding algorithm in
+`semantics/CALLABLES.md`. Outside a parameter list, `:` keeps its ordinary
+slot-creation meaning and `=` its ordinary assignment meaning. `=` is not a
+parameter-default declarator, and there is no `:=` form.
+
+Plain and defaulted parameters may appear in any order. An optional rest
+parameter remains final. Therefore all of these are valid:
 
 ```js
-(a, b, c = 10, d = 20) => { ... }
-(a, b = 10, ...rest) => { ... }
-(a = 10, b = 20, ...rest) => { ... }
+(a, b, c: 10, d: 20) => { ... }
+(a: 10, b, c: 30, d) => { ... }
+(a: 10, b, ...rest) => { ... }
 ```
 
 while these are syntax errors:
 
 ```js
 (a = 10, b) => { ... }
-(a, b = 10, c) => { ... }
-(a = 10, b, ...rest) => { ... }
+(...rest, a) => { ... }
 ```
 
-Core v0.1 has no named-argument syntax and no omitted-position marker. Under the
-positional binding model in `semantics/CALLABLES.md`, a defaulted parameter that
-precedes a later required parameter cannot have its default selected by any
-otherwise successful positional call: omitting that position also leaves the
-later required parameter unsupplied, while supplying enough positional values to
-reach the later parameter necessarily supplies the earlier one. Protos rejects
-that dead-default signature shape syntactically rather than introducing a hidden
-missing value, placeholder argument, alternate binding mode, or named-argument
-mechanism.
+Core v0.1 has no named-argument syntax and no omitted-position marker; binding
+remains strictly positional.
 
 Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
 
@@ -1265,7 +1257,7 @@ Multiline parameter lists remain valid when the commas are present:
     body
 }
 
-(a = 1, b = 2) => {
+(a: 1, b: 2) => {
     body
 }
 
@@ -1477,7 +1469,7 @@ These are invalid:
 
 a, b => a + b
 
-x = 1 => x
+x: 1 => x
 
 ...xs => xs
 
@@ -2713,25 +2705,19 @@ parameter-list =
 
 parameter-items =
       rest-parameter
-    | required-parameter-items,
-      [ ",", [ layout ], default-parameter-items ],
-      [ ",", [ layout ], rest-parameter ]
-    | default-parameter-items,
+    | positional-parameter,
+      { ",", [ layout ], positional-parameter },
       [ ",", [ layout ], rest-parameter ] ;
 
-required-parameter-items =
-    required-parameter,
-    { ",", [ layout ], required-parameter } ;
+positional-parameter =
+      plain-parameter
+    | default-parameter ;
 
-default-parameter-items =
-    default-parameter,
-    { ",", [ layout ], default-parameter } ;
-
-required-parameter =
+plain-parameter =
     identifier ;
 
 default-parameter =
-    identifier, "=", expression ;
+    identifier, ":", expression ;
 
 rest-parameter =
     "...", identifier ;
@@ -3050,7 +3036,7 @@ factory()[index]
 
 ## Parameters, Rest Parameters, and Argument Spread
 
-Closure parameter lists may contain required ordinary parameters followed by parameters with defaults, and at most one trailing rest parameter. Required non-rest parameters cannot follow a defaulted parameter.
+Closure parameter lists may contain plain parameters and parameters with `:` defaults in any order, and at most one trailing rest parameter.
 
 The normative productions are defined in Sections 16-17 and in the Compact EBNF. A rest parameter must be the final parameter. Defaults, rest capture, and spread are part of the canonical grammar rather than post-parse extensions.
 
@@ -3695,13 +3681,13 @@ are ordinary message sends parsed by the existing member/call grammar.
 
 Parameter names within a single closure parameter list must be unique.
 
-This applies to required parameters, parameters with defaults, and the rest parameter:
+This applies to plain parameters, parameters with defaults, and the rest parameter:
 
 ```js
 (a, a) => { ... }             // invalid
-(a, a = 10) => { ... }        // invalid
+(a, a: 10) => { ... }         // invalid
 (a, ...a) => { ... }          // invalid
-(a, b = 10, ...rest) => { }   // valid
+(a, b: 10, ...rest) => { }    // valid
 ```
 
 Duplicate parameter names are rejected during parsing or static validation before execution begins.

@@ -59,8 +59,8 @@ import org.junit.jupiter.api.io.TempDir;
  *
  * <p>The expected NORMAL activation root of {@code () => { true.ifTrue() { 1 } }} is a handwritten
  * {@link ProtosSemanticBytecodeRootNodeGen.Builder} program authored from the language root
- * contract (a parameterless Closure root with its nested PERF032-G6 arity-rejection root and one
- * terminal statement returning the literal's Long carrier). It never consults the parser, the
+ * contract (a parameterless Closure root with one terminal statement returning the literal's
+ * Long carrier; D203/I105 lowers no arity-rejection root). It never consults the parser, the
  * canonicalizer, the lowerer or any lowered root. Real roots always come from the production
  * {@code ParsingRequest} path of an entered Context, so the profile is the Context's own.
  *
@@ -166,7 +166,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 item -> item.contains("BindClosureFrameParameter")));
                 assertEquals(2, groupRoots(module).size());
                 assertSame(production, groupRoots(module).get(1));
-                assertTrue(production.arityRejectionTarget() == null);
 
                 var target = production.getCallTarget();
                 var group = production.getRootNodes();
@@ -192,7 +191,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         }
     }
 
-    /** Root count/order, arity rejection and CallTargets of the NORMAL groups. */
+    /** Root count/order and CallTargets of the NORMAL groups. */
     @Test
     void normalGroupTopologyHasNoCallbackRoot() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
@@ -202,13 +201,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             compile(characters, "topology-" + characters.length());
                     List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
                     /*
-                     * Roots are numbered when opened: the module root, the Closure root it
-                     * creates, and that parameterless Closure's arity-rejection root nested
-                     * first in it. The folded callback is never lowered, so it has no root.
+                     * Roots are numbered when opened: the module root and the Closure root it
+                     * creates. The folded callback is never lowered, so it has no root.
                      */
-                    assertEquals(3, roots.size(), characters);
+                    assertEquals(2, roots.size(), characters);
                     assertSame(module, roots.get(0));
-                    assertArityRejection(roots.get(1), roots.get(2));
 
                     ProtosClosureValue closure = assertInstanceOf(
                             ProtosClosureValue.class,
@@ -233,10 +230,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             debug.run(() -> {
                 ProtosSemanticBytecodeRootNode module = compile(WITNESS, "debug-witness");
                 List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
-                // Module, Closure, its arity root, the callback root, the callback's arity root.
-                assertEquals(5, roots.size());
-                assertArityRejection(roots.get(1), roots.get(2));
-                assertArityRejection(roots.get(3), roots.get(4));
+                // Module, Closure and the callback root.
+                assertEquals(3, roots.size());
 
                 // Unfolded in DEBUG: the ordinary send keeps no literal-body capability.
                 assertTrue(!roots.get(1).provablyNonSuspendingBody());
@@ -250,7 +245,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 .anyMatch(entry -> entry.contains("IsCompactCanonicalBooleanMiss")),
                         activation::toString);
 
-                ProtosSemanticBytecodeRootNode callback = roots.get(3);
+                ProtosSemanticBytecodeRootNode callback = roots.get(2);
                 assertNotNull(callback.getSourceSection());
                 // A Closure root spans its body sequence, as the direct Closure root does.
                 assertEquals("1", callback.getSourceSection().getCharacters().toString());
@@ -270,8 +265,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * Reparse ({@code ensureComplete}) keeps the group, its root and CallTarget identities, its
-     * arity targets and every semantic instruction, and only adds tag instrumentation.
+     * Reparse ({@code ensureComplete}) keeps the group, its root and CallTarget identities and
+     * every semantic instruction, and only adds tag instrumentation.
      */
     @Test
     void reparseKeepsTopologyIdentitiesAndSemanticInstructions() throws Exception {
@@ -284,9 +279,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
                     List<RootCallTarget> targets =
                             roots.stream().map(RootNode::getCallTarget).toList();
-                    List<RootCallTarget> arityTargets = roots.stream()
-                            .map(ProtosSemanticBytecodeRootNode::arityRejectionTarget)
-                            .toList();
                     List<List<String>> semantic =
                             roots.stream().map(root -> semanticSignature(root)).toList();
 
@@ -305,7 +297,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 (ProtosSemanticBytecodeRootNode) group.getNode(index);
                         assertSame(roots.get(index), root);
                         assertSame(targets.get(index), root.getCallTarget());
-                        assertSame(arityTargets.get(index), root.arityRejectionTarget());
                         assertOnlyInstrumentationAdded(
                                 semantic.get(index), semanticSignature(root),
                                 mode + " root " + index);
@@ -565,16 +556,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * Handwritten expectation of the NORMAL activation root: a parameterless Closure root whose
-     * PERF032-G6 arity-rejection root is nested first, followed by a direct return
-     * of the Long carrier of {@code 1}. Source metadata and the arity root remain;
-     * ordinary guest-value materialization is handled by the call boundary.
-     */
-    /**
      * I104-A standalone physical oracle. The original and fused variants
      * intentionally differ only in the parameter-binding operations.
-     * All other obligations, including source tags, runtime arity and
-     * numeric-carrier materialization, are represented identically.
+     * All other obligations, including source tags and numeric-carrier
+     * materialization, are represented identically. D203/I105: no
+     * excess-argument check follows the binding.
      */
     private static ProtosSemanticBytecodeRootNode handwrittenUnaryIdentityRoot(
             boolean fused) {
@@ -619,10 +605,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 builder.endLoadFrameClosureArgument();
                                 builder.endBindClosureFrameParameter();
                             }
-
-                            builder.beginCheckFrameClosureArgumentUpperBound();
-                            builder.emitLoadConstant(1);
-                            builder.endCheckFrameClosureArgumentUpperBound();
 
                             builder.beginSourceSection(
                                     readStart, "value".length());
@@ -698,7 +680,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 assertSame(module, roots.get(0));
                 assertSame(actual, roots.get(1));
                 assertSame(target, actual.getCallTarget());
-                assertEquals(null, actual.arityRejectionTarget());
 
                 group.ensureComplete();
                 assertSame(actual, group.getNode(1));
@@ -799,10 +780,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 }
                             }
 
-                            builder.beginCheckFrameClosureArgumentUpperBound();
-                            builder.emitLoadConstant(3);
-                            builder.endCheckFrameClosureArgumentUpperBound();
-
                             builder.beginSourceSection(lookupStart, 1);
                             builder.beginTag(
                                     StandardTags.StatementTag.class,
@@ -832,6 +809,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         return nodes.getNode(0);
     }
 
+    /**
+     * Handwritten expectation of the NORMAL activation root: a parameterless Closure root with a
+     * direct return of the Long carrier of {@code 1}. Ordinary guest-value materialization is
+     * handled by the call boundary; D203/I105 nests no arity-rejection root.
+     */
     private static ProtosSemanticBytecodeRootNode handwrittenLiteralOneActivationRoot() {
         String characters = DIRECT;
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i101-a-oracle.protos")
@@ -846,17 +828,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
-
-                            builder.beginSourceSection(bodyStart, bodyLength);
-                            builder.beginRoot();
-                            builder.beginCheckFrameClosureArgumentUpperBound();
-                            builder.emitLoadConstant(0);
-                            builder.endCheckFrameClosureArgumentUpperBound();
-                            builder.beginReturn();
-                            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-                            builder.endReturn();
-                            builder.endRoot();
-                            builder.endSourceSection();
 
                             builder.beginReturn();
                             builder.emitLoadConstant(1L);
@@ -890,16 +861,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         return root.getRootNodes().getNodes().stream()
                 .map(ProtosSemanticBytecodeRootNode.class::cast)
                 .toList();
-    }
-
-    private static void assertArityRejection(
-            ProtosSemanticBytecodeRootNode closureRoot,
-            ProtosSemanticBytecodeRootNode rejectionRoot) {
-        assertSame(rejectionRoot.getCallTarget(), closureRoot.arityRejectionTarget());
-        assertTrue(
-                signature(rejectionRoot).stream()
-                        .anyMatch(entry -> entry.contains("CheckFrameClosureArgumentUpperBound")),
-                () -> signature(rejectionRoot).toString());
     }
 
     private static void assertNoForbiddenNormalOperation(List<String> signature) {

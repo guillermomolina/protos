@@ -45,11 +45,11 @@ tests: [
             bodyDefaultCalls = bodyDefaultCalls + 1
             0
         }
-        trueResult: (() => false).whileTrue((ignored = bodyDefault()) => {
+        trueResult: (() => false).whileTrue((ignored: bodyDefault()) => {
             bodyCalls = bodyCalls + 1
             42
         })
-        whileResult: (() => false).while((ignored = bodyDefault()) => {
+        whileResult: (() => false).while((ignored: bodyDefault()) => {
             bodyCalls = bodyCalls + 1
             42
         })
@@ -267,9 +267,9 @@ tests: [
             conditionDefaultCalls = conditionDefaultCalls + 1
             conditionDefaultCalls == 1
         }
-        condition: (value = nextCondition()) => value
+        condition: (value: nextCondition()) => value
         bodyCalls: 0
-        result: condition.while((ignored = 1) => {
+        result: condition.while((ignored: 1) => {
             bodyCalls = bodyCalls + 1
             "body"
         })
@@ -277,9 +277,14 @@ tests: [
         Assertions.require(conditionDefaultCalls == 2)
         Assertions.require(bodyCalls == 1)
         Assertions.require((() => false).while((required) => { 1 }) === false)
-        Assertions.signals(Error, () => {
-            (() => true).while((required) => { 1 })
-        })
+        // D203: the body's declared parameter binds null; the loop terminates normally.
+        remaining: 2
+        nullBodies: 0
+        Assertions.require((() => remaining > 0).while((required) => {
+            (required === null).ifTrue(() => { nullBodies = nullBodies + 1 })
+            remaining = remaining - 1
+        }) === false)
+        Assertions.require(nullBodies == 2)
     }),
     Test("suspension in body and terminal condition keeps the result exactly once", () => {
         work: () => {

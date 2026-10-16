@@ -71,7 +71,7 @@ class ProtosLanguageServerSignatureHelpTest {
         assertEquals(List.of("(", ","), options.getTriggerCharacters());
 
         String uri = project.source().toUri().toString();
-        String source = "((first, second = 2, ...rest) => first)(1, ";
+        String source = "((first, second: 2, ...rest) => first)(1, ";
         server.textDocuments().didOpen(open(uri, 1, source));
 
         SignatureHelp help = signatureHelp(server, uri, 0, source.length());
@@ -80,10 +80,10 @@ class ProtosLanguageServerSignatureHelpTest {
         assertEquals(0, help.getActiveSignature());
         assertEquals(1, help.getActiveParameter());
         SignatureInformation signature = help.getSignatures().get(0);
-        assertEquals("(first, second = 2, ...rest)", signature.getLabel());
+        assertEquals("(first, second: 2, ...rest)", signature.getLabel());
         assertNull(signature.getDocumentation());
         assertEquals(
-                List.of("first", "second = 2", "...rest"),
+                List.of("first", "second: 2", "...rest"),
                 signature.getParameters().stream()
                         .map(ParameterInformation::getLabel)
                         .map(label -> label.getLeft())

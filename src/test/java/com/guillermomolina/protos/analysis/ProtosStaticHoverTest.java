@@ -47,7 +47,7 @@ class ProtosStaticHoverTest {
 
     @Test
     void provenDefaultedAndRestParametersKeepDeclarationSyntaxSeparate() {
-        String defaulted = "f: (first, second = 2) => second";
+        String defaulted = "f: (first, second: 2) => second";
         ProtosStaticHoverResult defaultedResult =
                 hover(defaulted, defaulted.lastIndexOf("second")).orElseThrow();
         assertEquals(
@@ -68,7 +68,7 @@ class ProtosStaticHoverTest {
 
     @Test
     void parameterDeclarationsPublishOnlyTheExactIdentifierSpan() {
-        String source = "f: (first, second = 2, ...rest) => { first }";
+        String source = "f: (first, second: 2, ...rest) => { first }";
 
         int first = source.indexOf("first");
         ProtosStaticHoverResult plain = hover(source, first).orElseThrow();
@@ -76,7 +76,7 @@ class ProtosStaticHoverTest {
         assertEquals(
                 syntax(
                         "Closure parameter declaration: first",
-                        "Closure parameters: (first, second = <default>, ...rest)"),
+                        "Closure parameters: (first, second: <default>, ...rest)"),
                 plain.sections());
 
         int second = source.indexOf("second");
@@ -86,7 +86,7 @@ class ProtosStaticHoverTest {
                 syntax(
                         "Closure parameter declaration: second",
                         "Default value present",
-                        "Closure parameters: (first, second = <default>, ...rest)"),
+                        "Closure parameters: (first, second: <default>, ...rest)"),
                 defaulted.sections());
 
         int rest = source.indexOf("rest");
@@ -96,7 +96,7 @@ class ProtosStaticHoverTest {
                 syntax(
                         "Closure parameter declaration: rest",
                         "Rest parameter",
-                        "Closure parameters: (first, second = <default>, ...rest)"),
+                        "Closure parameters: (first, second: <default>, ...rest)"),
                 restResult.sections());
 
         // Neither the default expression operator nor the rest spread is the name.
@@ -113,14 +113,14 @@ class ProtosStaticHoverTest {
 
     @Test
     void closureFirstTokenDescribesShapeWithoutClaimingCallers() {
-        String source = "f: (first, second = 2, ...rest) => { first }\nf(1)";
+        String source = "f: (first, second: 2, ...rest) => { first }\nf(1)";
         int open = source.indexOf('(');
         ProtosStaticHoverResult closure = hover(source, open).orElseThrow();
         assertEquals(new SourceSpan(open, open + 1), closure.span());
         assertEquals(
                 syntax(
                         "Closure",
-                        "Parameters: (first, second = <default>, ...rest)",
+                        "Parameters: (first, second: <default>, ...rest)",
                         "Body form: braced"),
                 closure.sections());
 

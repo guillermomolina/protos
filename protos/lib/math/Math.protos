@@ -25,8 +25,10 @@
 /// `Complex(+0.0, +2.0)`). NaN, infinities, signed zeros, overflow, and
 /// underflow never signal an Error; a Float-bearing Complex follows the
 /// principal-branch special-value rules of `std:math/Math`.
-sqrt: ((facility) => (value) => {
-    facility.sqrt(value)
+sqrt: ((facility) => (...arguments) => {
+    // D203: forwarding the complete supplied vector keeps the facility's
+    // exact one-argument check.
+    facility.sqrt(...arguments)
 })(_mathSqrtFacility)
 
 // The runtime-provisioned facility is captured privately above; it is not

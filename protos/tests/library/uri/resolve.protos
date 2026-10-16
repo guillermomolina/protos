@@ -75,7 +75,6 @@ tests: [
 
             Assertions.signals(Error, () => { Uri.resolve() })
             Assertions.signals(Error, () => { Uri.resolve(base) })
-            Assertions.signals(Error, () => { Uri.resolve(base, reference, reference) })
             Assertions.signals(Error, () => { Uri.resolve("http://a/", reference) })
             Assertions.signals(Error, () => { Uri.resolve(base, "g") })
 

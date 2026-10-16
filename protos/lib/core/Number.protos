@@ -17,11 +17,14 @@
 // kernel admits only a semantic Number receiver: a Complex answers its exact components, and a
 // real value answers itself and the exact SmallInteger 0.
 Number: {
-    real: () => {
+    // D203: the standard zero arity is checked explicitly.
+    real: (...args) => {
+        (args.size() == 0).ifFalse(() => { Error().signal() })
         _coreComplexKernel.real(this)
     }
 
-    imaginary: () => {
+    imaginary: (...args) => {
+        (args.size() == 0).ifFalse(() => { Error().signal() })
         _coreComplexKernel.imaginary(this)
     }
 }

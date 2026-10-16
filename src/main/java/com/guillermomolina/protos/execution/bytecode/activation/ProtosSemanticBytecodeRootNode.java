@@ -170,48 +170,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         return super.toString();
     }
 
-    /*
-     * PERF032-G6: for the root of a source Closure declaring no parameters, the target of its
-     * arity-rejection root, else null. Such a root's own body carries no argument-count check: the
-     * only binding step of an empty signature is the excess-argument check (CALLABLES.md,
-     * "Normative parameter-binding algorithm"), which precedes every observable effect, so a call
-     * supplying arguments is entered at this target instead (see selectSourceEntryTarget). The
-     * rejection root is lowered once per definition in the same BytecodeRootNodes group, with the
-     * same source section, and only materializes the call's exact activation and signals the
-     * unchanged argument-count Error. Attached once, after the group's create() returns.
-     */
-    @CompilationFinal private RootCallTarget arityRejectionTarget;
-
     /* PERF038-C: set once, when the first guest exception crosses this root. */
     @CompilationFinal private boolean guestExceptionCrossed;
-
-    final void attachArityRejectionTarget(RootCallTarget target) {
-        if (arityRejectionTarget != null) {
-            throw new IllegalStateException("arity-rejection target already attached");
-        }
-        this.arityRejectionTarget = java.util.Objects.requireNonNull(target, "target");
-    }
-
-    final RootCallTarget arityRejectionTarget() {
-        return arityRejectionTarget;
-    }
-
-    /**
-     * PERF032-G6 single selection point of the target an ordinary source Closure call enters:
-     * {@code bodyTarget} itself, except that a call supplying arguments to a Closure that declares
-     * no parameters enters that Closure's arity-rejection root. {@code suppliedArgumentCount} is
-     * read from the compact frame arguments or the existing rich activation; nothing is
-     * materialized to make this choice.
-     */
-    static RootCallTarget selectSourceEntryTarget(
-            RootCallTarget bodyTarget, int suppliedArgumentCount) {
-        if (suppliedArgumentCount != 0
-                && bodyTarget.getRootNode() instanceof ProtosSemanticBytecodeRootNode root
-                && root.arityRejectionTarget != null) {
-            return root.arityRejectionTarget;
-        }
-        return bodyTarget;
-    }
 
     /*
      * PERF038-H: conservative source-root execution capability.
@@ -394,17 +354,17 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * instead of the activation-operand forms whenever the current activation
      * is the root's own (never inside an inline Object body or inline callback
      * region). While the frame is still in compact source-call form, the
-     * supplied positional values are read directly from the frame arguments;
-     * an arity Error, like every other path, materializes the exact activation
-     * first and takes the unchanged activation implementation.
+     * supplied positional values are read directly from the frame arguments.
+     * D203: a position the call did not supply reads canonical null on both
+     * paths; no Closure-binding operation signals an argument-count Error.
      *
      * PERF038-C: each operation's compact path and its activation path are
      * separate specializations (the PERF038-B BindClosureFrameParameter
-     * shape). A site that has only ever run in compact frames within its
-     * arity compiles the frame-argument read alone; the materialization, the
-     * activation implementation and the arity Error are reached only through
-     * the respecializing fallback. The guards are re-evaluated on every
-     * execution and are exact complements of the former in-line conditions.
+     * shape). A site that has only ever run in compact frames compiles the
+     * frame-argument read alone; the materialization and the activation
+     * implementation are reached only through the respecializing fallback.
+     * The guards are re-evaluated on every execution and are exact
+     * complements of the former in-line conditions.
      */
 
     @Operation
@@ -430,52 +390,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class LoadFrameClosureArgument {
-        @Specialization(guards = "isCompactSupplied(positionalIndex, frame)")
+        @Specialization(guards = "isCompact(frame)")
         public static Object compact(int positionalIndex, @Bind VirtualFrame frame) {
-            /* PERF038-E: the guard already proved the index within the supplied count. */
-            return ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+            return ProtosFrameArguments.compactSuppliedArgumentOrNull(
                     frame.getArguments(), positionalIndex);
         }
 
-        @Specialization(guards = "!isCompactSupplied(positionalIndex, frame)")
+        @Specialization(guards = "!isCompact(frame)")
         public static Object materialized(int positionalIndex, @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.LoadClosureArgument.perform(
                     ProtosFrameArguments.activation(frame.getArguments()), positionalIndex);
         }
 
         @NonIdempotent
-        static boolean isCompactSupplied(int positionalIndex, VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactHasSuppliedArgument(
-                            arguments, positionalIndex);
-        }
-    }
-
-    @Operation
-    public static final class CheckFrameClosureArgumentUpperBound {
-        @Specialization(guards = "isCompactWithin(maximumPositionalArguments, frame)")
-        public static void compact(
-                int maximumPositionalArguments,
-                @Bind VirtualFrame frame) {
-            // The compact supplied count is already within the bound.
-        }
-
-        @Specialization(guards = "!isCompactWithin(maximumPositionalArguments, frame)")
-        public static void materialized(
-                int maximumPositionalArguments,
-                @Bind VirtualFrame frame) {
-            ProtosBytecodeRootNode.CheckClosureArgumentUpperBound.perform(
-                    ProtosFrameArguments.activation(frame.getArguments()),
-                    maximumPositionalArguments);
-        }
-
-        @NonIdempotent
-        static boolean isCompactWithin(int maximumPositionalArguments, VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactSuppliedArgumentCountAtMost(
-                            arguments, maximumPositionalArguments);
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
         }
     }
 
@@ -547,15 +476,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
-    @Operation
-    public static final class CheckClosureArgumentUpperBound {
-        @Specialization
-        public static void perform(ProtosActivation activation, int maximumPositionalArguments) {
-            ProtosBytecodeRootNode.CheckClosureArgumentUpperBound.perform(
-                    activation, maximumPositionalArguments);
-        }
-    }
-
     // ---- Lexical lookup and frame-backed bindings ----------------------------------
 
     @Operation
@@ -598,7 +518,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindRequiredFrameParameter {
         @Specialization(
-                guards = "isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+                guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
         public static void compact(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -607,13 +527,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
             Object value =
-                    ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+                    ProtosFrameArguments.compactSuppliedArgumentOrNull(
                             frame.getArguments(), ordinal);
             frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
         }
 
         @Specialization(
-                guards = "!isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+                guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
         public static void authoritative(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -628,22 +548,19 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
 
         @NonIdempotent
-        static boolean isCompactSuppliedAndUnbound(
+        static boolean isCompactUnbound(
                 LocalRangeAccessor frameBackedLocals,
                 int ordinal,
                 BytecodeNode bytecodeNode,
                 VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactHasSuppliedArgument(
-                            arguments, ordinal)
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
         }
 
         /**
-         * Retain the established rich-activation, missing-argument
-         * and duplicate-binding semantics.
+         * Retain the established rich-activation and duplicate-binding
+         * semantics.
          */
         @TruffleBoundary
         private static void slowBind(
@@ -771,9 +688,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * value is dynamic.
      *
      * The compact specialization combines the former frame argument load
-     * and frame-local binding into one Bytecode DSL operation. Published or
-     * otherwise non-compact activations retain the original authoritative
-     * operations, including missing-argument and duplicate-binding Errors.
+     * and frame-local binding into one Bytecode DSL operation; an unsupplied
+     * argument binds canonical null (D203). Published or otherwise
+     * non-compact activations retain the original authoritative operations,
+     * including duplicate-binding Errors.
      */
     @Operation
     @ConstantOperand(
@@ -786,7 +704,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(type = String.class, name = "name")
     public static final class BindUnaryFrameParameter {
         @Specialization(
-                guards = "isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+                guards = "isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
         public static void compact(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -794,14 +712,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            Object value = ProtosFrameArguments.compactSuppliedArgumentWithinCount(
+            Object value = ProtosFrameArguments.compactSuppliedArgumentOrNull(
                     frame.getArguments(), 0);
             frameBackedLocals.setObject(
                     bytecodeNode, frame, ordinal, value);
         }
 
         @Specialization(
-                guards = "!isCompactSuppliedAndUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
+                guards = "!isCompactUnbound(frameBackedLocals, ordinal, bytecodeNode, frame)")
         public static void authoritative(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -822,15 +740,12 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
 
         @NonIdempotent
-        static boolean isCompactSuppliedAndUnbound(
+        static boolean isCompactUnbound(
                 LocalRangeAccessor frameBackedLocals,
                 int ordinal,
                 BytecodeNode bytecodeNode,
                 VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && ProtosFrameArguments.compactHasSuppliedArgument(
-                            arguments, 0)
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
         }
@@ -913,28 +828,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosInlineCallbackFrameBindings.loadArgument(
                     child, frameBackedLocals, frameBackedLayout,
                     positionalIndex, bytecodeNode, frame);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    public static final class CheckInlineClosureArgumentUpperBound {
-        @Specialization
-        public static void perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
-                int maximumPositionalArguments,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            ProtosInlineCallbackFrameBindings.checkArgumentUpperBound(
-                    child, frameBackedLocals, frameBackedLayout,
-                    maximumPositionalArguments, bytecodeNode, frame);
         }
     }
 
@@ -6902,19 +6795,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
 
             RootCallTarget target = send.target();
-            if (target == null
-                    || !(target.getRootNode()
-                            instanceof ProtosSemanticBytecodeRootNode root)
-                    || !root.provablyNonSuspendingBody()) {
-                return false;
-            }
-
-            /*
-             * Admission must agree with the exact entry selected for
-             * this supplied arity, including the rejection root.
-             */
-            return ProtosSemanticBytecodeRootNode.selectSourceEntryTarget(
-                    target, suppliedArgumentCount) == target;
+            return target != null
+                    && target.getRootNode()
+                            instanceof ProtosSemanticBytecodeRootNode root
+                    && root.provablyNonSuspendingBody();
         }
 
         static GuardedSendTarget createGuardedSendForPrelude(
@@ -7150,11 +7034,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return target != null
                     && target.getRootNode()
                             instanceof ProtosSemanticBytecodeRootNode root
-                    && root.provablyNonSuspendingBody()
-                    && ProtosSemanticBytecodeRootNode
-                                    .selectSourceEntryTarget(
-                                            target, suppliedArgumentCount)
-                            == target;
+                    && root.provablyNonSuspendingBody();
         }
 
         /**
@@ -7183,12 +7063,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             if (guarded == null
                     || !(guarded.target().getRootNode()
                             instanceof ProtosSemanticBytecodeRootNode root)
-                    || !root.provablyNonSuspendingBody()
-                    || ProtosSemanticBytecodeRootNode
-                                    .selectSourceEntryTarget(
-                                            guarded.target(),
-                                            suppliedArgumentCount)
-                            != guarded.target()) {
+                    || !root.provablyNonSuspendingBody()) {
                 return false;
             }
 

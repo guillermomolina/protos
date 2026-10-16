@@ -53,22 +53,78 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 2)
     }),
-    Test("closure missing required argument error", () => {
+    Test("closure flexible arity binds missing to null and ignores excess", () => {
+        evaluated: 0
+        mark: (value) => {
+            evaluated = evaluated + 1
+            value
+        }
+        identity: (x) => x
+        Assertions.require(identity() === null)
+        Assertions.require(identity(42) == 42)
+        Assertions.require(identity(42, mark(99)) == 42)
+        Assertions.require(evaluated == 1)
+    }),
+    Test("closure defaults interleave with plain parameters", () => {
+        f: (a: 10, b, c: 30, d) => Array(a, b, c, d)
+        none: f()
+        Assertions.require((none[0] == 10) && (none[1] === null) && (none[2] == 30) && (none[3] === null))
+        one: f(1)
+        Assertions.require((one[0] == 1) && (one[1] === null) && (one[2] == 30) && (one[3] === null))
+        explicitNull: f(1, null)
+        Assertions.require((explicitNull[1] === null) && (explicitNull[2] == 30))
+        full: f(1, 2, 3, 4, 5)
+        Assertions.require((full.size() == 4) && (full[0] == 1) && (full[1] == 2) && (full[2] == 3) && (full[3] == 4))
+    }),
+    Test("closure default runs only for an absent argument", () => {
+        effects: 0
+        sideEffect: () => {
+            effects = effects + 1
+            effects
+        }
+        g: (x: sideEffect()) => x
+        Assertions.require(g() == 1)
+        Assertions.require(effects == 1)
+        Assertions.require(g(null) === null)
+        Assertions.require(effects == 1)
+    }),
+    Test("closure rest holds only supplied excess in a frozen Array", () => {
+        tail: (a: 10, ...rest) => rest
+        Assertions.require(tail().size() == 0)
+        Assertions.require(tail(7).size() == 0)
+        rest: tail(7, 8, 9)
+        Assertions.require((rest.size() == 2) && (rest[0] == 8) && (rest[1] == 9))
         Assertions.signals(Error, () => {
-            required: (value) => value
-            required()
+            rest[0] = 1
+        })
+    }),
+    Test("closure parameters are established sequentially", () => {
+        presence: (a, b) => Array(context.hasSlot("b"), b)
+        absent: presence(1)
+        Assertions.require((absent[0] == true) && (absent[1] === null))
+
+        laterAbsent: (a: context.hasSlot("b"), b) => a
+        Assertions.require(laterAbsent() == false)
+
+        b: 5
+        capturedLater: (a: b, b) => a
+        Assertions.require(capturedLater() == 5)
+
+        Assertions.signals(Error, () => {
+            planted: (a: (b: 1), b) => a
+            planted()
         })
     }),
     Test("closure parameter ordering valid", () => {
         tool009LegacyCase: () => {
-            ordered: (required, first = required + 1, second = first + 1, ...rest) => { second }
+            ordered: (required, first: required + 1, second: first + 1, ...rest) => { second }
             ordered(40)
         }
         Assertions.require(tool009LegacyCase() == 42)
     }),
     Test("default reads earlier parameter", () => {
         tool009LegacyCase: () => {
-            combine: (a, b = a + 1) => { b }
+            combine: (a, b: a + 1) => { b }
             combine(41)
         }
         Assertions.require(tool009LegacyCase() == 42)

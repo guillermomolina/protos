@@ -136,23 +136,16 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     value,
                     observedContext.readLocalSlot("value").orElseThrow());
 
+            // D203/I105: missing binds null and excess is ignored, both compactly.
             ProtosBytecodeRootNode.PreparedClosureCall missing =
                     fastDirect(identity, module);
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> enter(missing));
-            assertInstanceOf(
-                    ProtosActivation.class,
-                    missing.targetArguments()[0]);
+            assertSame(ProtosNullValue.INSTANCE, enter(missing));
+            assertSame(identity, missing.targetArguments()[0]);
 
             ProtosBytecodeRootNode.PreparedClosureCall excess =
                     fastDirect(identity, module, value, integer(99));
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> enter(excess));
-            assertInstanceOf(
-                    ProtosActivation.class,
-                    excess.targetArguments()[0]);
+            assertSame(value, enter(excess));
+            assertSame(identity, excess.targetArguments()[0]);
         });
     }
 
@@ -160,7 +153,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     void i104UnaryAdmissionExcludesComplexBodiesAndDebug() throws Exception {
         withCore(module -> {
             for (String source : List.of(
-                    "(value = 1) => { value }",
+                    "(value: 1) => { value }",
                     "(...value) => { value }",
                     "(a, b) => { a }",
                     "(value) => { context\nvalue }",
@@ -189,7 +182,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
 
     @Test
-    void i104RequiredPrefixPreservesCallsAndArity() throws Exception {
+    void i104RequiredPrefixPreservesCallsAndFlexibleArity() throws Exception {
         withCore(module -> {
             String[] sources = {
                 "(a, b) => { a }",
@@ -243,33 +236,30 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         target(closure).call(published));
                 assertSame(activation, published[0]);
 
+                // D203/I105: absent positions bind null without materialization.
                 for (int supplied = 0; supplied < count; supplied++) {
                     Object[] missingValues =
                             java.util.Arrays.copyOf(values, supplied);
                     var missing = fastDirect(
                             closure, module, missingValues);
-                    assertThrows(
-                            ProtosSignalException.class,
-                            () -> enter(missing));
-                    assertInstanceOf(
-                            ProtosActivation.class,
-                            missing.targetArguments()[0]);
+                    Object expected =
+                            selected[caseIndex] < supplied
+                                    ? values[selected[caseIndex]]
+                                    : ProtosNullValue.INSTANCE;
+                    assertSame(expected, enter(missing));
+                    assertSame(closure, missing.targetArguments()[0]);
                 }
 
                 Object[] tooMany =
                         java.util.Arrays.copyOf(values, count + 1);
                 tooMany[count] = integer(99);
                 var excess = fastDirect(closure, module, tooMany);
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> enter(excess));
-                assertInstanceOf(
-                        ProtosActivation.class,
-                        excess.targetArguments()[0]);
+                assertSame(values[selected[caseIndex]], enter(excess));
+                assertSame(closure, excess.targetArguments()[0]);
             }
 
             for (String excluded : List.of(
-                    "(a, b = 1) => { b }",
+                    "(a, b: 1) => { b }",
                     "(a, ...rest) => { a }",
                     "(a, b) => { context\nb }",
                     "(a, b) => { () => a }")) {
@@ -281,8 +271,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
 
         System.out.println("I104_B_REQUIRED_PREFIX=PASS");
-        System.out.println("I104_B_MISSING_ARGUMENT_PRECEDENCE=PASS");
-        System.out.println("I104_B_EXCESS_ARGUMENT_PRECEDENCE=PASS");
+        System.out.println("I104_B_MISSING_ARGUMENT_BINDS_NULL=PASS");
+        System.out.println("I104_B_EXCESS_ARGUMENT_IGNORED=PASS");
         System.out.println("I104_B_PUBLISHED_ACTIVATION=PASS");
         System.out.println("I104_B_NEGATIVE_ADMISSION=PASS");
     }
@@ -297,7 +287,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosIntegerValue d = integer(44);
 
             ProtosClosureValue defaults =
-                    closure("(a, b, c = a) => { c }", module);
+                    closure("(a, b, c: a) => { c }", module);
             assertContains(
                     instructionNames(defaults),
                     "BindRequiredFrameParameter");
@@ -311,21 +301,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     enter(fastDirect(defaults, module, a, b, c)),
                     "a supplied value suppresses its default");
 
-            var missing = fastDirect(defaults, module, a);
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> enter(missing));
-            assertInstanceOf(
-                    ProtosActivation.class,
-                    missing.targetArguments()[0]);
-
-            var excess = fastDirect(defaults, module, a, b, c, d);
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> enter(excess));
-            assertInstanceOf(
-                    ProtosActivation.class,
-                    excess.targetArguments()[0]);
+            // D203/I105: b is absent (null) and c's default reads a.
+            assertSame(a, enter(fastDirect(defaults, module, a)));
+            assertSame(c, enter(fastDirect(defaults, module, a, b, c, d)));
 
             Object[] published =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -339,7 +317,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(activation, published[0]);
 
             ProtosClosureValue ordinaryArgs =
-                    closure("(args, b, c = args) => { c }", module);
+                    closure("(args, b, c: args) => { c }", module);
             assertContains(
                     instructionNames(ordinaryArgs),
                     "BindRequiredFrameParameter");
@@ -377,7 +355,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "rest contains only the remaining supplied arguments");
 
             ProtosClosureValue combined =
-                    closure("(a, b, c = a, ...tail) => { tail }", module);
+                    closure("(a, b, c: a, ...tail) => { tail }", module);
             assertContains(
                     instructionNames(combined),
                     "BindRequiredFrameParameter");
@@ -400,7 +378,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             // original persistent-authority path, not the compact copy.
             ProtosClosureValue observed =
                     closure(
-                            "(a, b, c = context.hasSlot(\"a\")) => { c }",
+                            "(a, b, c: context.hasSlot(\"a\")) => { c }",
                             module);
             assertNone(
                     instructionNames(observed),
@@ -410,7 +388,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     enter(fastDirect(observed, module, a, b)));
 
             ProtosClosureValue captured =
-                    closure("(a, b, c = () => a) => { c }", module);
+                    closure("(a, b, c: () => a) => { c }", module);
             assertNone(
                     instructionNames(captured),
                     "BindRequiredFrameParameter");
@@ -439,7 +417,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
-    void multipleParametersBindInOrderAndCountErrorsMaterializeOnDemand() throws Exception {
+    void multipleParametersBindInOrderWithFlexibleArity() throws Exception {
         withCore(module -> {
             ProtosClosureValue middle = closure("(a, b, c) => { b }", module);
             assertNone(instructionNames(middle), "CurrentActivation");
@@ -450,25 +428,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertSame(b, enter(ordinary));
             assertSame(middle, ordinary.targetArguments()[0]);
 
-            ProtosBytecodeRootNode.PreparedClosureCall missing = fastDirect(middle, module, a, b);
-            assertThrows(ProtosSignalException.class, () -> enter(missing));
-            assertInstanceOf(
-                    ProtosActivation.class,
-                    missing.targetArguments()[0],
-                    "the argument-count Error materialized the exact activation");
+            // D203/I105: no argument-count Error; neither call materializes.
+            ProtosBytecodeRootNode.PreparedClosureCall missing = fastDirect(middle, module, a);
+            assertSame(ProtosNullValue.INSTANCE, enter(missing));
+            assertSame(middle, missing.targetArguments()[0]);
 
             ProtosBytecodeRootNode.PreparedClosureCall excess =
                     fastDirect(middle, module, a, b, c, integer(4));
-            assertThrows(ProtosSignalException.class, () -> enter(excess));
-            /*
-             * The grammar requires required parameters to precede defaulted
-             * ones, so no default effect can precede a missing required
-             * argument; the earlier-parameter effect is the binding itself.
-             */
+            assertSame(b, enter(excess));
+            assertSame(middle, excess.targetArguments()[0]);
         });
         System.out.println("LEFT_TO_RIGHT_PARAMETER_BINDING=PASS");
-        System.out.println("MISSING_ARGUMENT_PRECEDENCE=PASS");
-        System.out.println("EXCESS_ARGUMENT_PRECEDENCE=PASS");
+        System.out.println("MISSING_ARGUMENT_BINDS_NULL=PASS");
+        System.out.println("EXCESS_ARGUMENT_IGNORED=PASS");
     }
 
     @Test
@@ -1616,14 +1588,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     @Test
     void defaultsSeeOnlyEarlierParametersAndOrdinaryLookup() throws Exception {
         withCore(module -> {
-            ProtosClosureValue earlier = closure("(a, b = a) => { b }", module);
+            ProtosClosureValue earlier = closure("(a, b: a) => { b }", module);
             assertNone(instructionNames(earlier), "CurrentActivation");
             ProtosIntegerValue a = integer(5);
             ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(earlier, module, a);
             assertSame(a, enter(prepared));
             assertSame(earlier, prepared.targetArguments()[0]);
 
-            assertEquals("7", integerValue(evaluate("b: 7\nf: (a = b, b = 1) => { a }\nf()\n", module)), "a default never reads a later parameter's future value");
+            assertEquals("7", integerValue(evaluate("b: 7\nf: (a: b, b: 1) => { a }\nf()\n", module)), "a default never reads a later parameter's future value");
         });
         System.out.println("DEFAULT_BINDING_VISIBILITY=PASS");
     }
@@ -1633,7 +1605,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             Object observed =
                     evaluate(
-                            "f: (a, b = [context.hasSlot(\"a\"), context.hasSlot(\"b\")]) => { b }\n"
+                            "f: (a, b: [context.hasSlot(\"a\"), context.hasSlot(\"b\")]) => { b }\n"
                                     + "f(1)\n",
                             module);
             List<Object> presence = assertInstanceOf(ProtosArrayValue.class, observed).indexedSnapshot();
@@ -1710,7 +1682,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             module)), "a Closure created by the invocation captures its context by reference");
 
             assertEquals("42", integerValue(evaluate(
-                            "Error.handle(() => {\n f: (value) => { value }\n f()\n}, (caught) => 42)\n",
+                            "Error.handle(() => {\n f: (value) => { Error().signal() }\n f(1)\n}, (caught) => 42)\n",
                             module)), "an Error raised by a compact callee selects the ordinary handler");
 
             assertEquals("7", integerValue(evaluate(

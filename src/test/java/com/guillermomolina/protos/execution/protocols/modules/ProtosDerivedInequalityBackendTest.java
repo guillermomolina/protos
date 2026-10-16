@@ -88,7 +88,7 @@ class ProtosDerivedInequalityBackendTest {
                 ProtosBooleanValue.TRUE,
                 ProtosTestExecutionSupport.evaluate(
                         "derived-inequality-default-test.protos",
-                        "f: (value = left != right) => value\nf()",
+                        "f: (value: left != right) => value\nf()",
                         activation));
     }
 

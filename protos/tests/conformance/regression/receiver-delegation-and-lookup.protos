@@ -21,7 +21,7 @@ tests: [
         tool009LegacyCase: () => {
             base: {
                 value: 1
-                read: (selected = value) => { selected }
+                read: (selected: value) => { selected }
             }
             child: base { value: 23 }
             child.read()

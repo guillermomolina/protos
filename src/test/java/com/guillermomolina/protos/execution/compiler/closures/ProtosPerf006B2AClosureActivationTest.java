@@ -282,7 +282,7 @@ final class ProtosPerf006B2AClosureActivationTest {
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "(x, y = child(...items)) => y";
+                String characters = "(x, y: child(...items)) => y";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,

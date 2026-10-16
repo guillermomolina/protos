@@ -136,7 +136,6 @@ tests: [
             CSV: import("std:csv/CSV")
 
             Assertions.signals(Error, () => { CSV.parse() })
-            Assertions.signals(Error, () => { CSV.parse("a", "b") })
             Assertions.signals(Error, () => { CSV.parse(42) })
             Assertions.signals(Error, () => { CSV.parse(null) })
             Assertions.signals(Error, () => { CSV.parse(Array("a")) })

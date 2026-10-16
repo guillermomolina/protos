@@ -54,7 +54,7 @@ class ProtosParserClosureTest {
     void parsesZeroMultipleDefaultAndRestParameters() {
         assertEquals(0, closure("() => value").parameters().size());
 
-        SurfaceClosure closure = closure("(a, b = fallback, ...rest) => a");
+        SurfaceClosure closure = closure("(a, b: fallback, ...rest) => a");
         assertEquals(3, closure.parameters().size());
         assertParameter("a", false, false, closure.parameters().get(0));
         assertParameter("b", true, false, closure.parameters().get(1));
@@ -63,36 +63,34 @@ class ProtosParserClosureTest {
     }
 
     @Test
-    void rejectsRequiredNonRestParameterAfterDefaultedParameter() {
-        ParseError error = assertThrows(
-                ParseError.class,
-                () -> only("(first = fallback, required) => required"));
-        assertEquals(
-                "Required non-rest Closure parameters must precede defaulted parameters",
-                error.getMessage());
-
-        assertThrows(
-                ParseError.class,
-                () -> only("(first = fallback, second = other, required) => required"));
-        assertThrows(
-                ParseError.class,
-                () -> only("(first = fallback, required, ...rest) => required"));
+    void parsesDefaultedAndPlainParametersInAnyOrder() {
+        SurfaceClosure closure = closure("(a: 10, b, c: 30, d, ...rest) => b");
+        assertEquals(5, closure.parameters().size());
+        assertParameter("a", true, false, closure.parameters().get(0));
+        assertParameter("b", false, false, closure.parameters().get(1));
+        assertParameter("c", true, false, closure.parameters().get(2));
+        assertParameter("d", false, false, closure.parameters().get(3));
+        assertParameter("rest", false, true, closure.parameters().get(4));
     }
 
     @Test
-    void rejectsRequiredAfterDefaultFromProtosSyntaxFixture() throws Exception {
+    void rejectsEqualsAsParameterDefaultDeclarator() {
+        assertThrows(ParseError.class, () -> only("(a = 1) => a"));
+        assertThrows(ParseError.class, () -> only("(a, b = 1) => a"));
+        assertThrows(ParseError.class, () -> only("(a := 1) => a"));
+    }
+
+    @Test
+    void rejectsEqualsDefaultFromProtosSyntaxFixture() throws Exception {
         String source = Files.readString(
                 Path.of(
                         "protos",
                         "tests",
                         "parser",
-                        "closure-required-after-default-rejected.protos"));
-        ParseError error = assertThrows(
+                        "closure-equals-default-rejected.protos"));
+        assertThrows(
                 ParseError.class,
                 () -> new ProtosParser(source).parseProgram());
-        assertEquals(
-                "Required non-rest Closure parameters must precede defaulted parameters",
-                error.getMessage());
     }
 
     @Test

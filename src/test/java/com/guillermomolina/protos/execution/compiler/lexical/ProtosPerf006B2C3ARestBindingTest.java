@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -201,7 +200,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
     }
 
     @Test
-    void requiredPrefixStillRejectsTooFewArgumentsAndSpreadDefaultLowers()
+    void missingPrefixBindsNullAndSpreadDefaultLowers()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -234,11 +233,15 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                 language,
                                 "entry()",
                                 "perf006-b2c3a-missing-required.protos");
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> missingRequired.getCallTarget().call(module));
+                // D203/I105: head binds null; the rest Array is empty.
+                assertTrue(
+                        assertInstanceOf(
+                                        ProtosArrayValue.class,
+                                        missingRequired.getCallTarget().call(module))
+                                .indexedSnapshot()
+                                .isEmpty());
 
-                String defaultCharacters = "(head, fallback = child(...items)) => { fallback }";
+                String defaultCharacters = "(head, fallback: child(...items)) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -257,7 +260,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
             }
         }
 
-        System.out.println("PERF006_B2C3A_REQUIRED_PREFIX_ARITY=PASS");
+        System.out.println("PERF006_B2C3A_MISSING_PREFIX_EMPTY_REST=PASS");
         System.out.println("PERF006_B2C3A_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 

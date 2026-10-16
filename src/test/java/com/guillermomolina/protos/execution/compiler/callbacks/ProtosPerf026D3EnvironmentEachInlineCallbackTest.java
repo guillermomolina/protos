@@ -366,7 +366,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
         for (String callback :
                 List.of(
                         "(name, value) => {\n        probe()\n        step: () => { 1 }\n        step.call()\n    }",
-                        "(name, value = 7) => { probe() }",
+                        "(name, value: 7) => { probe() }",
                         "(name, ...rest) => { probe() }",
                         "(...rest) => { probe() }")) {
             assertStructuredEachPreserved(
@@ -381,14 +381,12 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
     }
 
     /**
-     * A zero-, one- or three-parameter literal keeps its ordinary arity
-     * failure at the actual callback invocation: over a non-empty Environment
-     * the probing body never runs, and over an empty one no invocation
-     * happens, so no early arity validation signals and the receiver is the
-     * result.
+     * D203/I105: a zero-, one- or three-parameter literal binds flexibly at
+     * each actual callback invocation, so its body runs once per entry; over
+     * an empty receiver no invocation happens. No arity prevalidation exists.
      */
     @Test
-    void mismatchedArityLiteralsKeepOrdinaryInvocationTimeArityErrors() throws Exception {
+    void mismatchedArityLiteralsBindFlexiblyAtInvocation() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -400,16 +398,16 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                                 "(name) => { probe() }",
                                 "(name, value, extra) => { probe() }")) {
                     Probe probe = new Probe();
-                    assertInteger(
-                            42,
+                    assertSame(
+                            ProtosBooleanValue.TRUE,
                             lowerRoot(
                                             "run: () => {\n"
-                                                    + "    environment.each(" + callback + ")\n"
+                                                    + "    environment.each(" + callback + ") === environment\n"
                                                     + "}\n"
-                                                    + "Error.handle(() => { run() }, (caught) => { 42 })\n")
+                                                    + "run()\n")
                                     .getCallTarget()
                                     .call(probe.module(prelude, standardEnvironment(prelude, ONE))));
-                    assertEquals(0, probe.calls.get(), callback);
+                    assertEquals(1, probe.calls.get(), callback);
 
                     Probe empty = new Probe();
                     assertSame(
@@ -428,7 +426,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 context.leave();
             }
         }
-        System.out.println("PERF026_D3_UNSUPPORTED_ARITY_FALLBACK=YES");
+        System.out.println("PERF026_D3_MISMATCHED_ARITY_FLEXIBLE=YES");
         System.out.println("PERF026_D3_ARITY_PREVALIDATION_INTRODUCED=NO");
     }
 

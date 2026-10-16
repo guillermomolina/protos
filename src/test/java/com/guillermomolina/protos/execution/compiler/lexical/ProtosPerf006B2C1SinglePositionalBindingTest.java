@@ -53,7 +53,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
     }
 
     @Test
-    void requiredParameterArityMismatchIsGuestError() throws Exception {
+    void missingArgumentBindsNull() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID); context.enter();
             try {
@@ -66,10 +66,11 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 String topChars = "entry()";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-arity-top.protos").build();
                 ProtosSemanticBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
-                assertThrows(ProtosSignalException.class, () -> top.getCallTarget().call(module));
+                // D203/I105: an absent argument binds canonical null.
+                assertSame(ProtosNullValue.INSTANCE, top.getCallTarget().call(module));
             } finally { context.leave(); }
         }
-        System.out.println("PERF006_B2C1_ARITY_ERROR=PASS");
+        System.out.println("PERF006_B2C1_MISSING_ARGUMENT_NULL=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(CanonicalClosure d, ProtosClosureExecutionPlan p, ProtosActivation c) {

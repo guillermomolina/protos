@@ -127,22 +127,16 @@ tests: [
         })
         null
     }),
-    Test("resolve requires exactly two arguments", () => {
+    Test("resolve validates absent arguments as null", () => {
+        // D203: absent arguments bind null and fail validation; excess is ignored.
         Assertions.signals(Error, () => {
             ColorMode.resolve()
         })
         Assertions.signals(Error, () => {
             ColorMode.resolve(ColorMode.ALWAYS)
         })
-        Assertions.signals(Error, () => {
-            ColorMode.resolve(ColorMode.ALWAYS, true, true)
-        })
-        Assertions.signals(Error, () => {
-            ColorMode.recognizes()
-        })
-        Assertions.signals(Error, () => {
-            ColorMode.recognizes(ColorMode.AUTO, ColorMode.AUTO)
-        })
+        Assertions.require(ColorMode.resolve(ColorMode.ALWAYS, false, true) == true)
+        Assertions.require(ColorMode.recognizes() == false)
     }),
     Test("resolved modes compose with ANSI rendering", () => {
         text: StyledText("x", Style("red"))

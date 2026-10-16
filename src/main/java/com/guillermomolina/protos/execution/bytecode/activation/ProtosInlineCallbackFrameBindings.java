@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -71,32 +72,16 @@ final class ProtosInlineCallbackFrameBindings {
             int positionalIndex,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        if (!child.isActivationMaterialized()
-                && positionalIndex < child.suppliedArgumentCount()) {
-            return child.suppliedArgument(positionalIndex);
+        if (!child.isActivationMaterialized()) {
+            // D203: an unsupplied position reads canonical null.
+            return positionalIndex < child.suppliedArgumentCount()
+                    ? child.suppliedArgument(positionalIndex)
+                    : ProtosNullValue.INSTANCE;
         }
         return ProtosBytecodeRootNode.LoadClosureArgument.perform(
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 positionalIndex);
-    }
-
-    /** Inline counterpart of {@code CheckFrameClosureArgumentUpperBound}. */
-    static void checkArgumentUpperBound(
-            PreparedInlineLiteralCall child,
-            LocalRangeAccessor frameBackedLocals,
-            ProtosFrameLexicalLayout frameBackedLayout,
-            int maximumPositionalArguments,
-            BytecodeNode bytecodeNode,
-            VirtualFrame frame) {
-        if (!child.isActivationMaterialized()
-                && child.suppliedArgumentCount() <= maximumPositionalArguments) {
-            return;
-        }
-        ProtosBytecodeRootNode.CheckClosureArgumentUpperBound.perform(
-                durableActivation(
-                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
-                maximumPositionalArguments);
     }
 
     /**

@@ -18,23 +18,18 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.diagnostics.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
@@ -45,19 +40,20 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF032-G6: a source Closure declaring no parameters executes a normal root without any
- * argument-count check, while every ordinary call that supplies arguments enters the Closure's
- * arity-rejection root, which signals the unchanged guest argument-count Error ({@code
- * CALLABLES.md}, Normative parameter-binding algorithm) without evaluating the body.
+ * PERF032-G6 introduced an arity-rejection root for source Closures declaring no parameters.
+ * D203/I105 retires it: ordinary Closure binding accepts every supplied argument count
+ * ({@code CALLABLES.md}, Normative parameter-binding algorithm), so a zero-parameter Closure
+ * always enters its single ordinary root, excess arguments are ignored, and an absent
+ * parameter binds canonical null. These tests pin that contract on the compact, rich,
+ * Task-owned, guest, DEBUG and host-embedding entry paths with the unchanged B5 header.
  */
 final class ProtosPerf032G6ZeroParameterGuestRootTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final String UPPER_BOUND_CHECK = "CheckFrameClosureArgumentUpperBound";
+    private static final String UPPER_BOUND_CHECK = "ArgumentUpperBound";
 
     @Test
     void normalRootHasNoArityCheckAndIsTheDirectSemanticTarget() throws Exception {
@@ -67,17 +63,12 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
 
             assertNone(instructionNames(root), UPPER_BOUND_CHECK);
             assertSame(root, target(one).getRootNode(), "no universal wrapper root");
-
-            RootCallTarget rejection = root.arityRejectionTarget();
-            assertNotNull(rejection);
-            assertNotSame(target(one), rejection);
-            ProtosSemanticBytecodeRootNode rejectionRoot =
-                    assertInstanceOf(ProtosSemanticBytecodeRootNode.class, rejection.getRootNode());
-            assertContains(instructionNames(rejectionRoot), UPPER_BOUND_CHECK);
-            assertNull(rejectionRoot.arityRejectionTarget(), "the rejection root is terminal");
+            assertEquals(
+                    2,
+                    root.getRootNodes().count(),
+                    "module and Closure roots only; no arity-rejection root is lowered");
         });
-        System.out.println("PERF032_G6_NORMAL_ROOT_WITHOUT_ARITY_CHECK=PASS");
-        System.out.println("PERF032_G6_DIRECT_SEMANTIC_TARGET=PASS");
+        System.out.println("I105_ZERO_PARAMETER_ROOT_WITHOUT_ARITY_CHECK=PASS");
     }
 
     @Test
@@ -97,140 +88,158 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     }
 
     @Test
-    void suppliedArgumentsEnterTheRejectionRootAndMaterializeOneActivation() throws Exception {
+    void suppliedArgumentsEnterTheBodyRootCompactly() throws Exception {
         withCore(module -> {
-            ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-reject.protos", module);
-            RootCallTarget rejection = planRoot(one).arityRejectionTarget();
+            ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-excess.protos", module);
 
             ProtosIntegerValue supplied = integer(5);
             ProtosBytecodeRootNode.PreparedClosureCall single = fastDirect(one, module, supplied);
-            assertSame(rejection, single.bodyTarget());
-            assertThrows(ProtosSignalException.class, () -> enter(single));
-            ProtosActivation activation =
-                    assertInstanceOf(ProtosActivation.class, single.targetArguments()[0]);
-            assertSame(activation, ProtosFrameArguments.activation(single.targetArguments()));
-            assertEquals(List.of(supplied), activation.suppliedArgumentsForRuntime());
+            assertSame(target(one), single.bodyTarget());
+            assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, single.targetArguments().length);
+            assertSame(supplied, single.targetArguments()[ProtosFrameArguments.HEADER_LENGTH]);
+            assertEquals("1", integerValue(enter(single)));
+            assertSame(one, single.targetArguments()[0], "excess arguments materialize nothing");
 
             ProtosBytecodeRootNode.PreparedClosureCall several =
                     fastDirect(one, module, integer(1), integer(2), integer(3));
-            assertSame(rejection, several.bodyTarget());
-            assertThrows(ProtosSignalException.class, () -> enter(several));
+            assertSame(target(one), several.bodyTarget());
+            assertEquals("1", integerValue(enter(several)));
         });
-        System.out.println("PERF032_G6_SINGLE_ARGUMENT_REJECTED=PASS");
-        System.out.println("PERF032_G6_SEVERAL_ARGUMENTS_REJECTED=PASS");
-        System.out.println("PERF032_G6_ONE_ERROR_ACTIVATION=PASS");
+        System.out.println("I105_EXCESS_ARGUMENTS_IGNORED_COMPACT=PASS");
     }
 
     @Test
-    void richActivationAndPlanExecutionKeepTheContract() throws Exception {
+    void richActivationAndPlanExecutionIgnoreExcessArguments() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-rich.protos", module);
             ProtosClosureExecutionPlan plan = one.executionPlan().orElseThrow();
 
             assertEquals("1", integerValue(plan.executeBytecodeActivationForTesting(richActivation(one, module))));
-            assertThrows(
-                    ProtosSignalException.class,
-                    () -> plan.executeBytecodeActivationForTesting(
-                            richActivation(one, module, integer(1))));
+            assertEquals(
+                    "1",
+                    integerValue(plan.executeBytecodeActivationForTesting(
+                            richActivation(one, module, integer(1)))));
 
             ProtosActivation rich = richActivation(one, module, integer(2));
             ProtosBytecodeRootNode.PreparedClosureCall prepared =
                     ProtosBytecodeRootNode.PreparedClosureCall.ordinary(target(one), rich);
-            assertSame(planRoot(one).arityRejectionTarget(), prepared.bodyTarget());
-            assertThrows(ProtosSignalException.class, () -> enter(prepared));
+            assertSame(target(one), prepared.bodyTarget());
+            assertEquals("1", integerValue(enter(prepared)));
             assertSame(rich, prepared.targetArguments()[0], "no second activation");
+
+            ProtosClosureValue pair =
+                    parsedClosure("(x, y) => { [x, y] }", "g6-rich-pair.protos", module);
+            List<Object> bound =
+                    elements(pair.executionPlan().orElseThrow()
+                            .executeBytecodeActivationForTesting(
+                                    richActivation(pair, module, integer(7))));
+            assertEquals("7", integerValue(bound.get(0)));
+            assertSame(ProtosNullValue.INSTANCE, bound.get(1), "an absent argument binds null");
         });
-        System.out.println("PERF032_G6_RICH_ACTIVATION_REJECTED=PASS");
-        System.out.println("PERF032_G6_PLAN_EXECUTION_REJECTED=PASS");
+        System.out.println("I105_RICH_ACTIVATION_FLEXIBLE_ARITY=PASS");
     }
 
     @Test
-    void guestCallsAndSendsSignalTheSameHandleableErrorWithoutBodyEffects() throws Exception {
+    void guestCallsAndSendsBindFlexiblyAndEvaluateEveryArgument() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
                         "g6-guest.protos",
                         """
                         n: 0
+                        effects: 0
+                        tick: () => {
+                            effects = effects + 1
+                            effects
+                        }
                         bump: () => { n = n + 1 }
-                        bumpOne: (x) => { n = n + 1 }
+                        pair: (x, y) => { [x, y] }
                         o: Object {
                             m: () => { n = n + 1 }
                         }
-                        direct: Error.handle(() => { bump(1) }, (caught) => { caught })
-                        many: Error.handle(() => { bump(1, 2) }, (caught) => { caught })
-                        sent: Error.handle(() => { o.m(1) }, (caught) => { caught })
-                        reference: Error.handle(() => { bumpOne(1, 2) }, (caught) => { caught })
-                        valid: [bump(), o.m()]
-                        [n, direct, many, sent, reference, valid]
+                        bump(1)
+                        bump(1, tick())
+                        o.m(tick())
+                        [n, effects, pair(), pair(7), pair(7, 8, tick())]
                         """);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), outcome::toString);
         List<Object> results = elements(outcome.value());
 
-        assertEquals("2", integerValue(results.get(0)), "only the valid calls ran");
-        ProtosObjectValue reference = assertInstanceOf(ProtosObjectValue.class, results.get(4));
-        for (int index = 1; index <= 3; index++) {
-            ProtosObjectValue caught = assertInstanceOf(ProtosObjectValue.class, results.get(index));
-            assertSame(
-                    reference.parent().orElseThrow(),
-                    caught.parent().orElseThrow(),
-                    "the same argument-count Error kind");
-        }
+        assertEquals("3", integerValue(results.get(0)), "every call ran its body");
+        // Read before pair(7, 8, tick()) evaluates its own ignored argument.
+        assertEquals("2", integerValue(results.get(1)), "ignored arguments were evaluated");
         assertEquals(
-                List.of("1", "2"),
-                elements(results.get(5)).stream()
-                        .map(ProtosPerf032G6ZeroParameterGuestRootTest::integerValue)
-                        .toList());
-        System.out.println("PERF032_G6_GUEST_DIRECT_CALL_CONTRACT=PASS");
-        System.out.println("PERF032_G6_METHOD_SEND_CONTRACT=PASS");
-        System.out.println("PERF032_G6_HANDLER_CAPTURE=PASS");
-        System.out.println("PERF032_G6_NO_BODY_EFFECTS=PASS");
+                List.of(ProtosNullValue.INSTANCE, ProtosNullValue.INSTANCE),
+                elements(results.get(2)));
+        assertEquals("7", integerValue(elements(results.get(3)).get(0)));
+        assertSame(ProtosNullValue.INSTANCE, elements(results.get(3)).get(1));
+        assertEquals("8", integerValue(elements(results.get(4)).get(1)));
+        System.out.println("I105_GUEST_DIRECT_CALL_FLEXIBLE=PASS");
+        System.out.println("I105_METHOD_SEND_FLEXIBLE=PASS");
+        System.out.println("I105_EXCESS_ARGUMENT_EVALUATED=PASS");
     }
 
     @Test
-    void unhandledRejectionKeepsTheSourceFrameWithoutAFictitiousOne() throws Exception {
-        ProtosDiagnosticTrace zero =
-                failedTrace(
-                        "g6-trace-zero.protos",
-                        """
-                        a: () => {
-                            1
-                        }
-                        a(1)
-                        """);
-        ProtosDiagnosticTrace one =
-                failedTrace(
-                        "g6-trace-one.protos",
-                        """
-                        a: (x) => {
-                            1
-                        }
-                        a(1, 2)
-                        """);
-        assertEquals(frames(one), frames(zero), "the in-body check produced the same frames");
-        System.out.println("PERF032_G6_TRACE_SOURCE_FRAME=PASS");
+    void debugAndNormalProfilesAgree() {
+        String program =
+                """
+                effects: 0
+                tick: () => {
+                    effects = effects + 1
+                    effects
+                }
+                f: (a: 10, b, c: 30, d) => { [a, b, c, d] }
+                g: (x: tick()) => { x }
+                tail: (a: 10, ...rest) => { rest }
+                one: () => { 1 }
+                full: f(1, 2, 3, 4, tick())
+                none: f()
+                defaulted: g()
+                explicitNull: g(null)
+                rest: tail(7, 8, 9)
+                restFrozen: Error.handle(() => {
+                    rest[0] = 0
+                    false
+                }, (caught) => { true })
+                (none[0] == 10) && (none[1] === null) && (none[2] == 30) && (none[3] === null) &&
+                    (full[3] == 4) && (effects == 2) && (defaulted == 2) &&
+                    (explicitNull === null) && (rest.size() == 2) && restFrozen &&
+                    (tail().size() == 0) && (one(1, 2) == 1)
+                """;
+        for (boolean debug : new boolean[] {false, true}) {
+            Context.Builder builder =
+                    Context.newBuilder(ProtosLanguage.ID)
+                            .option("protos.CoreRoot", CORE.toAbsolutePath().toString());
+            if (debug) {
+                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
+            }
+            try (Context context = builder.build()) {
+                assertTrue(
+                        context.eval(ProtosLanguage.ID, program).asBoolean(),
+                        debug ? "DEBUG" : "NORMAL");
+            }
+        }
+        System.out.println("I105_DEBUG_NORMAL_PARITY=PASS");
     }
 
     @Test
-    void rejectionRootSharesTheSourceSectionAcrossReparse() throws Exception {
+    void reparseKeepsTheSingleRoot() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-source.protos", module);
             ProtosSemanticBytecodeRootNode root = planRoot(one);
-            RootCallTarget rejection = root.arityRejectionTarget();
 
             // Materializing source information reparses the whole group.
             root.getRootNodes().ensureSourceInformation();
             assertNotNull(root.getSourceSection());
-            assertEquals(root.getSourceSection(), rejection.getRootNode().getSourceSection());
             assertSame(root, planRoot(one), "the normal root identity survives the reparse");
-            assertSame(rejection, root.arityRejectionTarget());
+            assertEquals(2, root.getRootNodes().count(), "module and Closure roots only");
             assertNone(instructionNames(root), UPPER_BOUND_CHECK);
-            assertEquals("1", integerValue(enter(fastDirect(one, module))));
+            assertEquals("1", integerValue(enter(fastDirect(one, module, integer(3)))));
         });
-        System.out.println("PERF032_G6_SOURCE_SECTION_AND_REPARSE=PASS");
+        System.out.println("I105_SOURCE_SECTION_AND_REPARSE=PASS");
     }
 
     @Test
-    void taskOwnedEntryKeepsItsStateAndFailsWithTheError() throws Exception {
+    void taskOwnedEntryIgnoresExcessArguments() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-task.protos", module);
 
@@ -238,43 +247,39 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             assertEquals(ProtosTask.State.COMPLETED, valid.state());
             assertEquals("1", integerValue(valid.result().orElseThrow()));
 
-            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> rejected =
+            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> prepared =
                     new AtomicReference<>();
-            ProtosTask failed = runTaskOwned(one, module, List.of(integer(1)), rejected);
-            assertEquals(ProtosTask.State.FAILED, failed.state());
-            assertTrue(failed.failure().isPresent());
-            assertSame(planRoot(one).arityRejectionTarget(), rejected.get().bodyTarget());
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(rejected.get().targetArguments());
-            assertSame(failed, activation.task().orElseThrow(), "the exact owning Task");
+            ProtosTask excess = runTaskOwned(one, module, List.of(integer(1)), prepared);
+            assertEquals(ProtosTask.State.COMPLETED, excess.state());
+            assertEquals("1", integerValue(excess.result().orElseThrow()));
+            assertSame(target(one), prepared.get().bodyTarget());
             assertTrue(module.task().isEmpty());
         });
-        System.out.println("PERF032_G6_TASK_OWNED_CONTRACT=PASS");
+        System.out.println("I105_TASK_OWNED_CONTRACT=PASS");
     }
 
     @Test
-    void closuresWithParametersKeepTheirInBodyAlgorithm() throws Exception {
+    void closuresWithParametersEmitNoUpperBoundCheck() throws Exception {
         withCore(module -> {
             for (String characters :
-                    List.of("(x) => { x }", "(x, y) => { y }", "(x = 1) => { x }")) {
+                    List.of(
+                            "(x) => { x }",
+                            "(x, y) => { y }",
+                            "(x: 1) => { x }",
+                            "(x: 1, y) => { y }",
+                            "(...r) => { r }")) {
                 ProtosClosureValue closure = parsedClosure(characters, "g6-params.protos", module);
-                ProtosSemanticBytecodeRootNode root = planRoot(closure);
-                assertContains(instructionNames(root), UPPER_BOUND_CHECK);
-                assertNull(root.arityRejectionTarget(), characters);
+                assertNone(instructionNames(planRoot(closure)), UPPER_BOUND_CHECK);
             }
-            ProtosClosureValue rest = parsedClosure("(...r) => { r }", "g6-rest.protos", module);
-            assertNone(instructionNames(planRoot(rest)), UPPER_BOUND_CHECK);
-            assertNull(planRoot(rest).arityRejectionTarget());
         });
 
         ProtosExecutionOutcome outcome =
                 execute(
                         "g6-defaults.protos",
                         """
-                        d: (a = 7) => { a }
-                        r: (a = 1, ...rest) => { [a, rest] }
-                        excess: Error.handle(() => { d(1, 2) }, (caught) => { 0 })
-                        [d(), d(3), r(), r(10, 20), excess]
+                        d: (a: 7) => { a }
+                        r: (a: 1, ...rest) => { [a, rest] }
+                        [d(), d(3), r(), r(10, 20), d(1, 2)]
                         """);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), outcome::toString);
         List<Object> results = elements(outcome.value());
@@ -284,13 +289,13 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         assertTrue(elements(elements(results.get(2)).get(1)).isEmpty());
         assertEquals("10", integerValue(elements(results.get(3)).get(0)));
         assertEquals("20", integerValue(elements(elements(results.get(3)).get(1)).get(0)));
-        assertEquals("0", integerValue(results.get(4)));
-        System.out.println("PERF032_G6_PARAMETER_CLOSURES_UNCHANGED=PASS");
-        System.out.println("PERF032_G6_DEFAULTS_AND_REST_UNCHANGED=PASS");
+        assertEquals("1", integerValue(results.get(4)), "the excess argument is ignored");
+        System.out.println("I105_PARAMETER_CLOSURES_WITHOUT_UPPER_BOUND=PASS");
+        System.out.println("I105_DEFAULTS_AND_REST=PASS");
     }
 
     @Test
-    void standardEmbeddingExecutePreservesTheGuestError() {
+    void standardEmbeddingExecuteBindsFlexibly() {
         try (Context context =
                 Context.newBuilder(ProtosLanguage.ID)
                         .option("protos.CoreRoot", CORE.toAbsolutePath().toString())
@@ -301,19 +306,22 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                     run: () => {
                         1
                     }
+                    second: (a, b) => { b }
                     0
                     """);
             Value run = context.getBindings(ProtosLanguage.ID).getMember("run");
+            Value second = context.getBindings(ProtosLanguage.ID).getMember("second");
             for (int index = 0; index < 3; index++) {
                 assertEquals(1, run.execute().asInt());
+                assertEquals(1, run.execute(index).asInt());
             }
-            PolyglotException arity = assertThrows(PolyglotException.class, () -> run.execute(1));
-            assertTrue(arity.isGuestException());
-            assertFalse(
+            assertTrue(second.execute(5).isNull(), "an absent host argument binds null");
+            assertEquals(6, second.execute(5, 6, 7).asInt());
+            assertTrue(
                     languageContext(context).embeddedProcessOrNull().isLive(),
-                    "an unhandled arity Error is fatal");
+                    "flexible host calls signal no Error");
         }
-        System.out.println("PERF032_G6_STANDARD_EMBEDDING_GUEST_ERROR=PASS");
+        System.out.println("I105_STANDARD_EMBEDDING_FLEXIBLE=PASS");
     }
 
     private interface CoreTest {
@@ -345,18 +353,6 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     private static ProtosExecutionOutcome execute(String name, String source) throws Exception {
         return ProtosTestExecutionSupport.execute(
                 name, source, new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
-    }
-
-    private static ProtosDiagnosticTrace failedTrace(String name, String source) throws Exception {
-        ProtosExecutionOutcome outcome = execute(name, source);
-        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), outcome::toString);
-        return outcome.failureDiagnosticTrace().orElseThrow();
-    }
-
-    private static List<String> frames(ProtosDiagnosticTrace trace) {
-        return trace.frames().stream()
-                .map(frame -> frame.line() + ":" + frame.column() + ":" + frame.label())
-                .toList();
     }
 
     private static ProtosTask runTaskOwned(
@@ -449,12 +445,6 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(Instruction::getName)
                 .toList();
-    }
-
-    private static void assertContains(List<String> names, String operation) {
-        assertTrue(
-                names.stream().anyMatch(name -> name.contains(operation)),
-                () -> "expected " + operation + " in: " + names);
     }
 
     private static void assertNone(List<String> names, String operation) {

@@ -56,14 +56,21 @@ tests: [
     }),
     Test("selected callback is invoked once with zero arguments", () => {
         calls: 0
-        Assertions.signals(Error, () => { true.if((required) => { calls = calls + 1 }) })
-        Assertions.signals(Error, () => { false.else((required) => { calls = calls + 1 }) })
+        // D203: a declared parameter without a supplied argument binds null.
+        Assertions.require(true.if((required) => {
+            Assertions.require(required === null)
+            calls = calls + 1
+        }) === true)
+        Assertions.require(false.else((required) => {
+            Assertions.require(required === null)
+            calls = calls + 1
+        }) === false)
         seen: null
-        true.if((x = 5) => { seen = x })
+        true.if((x: 5) => { seen = x })
         Assertions.require(seen == 5)
         false.else((...rest) => { seen = rest.size() })
         Assertions.require(seen == 0)
-        Assertions.require(calls == 0)
+        Assertions.require(calls == 2)
     }),
     Test("selected callback may be a non-closure invokable object", () => {
         count: 0

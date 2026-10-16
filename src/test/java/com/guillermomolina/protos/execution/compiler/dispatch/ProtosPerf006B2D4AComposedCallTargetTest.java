@@ -348,7 +348,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                 (activation, supplied) -> target));
 
                 String characters =
-                        "(value = maker()()) => { value }";
+                        "(value: maker()()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -404,8 +404,8 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
 
                 for (String characters :
                         List.of(
-                                "(value = entry().pick(...items)) => { value }",
-                                "(value = entry.pick(...items)) => { value }")) {
+                                "(value: entry().pick(...items)) => { value }",
+                                "(value: entry.pick(...items)) => { value }")) {
                     CanonicalClosure definition =
                             closureDefinition(characters);
                     Source source =

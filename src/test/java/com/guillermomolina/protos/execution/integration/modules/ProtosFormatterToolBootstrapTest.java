@@ -472,7 +472,7 @@ final class ProtosFormatterToolBootstrapTest {
                         + "dog:animal{name:\"Rex\"\nage:2}\n"
                         + "bare:x=>x+1\n"
                         + "paren:(y)=>y*2\n"
-                        + "multi:(a,b=2,...rest)=>{result:a+b\n^result}\n"
+                        + "multi:(a,b: 2,...rest)=>{result:a+b\n^result}\n"
                         + "run(1){first\nsecond}\n"
                         + "noop:()=>{}\n"
                         + "mapping:%{\"a\":1\n\"b\":2}";
@@ -485,7 +485,7 @@ final class ProtosFormatterToolBootstrapTest {
                         + "}\n"
                         + "bare: x => x + 1\n"
                         + "paren: (y) => y * 2\n"
-                        + "multi: (a, b = 2, ...rest) => {\n"
+                        + "multi: (a, b: 2, ...rest) => {\n"
                         + "    result: a + b\n"
                         + "    ^result\n"
                         + "}\n"

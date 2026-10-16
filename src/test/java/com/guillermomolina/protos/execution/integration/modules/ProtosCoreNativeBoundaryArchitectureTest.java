@@ -85,7 +85,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/numeric/ProtosStandardNumberEqualityProtocol.java", 1),
                     Map.entry("execution/runtime/concurrency/ProtosParallelRuntime.java", 1),
                     Map.entry("execution/protocols/numeric/ProtosStandardNumberOrderingProtocol.java", 1),
-                    Map.entry("execution/protocols/numeric/ProtosStandardNumericConversionProtocol.java", 1));
+                    Map.entry("execution/protocols/numeric/ProtosStandardNumericConversionProtocol.java", 1),
+                    // D203/I105: private Object.protos argument-count Error helper.
+                    Map.entry("execution/host/embedding/ProtosCoreBootstrap.java", 1));
 
     private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
             Map.ofEntries(
@@ -156,8 +158,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(36, actualCore.size());
-        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(37, actualCore.size());
+        assertEquals(139, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }

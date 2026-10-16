@@ -55,7 +55,7 @@ tests: [
     }),
     Test("non local return from default", () => {
         tool009LegacyCase: () => {
-            f: (x = ^42) => {
+            f: (x: ^42) => {
                 0
             }
 

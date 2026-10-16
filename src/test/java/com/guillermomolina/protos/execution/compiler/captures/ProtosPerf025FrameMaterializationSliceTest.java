@@ -165,7 +165,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     void sequentialDefaultsSeeOnlyEarlierEstablishedParameters() throws Exception {
         withFixture(
                 fixture -> {
-                    ClosureUnderTest plan = closurePlan(fixture, "(a, b = a, c = b) => c");
+                    ClosureUnderTest plan = closurePlan(fixture, "(a, b: a, c: b) => c");
                     assertNoInstall(instructionNames(activationNode(plan)));
                     ProtosObjectValue first = newObject();
                     ProtosObjectValue second = newObject();
@@ -173,10 +173,9 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             deferredInvocation(fixture, plan.closure, List.of(first))));
                     assertSame(second, plan.plan.executeBytecodeActivationForTesting(
                             deferredInvocation(fixture, plan.closure, List.of(first, second))));
-                    assertThrows(
-                            ProtosSignalException.class,
-                            () -> plan.plan.executeBytecodeActivationForTesting(
-                                    deferredInvocation(fixture, plan.closure, List.of(first, second, first, second))));
+                    // D203/I105: excess arguments are ignored.
+                    assertSame(second, plan.plan.executeBytecodeActivationForTesting(
+                            deferredInvocation(fixture, plan.closure, List.of(first, second, second, first))));
                 });
         System.out.println("SEQUENTIAL_PARAMETERS_DEFAULTS=PASS");
     }

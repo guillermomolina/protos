@@ -485,7 +485,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter",
-      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
@@ -496,7 +496,7 @@
       ],
       "pe_call_chain": [
         "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
-        "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.BindRequiredFrameParameter.isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
@@ -520,7 +520,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter",
-      "method": "isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
+      "method": "isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
@@ -531,7 +531,7 @@
       ],
       "pe_call_chain": [
         "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.compact(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,BytecodeNode,VirtualFrame)",
-        "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.isCompactSuppliedAndUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.BindUnaryFrameParameter.isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     }

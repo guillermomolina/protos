@@ -883,12 +883,12 @@ No new keyword, grammar form, callable category, or public parallel-task identit
 is introduced.
 
 Ordinary invocation evaluates the receiver and explicit arguments left-to-right
-before the standard behavior runs. The standard behavior then checks ordinary
-Closure argument-count validity and forms one complete P-boundary snapshot.
+before the standard behavior runs. The standard behavior then forms one complete
+P-boundary snapshot. Ordinary Closure parameter binding (`CALLABLES.md`) accepts
+any supplied argument count, so no argument-count validation precedes the
+snapshot.
 
-An argument-count/binding error takes precedence over P graph validation once
-the already-evaluated arguments have entered the standard behavior. If the
-combined input graph cannot cross P, the invocation synchronously signals the
+If the combined input graph cannot cross P, the invocation synchronously signals the
 standard `NonParallelValue` error, which delegates directly to `Error`. No result
 Future is returned and no partial P computation becomes eligible.
 

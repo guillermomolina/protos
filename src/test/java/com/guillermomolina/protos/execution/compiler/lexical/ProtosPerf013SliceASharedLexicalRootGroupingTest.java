@@ -173,11 +173,10 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                 assertSame(group, rootA.getRootNodes());
                 assertSame(group, rootB.getRootNodes());
                 assertSame(group, rootC.getRootNodes());
-                assertRejectionRootsInGroup(group, rootA, rootB, rootC);
                 assertEquals(
-                        7,
+                        4,
                         group.count(),
-                        () -> "expected owner + three Closure roots + three arity roots");
+                        () -> "expected owner + three Closure roots");
 
                 assertNotSame(root.getFrameDescriptor(), rootA.getFrameDescriptor());
                 assertNotSame(rootA.getFrameDescriptor(), rootB.getFrameDescriptor());
@@ -238,11 +237,10 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                         rootB,
                         "the closure execution plan for each Closure literal must "
                                 + "target its own distinct group root");
-                assertRejectionRootsInGroup(root.getRootNodes(), rootA, rootB);
                 assertEquals(
-                        5,
+                        3,
                         root.getRootNodes().count(),
-                        "expected owner + two Closure roots + two arity roots");
+                        "expected owner + two Closure roots");
             } finally {
                 context.leave();
             }
@@ -291,24 +289,6 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
         }
     }
 
-    /**
-     * PERF032-G6: each zero-parameter Closure has a cold arity-rejection
-     * root in the same BytecodeRootNodes group as its lexical owner.
-     */
-    private static void assertRejectionRootsInGroup(
-            BytecodeRootNodes<?> group,
-            ProtosSemanticBytecodeRootNode... closureRoots) {
-        for (ProtosSemanticBytecodeRootNode closureRoot : closureRoots) {
-            ProtosSemanticBytecodeRootNode rejectionRoot =
-                    assertInstanceOf(
-                            ProtosSemanticBytecodeRootNode.class,
-                            closureRoot.arityRejectionTarget().getRootNode());
-            assertSame(
-                    group,
-                    rejectionRoot.getRootNodes(),
-                    "arity-rejection root must preserve lexical group identity");
-        }
-    }
 
     private static CanonicalSequence canonicalize(String characters) {
         return (CanonicalSequence)

@@ -57,8 +57,9 @@ prelude.newModuleActivation());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
 
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
-        assertTrue(runner.contains("terminalObserver = null"));
-        assertTrue(runner.contains("lifecycleObserver = null"));
+        // D203/I105: absent optional observers bind null without a default.
+        assertTrue(runner.contains("\n    terminalObserver,\n"));
+        assertTrue(runner.contains("\n    lifecycleObserver\n) => {"));
         assertTrue(runner.contains("terminalObserver("));
         assertTrue(runner.contains("lifecycleObserver("));
         assertTrue(runner.contains("\"started\""));

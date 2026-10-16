@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -31,7 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -187,7 +186,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
     }
 
     @Test
-    void arityFailureAndSpreadDefaultLoweringCoexist()
+    void missingArgumentAndSpreadDefaultLoweringCoexist()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -196,7 +195,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
 
-                String requiredCharacters = "(first, second) => { first }";
+                String requiredCharacters = "(first, second) => { second }";
                 Source requiredSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -225,12 +224,13 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 ProtosSemanticBytecodeRootNode missingRoot =
                         new CanonicalToBytecodeLowerer(language, missingSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(missingCharacters));
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> missingRoot.getCallTarget().call(module));
+                // D203/I105: the absent second argument binds canonical null.
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        missingRoot.getCallTarget().call(module));
 
                 String defaultCharacters =
-                        "(head, fallback = child(...items)) => { fallback }";
+                        "(head, fallback: child(...items)) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -248,7 +248,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
             }
         }
 
-        System.out.println("PERF006_B2C3B1_ARITY_ERROR_PRESERVED=PASS");
+        System.out.println("PERF006_B2C3B1_MISSING_ARGUMENT_BINDS_NULL=PASS");
         System.out.println(
                 "PERF006_B2C3B1_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }

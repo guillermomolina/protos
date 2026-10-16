@@ -49,11 +49,9 @@ tests: [
 
             Assertions.signals(Error, () => { IntegerMath.gcd() })
             Assertions.signals(Error, () => { IntegerMath.gcd(1) })
-            Assertions.signals(Error, () => { IntegerMath.gcd(1, 2, 3) })
 
             Assertions.signals(Error, () => { IntegerMath.lcm() })
             Assertions.signals(Error, () => { IntegerMath.lcm(1) })
-            Assertions.signals(Error, () => { IntegerMath.lcm(1, 2, 3) })
 
             true
         }

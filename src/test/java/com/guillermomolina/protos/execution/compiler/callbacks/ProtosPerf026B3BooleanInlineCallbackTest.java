@@ -211,7 +211,7 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
         assertCallbackRootPreserved(
                 """
                 run: () => {
-                    true.ifTrueIfFalse((x = 1) => {
+                    true.ifTrueIfFalse((x: 1) => {
                         probe()
                         x
                     }, () => { 2 })

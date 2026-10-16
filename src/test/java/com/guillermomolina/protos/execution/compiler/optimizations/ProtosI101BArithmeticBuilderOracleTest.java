@@ -141,12 +141,11 @@ final class ProtosI101BArithmeticBuilderOracleTest {
 
                 ProtosSemanticBytecodeRootNode module = parse(program, caseName);
                 List<ProtosSemanticBytecodeRootNode> realRoots = roots(module);
-                assertEquals(3, realRoots.size(),
-                        "module, ordinary Closure root, independent arity rejection");
+                // D203/I105: no arity-rejection root accompanies the Closure root.
+                assertEquals(2, realRoots.size(),
+                        "module and ordinary Closure root");
                 assertSame(module, realRoots.get(0));
                 ProtosSemanticBytecodeRootNode actual = realRoots.get(1);
-                assertSame(realRoots.get(2).getCallTarget(),
-                        actual.arityRejectionTarget());
 
                 ProtosSemanticBytecodeRootNode oracle = manual.get();
                 assertEquals(1, roots(oracle).size(),

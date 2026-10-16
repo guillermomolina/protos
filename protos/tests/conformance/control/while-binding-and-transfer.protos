@@ -17,30 +17,20 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("while body binding failure when reached", () => {
+    Test("while body parameter binds null when reached", () => {
         tool009LegacyCase: () => {
+            // D203: the body's declared parameter is absent, so it binds null.
             conditionCalls: 0
-            bodyCalls: 0
-            handled: false
+            nullBodies: 0
             condition: () => {
                 conditionCalls = conditionCalls + 1
-                true
+                conditionCalls <= 2
             }
-            Error.handle(
-                () => {
-                    condition.whileTrue((required) => {
-                        bodyCalls = bodyCalls + 1
-                    })
-                    null
-                },
-                (caught) => {
-                    handled = caught.parent() === Error
-                    null
-                }
-            )
-            handled &&
-                (conditionCalls == 1) &&
-                (bodyCalls == 0)
+            condition.whileTrue((required) => {
+                (required === null).ifTrue(() => { nullBodies = nullBodies + 1 })
+            })
+            (conditionCalls == 3) &&
+                (nullBodies == 2)
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
@@ -100,24 +90,20 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
-    Test("while condition binding failure not preflighted", () => {
+    Test("while condition parameter binds null when activated", () => {
         tool009LegacyCase: () => {
+            // D203: the condition's declared parameter is absent, so it binds null.
             bodyCalls: 0
-            handled: false
-            condition: (required) => false
-            Error.handle(
-                () => {
-                    condition.whileTrue(() => {
-                        bodyCalls = bodyCalls + 1
-                    })
-                    null
-                },
-                (caught) => {
-                    handled = caught.parent() === Error
-                    null
-                }
-            )
-            handled &&
+            nullConditions: 0
+            condition: (required) => {
+                (required === null).ifTrue(() => { nullConditions = nullConditions + 1 })
+                false
+            }
+            result: condition.whileTrue(() => {
+                bodyCalls = bodyCalls + 1
+            })
+            (result === null) &&
+                (nullConditions == 1) &&
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
@@ -176,7 +162,7 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
-    Test("while unreachable body binding failure not preflighted", () => {
+    Test("while unreachable body is not preflighted", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
             result: (() => false).whileTrue((required) => {

@@ -74,12 +74,10 @@ tests: [
 
             Assertions.signals(Error, () => { IntegerMath.pow() })
             Assertions.signals(Error, () => { IntegerMath.pow(2) })
-            Assertions.signals(Error, () => { IntegerMath.pow(2, 3, 4) })
 
             Assertions.signals(Error, () => { IntegerMath.powMod() })
             Assertions.signals(Error, () => { IntegerMath.powMod(2) })
             Assertions.signals(Error, () => { IntegerMath.powMod(2, 3) })
-            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, 5, 7) })
 
             true
         }

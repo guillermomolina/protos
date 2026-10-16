@@ -123,9 +123,8 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             assertNotNull(target);
             assertSame(target, TryDirectCallZero.definitionTarget(second, module, context));
             assertTrue(TryDirectCallZero.admittedTarget(target, 0));
-            // A zero-parameter Closure called with an argument selects its
-            // arity-rejection entry, which the fused path never enters.
-            assertFalse(TryDirectCallOne.admittedTarget(target, 1));
+            // D203/I105: an excess argument enters the same ordinary root.
+            assertTrue(TryDirectCallOne.admittedTarget(target, 1));
             assertSame(second, TryDirectCallZero.admittedInstanceOrNull(second, module));
         });
     }

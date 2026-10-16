@@ -150,7 +150,7 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
         withEnteredLanguage(
                 (language, module) -> {
                     String characters =
-                            "(first = \"first\", later = missing) => first";
+                            "(first: \"first\", later: missing) => first";
                     Source source =
                             Source.newBuilder(
                                             ProtosLanguage.ID,

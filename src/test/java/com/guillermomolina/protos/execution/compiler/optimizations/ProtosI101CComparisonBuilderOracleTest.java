@@ -555,16 +555,12 @@ final class ProtosI101CComparisonBuilderOracleTest {
             ProtosSemanticBytecodeRootNode module, String program) {
         List<ProtosSemanticBytecodeRootNode> group = roots(module);
 
-        assertEquals(3, group.size(),
-                "Module, executable Closure and arity rejection");
+        // D203/I105: no arity-rejection root accompanies the Closure root.
+        assertEquals(2, group.size(),
+                "Module and executable Closure");
         assertSame(module, group.get(0));
 
         ProtosSemanticBytecodeRootNode closure = group.get(1);
-        ProtosSemanticBytecodeRootNode rejection = group.get(2);
-
-        assertSame(
-                rejection.getCallTarget(),
-                closure.arityRejectionTarget());
 
         assertSource(closure, program);
 
@@ -596,8 +592,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
                 .map(ProtosI101CComparisonBuilderOracleTest::completeSignature)
                 .toList();
 
-        RootCallTarget rejection = before.get(1).arityRejectionTarget();
-
         group.ensureComplete();
         group.ensureComplete();
 
@@ -611,9 +605,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
             assertSame(targets.get(i), after.get(i).getCallTarget());
             assertEquals(signatures.get(i), completeSignature(after.get(i)));
         }
-
-        assertSame(rejection, after.get(1).arityRejectionTarget());
-        assertSame(after.get(2).getCallTarget(), rejection);
     }
 
     private static Object invoke(
