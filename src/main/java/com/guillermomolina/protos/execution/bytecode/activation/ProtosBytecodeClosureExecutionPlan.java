@@ -143,6 +143,31 @@ final class ProtosBytecodeClosureExecutionPlan {
             CanonicalBindingAnalysis bindingAnalysis,
             ProtosSemanticBytecodeRootNode activationRoot,
             ProtosExecutionMode profile) {
+        this(
+                definition,
+                language,
+                source,
+                bindingAnalysis,
+                activationRoot,
+                profile,
+                CanonicalReturnHomeAnalysis.mayObserveReturnHome(
+                        Objects.requireNonNull(definition, "definition")));
+    }
+
+    /**
+     * I106 (PLAT061-B): variant for a lowerer that already proved {@code
+     * mayObserveReturnHome} for this exact {@code definition} ({@link
+     * CanonicalCompilationFacts#mayObserveReturnHome}), so the definition fact
+     * is not re-derived.
+     */
+    ProtosBytecodeClosureExecutionPlan(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosExecutionMode profile,
+            boolean mayObserveReturnHome) {
         this.definition =
                 Objects.requireNonNull(definition, "definition");
         this.profile = Objects.requireNonNull(profile, "profile");
@@ -195,8 +220,7 @@ final class ProtosBytecodeClosureExecutionPlan {
          * per ordinary source Closure call).
          */
         this.activationTarget = activationRoot.getCallTarget();
-        this.mayObserveReturnHome =
-                CanonicalReturnHomeAnalysis.mayObserveReturnHome(definition);
+        this.mayObserveReturnHome = mayObserveReturnHome;
     }
 
     CanonicalClosure definition() {

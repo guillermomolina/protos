@@ -202,8 +202,13 @@ final class CanonicalToBytecodeLowerer {
 
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
-    private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
-            bindingAnalysisByClosure = new java.util.IdentityHashMap<>();
+    /*
+     * I106 (PLAT061-B): canonical proofs of this compilation unit, shared by
+     * every parse of its retained Bytecode parser and never by another
+     * lowerer or Context.
+     */
+    private final CanonicalCompilationFacts compilationFacts =
+            new CanonicalCompilationFacts();
     /*
      * I091: exact host descriptors of the number literals of this lowering, parsed once per
      * literal node however many lowering decisions consult it.
@@ -229,8 +234,8 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * PERF025 frame-materialization slice: the frame-binding range and layout
-     * of the genuine root currently being lowered when {@link
-     * #requiresPersistentFrameAuthority} proved it needs no persistent frame
+     * of the genuine root currently being lowered when its {@link
+     * CanonicalCompilationFacts.RootFacts} proved it needs no persistent frame
      * authority, else {@code null}. While non-null, that root's own statically
      * proven current bindings are established through the frame-native
      * operations instead of the named-slot authority path. Saved and restored
@@ -437,8 +442,7 @@ final class CanonicalToBytecodeLowerer {
                     && inheritedBindingAnalysis.scopeOf(activationDefinition).isPresent()) {
                 return inheritedBindingAnalysis;
             }
-            return bindingAnalysisByClosure.computeIfAbsent(
-                    activationDefinition, CanonicalBindingAnalyzer::analyzeClosure);
+            return compilationFacts.isolatedClosureAnalysis(activationDefinition);
         }
 
         /*
@@ -471,7 +475,7 @@ final class CanonicalToBytecodeLowerer {
                 && moduleBindingAnalysis.scopeOf(definition).isPresent()) {
             return moduleBindingAnalysis;
         }
-        return CanonicalBindingAnalyzer.analyzeClosure(definition);
+        return compilationFacts.isolatedClosureAnalysis(definition);
     }
 
     private CanonicalLexicalScope rootScopeFor(
@@ -482,6 +486,22 @@ final class CanonicalToBytecodeLowerer {
         }
         return analysis.scopeOf(activationDefinition)
                 .orElseGet(analysis::topScope);
+    }
+
+    /**
+     * I106 (PLAT061-B): resolves the analysis and scope of one root and
+     * proves its canonical facts before that root's builder section opens.
+     * Physical facts (layout, carriers, BytecodeLocals) stay with emission.
+     */
+    private CanonicalCompilationFacts.RootFacts prepareRootFacts(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            CanonicalBindingAnalysis analysis) {
+        return compilationFacts.rootFacts(
+                sequence,
+                activationDefinition,
+                analysis,
+                rootScopeFor(analysis, activationDefinition));
     }
 
     /**
@@ -627,6 +647,11 @@ final class CanonicalToBytecodeLowerer {
          * enclosing root (emitInlineObjectConstruction) and contributes no
          * root to the group.
          */
+        CanonicalCompilationFacts.RootFacts rootFacts =
+                prepareRootFacts(
+                        sequence,
+                        activationDefinition,
+                        bindingAnalysisFor(sequence, activationDefinition));
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
@@ -652,7 +677,8 @@ final class CanonicalToBytecodeLowerer {
                                     lowerRootInto(
                                             builder,
                                             sequence,
-                                            activationDefinition);
+                                            activationDefinition,
+                                            rootFacts);
                                     builder.endSource();
                                 } finally {
                                     closureRootsLoweredThisParse = savedLoweredThisParse;
@@ -668,7 +694,9 @@ final class CanonicalToBytecodeLowerer {
                                         source,
                                         pending.bindingAnalysis(),
                                         pending.root(),
-                                        profile));
+                                        profile,
+                                        compilationFacts.mayObserveReturnHome(
+                                                pending.definition())));
             }
 
             return roots.getNode(0);
@@ -687,29 +715,17 @@ final class CanonicalToBytecodeLowerer {
      * recursive validation constructs nested Closure/Object plans. Otherwise
      * those plans would conservatively re-analyze nested Closures in
      * isolation and lose their captured owner/depth metadata.
+     *
+     * <p>I106: {@code rootFacts} was prepared by the caller before this
+     * root's builder section opened and is not proven again here.
      */
     private ProtosSemanticBytecodeRootNode lowerRootInto(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
-        CanonicalBindingAnalysis analysisForThisRoot =
-                bindingAnalysisFor(sequence, activationDefinition);
-        CanonicalLexicalScope scopeForThisRoot =
-                rootScopeFor(analysisForThisRoot, activationDefinition);
-        return lowerRootInto(
-                builder,
-                sequence,
-                activationDefinition,
-                analysisForThisRoot,
-                scopeForThisRoot);
-    }
-
-    private ProtosSemanticBytecodeRootNode lowerRootInto(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            CanonicalBindingAnalysis analysisForThisRoot,
-            CanonicalLexicalScope scopeForThisRoot) {
+            CanonicalCompilationFacts.RootFacts rootFacts) {
+        CanonicalBindingAnalysis analysisForThisRoot = rootFacts.bindingAnalysis();
+        CanonicalLexicalScope scopeForThisRoot = rootFacts.scope();
         validateSupported(sequence);
         validateSpan(sequence.span());
 
@@ -758,8 +774,11 @@ final class CanonicalToBytecodeLowerer {
             currentRootBindingCallCandidates =
                     activationDefinition == null
                             ? java.util.Map.of()
-                            : bindingClosureCallCandidates(
-                                    sequence, analysisForThisRoot, scopeForThisRoot);
+                            : compilationFacts.bindingClosureCallCandidates(
+                                    sequence,
+                                    activationDefinition,
+                                    analysisForThisRoot,
+                                    scopeForThisRoot);
             currentRootMaterializedClosures =
                     java.util.Collections.newSetFromMap(
                             new java.util.IdentityHashMap<>());
@@ -781,7 +800,7 @@ final class CanonicalToBytecodeLowerer {
                     builder,
                     sequence,
                     activationDefinition,
-                    scopeForThisRoot);
+                    rootFacts);
         } finally {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
@@ -809,116 +828,6 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I096-B1 (PLAT057-B) static discovery of candidate bodies for ordinary
-     * calls through a lexical binding, restricted to the expressions of one
-     * genuine root sequence: a target-less {@code CanonicalCreate} whose
-     * value is a Closure literal and whose binding identity is owned by
-     * {@code scope} declares a candidate, and a call in a later expression
-     * whose receiver lookup is {@link CanonicalBindingResolution.Resolved}
-     * to that exact identity is associated with it, whether it is the
-     * expression itself or one of its operands evaluated by this same
-     * activation ({@link #collectBindingClosureCallCandidates}). Identities,
-     * never names, decide membership. An identity created more than once in
-     * the sequence keeps no candidate after its second creation, so each site
-     * has at most one.
-     *
-     * <p>The association states only which body the site may expect; whether
-     * the called value is an instance of it is decided at run time by the
-     * carrier admission ({@link #emitInlineClosureLiteralCall}).
-     */
-    private static java.util.Map<CanonicalCall, CanonicalClosure> bindingClosureCallCandidates(
-            CanonicalSequence sequence,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope) {
-        java.util.IdentityHashMap<CanonicalBindingIdentity, CanonicalClosure> definitions =
-                new java.util.IdentityHashMap<>();
-        java.util.Set<CanonicalBindingIdentity> recreated =
-                java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-        java.util.IdentityHashMap<CanonicalCall, CanonicalClosure> candidates =
-                new java.util.IdentityHashMap<>();
-
-        for (CanonicalExpression expression : sequence.expressions()) {
-            collectBindingClosureCallCandidates(
-                    expression, analysis, definitions, candidates);
-
-            if (expression instanceof CanonicalCreate create
-                    && create.target().isEmpty()) {
-                CanonicalBindingIdentity identity =
-                        analysis.identityOf(create).orElse(null);
-                if (identity == null || identity.owner() != scope) {
-                    continue;
-                }
-                if (create.value() instanceof CanonicalClosure closure
-                        && !definitions.containsKey(identity)
-                        && !recreated.contains(identity)) {
-                    definitions.put(identity, closure);
-                } else {
-                    definitions.remove(identity);
-                    recreated.add(identity);
-                }
-            }
-        }
-        return candidates;
-    }
-
-    /**
-     * Associates every ordinary call of {@code expression} whose receiver
-     * lookup resolves to an identity with a current candidate definition.
-     * Only operand positions evaluated by this same activation are visited:
-     * a nested Closure or Object body, a sequence, and any other
-     * scope-introducing or vector-staging form is not entered, so no call is
-     * associated across a heterogeneous scope.
-     */
-    private static void collectBindingClosureCallCandidates(
-            CanonicalExpression expression,
-            CanonicalBindingAnalysis analysis,
-            java.util.Map<CanonicalBindingIdentity, CanonicalClosure> definitions,
-            java.util.Map<CanonicalCall, CanonicalClosure> candidates) {
-        java.util.List<CanonicalExpression> operands = switch (expression) {
-            case CanonicalCall call -> {
-                if (call.receiver() instanceof CanonicalLookup lookup
-                        && analysis.resolutionOf(lookup).orElse(null)
-                                instanceof CanonicalBindingResolution.Resolved resolved) {
-                    CanonicalClosure definition = definitions.get(resolved.identity());
-                    if (definition != null) {
-                        candidates.put(call, definition);
-                    }
-                }
-                java.util.List<CanonicalExpression> callOperands =
-                        new java.util.ArrayList<>(call.arguments());
-                callOperands.add(0, call.receiver());
-                yield callOperands;
-            }
-            case CanonicalSend send -> {
-                java.util.List<CanonicalExpression> sendOperands =
-                        new java.util.ArrayList<>(send.arguments());
-                sendOperands.add(0, send.receiver());
-                yield sendOperands;
-            }
-            case CanonicalCreate create -> java.util.stream.Stream.concat(
-                            create.target().stream(), java.util.stream.Stream.of(create.value()))
-                    .toList();
-            case CanonicalAssign assign -> java.util.stream.Stream.concat(
-                            assign.target().stream(), java.util.stream.Stream.of(assign.value()))
-                    .toList();
-            case CanonicalIndexedAssign indexed ->
-                    java.util.List.of(indexed.receiver(), indexed.index(), indexed.value());
-            case CanonicalMember member -> java.util.List.of(member.receiver());
-            case CanonicalIdentity identity ->
-                    java.util.List.of(identity.left(), identity.right());
-            case CanonicalNotIdentity identity ->
-                    java.util.List.of(identity.left(), identity.right());
-            case CanonicalDerivedInequality inequality ->
-                    java.util.List.of(inequality.left(), inequality.right());
-            case CanonicalReturn returnExpression -> java.util.List.of(returnExpression.value());
-            default -> java.util.List.of();
-        };
-        for (CanonicalExpression operand : operands) {
-            collectBindingClosureCallCandidates(operand, analysis, definitions, candidates);
-        }
-    }
-
-    /**
      * PERF013 Slice A/A2: lowers a Closure lexically reached while an
      * enclosing root's own {@code beginRoot()}/{@code endRoot()} pair is
      * still open, nesting this Closure's root in the exact same {@code
@@ -939,23 +848,26 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         validateSupportedDefaults(definition);
-        CanonicalBindingAnalysis analysisForThisRoot =
-                bindingAnalysisForNestedClosure(definition);
-        CanonicalLexicalScope scopeForThisRoot =
-                rootScopeFor(analysisForThisRoot, definition);
+        CanonicalCompilationFacts.RootFacts rootFacts =
+                prepareRootFacts(
+                        definition.body(),
+                        definition,
+                        bindingAnalysisForNestedClosure(definition));
         return lowerRootInto(
                 builder,
                 definition.body(),
                 definition,
-                analysisForThisRoot,
-                scopeForThisRoot);
+                rootFacts);
     }
 
     private ProtosSemanticBytecodeRootNode emitRootBody(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            CanonicalLexicalScope scopeForThisRoot) {
+            CanonicalCompilationFacts.RootFacts rootFacts) {
+        CanonicalLexicalScope scopeForThisRoot = rootFacts.scope();
+        boolean requiresPersistentFrameAuthority =
+                rootFacts.requiresPersistentFrameAuthority();
         SourceSpan rootSpan = sequence.span();
         UnaryNormalEntry unaryEntry =
                 admitUnaryNormalEntry(
@@ -963,7 +875,8 @@ final class CanonicalToBytecodeLowerer {
                         activationDefinition,
                         currentRootAnalysis,
                         scopeForThisRoot,
-                        profile);
+                        profile,
+                        requiresPersistentFrameAuthority);
 
         builder.beginSourceSection(
                 rootSpan.startOffset(),
@@ -1020,11 +933,7 @@ final class CanonicalToBytecodeLowerer {
              * that may need its bindings outside its live frame installs the
              * escape-safe (BUG013) materialized-frame authority at entry.
              */
-            if (requiresPersistentFrameAuthority(
-                    sequence,
-                    activationDefinition,
-                    currentRootAnalysis,
-                    scopeForThisRoot)) {
+            if (requiresPersistentFrameAuthority) {
                 builder.beginInstallFrameLexicalAuthority(
                         frameLocalRange,
                         frameLocalLayout);
@@ -1086,7 +995,9 @@ final class CanonicalToBytecodeLowerer {
         if (activationDefinition != null) {
             int requiredPrefixCount =
                     admitRequiredPrefix(
-                            activationDefinition, sequence, scopeForThisRoot);
+                            activationDefinition,
+                            scopeForThisRoot,
+                            requiresPersistentFrameAuthority);
             if (requiredPrefixCount >= 2) {
                 // I104-B: each emitted ordinal is a constant operand.
                 for (int ordinal = 0;
@@ -2014,7 +1925,8 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure definition,
             CanonicalBindingAnalysis analysis,
             CanonicalLexicalScope scope,
-            ProtosExecutionMode profile) {
+            ProtosExecutionMode profile,
+            boolean requiresPersistentFrameAuthority) {
         if (profile != ProtosExecutionMode.NORMAL
                 || definition == null
                 || analysis == null
@@ -2045,43 +1957,13 @@ final class CanonicalToBytecodeLowerer {
                 || !parameterIdentity.name().equals(parameter.name())
                 || !(resolution instanceof CanonicalBindingResolution.Resolved resolved)
                 || resolved.identity() != parameterIdentity
-                || requiresPersistentFrameAuthority(
-                        body, definition, analysis, scope)) {
+                || requiresPersistentFrameAuthority) {
             return null;
         }
 
         return new UnaryNormalEntry(parameter.name());
     }
 
-    /**
-     * PERF025 frame-materialization slice: conservative lowering decision on
-     * whether this genuine root must install its persistent, escape-safe
-     * materialized-frame authority at entry, or may keep its statically proven
-     * current bindings in its ordinary frame locals for the lifetime of its
-     * live frame.
-     *
-     * <p>Only a Closure root can avoid the authority: a top-level/module root
-     * may share its activation with later roots (REPL/module persistence and
-     * the I072-C authority handoff), so it always installs it. A Closure root
-     * avoids it only when nothing in its own parameters or body can make its
-     * current execution context observable or capturable, or reach a current
-     * binding other than through its static identity:
-     * <ul>
-     *   <li>no nested Closure (including inline literal callbacks and Closure
-     *       defaults), which captures the current context by reference;</li>
-     *   <li>no Object construction, whose construction activation captures it;</li>
-     *   <li>no {@code context} intrinsic and no {@code compose}, which observe
-     *       or populate it as a guest Context;</li>
-     *   <li>every bare read or write of a name this root declares is {@code
-     *       Resolved} to this root's own scope (never {@code Candidate} or
-     *       {@code Dynamic}), and every target-less creation is proven to
-     *       establish a binding of this root's own scope.</li>
-     * </ul>
-     * Any unrecognized form keeps the authority. A root that is admitted but
-     * whose activation is nonetheless observed at run time takes the
-     * in-frame transition of {@link
-     * ProtosBytecodeRootNode#createCurrentFrameBinding}.
-     */
     /**
      * PERF034-C: only a parameterless source Closure with an effect-free
      * straight-line body may use builtin StoreLocal/LoadLocal for its own
@@ -2459,148 +2341,6 @@ final class CanonicalToBytecodeLowerer {
         if (candidate != null) {
             hints.put(send, candidate);
         }
-    }
-
-    private static boolean requiresPersistentFrameAuthority(
-            CanonicalSequence body,
-            CanonicalClosure activationDefinition,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope) {
-        if (activationDefinition == null || analysis == null || scope == null) {
-            return true;
-        }
-        for (CanonicalParameter parameter : activationDefinition.parameters()) {
-            if (analysis.identityOf(parameter)
-                            .map(identity -> identity.owner() != scope)
-                            .orElse(true)
-                    || (parameter.defaultValue().isPresent()
-                            && demandsPersistentFrame(
-                                    parameter.defaultValue().orElseThrow(), analysis, scope))) {
-                return true;
-            }
-        }
-        return demandsPersistentFrame(body, analysis, scope);
-    }
-
-    private static boolean demandsPersistentFrame(
-            CanonicalExpression expression,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope) {
-        if (expression instanceof CanonicalLiteral) {
-            return false;
-        }
-        if (expression instanceof CanonicalClosure
-                || expression instanceof CanonicalObject
-                || expression instanceof CanonicalCompose) {
-            return true;
-        }
-        if (expression instanceof CanonicalIntrinsic intrinsic) {
-            return intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
-        }
-        if (expression instanceof CanonicalLookup lookup) {
-            return scope.declaresName(lookup.name())
-                    && !resolvedInScope(analysis.resolutionOf(lookup), scope);
-        }
-        if (expression instanceof CanonicalAssign assign) {
-            if (assign.target().isPresent()) {
-                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope)
-                        || demandsPersistentFrame(assign.value(), analysis, scope);
-            }
-            return (scope.declaresName(assign.name())
-                            && !resolvedInScope(analysis.resolutionOf(assign), scope))
-                    || demandsPersistentFrame(assign.value(), analysis, scope);
-        }
-        if (expression instanceof CanonicalCreate create) {
-            if (create.target().isPresent()) {
-                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope)
-                        || demandsPersistentFrame(create.value(), analysis, scope);
-            }
-            return analysis.identityOf(create)
-                            .map(identity -> identity.owner() != scope)
-                            .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope);
-        }
-        if (expression instanceof CanonicalMultipleCreate create) {
-            return analysis.identitiesOf(create)
-                            .map(identities -> identities.size() != create.names().size()
-                                    || identities.stream()
-                                            .anyMatch(identity -> identity.owner() != scope))
-                            .orElse(true)
-                    || demandsPersistentFrame(create.value(), analysis, scope);
-        }
-        if (expression instanceof CanonicalSequence sequence) {
-            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope);
-        }
-        if (expression instanceof CanonicalCall call) {
-            return demandsPersistentFrame(call.receiver(), analysis, scope)
-                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope);
-        }
-        if (expression instanceof CanonicalSend send) {
-            return demandsPersistentFrame(send.receiver(), analysis, scope)
-                    || anyDemandsPersistentFrame(send.arguments(), analysis, scope);
-        }
-        if (expression instanceof CanonicalSuperSend superSend) {
-            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope);
-        }
-        if (expression instanceof CanonicalMember member) {
-            return demandsPersistentFrame(member.receiver(), analysis, scope);
-        }
-        if (expression instanceof CanonicalIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope)
-                    || demandsPersistentFrame(identity.right(), analysis, scope);
-        }
-        if (expression instanceof CanonicalNotIdentity identity) {
-            return demandsPersistentFrame(identity.left(), analysis, scope)
-                    || demandsPersistentFrame(identity.right(), analysis, scope);
-        }
-        if (expression instanceof CanonicalDerivedInequality inequality) {
-            return demandsPersistentFrame(inequality.left(), analysis, scope)
-                    || demandsPersistentFrame(inequality.right(), analysis, scope);
-        }
-        if (expression instanceof CanonicalIndexedAssign indexed) {
-            return demandsPersistentFrame(indexed.receiver(), analysis, scope)
-                    || demandsPersistentFrame(indexed.index(), analysis, scope)
-                    || demandsPersistentFrame(indexed.value(), analysis, scope);
-        }
-        if (expression instanceof CanonicalMapConstruction map) {
-            if (demandsPersistentFrame(map.factory(), analysis, scope)) {
-                return true;
-            }
-            for (CanonicalMapConstruction.Entry entry : map.entries()) {
-                if (demandsPersistentFrame(entry.key(), analysis, scope)
-                        || demandsPersistentFrame(entry.value(), analysis, scope)) {
-                    return true;
-                }
-            }
-            return false;
-        }
-        if (expression instanceof CanonicalReturn returnExpression) {
-            return demandsPersistentFrame(returnExpression.value(), analysis, scope);
-        }
-        if (expression instanceof CanonicalSpread spread) {
-            return demandsPersistentFrame(spread.expression(), analysis, scope);
-        }
-        return true;
-    }
-
-    private static boolean anyDemandsPersistentFrame(
-            java.util.List<CanonicalExpression> expressions,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope) {
-        for (CanonicalExpression expression : expressions) {
-            if (demandsPersistentFrame(expression, analysis, scope)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean resolvedInScope(
-            java.util.Optional<CanonicalBindingResolution> resolution,
-            CanonicalLexicalScope scope) {
-        return resolution.isPresent()
-                && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
-                && resolved.identity().owner() == scope;
     }
 
     /**
@@ -3286,8 +3026,8 @@ final class CanonicalToBytecodeLowerer {
      */
     private int admitRequiredPrefix(
             CanonicalClosure definition,
-            CanonicalSequence body,
-            CanonicalLexicalScope scope) {
+            CanonicalLexicalScope scope,
+            boolean requiresPersistentFrameAuthority) {
         if (profile != ProtosExecutionMode.NORMAL
                 || currentActivationLocal != null
                 || currentInlineCallbackFrameNative
@@ -3297,8 +3037,7 @@ final class CanonicalToBytecodeLowerer {
                 || currentRootFrameNativeLayout == null
                 || definition.parameters().size() < 2
                 || currentRootAnalysis.scopeOf(definition).orElse(null) != scope
-                || requiresPersistentFrameAuthority(
-                        body, definition, currentRootAnalysis, scope)) {
+                || requiresPersistentFrameAuthority) {
             return 0;
         }
 
@@ -6949,16 +6688,15 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure definition,
             BytecodeLocal child,
             BytecodeLocal result) {
-        CanonicalBindingAnalysis callbackAnalysis =
-                bindingAnalysisForNestedClosure(definition);
-        CanonicalLexicalScope callbackScope =
-                rootScopeFor(callbackAnalysis, definition);
-        boolean frameNativeCallback =
-                !requiresPersistentFrameAuthority(
+        CanonicalCompilationFacts.RootFacts callbackFacts =
+                prepareRootFacts(
                         definition.body(),
                         definition,
-                        callbackAnalysis,
-                        callbackScope);
+                        bindingAnalysisForNestedClosure(definition));
+        CanonicalBindingAnalysis callbackAnalysis = callbackFacts.bindingAnalysis();
+        CanonicalLexicalScope callbackScope = callbackFacts.scope();
+        boolean frameNativeCallback =
+                !callbackFacts.requiresPersistentFrameAuthority();
 
         builder.beginBlock();
         BytecodeLocal callbackCall =
@@ -8714,13 +8452,14 @@ final class CanonicalToBytecodeLowerer {
      */
     private boolean admitsNormalInlineControlBody(CanonicalClosure closure) {
         if (!closure.parameters().isEmpty()
-                || CanonicalReturnHomeAnalysis.mayObserveReturnHome(
-                        closure)) {
+                || compilationFacts.mayObserveReturnHome(closure)) {
             return false;
         }
 
+        // Deliberately isolated: the own-binding and direct-parent-capture
+        // proofs below compare it against the current root's analysis.
         CanonicalBindingAnalysis analysis =
-                CanonicalBindingAnalyzer.analyzeClosure(closure);
+                compilationFacts.isolatedClosureAnalysis(closure);
         CanonicalLexicalScope scope =
                 analysis.scopeOf(closure).orElseThrow();
 
@@ -8751,8 +8490,9 @@ final class CanonicalToBytecodeLowerer {
         return (ownScalarBindings
                         || noOwnBindingsAndProvenCaptures
                         || mixedOwnBindingsAndParentCaptures)
-                && !requiresPersistentFrameAuthority(
-                        closure.body(), closure, analysis, scope);
+                && !compilationFacts.rootFacts(
+                                closure.body(), closure, analysis, scope)
+                        .requiresPersistentFrameAuthority();
     }
 
     /**
@@ -9219,8 +8959,9 @@ final class CanonicalToBytecodeLowerer {
         CanonicalLexicalScope savedCallbackScalarScope =
                 currentNormalCallbackScalarScope;
         try {
+            // The same isolated analysis admitsNormalInlineControlBody proved.
             CanonicalBindingAnalysis callbackAnalysis =
-                    CanonicalBindingAnalyzer.analyzeClosure(closure);
+                    compilationFacts.isolatedClosureAnalysis(closure);
             CanonicalLexicalScope callbackScope =
                     callbackAnalysis.scopeOf(closure).orElseThrow();
             if (!callbackScope.declaredNames().isEmpty()) {
@@ -10158,7 +9899,8 @@ final class CanonicalToBytecodeLowerer {
      * I096-A (PLAT057-B) compile-time candidate for lexical inlining of an
      * ordinary Closure call: the receiver is an immediate Closure literal, so
      * its body is known while lowering this caller. I096-B1 extends this to a
-     * receiver lookup that {@link #bindingClosureCallCandidates} associates
+     * receiver lookup that {@link
+     * CanonicalCompilationFacts#bindingClosureCallCandidates} associates
      * with the single Closure literal created in its binding, when this
      * parse of the root has already materialized that literal (so its plan
      * is registered before the site). For a binding the candidate is only an
@@ -10175,7 +9917,7 @@ final class CanonicalToBytecodeLowerer {
      * <p>Unlike the PLAT044 B′ callback candidates, a body creating a nested
      * Closure (directly, or as a method of an object it constructs) is
      * admitted. Such a body always requires persistent frame authority
-     * ({@link #demandsPersistentFrame}), so {@link #emitInlineLiteralCallback}
+     * ({@link CanonicalCompilationFacts#rootFacts}), so {@link #emitInlineLiteralCallback}
      * never gives it frame-native block-local bindings: its parameters and
      * locals are bound by name on the invocation's own fresh activation,
      * materialized from the carrier before the first binding, and every

@@ -46,7 +46,10 @@ public final class ProtosSourceCompiler {
                 new ProtosParser(source.getCharacters().toString()).parseProgram();
         CanonicalSequence canonical =
                 (CanonicalSequence) canonicalizer.canonicalize(surface);
-        return new CanonicalToBytecodeLowerer(language, source, profile)
+        // I106: the whole-tree lexical analysis is built once, before lowering.
+        CanonicalBindingAnalysis bindingAnalysis =
+                CanonicalBindingAnalyzer.analyzeModule(canonical);
+        return new CanonicalToBytecodeLowerer(language, source, bindingAnalysis, profile)
                 .lowerRoot(canonical)
                 .getCallTarget();
     }

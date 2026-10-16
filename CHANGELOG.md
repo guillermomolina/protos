@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.369-SNAPSHOT
+
+- `I106` (#904): implement PLAT061-B composable canonical compilation facts.
+  - Add the compilation-unit-local `CanonicalCompilationFacts`, which
+    memoizes by identity the isolated Closure analysis, ReturnHome
+    observability, the persistent-frame proof and I096 binding call
+    candidates, each valid only for its exact definition, analysis and scope.
+  - Prove root facts before the Bytecode Builder opens each root; the five
+    persistent-frame consumers reuse one proof instead of re-walking the AST.
+  - `ProtosSourceCompiler` builds the whole-tree binding analysis once before
+    lowering, and Closure plans receive the already proven ReturnHome fact.
+  - Mismatched or incomplete queries fail closed. Emitted Bytecode, the B5
+    ABI and observable semantics are unchanged.
+
 ## 0.3.368-SNAPSHOT
 
 - `I101` (#892): complete PLAT058-D profile-specialized minimal

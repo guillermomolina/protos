@@ -99,6 +99,29 @@ public final class ProtosClosureExecutionPlan {
                         profile));
     }
 
+    /**
+     * I106 (PLAT061-B): as above, with the ReturnHome observability of
+     * {@code definition} already proven by the lowering unit.
+     */
+    static ProtosClosureExecutionPlan bytecode(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosSemanticBytecodeRootNode bodyRoot,
+            ProtosExecutionMode profile,
+            boolean mayObserveReturnHome) {
+        return new ProtosClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
+                        definition,
+                        language,
+                        source,
+                        bindingAnalysis,
+                        bodyRoot,
+                        profile,
+                        mayObserveReturnHome));
+    }
+
     CanonicalBindingAnalysis bytecodeBindingAnalysisForTesting() {
         return bytecodePlan.bindingAnalysisForTesting();
     }
