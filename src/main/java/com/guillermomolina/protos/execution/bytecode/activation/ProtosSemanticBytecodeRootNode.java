@@ -7578,4 +7578,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     prepared, result);
         }
     }
+
+    /**
+     * PERF042 experimental physical lower bound.
+     * Statically known call target, no source-language guards or fallback.
+     */
+    @Operation(forceCached = true)
+    @ConstantOperand(type = RootCallTarget.class, name = "target")
+    public static final class Perf042KnownIdentityCallOne {
+        @Specialization
+        public static Object perform(
+                RootCallTarget target,
+                Object argument,
+                @Cached("create(target)") DirectCallNode direct) {
+            return direct.call(argument);
+        }
+    }
+
 }
