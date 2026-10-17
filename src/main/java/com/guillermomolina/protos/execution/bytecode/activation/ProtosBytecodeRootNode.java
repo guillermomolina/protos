@@ -4738,6 +4738,130 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class IsStructuredLocalEachCall {
+        @Specialization
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return isStandardLocalEach(prepared);
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return isStandardLocalEach(prepared);
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return isStandardLocalEach(prepared);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
+            return isStandardLocalEach(prepared);
+        }
+
+        private static boolean isStandardLocalEach(
+                PreparedClosureCall prepared) {
+            return prepared.isStructuredArrayEach()
+                    || prepared.isStructuredBytesEach()
+                    || prepared.isStructuredEnvironmentEach()
+                    || prepared.isStructuredIdentityMapEach()
+                    || prepared.isStructuredMapEach();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredLocalEachCall {
+        @Specialization
+        public static PreparedLocalEachCall ordinary(
+                OrdinarySourceCall prepared) {
+            if (prepared.isStructuredArrayEach()) {
+                return PrepareStructuredArrayEachCall.ordinary(prepared);
+            }
+            if (prepared.isStructuredBytesEach()) {
+                return PrepareStructuredBytesEachCall.ordinary(prepared);
+            }
+            if (prepared.isStructuredEnvironmentEach()) {
+                return PrepareStructuredEnvironmentEachCall.ordinary(prepared);
+            }
+            if (prepared.isStructuredIdentityMapEach()) {
+                return PrepareStructuredIdentityMapEachCall.ordinary(prepared);
+            }
+            if (prepared.isStructuredMapEach()) {
+                return PrepareStructuredMapEachCall.ordinary(prepared);
+            }
+            throw new IllegalStateException(
+                    "Not a structured local each call");
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall nativeCall(
+                NativeCall prepared) {
+            if (prepared.isStructuredArrayEach()) {
+                return PrepareStructuredArrayEachCall.nativeCall(prepared);
+            }
+            if (prepared.isStructuredBytesEach()) {
+                return PrepareStructuredBytesEachCall.nativeCall(prepared);
+            }
+            if (prepared.isStructuredEnvironmentEach()) {
+                return PrepareStructuredEnvironmentEachCall.nativeCall(prepared);
+            }
+            if (prepared.isStructuredIdentityMapEach()) {
+                return PrepareStructuredIdentityMapEachCall.nativeCall(prepared);
+            }
+            if (prepared.isStructuredMapEach()) {
+                return PrepareStructuredMapEachCall.nativeCall(prepared);
+            }
+            throw new IllegalStateException(
+                    "Not a structured local each call");
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall immediate(
+                ImmediateResultCall prepared) {
+            if (prepared.isStructuredArrayEach()) {
+                return PrepareStructuredArrayEachCall.immediate(prepared);
+            }
+            if (prepared.isStructuredBytesEach()) {
+                return PrepareStructuredBytesEachCall.immediate(prepared);
+            }
+            if (prepared.isStructuredEnvironmentEach()) {
+                return PrepareStructuredEnvironmentEachCall.immediate(prepared);
+            }
+            if (prepared.isStructuredIdentityMapEach()) {
+                return PrepareStructuredIdentityMapEachCall.immediate(prepared);
+            }
+            if (prepared.isStructuredMapEach()) {
+                return PrepareStructuredMapEachCall.immediate(prepared);
+            }
+            throw new IllegalStateException(
+                    "Not a structured local each call");
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
+            if (prepared.isStructuredArrayEach()) {
+                return PrepareStructuredArrayEachCall.moduleInitialization(prepared);
+            }
+            if (prepared.isStructuredBytesEach()) {
+                return PrepareStructuredBytesEachCall.moduleInitialization(prepared);
+            }
+            if (prepared.isStructuredEnvironmentEach()) {
+                return PrepareStructuredEnvironmentEachCall.moduleInitialization(prepared);
+            }
+            if (prepared.isStructuredIdentityMapEach()) {
+                return PrepareStructuredIdentityMapEachCall.moduleInitialization(prepared);
+            }
+            if (prepared.isStructuredMapEach()) {
+                return PrepareStructuredMapEachCall.moduleInitialization(prepared);
+            }
+            throw new IllegalStateException(
+                    "Not a structured local each call");
+        }
+
+    }
+
+    @Operation
     public static final class IsStructuredArrayEachCall {
         @Specialization
         public static boolean ordinary(OrdinarySourceCall prepared) {
@@ -4781,6 +4905,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static PreparedArrayEachCall moduleInitialization(
                 ModuleInitializationCall prepared) {
             return prepared.prepareStructuredArrayEach();
+        }
+    }
+
+    @Operation
+    public static final class StructuredLocalEachHasNext {
+        @Specialization
+        public static boolean perform(PreparedLocalEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredLocalEachChildCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedLocalEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredLocalEach {
+        @Specialization
+        public static void perform(PreparedLocalEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredLocalEach {
+        @Specialization
+        public static Object perform(PreparedLocalEachCall prepared) {
+            return prepared.finish();
         }
     }
 
