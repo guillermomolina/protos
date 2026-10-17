@@ -107,8 +107,9 @@ final class ProtosPerf037EDirectTerminalReturnTest {
             assertTrue(
                     root.getBytecodeNode().getInstructionsAsList().stream()
                             .anyMatch(instruction ->
+                                    // I112: the return epilogue owns the carrier projection.
                                     instruction.getName()
-                                            .contains("MaterializeReturnCarrier")));
+                                            .contains("EpilogForReturn")));
 
             assertFalse(localNames(run).contains("sequenceResult"));
             assertEquals(

@@ -10839,6 +10839,96 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * I112 / PLAT062-T terminal execution of a prepared call selected inside a
+     * terminal invocation operation ({@code InvokeClosure*Tail}). It selects
+     * the entry of the four existing representations exactly as {@link
+     * EnterClosureCall} and {@link EnterNestedStructuredDispatch} do, then
+     * completes the call here: a synchronous result is finished directly; a
+     * suspended one is returned as one {@link ProtosTailCallContinuation}
+     * retaining this call as the owner of its pending completion.
+     *
+     * <p>A structured native call enters the Context's existing C-prime
+     * dispatcher root, which keeps ownership of its own finish, ensure and
+     * handler regions and cleanup; this method then never finishes the same
+     * call again and only adapts the dispatcher boundary. Every other
+     * representation is finished, or completed on an abrupt exit, exactly
+     * once by this method or by its transport.
+     */
+    static Object executeTerminalPreparedCall(
+            PreparedClosureCall prepared,
+            IndirectCallNode indirectCall,
+            BytecodeNode callerBytecode,
+            int callerIndex) {
+        boolean ownerFinishesHere = !prepared.requiresStructuredDispatch();
+        Object outcome;
+        try {
+            outcome = enterTerminalPreparedCall(prepared, indirectCall);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            Object handled;
+            try {
+                handled = prepared.handleControlTransfer(bridged.transfer());
+            } catch (RuntimeException | Error escaped) {
+                if (ownerFinishesHere) {
+                    prepared.complete();
+                }
+                throw escaped;
+            }
+            return ownerFinishesHere ? prepared.finish(handled) : handled;
+        } catch (AbstractTruffleException failure) {
+            prepared.failIfModuleInitialization();
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw failure;
+        } catch (ControlFlowException transfer) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw transfer;
+        } catch (RuntimeException failure) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw prepared.mapRuntimeFailure(failure);
+        } catch (Error failure) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw failure;
+        }
+        return ProtosTailCallContinuation.completeOrDefer(
+                prepared, outcome, ownerFinishesHere, callerBytecode, callerIndex);
+    }
+
+    private static Object enterTerminalPreparedCall(
+            PreparedClosureCall prepared,
+            IndirectCallNode indirectCall) {
+        if (prepared instanceof OrdinarySourceCall ordinary) {
+            return indirectCall.call(ordinary.bodyTarget(), ordinary.targetArguments());
+        }
+        if (prepared instanceof NativeCall nativeCall) {
+            if (nativeCall.requiresStructuredDispatch()) {
+                return indirectCall.call(
+                        ProtosTaskCPrimeEntryExecution.structuredDispatchTargetForEnteredContext(),
+                        nativeCall.activation(),
+                        nativeCall);
+            }
+            return nativeCall.enterNative();
+        }
+        if (prepared instanceof ImmediateResultCall immediate) {
+            return immediate.enterImmediate();
+        }
+        if (prepared instanceof ModuleInitializationCall module) {
+            if (module.isImmediate()) {
+                return module.enterImmediate();
+            }
+            return indirectCall.call(module.bodyTarget(), module.targetArguments());
+        }
+        throw new IllegalStateException(
+                "unsupported prepared Closure call representation");
+    }
+
+    /**
      * Enters a prepared Closure call. TEST009-I: every specialization receives
      * one concrete final {@link PreparedClosureCall} representation, so the
      * entry, control-transfer, module-failure and runtime-failure calls bind
@@ -10996,6 +11086,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * then continue to see only ordinary nested ContinuationResults.
              */
             return value instanceof ContinuationResult
+                    || value instanceof ProtosTailCallContinuation
                     || value instanceof ProtosNativeSuspension
                     || value instanceof ProtosIoOperationSuspension
                     || value instanceof ProtosIoReleaseSuspension;
@@ -11061,6 +11152,29 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "operation-owned suspension received an unsupported resume transport");
             }
             return suspension.resume();
+        }
+
+        /**
+         * I112 / PLAT062-T: continues a child's terminal transport. The
+         * transport resumes its own retained state and completes its own
+         * owner; this caller's prepared call adapts what leaves it exactly as
+         * for a child {@link ContinuationResult}.
+         */
+        @Specialization
+        public static Object terminal(
+                PreparedClosureCall prepared,
+                ProtosTailCallContinuation transport,
+                Object resumeValue) {
+            try {
+                return ProtosTailCallContinuation.resume(transport, resumeValue);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (AbstractTruffleException transfer) {
+                prepared.failIfModuleInitialization();
+                throw transfer;
+            } catch (RuntimeException failure) {
+                throw prepared.mapRuntimeFailure(failure);
+            }
         }
 
         @Specialization(

@@ -451,7 +451,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             List<String> instructions = instructionNames(run);
             assertEquals(
-                    List.of("load.constant", "store.local", "load.local", "return"),
+                    // I112: every semantic root has the EnterRoot prologue and
+                    // the EpilogForReturn epilogue.
+                    List.of("c.EnterRoot", "load.constant", "store.local", "load.local",
+                            "c.EpilogForReturn", "return"),
                     instructions,
                     "NORMAL must emit only the proven local Builder");
             assertNone(instructions, "CurrentActivation");
@@ -505,9 +508,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             List<String> instructions = instructionNames(scalar);
             assertEquals(
                     List.of(
+                            "c.EnterRoot",
                             "load.constant", "store.local",
                             "load.constant", "store.local",
-                            "load.local", "return"),
+                            "load.local",
+                            "c.EpilogForReturn", "return"),
                     instructions,
                     "NORMAL emits the minimal two-binding Builder");
             assertNone(instructions, "CurrentActivation");
@@ -649,8 +654,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         body.literalOnly() ? 1 : body.created().size(),
                         countOf(instructions, "load.local"));
                 assertEquals(1, countOf(instructions, "return"));
+                // I112: plus the EnterRoot prologue and EpilogForReturn epilogue.
                 assertEquals(
-                        body.created().size() * 2 + 2,
+                        body.created().size() * 2 + 4,
                         instructions.size(),
                         () -> body.characters() + ": " + instructions);
                 List<Object> locals = localNames(scalar);

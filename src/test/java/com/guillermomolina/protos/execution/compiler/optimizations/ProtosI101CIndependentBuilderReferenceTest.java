@@ -323,10 +323,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     builder.createLocal("normalBooleanControlReceiver", null);
                             builder.beginStoreLocal(receiverValue);
                             builder.beginMaterializePrimitiveNumericCarrier();
-                            builder.beginReadRootFrameLocal(
-                                    receiver, layout.presentContinuityAt(0));
-                            builder.emitLoadConstant("receiver");
-                            builder.endReadRootFrameLocal();
+                            builder.emitReadRootFrameLocal(
+                                    receiver, layout.presentContinuityAt(0), "receiver");
                             builder.emitLoadConstant(true);
                             builder.endMaterializePrimitiveNumericCarrier();
                             builder.endStoreLocal();
@@ -378,10 +376,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endSourceSection();
                             endReferenceStatement(builder);
 
+                            // I112: the return epilogue projects a retained carrier.
                             builder.beginReturn();
-                            builder.beginMaterializeReturnCarrier();
                             builder.emitLoadLocal(result);
-                            builder.endMaterializeReturnCarrier();
                             builder.endReturn();
 
                             builder.endRoot();
@@ -454,8 +451,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.endRoot();
                     builder.endSourceSection();
 
-                    builder.beginMaterializeCurrentClosure();
-                    builder.emitCurrentCallerReference();
+                    // I112: the creating activation is bound from the frame.
+                    builder.beginMaterializeCurrentClosure(true);
                     builder.emitLoadConstant(literal);
                     builder.emitLoadConstant(literalPlan);
                     builder.endMaterializeCurrentClosure();
@@ -545,12 +542,12 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         "call-zero",
                         "() => { null() }",
                         false,
-                        "InvokeClosureZero"),
+                        "InvokeClosureZeroTail"),
                 new Witness(
                         "call-n",
                         "() => { null(7, 9) }",
                         true,
-                        "InvokeClosureArguments"));
+                        "InvokeClosureArgumentsTail"));
 
         try (Harness normal =
                 new Harness(ProtosExecutionMode.NORMAL)) {
@@ -599,16 +596,17 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     actual, witness.invocation()) >= 0,
                             witness.name() + " missing semantic invocation");
 
-                    for (String required : List.of(
+                    // I112 / PLAT062-T: the terminal operation owns the
+                    // fallback; no physical composition remains here.
+                    for (String absent : List.of(
                             "IsPreparedClosureInvocation",
                             "RequiresStructuredDispatch",
                             "EnterStraightLineSourceCall",
                             "EnterClosureCall",
                             "IsContinuationForCall",
-                            "ResumeContinuation")) {
-                        assertTrue(
-                                indexOfOperation(actual, required) >= 0,
-                                witness.name() + ": " + required);
+                            "ResumeContinuation",
+                            "Yield")) {
+                        assertNoOperation(actual, absent);
                     }
 
                     assertNoOperation(actual, "TryDirectCall");
@@ -634,7 +632,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     /**
      * Independent, single-root Builder model of a parameterless
      * Closure whose terminal expression invokes null with zero or
-     * two positional arguments. The call is not executed here:
+     * two positional arguments, lowered as an I112 terminal call. The call is not executed here:
      * null is chosen solely to make the receiver construction
      * independent of any Closure materialization or lexical lookup.
      */
@@ -671,19 +669,10 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     bodyStart, bodyLength);
                             builder.beginRoot();
 
-                            BytecodeLocal prepared =
-                                    builder.createLocal(
-                                            "preparedClosureCall", null);
-                            BytecodeLocal child =
-                                    builder.createLocal(
-                                            "childResult", null);
-                            BytecodeLocal resumed =
-                                    builder.createLocal(
-                                            "resumeValue", null);
-                            BytecodeLocal result =
-                                    builder.createLocal(
-                                            "sequenceResult", null);
-
+                            // I112 / PLAT062-T: the final call is the
+                            // root's terminal invocation; its operands
+                            // are evaluated exactly once, left to right.
+                            builder.beginReturn();
                             beginReferenceStatement(
                                     builder, callStart, callLength);
 
@@ -691,108 +680,33 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                                     callStart, callLength);
                             builder.beginTag(
                                     StandardTags.CallTag.class);
-                            builder.beginBlock();
 
-                            // The receiver is evaluated exactly once.
-                            BytecodeLocal receiver =
-                                    builder.createLocal(
-                                            "callReceiver", null);
-                            builder.beginStoreLocal(receiver);
+                            if (multi) {
+                                builder.beginInvokeClosureArgumentsTail();
+                            } else {
+                                builder.beginInvokeClosureZeroTail();
+                            }
+
                             builder.emitLoadConstant(
                                     ProtosNullValue.INSTANCE);
-                            builder.endStoreLocal();
-
-                            BytecodeLocal first = null;
-                            BytecodeLocal second = null;
-
-                            if (multi) {
-                                first = builder.createLocal(
-                                        "callArgument", null);
-                                builder.beginStoreLocal(first);
-                                builder.emitLoadConstant(
-                                        ProtosNumericValueSupport.integer(7));
-                                builder.endStoreLocal();
-
-                                second = builder.createLocal(
-                                        "callArgument", null);
-                                builder.beginStoreLocal(second);
-                                builder.emitLoadConstant(
-                                        ProtosNumericValueSupport.integer(9));
-                                builder.endStoreLocal();
-                            }
-
-                            BytecodeLocal outcome =
-                                    builder.createLocal(
-                                            "closureInvocationOutcome", null);
-
-                            builder.beginStoreLocal(outcome);
-
-                            if (multi) {
-                                builder.beginInvokeClosureArguments();
-                            } else {
-                                builder.beginInvokeClosureZero();
-                            }
-
-                            builder.emitLoadLocal(receiver);
-                            builder.emitCurrentActivation();
 
                             if (multi) {
                                 builder.beginCollectClosureCallArguments();
-                                builder.emitLoadLocal(first);
-                                builder.emitLoadLocal(second);
+                                builder.emitLoadConstant(
+                                        ProtosNumericValueSupport.integer(7));
+                                builder.emitLoadConstant(
+                                        ProtosNumericValueSupport.integer(9));
                                 builder.endCollectClosureCallArguments();
-                                builder.endInvokeClosureArguments();
+                                builder.endInvokeClosureArgumentsTail();
                             } else {
-                                builder.endInvokeClosureZero();
+                                builder.endInvokeClosureZeroTail();
                             }
 
-                            builder.endStoreLocal();
-
-                            // The only caller-side classification is
-                            // whether the operation returned a prepared
-                            // invocation that needs structural control.
-                            builder.beginIfThenElse();
-                            builder.beginIsPreparedClosureInvocation();
-                            builder.emitLoadLocal(outcome);
-                            builder.endIsPreparedClosureInvocation();
-
-                            builder.beginBlock();
-
-                            builder.beginStoreLocal(prepared);
-                            builder.emitLoadLocal(outcome);
-                            builder.endStoreLocal();
-
-                            emitReferencePreparedInvocation(
-                                    builder,
-                                    result,
-                                    prepared,
-                                    child,
-                                    resumed);
-
-                            builder.endBlock();
-
-                            // A direct operation result has already
-                            // completed the invocation.
-                            builder.beginBlock();
-                            builder.beginStoreLocal(result);
-                            builder.beginMaterializePrimitiveNumericCarrier();
-                            builder.emitLoadLocal(outcome);
-                            builder.emitLoadConstant(true);
-                            builder.endMaterializePrimitiveNumericCarrier();
-                            builder.endStoreLocal();
-                            builder.endBlock();
-
-                            builder.endIfThenElse();
-
-                            builder.endBlock();
                             builder.endTag(
                                     StandardTags.CallTag.class);
                             builder.endSourceSection();
 
                             endReferenceStatement(builder);
-
-                            builder.beginReturn();
-                            builder.emitLoadLocal(result);
                             builder.endReturn();
 
                             builder.endRoot();
@@ -853,23 +767,25 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         actual,
                         "I108 Call1 identity complete Builder signature");
 
+                // I112 / PLAT062-T: the final call is terminal. The
+                // operation owns selection, fallback and the transport
+                // of a suspended invocation; no physical composition
+                // remains in this root.
                 assertTrue(
                         indexOfOperation(
-                                actual, "InvokeClosureOne") >= 0);
-
-                assertTrue(
-                        indexOfOperation(
-                                actual, "IsPreparedClosureInvocation") >= 0);
+                                actual, "InvokeClosureOneTail") >= 0);
 
                 for (String operation : List.of(
+                        "IsPreparedClosureInvocation",
                         "IsContinuationForCall",
                         "ResumeContinuation",
+                        "Yield",
                         "EnterStraightLineSourceCall",
                         "EnterClosureCall",
-                        "FinishClosureCall")) {
-                    assertTrue(
-                            indexOfOperation(actual, operation) >= 0,
-                            () -> operation + " missing in " + actual);
+                        "FinishClosureCall",
+                        "CurrentActivation",
+                        "MaterializePrimitiveNumericCarrier")) {
+                    assertNoOperation(actual, operation);
                 }
 
                 assertNoOperation(actual, "TryDirectCallOne");
@@ -910,9 +826,10 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      *     (identity) => { identity(1) }
      *
      * The actual lowerer is never consulted to construct this
-     * reference. It includes parameter binding, receiver read,
-     * primitive argument staging, semantic Call1, generic fallback,
-     * suspension composition and the return carrier boundary.
+     * reference. It includes parameter binding, the direct receiver
+     * read, primitive argument staging and the I112 terminal Call1,
+     * which owns generic fallback and suspension transport; the
+     * return carrier boundary is the root's return epilogue.
      */
     private static ProtosSemanticBytecodeRootNode
             handwrittenI108IdentityCallOneRoot() {
@@ -966,22 +883,14 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
                             builder.endBindClosureFrameParameter();
 
-                            // Shared scratch locals of the composed call.
-                            BytecodeLocal prepared =
-                                    builder.createLocal(
-                                            "preparedClosureCall", null);
-
-                            BytecodeLocal child =
-                                    builder.createLocal(
-                                            "childResult", null);
-
-                            BytecodeLocal resumed =
-                                    builder.createLocal(
-                                            "resumeValue", null);
-
-                            BytecodeLocal result =
-                                    builder.createLocal(
-                                            "sequenceResult", null);
+                            // I112 / PLAT062-T: the final call is the
+                            // root's terminal invocation. Receiver and
+                            // argument are its two operands, evaluated
+                            // once, left to right; the caller is bound
+                            // from the frame. No scratch local, prepared
+                            // dispatch or Yield remains in this root.
+                            // The Return is the root's last operation.
+                            builder.beginReturn();
 
                             beginReferenceStatement(
                                     builder, callStart, callLength);
@@ -992,92 +901,22 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginTag(
                                     StandardTags.CallTag.class);
 
-                            builder.beginBlock();
+                            builder.beginInvokeClosureOneTail();
 
-                            // Evaluate the receiver once.
-                            BytecodeLocal receiver =
-                                    builder.createLocal(
-                                            "callReceiver", null);
-
-                            builder.beginStoreLocal(receiver);
-
-                            builder.beginMaterializePrimitiveNumericCarrier();
-
-                            builder.beginReadRootFrameLocal(
+                            // The receiver binding is read directly; the
+                            // operation projects a carrier before any
+                            // generic selection.
+                            builder.emitReadRootFrameLocal(
                                     identity,
-                                    layout.presentContinuityAt(0));
-
-                            builder.emitLoadConstant("identity");
-
-                            builder.endReadRootFrameLocal();
-
-                            builder.emitLoadConstant(true);
-                            builder.endMaterializePrimitiveNumericCarrier();
-
-                            builder.endStoreLocal();
+                                    layout.presentContinuityAt(0),
+                                    "identity");
 
                             // I091: the scalar argument is a Long
                             // carrier until the selected path requires
                             // a guest numeric value.
-                            BytecodeLocal argument =
-                                    builder.createLocal(
-                                            "callArgument", null);
-
-                            builder.beginStoreLocal(argument);
                             builder.emitLoadConstant(1L);
-                            builder.endStoreLocal();
 
-                            BytecodeLocal outcome =
-                                    builder.createLocal(
-                                            "closureInvocationOutcome", null);
-
-                            builder.beginStoreLocal(outcome);
-
-                            builder.beginInvokeClosureOne();
-                            builder.emitLoadLocal(receiver);
-                            builder.emitCurrentActivation();
-                            builder.emitLoadLocal(argument);
-                            builder.endInvokeClosureOne();
-
-                            builder.endStoreLocal();
-
-                            // The semantic operation returns either a
-                            // completed value or a PreparedClosureCall.
-                            builder.beginIfThenElse();
-
-                            builder.beginIsPreparedClosureInvocation();
-                            builder.emitLoadLocal(outcome);
-                            builder.endIsPreparedClosureInvocation();
-
-                            // Prepared result: execute the complete
-                            // physical fallback with Bytecode Yield.
-                            builder.beginBlock();
-
-                            builder.beginStoreLocal(prepared);
-                            builder.emitLoadLocal(outcome);
-                            builder.endStoreLocal();
-
-                            emitReferencePreparedInvocation(
-                                    builder,
-                                    result,
-                                    prepared,
-                                    child,
-                                    resumed);
-
-                            builder.endBlock();
-
-                            // Completed direct result.
-                            builder.beginBlock();
-
-                            builder.beginStoreLocal(result);
-                            builder.emitLoadLocal(outcome);
-                            builder.endStoreLocal();
-
-                            builder.endBlock();
-
-                            builder.endIfThenElse();
-
-                            builder.endBlock();
+                            builder.endInvokeClosureOneTail();
 
                             builder.endTag(
                                     StandardTags.CallTag.class);
@@ -1085,14 +924,6 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endSourceSection();
 
                             endReferenceStatement(builder);
-
-                            // A Call1 result may retain its I091
-                            // private primitive carrier.
-                            builder.beginReturn();
-
-                            builder.beginMaterializeReturnCarrier();
-                            builder.emitLoadLocal(result);
-                            builder.endMaterializeReturnCarrier();
 
                             builder.endReturn();
 

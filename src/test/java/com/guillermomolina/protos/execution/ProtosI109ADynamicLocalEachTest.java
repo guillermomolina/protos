@@ -761,10 +761,11 @@ final class ProtosI109ADynamicLocalEachTest {
 
         for (String instruction :
                 epilogue.subList(1, epilogue.size() - 1)) {
-            assertEquals(
-                    "clear.local",
-                    instruction,
-                    diagnostic + ": instrucción extra inesperada");
+            // I112: every root return runs the EpilogForReturn epilogue.
+            assertTrue(
+                    instruction.equals("clear.local")
+                            || instruction.equals("c.EpilogForReturn"),
+                    () -> diagnostic + ": instrucción extra inesperada " + instruction);
         }
     }
 

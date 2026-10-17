@@ -255,7 +255,9 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         execute(
                                 language,
                                 module,
-                                "target()",
+                                // I112: a final call is terminal; a caller with remaining
+                                // work keeps the composed C-prime chain under test.
+                                "result: target()\nresult",
                                 "perf006-b2d3b-yielding-invoke.protos");
 
                 ContinuationResult parent =

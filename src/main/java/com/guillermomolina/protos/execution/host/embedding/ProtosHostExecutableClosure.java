@@ -26,7 +26,6 @@ import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.RootCallTarget;
-import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
@@ -265,12 +264,17 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 ProtosEmbeddedProcess embedding,
                 ProtosBytecodeRootNode.OrdinarySourceCall prepared,
                 Object outcome) {
-            if (outcome instanceof ContinuationResult) {
+            // I112: a terminal transport is pending exactly like a ContinuationResult.
+            if (ProtosTailCallContinuation.isPending(outcome)) {
                 if (embedding == null) {
                     CompilerDirectives.transferToInterpreterAndInvalidate();
+                    // Never hand the backend-private pending result to the host.
+                    ProtosTailCallContinuation.abandon(outcome);
+                    prepared.complete();
                     throw new IllegalStateException(
                             "a session host executable cannot drive a suspended continuation");
                 }
+                // The driver finishes every inner terminal owner before this outer call.
                 outcome = ProtosHostEntrySuspension.resumeAfterWaits(embedding, prepared, outcome);
             }
             return prepared.finish(outcome);

@@ -29,7 +29,6 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleSafepoint;
-import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import java.util.List;
 import java.util.Objects;
@@ -149,12 +148,20 @@ final class ProtosHostEntrySuspension {
             Object outcome,
             boolean entryRoot) {
         Objects.requireNonNull(embedding, "embedding");
-        while (outcome instanceof ContinuationResult continuation) {
-            awaitReady(embedding, suspensionLeaf(continuation).dependency(), prepared, entryRoot);
+        // I112: the pending result is a ContinuationResult or a terminal transport.
+        while (ProtosTailCallContinuation.isPending(outcome)) {
+            Object continuation = outcome;
+            awaitReady(
+                    embedding,
+                    suspensionLeaf(continuation).dependency(),
+                    prepared,
+                    entryRoot,
+                    continuation);
             try {
                 outcome =
                         Objects.requireNonNull(
-                                continuation.continueWith(ProtosNullValue.INSTANCE),
+                                ProtosTailCallContinuation.resume(
+                                        continuation, ProtosNullValue.INSTANCE),
                                 "resumed host-entry continuation returned null");
             } catch (ProtosBytecodeControlTransferException bridged) {
                 if (entryRoot) {
@@ -177,7 +184,8 @@ final class ProtosHostEntrySuspension {
             ProtosEmbeddedProcess embedding,
             ProtosTask.WaitDependency dependency,
             ProtosBytecodeRootNode.PreparedClosureCall prepared,
-            boolean entryRoot) {
+            boolean entryRoot,
+            Object continuation) {
         ProtosActorExecutionDomain domain = embedding.rootExecutionDomain();
         // Actor-local work dispatched while waiting is not inside this entry's Bytecode extent.
         HostEntryExtent entryExtent = domain.swapHostEntryExtentForRuntime(HostEntryExtent.NONE);
@@ -215,6 +223,8 @@ final class ProtosHostEntrySuspension {
                 if (dependency instanceof FutureDependency observer) {
                     observer.release();
                 }
+                // I112: deferred terminal owners close first, innermost first.
+                ProtosTailCallContinuation.abandon(continuation);
                 if (!entryRoot) {
                     prepared.complete();
                 }
@@ -222,11 +232,8 @@ final class ProtosHostEntrySuspension {
         }
     }
 
-    private static ProtosNativeSuspension suspensionLeaf(ContinuationResult top) {
-        Object current = top;
-        while (current instanceof ContinuationResult nested) {
-            current = nested.getResult();
-        }
+    private static ProtosNativeSuspension suspensionLeaf(Object top) {
+        Object current = ProtosTailCallContinuation.suspensionLeaf(top);
         if (!(current instanceof ProtosNativeSuspension suspension)) {
             throw new IllegalStateException(
                     "host-entry C-prime suspension requires a native suspension leaf");

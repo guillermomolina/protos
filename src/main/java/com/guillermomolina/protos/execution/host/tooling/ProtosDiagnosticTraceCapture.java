@@ -67,6 +67,12 @@ import java.util.List;
  *       contributes one callback frame (innermost first) before the enclosing physical frame. The
  *       automatic root tag is the physical frame itself and is never duplicated. No inline
  *       activation, scope or binding is materialized.
+ *   <li>I112 / PLAT062-T: a caller whose terminal invocation suspended returned its transport,
+ *       so after resumption it is no longer a physical frame. When the occurrence crossed such a
+ *       resumed transport, {@link #recordResumedTerminalCaller} stored the caller's logical
+ *       location and the physical depth at that crossing; the caller is projected as one semantic
+ *       frame at exactly that position among the unwound frames, innermost first. It is a
+ *       diagnostic frame only: no Truffle frame, activation or continuation is fabricated.
  * </ol>
  *
  * <p>Source information is materialized lazily, only on this failure path, through the public
@@ -113,6 +119,18 @@ final class ProtosDiagnosticTraceCapture {
     }
 
     /**
+     * I112: records, while {@code exception} crosses a resumed terminal transport, the logical
+     * location of the caller that already returned the transport. Failure path only.
+     */
+    @TruffleBoundary
+    static void recordResumedTerminalCaller(
+            AbstractTruffleException exception, BytecodeLocation caller) {
+        if (caller != null && exception instanceof ProtosSignalException signal) {
+            signal.recordResumedTerminalCallerForRuntime(caller, livePhysicalFrameCount());
+        }
+    }
+
+    /**
      * Projects the semantic guest frames of {@code occurrence} into an inert trace.
      *
      * <p>Diagnostics must never change the semantic outcome they describe: a projection that
@@ -138,7 +156,16 @@ final class ProtosDiagnosticTraceCapture {
 
         Collector collector = new Collector();
         Origin origin = Origin.of(occurrence);
+        ProtosSignalException signal =
+                occurrence instanceof ProtosSignalException candidate ? candidate : null;
+        int logicalCallers = signal == null ? 0 : signal.resumedTerminalCallerCountForRuntime();
+        int nextLogical = 0;
         for (int index = 0; index < occurrenceFrames && !collector.full(); index++) {
+            while (nextLogical < logicalCallers
+                    && logicalPosition(signal, nextLogical, occurrenceFrames, hostingFrames)
+                            <= index) {
+                projectLogicalCaller(signal.resumedTerminalCallerForRuntime(nextLogical++), collector);
+            }
             TruffleStackTraceElement element = elements.get(index);
             ProtosSemanticBytecodeRootNode semantic = semanticRoot(element.getTarget().getRootNode());
             if (semantic == null) {
@@ -154,7 +181,28 @@ final class ProtosDiagnosticTraceCapture {
             origin = null;
             projectSemanticFrame(semantic, location, collector);
         }
+        while (nextLogical < logicalCallers && !collector.full()) {
+            projectLogicalCaller(signal.resumedTerminalCallerForRuntime(nextLogical++), collector);
+        }
         return collector.finish();
+    }
+
+    /*
+     * The physical frames unwound after the crossing are those live then and no longer live at
+     * this capture; the logical caller sits just before them.
+     */
+    private static int logicalPosition(
+            ProtosSignalException signal, int index, int occurrenceFrames, int hostingFrames) {
+        int unwoundAfter =
+                Math.max(0, signal.resumedTerminalCallerLiveFramesForRuntime(index) - hostingFrames);
+        return Math.max(0, occurrenceFrames - unwoundAfter);
+    }
+
+    private static void projectLogicalCaller(BytecodeLocation caller, Collector collector) {
+        if (caller.getBytecodeNode().getBytecodeRootNode()
+                instanceof ProtosSemanticBytecodeRootNode semantic) {
+            projectSemanticFrame(semantic, caller, collector);
+        }
     }
 
     private static int livePhysicalFrameCount() {

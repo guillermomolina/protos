@@ -285,6 +285,18 @@ public final class ProtosClosureInvoker {
                         prepared,
                         IndirectCallNode.create());
 
+        if (entered instanceof ProtosTailCallContinuation) {
+            /*
+             * I112: a synchronous extent has no authority to resume a suspended terminal
+             * invocation, and its backend-private transport is never a guest value. Its deferred
+             * owners are closed, innermost first, before this call's own ReturnHome (completed by
+             * invokePreparedInExtent).
+             */
+            ProtosTailCallContinuation.abandon(entered);
+            prepared.complete();
+            throw new IllegalStateException(
+                    "synchronous Closure invocation cannot drive a suspended terminal continuation");
+        }
         return prepared.finish(entered);
     }
 }

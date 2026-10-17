@@ -126,7 +126,9 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                         execute(
                                 language,
                                 module,
-                                "callable()",
+                                // I112: a final call is terminal; a caller with remaining
+                                // work keeps the composed C-prime chain under test.
+                                "result: callable()\nresult",
                                 "perf006-b2d3a-inherited-invoke.protos");
 
                 ContinuationResult parent =

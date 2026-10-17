@@ -198,13 +198,18 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
             Object first = parentRoot.getCallTarget().call(module);
             assertEquals(1, prefixCalls.get());
 
-            ContinuationResult parent =
-                    assertInstanceOf(ContinuationResult.class, first);
+            /*
+             * I112 / PLAT062-T: entry() is the parent's terminal call, so the parent root returns
+             * its terminal transport instead of a caller ContinuationResult. The transport keeps
+             * the logical location of that call; the child keeps its own continuation.
+             */
+            ProtosTailCallContinuation parent =
+                    assertInstanceOf(ProtosTailCallContinuation.class, first);
             ContinuationResult child =
-                    assertInstanceOf(ContinuationResult.class, parent.getResult());
+                    assertInstanceOf(ContinuationResult.class, parent.pendingResult());
             activationOf(child);
 
-            BytecodeLocation parentLocation = parent.getBytecodeLocation();
+            BytecodeLocation parentLocation = parent.callerLocation();
             BytecodeLocation childLocation = child.getBytecodeLocation();
             assertNotNull(parentLocation);
             assertNotNull(childLocation);
@@ -233,7 +238,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     childLocation.getBytecodeNode().getBytecodeRootNode(),
                     "logical callee location must remain owned by the semantic Bytecode composition root");
 
-            Object completed = parent.continueWith(ProtosNullValue.INSTANCE);
+            Object completed = ProtosTailCallContinuation.resume(parent, ProtosNullValue.INSTANCE);
             assertSame(marker, completed);
             assertEquals(
                     1,

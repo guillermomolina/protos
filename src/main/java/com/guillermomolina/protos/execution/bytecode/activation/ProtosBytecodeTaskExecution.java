@@ -32,9 +32,12 @@ import java.util.Objects;
  * publication.
  *
  * <p>This class owns no scheduler state and no global continuation registry. The complete
- * top-level {@link ContinuationResult} is retained only by the suspended {@link ProtosTask}.
- * Nested continuation frames remain opaque Truffle state; this bridge walks their current result
- * chain only far enough to find the backend-private native suspension leaf and its dependency.
+ * top-level pending result, a {@link ContinuationResult} or the I112 terminal transport ({@link
+ * ProtosTailCallContinuation}) of a root that ended in a suspended terminal call, is retained
+ * only by the suspended {@link ProtosTask}. Nested continuation frames and transports remain
+ * opaque state; this bridge walks their current result chain only far enough to find the
+ * backend-private native suspension leaf and its dependency, and resumes the retained result
+ * itself, never the call from its beginning.
  *
  * <p>A ready prerequisite is resumed synchronously without publishing a suspension. Otherwise
  * B3A's capture-pending/publication protocol atomically installs the complete top-level
@@ -98,14 +101,15 @@ final class ProtosBytecodeTaskExecution {
     private static void resumePreparedPublished(
             ProtosTask task,
             ProtosBytecodeRootNode.PreparedClosureCall prepared,
-            ContinuationResult continuation,
+            Object continuation,
             ProtosTask.WaitDependency dependency) {
         runPreparedSegment(
                 task,
                 prepared,
                 () -> {
                     if (task.cancellationRequested()) {
-                        return continuation.continueWith(
+                        return ProtosTailCallContinuation.resume(
+                                continuation,
                                 beginCancellationTransfer(
                                         task,
                                         "published Task-owned Closure C-prime resume"));
@@ -114,7 +118,8 @@ final class ProtosBytecodeTaskExecution {
                         throw new IllegalStateException(
                                 "published Task-owned Closure continuation resumed without its dependency");
                     }
-                    return continuation.continueWith(ProtosNullValue.INSTANCE);
+                    return ProtosTailCallContinuation.resume(
+                            continuation, ProtosNullValue.INSTANCE);
                 });
     }
 
@@ -177,10 +182,11 @@ final class ProtosBytecodeTaskExecution {
             Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
-            if (!(outcome instanceof ContinuationResult continuation)) {
+            if (!ProtosTailCallContinuation.isPending(outcome)) {
                 task.complete(prepared.finish(outcome));
                 return;
             }
+            Object continuation = outcome;
 
             ProtosNativeSuspension leaf =
                     nativeSuspensionLeaf(continuation);
@@ -191,7 +197,8 @@ final class ProtosBytecodeTaskExecution {
                 if (task.cancellationRequested()) {
                     outcome =
                             Objects.requireNonNull(
-                                    continuation.continueWith(
+                                    ProtosTailCallContinuation.resume(
+                                            continuation,
                                             beginCancellationTransfer(
                                                     task,
                                                     "pre-publication Task-owned Closure C-prime suspension")),
@@ -200,7 +207,8 @@ final class ProtosBytecodeTaskExecution {
                 }
                 outcome =
                         Objects.requireNonNull(
-                                continuation.continueWith(ProtosNullValue.INSTANCE),
+                                ProtosTailCallContinuation.resume(
+                                        continuation, ProtosNullValue.INSTANCE),
                                 "ready Task-owned Closure continuation returned null");
                 continue;
             }
@@ -220,14 +228,15 @@ final class ProtosBytecodeTaskExecution {
     private static void resumePublished(
             ProtosTask task,
             ProtosActivation activation,
-            ContinuationResult continuation,
+            Object continuation,
             ProtosTask.WaitDependency dependency) {
         runSegment(
                 task,
                 activation,
                 () -> {
                     if (task.cancellationRequested()) {
-                        return continuation.continueWith(
+                        return ProtosTailCallContinuation.resume(
+                                continuation,
                                 beginCancellationTransfer(
                                         task,
                                         "published C-prime resume"));
@@ -236,8 +245,8 @@ final class ProtosBytecodeTaskExecution {
                         throw new IllegalStateException(
                                 "published C-prime continuation resumed without its dependency");
                     }
-                    return continuation.continueWith(
-                            ProtosNullValue.INSTANCE);
+                    return ProtosTailCallContinuation.resume(
+                            continuation, ProtosNullValue.INSTANCE);
                 });
     }
 
@@ -289,10 +298,11 @@ final class ProtosBytecodeTaskExecution {
             Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
-            if (!(outcome instanceof ContinuationResult continuation)) {
+            if (!ProtosTailCallContinuation.isPending(outcome)) {
                 task.complete(outcome);
                 return;
             }
+            Object continuation = outcome;
 
             ProtosNativeSuspension leaf =
                     nativeSuspensionLeaf(continuation);
@@ -309,7 +319,8 @@ final class ProtosBytecodeTaskExecution {
                 if (task.cancellationRequested()) {
                     outcome =
                             Objects.requireNonNull(
-                                    continuation.continueWith(
+                                    ProtosTailCallContinuation.resume(
+                                            continuation,
                                             beginCancellationTransfer(
                                                     task,
                                                     "pre-publication C-prime suspension")),
@@ -318,8 +329,8 @@ final class ProtosBytecodeTaskExecution {
                 }
                 outcome =
                         Objects.requireNonNull(
-                                continuation.continueWith(
-                                        ProtosNullValue.INSTANCE),
+                                ProtosTailCallContinuation.resume(
+                                        continuation, ProtosNullValue.INSTANCE),
                                 "ready C-prime continuation returned null");
                 continue;
             }
@@ -366,12 +377,14 @@ final class ProtosBytecodeTaskExecution {
                                     .target()
                                     .call(prepared.activation(), prepared)
                             : prepared.bodyTarget().call(prepared.targetArguments());
-            while (outcome instanceof ContinuationResult continuation) {
+            while (ProtosTailCallContinuation.isPending(outcome)) {
+                // I112: a terminal transport finishes its inner owners before this call's own.
                 outcome =
-                        continuation.continueWith(
+                        ProtosTailCallContinuation.resume(
+                                outcome,
                                 nestedResumeValue(
                                         task,
-                                        nativeSuspensionLeaf(continuation).dependency(),
+                                        nativeSuspensionLeaf(outcome).dependency(),
                                         errorSite));
             }
             Objects.requireNonNull(outcome, "nested synchronous C-prime call returned null");
@@ -414,13 +427,10 @@ final class ProtosBytecodeTaskExecution {
         return ProtosNullValue.INSTANCE;
     }
 
-    private static ProtosNativeSuspension nativeSuspensionLeaf(
-            ContinuationResult top) {
-        Object current = top;
-        while (current instanceof ContinuationResult continuation) {
-            current = continuation.getResult();
-        }
-        if (!(current instanceof ProtosNativeSuspension suspension)) {
+    /** Walks Truffle continuations and I112 terminal transports without consuming them. */
+    private static ProtosNativeSuspension nativeSuspensionLeaf(Object top) {
+        if (!(ProtosTailCallContinuation.suspensionLeaf(top)
+                instanceof ProtosNativeSuspension suspension)) {
             throw new UnsupportedOperationException(
                     "PERF006-B3 Task-owned C-prime suspension requires a native suspension leaf");
         }

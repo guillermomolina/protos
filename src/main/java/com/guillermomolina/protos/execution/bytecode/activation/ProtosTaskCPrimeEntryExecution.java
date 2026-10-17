@@ -50,6 +50,17 @@ final class ProtosTaskCPrimeEntryExecution {
         return context.taskCPrimeEntryPlanForRuntime();
     }
 
+    /**
+     * I112 / PLAT062-T: the existing Context-local C-prime dispatcher entered
+     * by a terminal invocation that selected a structured call, with the
+     * same {@code (activation, prepared)} arguments as {@code
+     * EnterNestedStructuredDispatch}. The dispatcher root keeps ownership of
+     * the call's structured regions, cleanup and finish.
+     */
+    static RootCallTarget structuredDispatchTargetForEnteredContext() {
+        return planForEnteredContext().target();
+    }
+
     static void execute(
             ProtosTask task,
             ProtosBytecodeRootNode.PreparedClosureCall prepared) {

@@ -478,7 +478,12 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                 assertInteger(8, evaluate("callOne(makeAdder(1), 7)\n", "perf042-transient-adder.protos", module));
                 assertInteger(7, evaluate("callOne(make(), 7)\n", "perf042-transient-back.protos", module));
             }
-            assertSame(entry, singleEntry("callOne", module));
+            // I112: the final call is terminal, and terminal admission does
+            // not require a non-suspending target, so the adder definition is
+            // admitted with its own entry; the original entry is kept.
+            List<Object> entries = definitionTierEntries("callOne", InvokeClosureOne.class, module);
+            assertEquals(2, entries.size());
+            assertTrue(entries.contains(entry));
 
             // A site whose first receiver is overridden still installs the
             // definition tier for the admitted instances that follow.
@@ -610,18 +615,20 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                                 .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                                 .toList();
 
+                // I112: the final call is terminal; its operation owns the
+                // fused entry and the fallback, with no caller-side protocol.
                 String invocation = function.equals("callZero")
-                        ? "InvokeClosureZero"
-                        : "InvokeClosureOne";
+                        ? "c.InvokeClosureZeroTail"
+                        : "c.InvokeClosureOneTail";
 
                 assertTrue(
-                        names.stream().anyMatch(name -> name.contains(invocation)),
+                        names.stream().anyMatch(name -> name.equals(invocation)),
                         names::toString);
-                assertTrue(
+                assertFalse(
                         names.stream().anyMatch(
                                 name -> name.contains("EnterStraightLineSourceCall")),
                         names::toString);
-                assertTrue(
+                assertFalse(
                         names.stream().anyMatch(
                                 name -> name.contains("IsPreparedClosureInvocation")),
                         names::toString);
@@ -672,10 +679,14 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
         Object bytecode = functionRoot(function, module).getBytecodeNode();
         Node[] cachedNodes = (Node[]) field(bytecode, "cachedNodes_");
         String nodeName = operation.getSimpleName() + "_Node";
+        // I112: a final call of the function is the terminal form of the same site.
+        String terminalNodeName = operation.getSimpleName() + "Tail_Node";
         List<Object> entries = new ArrayList<>();
         int sites = 0;
         for (Node node : cachedNodes) {
-            if (node == null || !node.getClass().getSimpleName().equals(nodeName)) {
+            if (node == null
+                    || !(node.getClass().getSimpleName().equals(nodeName)
+                            || node.getClass().getSimpleName().equals(terminalNodeName))) {
                 continue;
             }
             sites++;

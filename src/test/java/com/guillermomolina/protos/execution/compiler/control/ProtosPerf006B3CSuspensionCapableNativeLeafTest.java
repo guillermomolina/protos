@@ -255,7 +255,8 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 Object first =
                         lowerRoot(
                                         language,
-                                        "leaf()",
+                                        // I112: a final call is terminal; keep the composed chain.
+                                        "result: leaf()\nresult",
                                         "perf006-b3c-leaf-suspension.protos")
                                 .getCallTarget()
                                 .call(module);
@@ -359,7 +360,8 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                         bytecodeClosure(
                                 language,
                                 module,
-                                "() => { leaf() }",
+                                // I112: a final call is terminal; keep the composed chain.
+                                "() => { result: leaf()\nresult }",
                                 "perf006-b3c-middle.protos");
                 module.context().createLocalSlot(
                         "entry",
@@ -368,7 +370,8 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 Object first =
                         lowerRoot(
                                         language,
-                                        "entry()",
+                                        // I112: a final call is terminal; keep the composed chain.
+                                        "result: entry()\nresult",
                                         "perf006-b3c-top.protos")
                                 .getCallTarget()
                                 .call(module);

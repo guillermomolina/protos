@@ -1148,8 +1148,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 "return", epilogue.get(epilogue.size() - 1),
                 message + ": reparse epilogue must end with return " + epilogue);
         for (String instruction : epilogue.subList(1, epilogue.size() - 1)) {
+            // I112: every root return runs the EpilogForReturn epilogue.
             assertTrue(
-                    instruction.startsWith("clear.local "),
+                    instruction.startsWith("clear.local ")
+                            || instruction.startsWith("c.EpilogForReturn"),
                     () -> message
                             + ": unexpected reparse epilogue instruction "
                             + instruction + " in " + epilogue);
@@ -1302,6 +1304,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 builder.endBindClosureFrameParameter();
                             }
 
+                            // I112: the Return is the root's last operation and
+                            // the return epilogue owns the carrier projection.
+                            builder.beginReturn();
                             builder.beginSourceSection(
                                     readStart, "value".length());
                             builder.beginTag(
@@ -1309,21 +1314,17 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                     StandardTags.ExpressionTag.class);
                             builder.beginBlock();
 
-                            builder.beginReturn();
-                            builder.beginMaterializeReturnCarrier();
-                            builder.beginReadRootFrameLocal(
+                            builder.emitReadRootFrameLocal(
                                     local,
-                                    layout.presentContinuityAt(0));
-                            builder.emitLoadConstant("value");
-                            builder.endReadRootFrameLocal();
-                            builder.endMaterializeReturnCarrier();
-                            builder.endReturn();
+                                    layout.presentContinuityAt(0),
+                                    "value");
 
                             builder.endBlock();
                             builder.endTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
+                            builder.endReturn();
 
                             builder.endRoot();
                             builder.endSourceSection();
@@ -1389,16 +1390,14 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         beforeReparse,
                         afterReparse.subList(0, beforeReparse.size()),
                         "I104-B reparse changed the original instruction prefix");
+                // I112: the root ends with its Return, so no fallthrough
+                // local cleanup is reachable; reparse appends only the
+                // instrumented root return.
                 assertEquals(
-                        List.of(
-                                "load.null",
-                                "clear.local LOCAL_OFFSET=0",
-                                "clear.local LOCAL_OFFSET=1",
-                                "clear.local LOCAL_OFFSET=2",
-                                "return"),
+                        List.of("return"),
                         afterReparse.subList(
                                 beforeReparse.size(), afterReparse.size()),
-                        "I104-B reparse must append only the expected local cleanup");
+                        "I104-B reparse must append only the instrumented return");
 
                 System.out.println("I104_B_BUILDER_ORACLE=PASS");
                 System.out.println("I104_B_REPARSE=PASS");
@@ -1476,27 +1475,26 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 }
                             }
 
+                            // I112: the Return is the root's last operation and
+                            // the return epilogue owns the carrier projection.
+                            builder.beginReturn();
                             builder.beginSourceSection(lookupStart, 1);
                             builder.beginTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.beginBlock();
 
-                            builder.beginReturn();
-                            builder.beginMaterializeReturnCarrier();
-                            builder.beginReadRootFrameLocal(
+                            builder.emitReadRootFrameLocal(
                                     locals[1],
-                                    layout.presentContinuityAt(1));
-                            builder.emitLoadConstant("b");
-                            builder.endReadRootFrameLocal();
-                            builder.endMaterializeReturnCarrier();
-                            builder.endReturn();
+                                    layout.presentContinuityAt(1),
+                                    "b");
 
                             builder.endBlock();
                             builder.endTag(
                                     StandardTags.StatementTag.class,
                                     StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
+                            builder.endReturn();
 
                             builder.endRoot();
                             builder.endSourceSection();
@@ -1639,7 +1637,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             if (matched < before.size() && entry.equals(before.get(matched))) {
                 matched++;
             } else {
-                assertTrue(entry.equals("load.null") || entry.equals("return"),
+                // I112: every root return runs the EpilogForReturn epilogue.
+                assertTrue(entry.equals("load.null")
+                                || entry.equals("return")
+                                || entry.startsWith("c.EpilogForReturn"),
                         () -> message + ": unexpected " + entry + " in " + after);
             }
         }

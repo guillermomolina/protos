@@ -98,11 +98,15 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             // production root is not a valid acceptance criterion.
             report("BOUND_ARGUMENT", bound, actual);
 
+            // I112: the generated prologue and return epilogue belong to
+            // every semantic root, the handwritten bound included.
             assertEquals(
                     List.of(
+                            "c.EnterRoot",
                             "load.argument",
                             "store.local",
                             "load.local",
+                            "c.EpilogForReturn",
                             "return"),
                     executionPrefixNames(bound),
                     "PERF042 handwritten lower-bound Builder");
@@ -112,10 +116,12 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             // separately pin the physical unary entry operations.
             assertEquals(
                     List.of(
+                            // I112: the binding name is a constant operand and
+                            // the return epilogue owns the carrier projection.
+                            "c.EnterRoot",
                             "c.BindUnaryFrameParameter",
-                            "load.constant",
                             "c.ReadRootFrameLocal",
-                            "c.MaterializeReturnCarrier",
+                            "c.EpilogForReturn",
                             "return"),
                     executionPrefixNames(actual),
                     "I104-A must retain its fused unary entry and "

@@ -7,7 +7,6 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.bytecode.ContinuationResult;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
@@ -25,7 +24,8 @@ final class ProtosBytecodeIoOperationExecution
 
     private boolean started;
     private boolean finished;
-    private ContinuationResult continuation;
+    /* The retained pending result: a ContinuationResult or an I112 terminal transport. */
+    private Object continuation;
     private ProtosIoOperationSuspension suspension;
 
     private ProtosBytecodeIoOperationExecution(
@@ -121,7 +121,7 @@ final class ProtosBytecodeIoOperationExecution
                     "operation-owned C-prime driver dispatched for another operation");
         }
 
-        ContinuationResult resumeContinuation = null;
+        Object resumeContinuation = null;
         ProtosIoOperationSuspension resumeSuspension = null;
         boolean initial = false;
         synchronized (stateLock) {
@@ -157,7 +157,8 @@ final class ProtosBytecodeIoOperationExecution
             } else {
                 resumeSuspension.releaseWait();
                 outcome = Objects.requireNonNull(
-                        resumeContinuation.continueWith(ProtosNullValue.INSTANCE),
+                        ProtosTailCallContinuation.resume(
+                                resumeContinuation, ProtosNullValue.INSTANCE),
                         "operation-owned C-prime continuation returned null");
             }
             driveOutcome(outcome);
@@ -189,10 +190,11 @@ final class ProtosBytecodeIoOperationExecution
     private void driveOutcome(Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
-            if (!(outcome instanceof ContinuationResult next)) {
+            if (!ProtosTailCallContinuation.isPending(outcome)) {
                 finishCompletion(outcome);
                 return;
             }
+            Object next = outcome;
 
             ProtosIoOperationSuspension leaf = operationSuspensionLeaf(next);
             if (leaf.operation() != operation) {
@@ -203,7 +205,7 @@ final class ProtosBytecodeIoOperationExecution
             if (leaf.dependency().isReady()) {
                 leaf.releaseWait();
                 outcome = Objects.requireNonNull(
-                        next.continueWith(ProtosNullValue.INSTANCE),
+                        ProtosTailCallContinuation.resume(next, ProtosNullValue.INSTANCE),
                         "ready operation-owned C-prime continuation returned null");
                 continue;
             }
@@ -260,11 +262,8 @@ final class ProtosBytecodeIoOperationExecution
         }
     }
 
-    private static ProtosIoOperationSuspension operationSuspensionLeaf(ContinuationResult top) {
-        Object current = top;
-        while (current instanceof ContinuationResult nested) {
-            current = nested.getResult();
-        }
+    private static ProtosIoOperationSuspension operationSuspensionLeaf(Object top) {
+        Object current = ProtosTailCallContinuation.suspensionLeaf(top);
         if (!(current instanceof ProtosIoOperationSuspension suspension)) {
             throw new UnsupportedOperationException(
                     "PLAT029 operation-owned C-prime suspension requires an operation-owned suspension leaf");

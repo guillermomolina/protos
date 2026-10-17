@@ -531,9 +531,18 @@ final class ProtosI108BCallNDispatchTest {
                         java.util.List<String> before =
                                 instructionNames(root);
 
+                        // I112: a NORMAL final positional call is terminal;
+                        // spread and DEBUG keep the composed protocol.
+                        boolean terminal =
+                                mode == ProtosExecutionMode.NORMAL
+                                        && !site.function().equals("callSpread");
+                        String operation =
+                                terminal ? site.operation() + "Tail" : site.operation();
+
                         assertInvocationTopology(
                                 before,
-                                site.operation(),
+                                operation,
+                                terminal,
                                 mode + " " + site.function()
                                         + " before ensureComplete");
 
@@ -547,7 +556,8 @@ final class ProtosI108BCallNDispatchTest {
 
                         assertInvocationTopology(
                                 complete,
-                                site.operation(),
+                                operation,
+                                terminal,
                                 mode + " " + site.function()
                                         + " after ensureComplete");
 
@@ -586,16 +596,18 @@ final class ProtosI108BCallNDispatchTest {
     private static void assertInvocationTopology(
             java.util.List<String> instructions,
             String expectedInvocation,
+            boolean terminal,
             String description) {
         assertTrue(
                 containsOperation(instructions, expectedInvocation),
                 description + ": missing semantic invocation "
                         + expectedInvocation + " in " + instructions);
 
-        assertTrue(
+        assertEquals(
+                !terminal,
                 containsOperation(
                         instructions, "IsPreparedClosureInvocation"),
-                description + ": missing prepared-result discrimination");
+                description + ": prepared-result discrimination only at a composed site");
 
         // No second mechanical preparation/dispatch pipeline at
         // the caller site. The generic preparation belongs to the
@@ -620,10 +632,11 @@ final class ProtosI108BCallNDispatchTest {
                 "IsContinuationForCall",
                 "yield",
                 "ResumeContinuation")) {
-            assertTrue(
+            // I112: a terminal site transports a suspension instead.
+            assertEquals(
+                    !terminal,
                     containsOperation(instructions, continuation),
-                    description + ": missing structural continuation "
-                            + continuation);
+                    description + ": structural continuation " + continuation);
         }
     }
 
@@ -772,9 +785,12 @@ final class ProtosI108BCallNDispatchTest {
         Object entry = null;
 
         for (Node node : cachedNodes) {
+            // I112: a final CallN is the terminal form of the same site.
             if (node == null
-                    || !node.getClass().getSimpleName()
-                            .equals("InvokeClosureArguments_Node")) {
+                    || !(node.getClass().getSimpleName()
+                                    .equals("InvokeClosureArguments_Node")
+                            || node.getClass().getSimpleName()
+                                    .equals("InvokeClosureArgumentsTail_Node"))) {
                 continue;
             }
 

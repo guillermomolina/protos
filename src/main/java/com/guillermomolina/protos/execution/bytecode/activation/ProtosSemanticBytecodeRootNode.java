@@ -61,12 +61,14 @@ import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
+import com.oracle.truffle.api.bytecode.EpilogReturn;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.OperationProxy;
+import com.oracle.truffle.api.bytecode.Prolog;
 import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
@@ -210,6 +212,48 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         return directScalarLocalCarrierBody;
     }
 
+    /*
+     * I112 / PLAT062-T: the persistent frame lexical authority of a root that
+     * EnterRoot installs at entry instead of an InstallFrameLexicalAuthority
+     * body operation, or null. Recorded by the lowerer once per parse, before
+     * the root can execute; the same range and layout as its frame-native
+     * creation and read operations.
+     */
+    /*
+     * I112: whether EpilogForReturn applies the MaterializeReturnCarrier
+     * projection, exactly at the roots whose terminal value the lowerer used
+     * to wrap in that operation. Every other root (an I101-B scalar-lane
+     * body, a builder-level root) returns its value unchanged and leaves the
+     * projection to its caller. Recorded once per parse.
+     */
+    @CompilationFinal private boolean epilogProjectsReturnCarrier;
+
+    final void recordEpilogProjectsReturnCarrier(boolean projects) {
+        this.epilogProjectsReturnCarrier = projects;
+    }
+
+    final boolean epilogProjectsReturnCarrier() {
+        return epilogProjectsReturnCarrier;
+    }
+
+    private LocalRangeAccessor prologAuthorityLocals;
+    private ProtosFrameLexicalLayout prologAuthorityLayout;
+
+    final void recordPrologFrameLexicalAuthority(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout) {
+        this.prologAuthorityLocals = frameBackedLocals;
+        this.prologAuthorityLayout = frameBackedLayout;
+    }
+
+    final LocalRangeAccessor prologAuthorityLocals() {
+        return prologAuthorityLocals;
+    }
+
+    final ProtosFrameLexicalLayout prologAuthorityLayout() {
+        return prologAuthorityLayout;
+    }
+
     final void recordFrameNativeBindings(
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout) {
@@ -284,6 +328,73 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * scopes all observe one activation identity. A frame that already carries an activation
      * returns it unchanged.
      */
+    /**
+     * I112 / PLAT062-T root prologue. It never creates a rich activation (the
+     * activation stays lazy, {@link CurrentActivation}) and leaves every
+     * existing entry contract unchanged; a root registered by the lowerer
+     * additionally receives its persistent frame lexical authority here.
+     */
+    @Prolog
+    public static final class EnterRoot {
+        @Specialization
+        public static void perform(
+                @Bind ProtosSemanticBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind VirtualFrame frame) {
+            LocalRangeAccessor locals = root.prologAuthorityLocals();
+            if (locals != null) {
+                /*
+                 * I112: exactly the entry installation of
+                 * InstallFrameLexicalAuthority, before the first body
+                 * operation, over this root's own frame, location and the
+                 * layout its frame-native operations use. Those operations
+                 * then recognize it as the installed authority.
+                 */
+                ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(
+                        locals,
+                        root.prologAuthorityLayout(),
+                        ProtosFrameArguments.activation(frame),
+                        bytecodeNode,
+                        firstBodyBytecodeIndex(bytecodeNode, bytecodeIndex),
+                        frame);
+            }
+        }
+
+        /*
+         * The authority's location must lie inside the root's local scope,
+         * which starts after the prologue: the first body instruction, where
+         * InstallFrameLexicalAuthority itself used to execute.
+         */
+        @TruffleBoundary
+        private static int firstBodyBytecodeIndex(BytecodeNode bytecodeNode, int prologIndex) {
+            return bytecodeNode.getInstruction(prologIndex).getNextBytecodeIndex();
+        }
+    }
+
+    /**
+     * I112 / PLAT062-T return epilogue: for a root recorded by the lowerer as
+     * projecting (exactly where it used to emit that operation), the implicit
+     * final projection of {@link MaterializeReturnCarrier}: a primitive
+     * numeric carrier reaches only a caller that accepts it. Every other value,
+     * including a pending continuation or terminal transport, and every value
+     * of a non-projecting root, is returned unchanged. It never finishes a
+     * suspended invocation.
+     */
+    @EpilogReturn
+    public static final class EpilogForReturn {
+        @Specialization
+        public static Object perform(
+                Object value,
+                @Bind ProtosSemanticBytecodeRootNode root,
+                @Bind VirtualFrame frame) {
+            if (!root.epilogProjectsReturnCarrier()) {
+                return value;
+            }
+            return MaterializeReturnCarrier.perform(value, frame);
+        }
+    }
+
     @Operation
     public static final class CurrentActivation {
         /*
@@ -919,6 +1030,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
     @ConstantOperand(type = int.class, name = "ordinal")
+    @ConstantOperand(type = String.class, name = "name")
     public static final class CreateCurrentFrameLocal {
         /**
          * PERF025 compact callee execution: the body-level counterpart of
@@ -1100,6 +1212,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
     @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
+    @ConstantOperand(type = String.class, name = "name")
     public static final class ReadRootFrameLocal {
         /*
          * The lowerer emitted this operation only for a current Resolved
@@ -2459,24 +2572,56 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * Root-level Closure creation (I092, I112). The creating activation is
+     * this root's own frame argument 0, bound from the frame rather than
+     * loaded as a Bytecode operand. A published activation is captured
+     * unchanged; a still-compact root captures without materializing only
+     * when {@code compactCapture} (the I092 admission: a genuine root that
+     * declares no frame-owned lexical bindings) holds, and otherwise
+     * materializes and publishes its exact activation first, exactly as
+     * {@link CurrentActivation} followed by {@link MaterializeClosure}.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "compactCapture")
     public static final class MaterializeCurrentClosure {
-        @Specialization
-        public static ProtosClosureValue rich(
-                ProtosActivation activation,
+        @Specialization(guards = "hasPublishedActivation(frame)")
+        public static ProtosClosureValue published(
+                boolean compactCapture,
                 CanonicalClosure definition,
-                ProtosClosureExecutionPlanCell executionPlanCell) {
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.MaterializeClosure.perform(
-                    activation, definition, executionPlanCell);
+                    ProtosFrameArguments.publishedActivation(frame.getArguments()),
+                    definition,
+                    executionPlanCell);
         }
 
-        @Specialization
+        @Specialization(guards = {"compactCapture", "!hasPublishedActivation(frame)"})
         public static ProtosClosureValue compact(
-                Object[] caller,
+                boolean compactCapture,
                 CanonicalClosure definition,
-                ProtosClosureExecutionPlanCell executionPlanCell) {
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
-                    caller, definition, executionPlanCell);
+                    frame.getArguments(), definition, executionPlanCell);
+        }
+
+        @Specialization(guards = {"!compactCapture", "!hasPublishedActivation(frame)"})
+        public static ProtosClosureValue rich(
+                boolean compactCapture,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
+            return ProtosBytecodeRootNode.MaterializeClosure.perform(
+                    ProtosFrameArguments.activation(frame),
+                    definition,
+                    executionPlanCell);
+        }
+
+        @NonIdempotent
+        static boolean hasPublishedActivation(VirtualFrame frame) {
+            return ProtosFrameArguments.hasPublishedActivation(frame.getArguments());
         }
     }
 
@@ -8197,6 +8342,623 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * I112 / PLAT062-T terminal Call1: the final expression of a genuine
+     * source root, after which the root only returns. Its two operands are
+     * the receiver and the single supplied value, evaluated once, left to
+     * right; the caller is this root's own frame argument 0. D013 selection
+     * of {@code call} happens here, after both operands.
+     *
+     * <p>The caches and guards are those of {@link InvokeClosureOne}, except
+     * that admission does not require a non-suspending callee: a terminal
+     * caller has no guest work left, so a suspended callee is returned as a
+     * {@link ProtosTailCallContinuation} that retains its pending state and
+     * the owner of its completion. A synchronous result is returned as the
+     * guest value without any allocation. Every other selection (overridden
+     * {@code call}, native body, observable ReturnHome, foreign target or
+     * Context) is prepared and executed inside this operation; a prepared
+     * call never reaches the caller root.
+     */
+    @Operation
+    public static final class InvokeClosureOneTail {
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedGuarded != null",
+                    "admittedTail(cachedGuarded)"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded,
+                @Cached("create(cachedGuarded.target())")
+                        DirectCallNode node) {
+            return enterDirect(
+                    bytecodeNode,
+                    bytecodeIndex,
+                    node,
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            cachedGuarded.closure(),
+                            PrepareSendArguments.exactCaller(caller),
+                            supplied0));
+        }
+
+        /** The terminal counterpart of {@link InvokeClosureOne#definitionSource}. */
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "sourcePlan != null",
+                    "sourcePlan == cachedSourcePlan",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "projectionRequired == cachedProjectionRequired",
+                    "cachedTarget != null",
+                    "cachedAdmitted"
+                },
+                limit = "3")
+        public static Object definitionSource(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Bind("sourceDefinitionOrNull(receiver)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("sourcePlanOrNull(receiver)")
+                        ProtosClosureExecutionPlan sourcePlan,
+                @Bind("requiresContextProjection(receiver)")
+                        boolean projectionRequired,
+                @Cached("closureDefinition")
+                        CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("sourcePlan")
+                        ProtosClosureExecutionPlan cachedSourcePlan,
+                @Cached("projectionRequired")
+                        boolean cachedProjectionRequired,
+                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("admittedTailTarget(cachedTarget)")
+                        boolean cachedAdmitted,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node,
+                @Cached IndirectCallNode indirectCall) {
+            ProtosClosureValue closure =
+                    InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
+            if (closure == null) {
+                return prepareAndEnter(
+                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+            }
+            return enterDirect(
+                    bytecodeNode,
+                    bytecodeIndex,
+                    node,
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            closure,
+                            PrepareSendArguments.exactCaller(caller),
+                            supplied0));
+        }
+
+        /** See {@link InvokeClosureZero#rejectedSource}. */
+        @Specialization(
+                guards = "temporarilyRejectedInstance(receiver, caller)")
+        public static Object rejectedSource(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        @Specialization
+        public static Object generic(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        /*
+         * The complete ordinary D013 selection on the already evaluated
+         * operands, then the terminal execution of the selected invocation.
+         * A primitive carrier operand is projected before selection.
+         */
+        private static Object prepareAndEnter(
+                Object receiver,
+                Object caller,
+                Object supplied0,
+                IndirectCallNode indirectCall,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex) {
+            return ProtosBytecodeRootNode.executeTerminalPreparedCall(
+                    ProtosBytecodeRootNode.prepareClosureCallOneFallback(
+                            ProtosNumericValueSupport.guestValue(receiver),
+                            PrepareSendArguments.exactCaller(caller),
+                            ProtosNumericValueSupport.guestValue(supplied0)),
+                    indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        /*
+         * The admitted direct entry of every terminal arity: a synchronous
+         * result is the projected guest value; a suspended one is retained
+         * by one terminal transport without an owning prepared call.
+         */
+        static Object enterDirect(
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex,
+                DirectCallNode node,
+                Object[] frameArguments) {
+            Object outcome;
+            try {
+                outcome = node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+            return ProtosTailCallContinuation.completeOrDefer(
+                    null, outcome, false, bytecodeNode, bytecodeIndex);
+        }
+
+        /**
+         * This root's own caller reference (see {@link CurrentCallerReference}):
+         * the published activation, or the still-compact frame arguments.
+         */
+        @NonIdempotent
+        static Object callerReference(VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.hasPublishedActivation(arguments)
+                    ? ProtosFrameArguments.publishedActivation(arguments)
+                    : arguments;
+        }
+
+        /**
+         * {@link InvokeClosureZero#admitted} without the non-suspension
+         * requirement: a source entry, and the exact Closure proves the
+         * unobservable ReturnHome marker.
+         */
+        static boolean admittedTail(GuardedDirectClosureCallTarget guarded) {
+            return guarded != null
+                    && guarded.target().getRootNode()
+                            instanceof ProtosSemanticBytecodeRootNode
+                    && guarded.closure().invocationReturnHomeForRuntime()
+                            == ProtosReturnHome.unobservable();
+        }
+
+        /** {@link InvokeClosureZero#admittedTarget} without the non-suspension requirement. */
+        static boolean admittedTailTarget(RootCallTarget target) {
+            return target != null
+                    && target.getRootNode() instanceof ProtosSemanticBytecodeRootNode;
+        }
+
+        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+            return InvokeClosureZero.sourceDefinitionOrNull(receiver);
+        }
+
+        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
+            return InvokeClosureZero.sourcePlanOrNull(receiver);
+        }
+
+        static boolean requiresContextProjection(Object receiver) {
+            return InvokeClosureZero.requiresContextProjection(receiver);
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+        }
+
+        @NonIdempotent
+        static boolean temporarilyRejectedInstance(Object receiver, Object caller) {
+            return InvokeClosureZero.temporarilyRejectedInstance(receiver, caller);
+        }
+
+        static RootCallTarget definitionTarget(
+                Object receiver,
+                Object caller,
+                ProtosLanguageContext enteredContext) {
+            return InvokeClosureZero.definitionTarget(receiver, caller, enteredContext);
+        }
+
+        static GuardedDirectClosureCallTarget
+                createGuardedDirectClosureCallForPrelude(
+                        Object receiver,
+                        ProtosPrelude prelude,
+                        ProtosLanguageContext enteredContext) {
+            return InvokeClosureZero.createGuardedDirectClosureCallForPrelude(
+                    receiver, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return InvokeClosureZero.callerPrelude(caller);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /** I112 / PLAT062-T terminal Call0; see {@link InvokeClosureOneTail}. */
+    @Operation
+    public static final class InvokeClosureZeroTail {
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedGuarded != null",
+                    "admittedTail(cachedGuarded)"
+                },
+                assumptions = "cachedGuarded.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedDirectClosureCallForPrelude(receiver, prelude, enteredContext)")
+                        GuardedDirectClosureCallTarget cachedGuarded,
+                @Cached("create(cachedGuarded.target())")
+                        DirectCallNode node) {
+            return InvokeClosureOneTail.enterDirect(
+                    bytecodeNode,
+                    bytecodeIndex,
+                    node,
+                    ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                            cachedGuarded.closure(),
+                            PrepareSendArguments.exactCaller(caller)));
+        }
+
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "sourcePlan != null",
+                    "sourcePlan == cachedSourcePlan",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "projectionRequired == cachedProjectionRequired",
+                    "cachedTarget != null",
+                    "cachedAdmitted"
+                },
+                limit = "3")
+        public static Object definitionSource(
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Bind("sourceDefinitionOrNull(receiver)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("sourcePlanOrNull(receiver)")
+                        ProtosClosureExecutionPlan sourcePlan,
+                @Bind("requiresContextProjection(receiver)")
+                        boolean projectionRequired,
+                @Cached("closureDefinition")
+                        CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("sourcePlan")
+                        ProtosClosureExecutionPlan cachedSourcePlan,
+                @Cached("projectionRequired")
+                        boolean cachedProjectionRequired,
+                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("admittedTailTarget(cachedTarget)")
+                        boolean cachedAdmitted,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node,
+                @Cached IndirectCallNode indirectCall) {
+            ProtosClosureValue closure =
+                    InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
+            if (closure == null) {
+                return prepareAndEnter(
+                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
+            }
+            return InvokeClosureOneTail.enterDirect(
+                    bytecodeNode,
+                    bytecodeIndex,
+                    node,
+                    ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                            closure,
+                            PrepareSendArguments.exactCaller(caller)));
+        }
+
+        @Specialization(
+                guards = "temporarilyRejectedInstance(receiver, caller)")
+        public static Object rejectedSource(
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        @Specialization
+        public static Object generic(
+                Object receiver,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        private static Object prepareAndEnter(
+                Object receiver,
+                Object caller,
+                IndirectCallNode indirectCall,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex) {
+            return ProtosBytecodeRootNode.executeTerminalPreparedCall(
+                    ProtosBytecodeRootNode.PrepareClosureCall.perform(
+                            ProtosNumericValueSupport.guestValue(receiver),
+                            PrepareSendArguments.exactCaller(caller)),
+                    indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        @NonIdempotent
+        static Object callerReference(VirtualFrame frame) {
+            return InvokeClosureOneTail.callerReference(frame);
+        }
+
+        static boolean admittedTail(GuardedDirectClosureCallTarget guarded) {
+            return InvokeClosureOneTail.admittedTail(guarded);
+        }
+
+        static boolean admittedTailTarget(RootCallTarget target) {
+            return InvokeClosureOneTail.admittedTailTarget(target);
+        }
+
+        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+            return InvokeClosureZero.sourceDefinitionOrNull(receiver);
+        }
+
+        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
+            return InvokeClosureZero.sourcePlanOrNull(receiver);
+        }
+
+        static boolean requiresContextProjection(Object receiver) {
+            return InvokeClosureZero.requiresContextProjection(receiver);
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+        }
+
+        @NonIdempotent
+        static boolean temporarilyRejectedInstance(Object receiver, Object caller) {
+            return InvokeClosureZero.temporarilyRejectedInstance(receiver, caller);
+        }
+
+        static RootCallTarget definitionTarget(
+                Object receiver,
+                Object caller,
+                ProtosLanguageContext enteredContext) {
+            return InvokeClosureZero.definitionTarget(receiver, caller, enteredContext);
+        }
+
+        static GuardedDirectClosureCallTarget
+                createGuardedDirectClosureCallForPrelude(
+                        Object receiver,
+                        ProtosPrelude prelude,
+                        ProtosLanguageContext enteredContext) {
+            return InvokeClosureZero.createGuardedDirectClosureCallForPrelude(
+                    receiver, prelude, enteredContext);
+        }
+
+        static ProtosPrelude callerPrelude(Object caller) {
+            return InvokeClosureZero.callerPrelude(caller);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * I112 / PLAT062-T terminal CallN and spread; see {@link
+     * InvokeClosureOneTail}. The supplied vector is the already evaluated
+     * {@link CollectClosureCallArguments} or {@link
+     * SnapshotClosureCallArguments} operand, so argument effects and the
+     * spread snapshot keep their order. The caches are those of {@link
+     * InvokeClosureArguments}, without its non-suspension requirement.
+     */
+    @Operation
+    public static final class InvokeClosureArgumentsTail {
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "definition != null",
+                    "definition == cachedDefinition",
+                    "plan != null",
+                    "plan == cachedPlan",
+                    "entered != null",
+                    "entered == cachedContext",
+                    "projection == cachedProjection",
+                    "cachedTarget != null",
+                    "cachedAdmitted"
+                },
+                limit = "3")
+        public static Object direct(
+                Object receiver,
+                Object[] supplied,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("currentActivation(frame)") ProtosActivation caller,
+                @Bind("sourceDefinitionOrNull(receiver)")
+                        CanonicalClosure definition,
+                @Bind("sourcePlanOrNull(receiver)")
+                        ProtosClosureExecutionPlan plan,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext entered,
+                @Bind("requiresProjection(receiver)")
+                        boolean projection,
+                @Cached("definition")
+                        CanonicalClosure cachedDefinition,
+                @Cached("plan")
+                        ProtosClosureExecutionPlan cachedPlan,
+                @Cached("entered")
+                        ProtosLanguageContext cachedContext,
+                @Cached("projection")
+                        boolean cachedProjection,
+                @Cached("targetFor(receiver, caller, entered)")
+                        RootCallTarget cachedTarget,
+                @Cached("admittedTailTarget(cachedTarget)")
+                        boolean cachedAdmitted,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node,
+                @Cached IndirectCallNode indirectCall) {
+            ProtosClosureValue closure = InvokeClosureArguments.admitted(receiver, caller);
+            if (closure == null) {
+                return prepareAndEnter(
+                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
+            }
+            return InvokeClosureOneTail.enterDirect(
+                    bytecodeNode,
+                    bytecodeIndex,
+                    node,
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            closure, caller, null, supplied));
+        }
+
+        @Specialization(guards = "temporarilyRejected(receiver, caller)")
+        public static Object rejected(
+                Object receiver,
+                Object[] supplied,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("currentActivation(frame)") ProtosActivation caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        @Specialization
+        public static Object generic(
+                Object receiver,
+                Object[] supplied,
+                @Bind VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("currentActivation(frame)") ProtosActivation caller,
+                @Cached IndirectCallNode indirectCall) {
+            return prepareAndEnter(
+                    receiver, caller, supplied, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        private static Object prepareAndEnter(
+                Object receiver,
+                ProtosActivation caller,
+                Object[] supplied,
+                IndirectCallNode indirectCall,
+                BytecodeNode bytecodeNode,
+                int bytecodeIndex) {
+            return ProtosBytecodeRootNode.executeTerminalPreparedCall(
+                    ProtosBytecodeRootNode.PrepareClosureCallArguments.perform(
+                            ProtosNumericValueSupport.guestValue(receiver),
+                            caller,
+                            supplied),
+                    indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        /** The exact activation of this root, as {@link CurrentActivation} yields it. */
+        @NonIdempotent
+        static ProtosActivation currentActivation(VirtualFrame frame) {
+            return ProtosFrameArguments.activation(frame);
+        }
+
+        static boolean admittedTailTarget(RootCallTarget target) {
+            return InvokeClosureOneTail.admittedTailTarget(target);
+        }
+
+        static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
+            return InvokeClosureArguments.sourceDefinitionOrNull(receiver);
+        }
+
+        static ProtosClosureExecutionPlan sourcePlanOrNull(Object receiver) {
+            return InvokeClosureArguments.sourcePlanOrNull(receiver);
+        }
+
+        static boolean requiresProjection(Object receiver) {
+            return InvokeClosureArguments.requiresProjection(receiver);
+        }
+
+        @NonIdempotent
+        static boolean temporarilyRejected(Object receiver, ProtosActivation caller) {
+            return InvokeClosureArguments.temporarilyRejected(receiver, caller);
+        }
+
+        static RootCallTarget targetFor(
+                Object receiver,
+                ProtosActivation caller,
+                ProtosLanguageContext entered) {
+            return InvokeClosureArguments.targetFor(receiver, caller, entered);
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureArguments.createDirectCallNodeOrNull(target);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
     /*
      * I108-A: only a prepared invocation requires caller-side
      * Bytecode DSL control composition. Direct invocation results
@@ -8330,6 +9092,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         /** Exactly {@link ProtosBytecodeRootNode.IsContinuation#perform} for every instance of {@code type}. */
         static boolean isContinuationClass(Class<?> type) {
             return ContinuationResult.class.isAssignableFrom(type)
+                    || ProtosTailCallContinuation.class.isAssignableFrom(type)
                     || ProtosNativeSuspension.class.isAssignableFrom(type)
                     || ProtosIoOperationSuspension.class.isAssignableFrom(type)
                     || ProtosIoReleaseSuspension.class.isAssignableFrom(type);
@@ -8432,6 +9195,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object resumeValue) {
             return ProtosBytecodeRootNode.ResumeContinuation.ioOperationSuspension(
                     prepared, suspension, resumeValue);
+        }
+
+        /** I112: continues a child's terminal transport; see {@link ProtosTailCallContinuation}. */
+        @Specialization
+        public static Object terminal(
+                PreparedClosureCall prepared,
+                ProtosTailCallContinuation transport,
+                Object resumeValue) {
+            return ProtosBytecodeRootNode.ResumeContinuation.terminal(
+                    prepared, transport, resumeValue);
         }
 
         @Specialization(

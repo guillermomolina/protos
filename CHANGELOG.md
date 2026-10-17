@@ -7,6 +7,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.374-SNAPSHOT
+
+- `I112` (#920): implement ratified PLAT062-T compact terminal Closure
+  invocation.
+  - Add `InvokeClosureZeroTail`, `InvokeClosureOneTail` and
+    `InvokeClosureArgumentsTail` for the final call of a genuine NORMAL root:
+    receiver and arguments are evaluated once, left to right, D013
+    `call` selection stays dynamic and post-argument, and the operation owns
+    the I108 PIC tiers and the complete prepared fallback.
+  - Add the backend-private `ProtosTailCallContinuation` transport: a
+    suspended terminal invocation keeps its original continuation or native
+    leaf and the owner of its completion; resumption never replays, and
+    finish/complete/ReturnHome run exactly once, innermost first. Task,
+    host-entry, I/O and synchronous drivers accept it; it never escapes as a
+    guest value. A synchronous result allocates nothing.
+  - Add the `EnterRoot` prologue and `EpilogForReturn` epilogue; admitted
+    module roots install their persistent frame lexical authority from the
+    prologue and use frame-native binding operations; `name` becomes a
+    constant operand of `CreateCurrentFrameLocal`/`ReadRootFrameLocal` and
+    root-level Closure creation binds its activation from the frame.
+  - Terminal roots are never published as non-suspending (D204/I107).
+  - Preserve CLI008 diagnostic continuity: a resumed terminal caller is
+    projected as a logical semantic frame from the transport's retained
+    location; no physical frame or caller continuation is fabricated.
+  - Physical acceptance: `identity: (value) => { value }` / `identity(1)`
+    measures 16 FULL instructions in `BytecodeConfig.DEFAULT` (11 + 5,
+    including one `pop`) across exactly two source roots.
+  - Add I112 budget and adversarial terminal-continuation coverage; update
+    physical topology assertions of affected I096/I101/I107/I108/PERF tests
+    and reconcile the TEST009-D generated BCI baseline: 15 new proven
+    transitions, 12 retired, zero RISK and zero UNKNOWN.
+  - Maintainer validation: make test PASS, make check PASS.
+
 ## 0.3.373-SNAPSHOT
 
 - `I108` (#909): implement ratified PLAT062-B semantic Closure

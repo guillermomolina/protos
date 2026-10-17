@@ -48,6 +48,14 @@ public final class ProtosSignalException extends AbstractTruffleException {
      * path only; keyed by the physical frame identity.
      */
     private java.util.IdentityHashMap<Object, BytecodeLocation> interpreterPositions;
+    /*
+     * I112 / PLAT062-T: logical caller positions of terminal invocations whose caller root had
+     * already returned its suspension transport when this occurrence crossed the resumption,
+     * innermost first, each with the number of physical frames live at that crossing. Failure
+     * path only; never a physical frame.
+     */
+    private java.util.List<BytecodeLocation> resumedTerminalCallers;
+    private java.util.List<Integer> resumedTerminalCallerLiveFrames;
 
     public ProtosSignalException(ProtosObjectValue error) {
         super();
@@ -85,6 +93,38 @@ public final class ProtosSignalException extends AbstractTruffleException {
         }
         interpreterPositions.computeIfAbsent(
                 frame, ignored -> bytecode.getBytecodeLocation(bytecodeIndex));
+    }
+
+    /**
+     * I112: records the logical position of a terminal caller that is no longer a physical frame
+     * when this occurrence crosses its resumed transport, with the number of physical frames live
+     * at that crossing (its insertion point among the unwound frames).
+     */
+    @TruffleBoundary
+    public void recordResumedTerminalCallerForRuntime(
+            BytecodeLocation caller, int livePhysicalFrames) {
+        if (caller == null) {
+            return;
+        }
+        if (resumedTerminalCallers == null) {
+            resumedTerminalCallers = new java.util.ArrayList<>(2);
+            resumedTerminalCallerLiveFrames = new java.util.ArrayList<>(2);
+        }
+        resumedTerminalCallers.add(caller);
+        resumedTerminalCallerLiveFrames.add(livePhysicalFrames);
+    }
+
+    /** Transient capture input; innermost first. */
+    public int resumedTerminalCallerCountForRuntime() {
+        return resumedTerminalCallers == null ? 0 : resumedTerminalCallers.size();
+    }
+
+    public BytecodeLocation resumedTerminalCallerForRuntime(int index) {
+        return resumedTerminalCallers.get(index);
+    }
+
+    public int resumedTerminalCallerLiveFramesForRuntime(int index) {
+        return resumedTerminalCallerLiveFrames.get(index);
     }
 
     /** Transient capture input: the recorded position of {@code frame}, or {@code null}. */

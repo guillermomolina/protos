@@ -204,8 +204,10 @@ final class ProtosI107ContinuationEmissionTest {
     @Test
     void dynamicSelectionsKeepTheirPhysicalFallback() throws Exception {
         List<String> sources = List.of(
-                // Ordinary call of a parameter: D013 dynamic selection.
-                "(f) => { f() }",
+                // Ordinary call of a parameter followed by guest work: D013
+                // dynamic selection. (A final call of a parameter is an I112
+                // terminal invocation; see terminalCallWithoutYieldIsNotANonSuspensionProof.)
+                "(f) => { f()\n 1 }",
                 // Binding candidate: the guard may miss after replacement/override.
                 "() => { f: () => { 1 }\n f() }",
                 "() => { f: () => { 1 }\n f = () => { 2 }\n f() }",
@@ -225,6 +227,67 @@ final class ProtosI107ContinuationEmissionTest {
                 ProtosSemanticBytecodeRootNode replaced =
                         compile("() => { f: () => { 1 }\n f = () => { 2 }\n f() }", "replace");
                 assertInteger(2, callClosure(normal, closureOf(normal, replaced)));
+            });
+        }
+    }
+
+    /**
+     * I112 / PLAT062-T: a terminal Closure invocation emits no Yield in its
+     * root, because no guest work follows it, yet it is not a proof of
+     * non-suspension: the invoked call may still suspend and the root then
+     * returns its terminal transport. A non-terminal unknown call keeps the
+     * physical C-prime protocol.
+     */
+    @Test
+    void terminalCallWithoutYieldIsNotANonSuspensionProof() throws Exception {
+        record Case(String source, String operation, String argument, long expected) {}
+        List<Case> terminal = List.of(
+                new Case("(f) => { f() }", "c.InvokeClosureZeroTail",
+                        "() => { 5 }", 5),
+                new Case("(f) => { f(1) }", "c.InvokeClosureOneTail",
+                        "(value) => { value + 4 }", 5),
+                new Case("(f) => { f(2, 3) }", "c.InvokeClosureArgumentsTail",
+                        "(a, b) => { a + b }", 5));
+        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+            normal.run(() -> {
+                for (Case test : terminal) {
+                    ProtosSemanticBytecodeRootNode module = compile(test.source(), "terminal");
+                    ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                    List<String> instructions = completeSignature(activation);
+                    assertTrue(
+                            instructions.stream().anyMatch(
+                                    entry -> entry.split(" ", 2)[0].equals(test.operation())),
+                            () -> test.operation() + " missing in " + instructions);
+                    assertNoContinuation(instructions);
+                    for (String absent : List.of(
+                            "c.IsPreparedClosureInvocation",
+                            "c.EnterClosureCall",
+                            "c.FinishClosureCall")) {
+                        assertFalse(
+                                instructions.stream().anyMatch(
+                                        entry -> entry.split(" ", 2)[0].equals(absent)),
+                                () -> absent + " in " + instructions);
+                    }
+                    // Terminal without an outer Yield is not non-suspending.
+                    assertFalse(activation.provablyNonSuspendingBody(), test.source());
+
+                    module.getRootNodes().ensureComplete();
+                    assertEquals(instructions, signature(activation));
+                    assertFalse(activation.provablyNonSuspendingBody(), test.source());
+
+                    assertInteger(
+                            test.expected(),
+                            callClosureWith(
+                                    normal, closureOf(normal, module), test.argument()));
+                }
+
+                ProtosSemanticBytecodeRootNode nonTerminal =
+                        activationRoot(compile("(f) => { f()\n 1 }", "non-terminal"));
+                List<String> composed = completeSignature(nonTerminal);
+                assertHasContinuation(composed);
+                assertFalse(composed.stream().anyMatch(entry -> entry.contains("Tail")),
+                        composed::toString);
+                assertFalse(nonTerminal.provablyNonSuspendingBody());
             });
         }
     }
@@ -437,6 +500,13 @@ final class ProtosI107ContinuationEmissionTest {
         ProtosActivation module = harness.moduleActivation();
         module.context().createLocalSlot("candidate", closure);
         return compile("candidate()", "call").getCallTarget().call(module);
+    }
+
+    private static Object callClosureWith(
+            Harness harness, ProtosClosureValue closure, String argument) {
+        ProtosActivation module = harness.moduleActivation();
+        module.context().createLocalSlot("candidate", closure);
+        return compile("candidate(" + argument + ")", "call-with").getCallTarget().call(module);
     }
 
     private static void assertInteger(long expected, Object value) {

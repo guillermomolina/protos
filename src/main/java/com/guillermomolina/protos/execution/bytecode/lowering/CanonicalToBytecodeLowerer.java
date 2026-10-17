@@ -218,6 +218,14 @@ final class CanonicalToBytecodeLowerer {
      */
     private boolean currentRootEmittedContinuationPath;
     /*
+     * I112 / PLAT062-T (D204): a terminal Closure invocation emitted into the
+     * genuine root being lowered. It emits no Yield, but the invoked call may
+     * still suspend and the root then returns its terminal transport, so the
+     * root is never published as non-suspending. Independent of the
+     * continuation-path flag; saved and restored per root.
+     */
+    private boolean currentRootEmittedTerminalInvocation;
+    /*
      * I091: exact host descriptors of the number literals of this lowering, parsed once per
      * literal node however many lowering decisions consult it.
      */
@@ -897,10 +905,12 @@ final class CanonicalToBytecodeLowerer {
                 currentRootMaterializedClosures;
         boolean savedInlineClosureCallBody = currentInlineClosureCallBody;
         boolean savedContinuationPath = currentRootEmittedContinuationPath;
+        boolean savedTerminalInvocation = currentRootEmittedTerminalInvocation;
         boolean openedRootScope = openRootScopes.add(scopeForThisRoot);
         try {
             currentInlineClosureCallBody = false;
             currentRootEmittedContinuationPath = false;
+            currentRootEmittedTerminalInvocation = false;
             /*
              * I096-B1: a Closure created by a module root owns a fresh
              * ReturnHome, which the carrier never admits, so a module root
@@ -938,6 +948,7 @@ final class CanonicalToBytecodeLowerer {
                     rootPlan);
         } finally {
             currentRootEmittedContinuationPath = savedContinuationPath;
+            currentRootEmittedTerminalInvocation = savedTerminalInvocation;
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
@@ -1053,6 +1064,10 @@ final class CanonicalToBytecodeLowerer {
         frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
         BytecodeLocal[] frameLocalRange = null;
         ProtosFrameLexicalLayout frameLocalLayout = null;
+        boolean prologFrameAuthority =
+                requiresPersistentFrameAuthority
+                        && !frameLocals.isEmpty()
+                        && admitsPrologFrameAuthority(sequence, activationDefinition);
         if (!frameLocals.isEmpty()) {
             frameLocalRange =
                     frameLocals.values().toArray(BytecodeLocal[]::new);
@@ -1070,7 +1085,17 @@ final class CanonicalToBytecodeLowerer {
              * that may need its bindings outside its live frame installs the
              * escape-safe (BUG013) materialized-frame authority at entry.
              */
-            if (requiresPersistentFrameAuthority) {
+            if (prologFrameAuthority) {
+                /*
+                 * I112 / PLAT062-T: the root still requires its persistent
+                 * authority; EnterRoot installs exactly that authority at
+                 * entry (recorded below), so its bindings use the
+                 * frame-native operations over the same range and layout and
+                 * no body operation installs it.
+                 */
+                currentRootFrameNativeLocals = frameLocalRange;
+                currentRootFrameNativeLayout = frameLocalLayout;
+            } else if (requiresPersistentFrameAuthority) {
                 builder.beginInstallFrameLexicalAuthority(
                         frameLocalRange,
                         frameLocalLayout);
@@ -1195,6 +1220,8 @@ final class CanonicalToBytecodeLowerer {
         CanonicalLiteral foldedTerminal = rootPlan.foldedTerminal();
 
         boolean loweringRefinementAccepted = true;
+        // I112: the terminal paths that used to emit MaterializeReturnCarrier.
+        boolean epilogProjectsReturnCarrier = false;
         if (directScalarLocalBody) {
             emitNormalDirectScalarLocalBody(builder, sequence);
             loweringRefinementAccepted = acceptsLoweringRefinement(
@@ -1264,6 +1291,18 @@ final class CanonicalToBytecodeLowerer {
                      * BytecodeRootNodes group before the Return operation opens.
                      * The Closure value itself is still created at runtime.
                      */
+                    /*
+                     * I112: a terminal read returns from the root as its last
+                     * operation, so the Builder appends no implicit fallthrough
+                     * return (load.null, epilogue, return) after the statement.
+                     */
+                    boolean returnEnclosesStatement =
+                            !scalarTerminal
+                                    && !closureTerminal
+                                    && last instanceof CanonicalLookup;
+                    if (returnEnclosesStatement) {
+                        builder.beginReturn();
+                    }
                     beginStatement(builder, lastStatement);
                     ProtosClosureExecutionPlanCell terminalClosurePlan =
                             closureTerminal
@@ -1285,24 +1324,47 @@ final class CanonicalToBytecodeLowerer {
                             && primitiveNumberLiteralOrNull(literal) != null) {
                         // I091: retain Long and Double literal carriers until the
                         // caller requires an observable guest numeric value.
+                        // I112: the EpilogForReturn epilogue owns that
+                        // projection for every returned value.
+                        epilogProjectsReturnCarrier = true;
                         builder.beginReturn();
-                        builder.beginMaterializeReturnCarrier();
                         builder.emitLoadConstant(primitiveNumberLiteralOrNull(literal));
-                        builder.endMaterializeReturnCarrier();
                         builder.endReturn();
                     } else if (last instanceof CanonicalLookup terminalRead) {
                         // I091: a retained carrier may return to an accepting caller.
-                        builder.beginReturn();
-                        builder.beginMaterializeReturnCarrier();
+                        // I112: a root binding (an admitted unary parameter
+                        // included) is one ReadRootFrameLocal with constant
+                        // operands; EpilogForReturn projects the result.
+                        epilogProjectsReturnCarrier = true;
                         emitLookup(builder, terminalRead, true);
-                        builder.endMaterializeReturnCarrier();
-                        builder.endReturn();
                     } else {
                         builder.beginReturn();
                         emitExpression(builder, last);
                         builder.endReturn();
                     }
                     endStatement(builder);
+                    if (returnEnclosesStatement) {
+                        builder.endReturn();
+                    }
+                } else if (admitsTerminalClosureCall(last)) {
+                    /*
+                     * I112 / PLAT062-T: the final Closure call is the root's
+                     * terminal invocation. No result or scratch local, no
+                     * prepared-call dispatch and no Yield is emitted here: the
+                     * terminal operation owns selection, its fallback and the
+                     * transport of a suspended invocation.
+                     */
+                    if (expressions.size() > 1) {
+                        emitDiscardedPrefix(
+                                builder,
+                                expressions.subList(0, expressions.size() - 1));
+                    }
+                    // Return is the root's last operation: no implicit fallthrough.
+                    builder.beginReturn();
+                    beginStatement(builder, last);
+                    emitTerminalClosureCall(builder, (CanonicalCall) last);
+                    endStatement(builder);
+                    builder.endReturn();
                 } else {
                     /*
                      * PERF037-E: even when the final expression requires
@@ -1360,14 +1422,10 @@ final class CanonicalToBytecodeLowerer {
 
                     endStatement(builder);
 
+                    // I112: EpilogForReturn projects a retained carrier result.
+                    epilogProjectsReturnCarrier = carrierTerminal;
                     builder.beginReturn();
-                    if (carrierTerminal) {
-                        builder.beginMaterializeReturnCarrier();
-                        builder.emitLoadLocal(result);
-                        builder.endMaterializeReturnCarrier();
-                    } else {
-                        builder.emitLoadLocal(result);
-                    }
+                    builder.emitLoadLocal(result);
                     builder.endReturn();
                 }
             }
@@ -1385,14 +1443,23 @@ final class CanonicalToBytecodeLowerer {
          */
         CanonicalCompilationFacts.EffectiveRoot effectiveRoot = rootPlan.effectiveRoot();
         boolean emittedGenericInvocation = currentRootEmittedContinuationPath;
-        if (emittedGenericInvocation) {
+        /*
+         * I112 / D204: a terminal invocation has no Yield in this root, yet
+         * it may delegate a real continuation through its transport. Its
+         * terminality is a property of the emission point, never a proof of
+         * non-suspension.
+         */
+        boolean emittedTerminalInvocation = currentRootEmittedTerminalInvocation;
+        if (emittedGenericInvocation || emittedTerminalInvocation) {
             // A consumed result is kept (REJECTED_CONSUMED is not an error).
             compilationFacts.invalidateNonSuspension(
                     CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
                     effectiveRoot,
                     rootFacts.bindingAnalysis(),
                     scopeForThisRoot,
-                    "generic invocation emitted");
+                    emittedGenericInvocation
+                            ? "generic invocation emitted"
+                            : "terminal invocation emitted");
         }
         /*
          * The physical evidence of this parse always wins: a root that
@@ -1401,6 +1468,7 @@ final class CanonicalToBytecodeLowerer {
          */
         result.recordProvablyNonSuspendingBody(
                 !emittedGenericInvocation
+                        && !emittedTerminalInvocation
                         && compilationFacts.consumeNonSuspension(
                                         CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
                                         effectiveRoot,
@@ -1410,6 +1478,7 @@ final class CanonicalToBytecodeLowerer {
                         && (loweringRefinementAccepted
                                 || rootPlan.plannedEffectiveRoot().proven()));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
+        result.recordEpilogProjectsReturnCarrier(epilogProjectsReturnCarrier);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
                     result,
@@ -1421,10 +1490,17 @@ final class CanonicalToBytecodeLowerer {
                                     ? ProtosDiagnosticRootIdentity.TOP_LEVEL
                                     : ProtosDiagnosticRootIdentity.CLOSURE));
         }
-        if (currentRootFrameNativeLayout != null) {
-            result.recordFrameNativeBindings(
-                    LocalRangeAccessor.constantOf(currentRootFrameNativeLocals),
-                    currentRootFrameNativeLayout);
+        if (prologFrameAuthority) {
+            result.recordPrologFrameLexicalAuthority(
+                    LocalRangeAccessor.constantOf(frameLocalRange),
+                    frameLocalLayout);
+        } else {
+            result.recordPrologFrameLexicalAuthority(null, null);
+            if (currentRootFrameNativeLayout != null) {
+                result.recordFrameNativeBindings(
+                        LocalRangeAccessor.constantOf(currentRootFrameNativeLocals),
+                        currentRootFrameNativeLayout);
+            }
         }
         return result;
     }
@@ -3552,8 +3628,8 @@ final class CanonicalToBytecodeLowerer {
         builder.beginCreateCurrentFrameLocal(
                 currentRootFrameNativeLocals,
                 currentRootFrameNativeLayout,
-                ordinal);
-        builder.emitLoadConstant(name);
+                ordinal,
+                name);
     }
 
     /**
@@ -3674,7 +3750,8 @@ final class CanonicalToBytecodeLowerer {
                         .anyMatch(expression ->
                                 requiresComposedInvocation(expression)
                                         && !(expression instanceof CanonicalAssign assign
-                                                && isScalarLocalAssign(assign)));
+                                                && isScalarLocalAssign(assign))
+                                        && !admitsCompactClosureCreate(expression));
         if (!needed) {
             return null;
         }
@@ -3723,6 +3800,8 @@ final class CanonicalToBytecodeLowerer {
                 beginStatement(builder, expression);
                 emitDiscardedScalarLocalRead(builder, lookup);
                 endStatement(builder);
+            } else if (admitsCompactClosureCreate(expression)) {
+                emitCompactClosureCreate(builder, (CanonicalCreate) expression);
             } else if (expression instanceof CanonicalClosure closure) {
                 /*
                  * Register the nested root before opening DiscardValue.
@@ -3793,6 +3872,195 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.endIfThenElse();
+    }
+
+    /**
+     * I112: a statement {@code name: <Closure literal>} creating a
+     * frame-native binding of the genuine root being lowered. Its value
+     * cannot suspend or observe the binding, so the creation consumes the
+     * Closure value directly, without a value local or staged sequence
+     * result. The rule is structural; every other creation keeps {@link
+     * #emitBodyCreate}.
+     */
+    private boolean admitsCompactClosureCreate(CanonicalExpression expression) {
+        return expression instanceof CanonicalCreate create
+                && create.target().isEmpty()
+                && create.value() instanceof CanonicalClosure
+                && currentActivationLocal == null
+                && !currentInlineCallbackFrameNative
+                && currentNormalCallbackScalarLocals.isEmpty()
+                && !currentRootScalarLocals.contains(create.name())
+                && frameNativeOrdinal(create.name()) >= 0;
+    }
+
+    /**
+     * I112: one admitted {@link #admitsCompactClosureCreate} statement. The
+     * nested root and its plan cell are registered before any consuming
+     * operation opens; the Closure is created at the statement and its
+     * identity is the value the binding receives. The statement value is
+     * discarded by the enclosing sequence.
+     */
+    private void emitCompactClosureCreate(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalCreate create) {
+        CanonicalClosure closure = (CanonicalClosure) create.value();
+        beginStatement(builder, create);
+        ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
+        emitCreateCurrentFrameLocal(
+                builder, frameNativeOrdinal(create.name()), create.name());
+        beginClosureCapture(builder);
+        builder.emitLoadConstant(closure);
+        builder.emitLoadConstant(plan);
+        endClosureCapture(builder);
+        builder.endCreateCurrentFrameLocal();
+        endStatement(builder);
+    }
+
+    /**
+     * I112 / PLAT062-T: a NORMAL module root whose persistent frame authority
+     * EnterRoot installs at entry. Conservative structural admission: every
+     * statement but the last creates a binding of this root from a Closure
+     * literal ({@code name: <Closure>}) or is a call whose receiver and
+     * arguments are direct values, and the last is such a call (the admitted
+     * terminal shape). Every other module keeps the
+     * InstallFrameLexicalAuthority body operation.
+     */
+    private boolean admitsPrologFrameAuthority(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition) {
+        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        if (profile != ProtosExecutionMode.NORMAL
+                || activationDefinition != null
+                || currentActivationLocal != null
+                || expressions.size() < 2
+                || !(expressions.get(expressions.size() - 1) instanceof CanonicalCall call)
+                || hasSpreadArgument(call.arguments())
+                || !isTerminalCallOperand(call.receiver())
+                || call.arguments().stream()
+                        .anyMatch(argument -> !isTerminalCallOperand(argument))) {
+            return false;
+        }
+        for (int index = 0; index < expressions.size() - 1; index++) {
+            CanonicalExpression expression = expressions.get(index);
+            boolean closureCreate =
+                    expression instanceof CanonicalCreate create
+                            && create.target().isEmpty()
+                            && create.value() instanceof CanonicalClosure;
+            boolean directCall =
+                    expression instanceof CanonicalCall prefixCall
+                            && !hasSpreadArgument(prefixCall.arguments())
+                            && isTerminalCallOperand(prefixCall.receiver())
+                            && prefixCall.arguments().stream()
+                                    .allMatch(CanonicalToBytecodeLowerer::isTerminalCallOperand);
+            if (!closureCreate && !directCall) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * I112 / PLAT062-T: whether {@code last}, the final expression of the
+     * genuine root being lowered, is a terminal Closure invocation: a
+     * {@link CanonicalCall} after which the root only returns its value,
+     * whose receiver and positional arguments are direct values that can be
+     * evaluated once, left to right, as operands of the terminal operation.
+     * Terminality is a property of this emission point, never a proof that
+     * the invocation cannot suspend.
+     *
+     * <p>Not admitted, and therefore lowered unchanged: DEBUG (which keeps
+     * the physical caller frame across a suspension), spread arguments,
+     * composed or control operands, an I096 inline Closure-literal
+     * candidate, and every inline callback or activation region, whose
+     * enclosing work must still resume physically.
+     */
+    private boolean admitsTerminalClosureCall(CanonicalExpression last) {
+        if (profile != ProtosExecutionMode.NORMAL
+                || !(last instanceof CanonicalCall call)
+                || currentActivationLocal != null
+                || currentInlineCallbackFrameNative
+                || currentInlineClosureCallBody
+                || !currentNormalCallbackScalarLocals.isEmpty()
+                || hasSpreadArgument(call.arguments())
+                || !isTerminalCallOperand(call.receiver())
+                || inlineClosureLiteralCallCandidate(call) != null
+                // Decided before the prefix materializes its literals: an
+                // I096-B1 binding candidate keeps its inline lowering.
+                || currentRootBindingCallCandidates.containsKey(call)) {
+            return false;
+        }
+        for (CanonicalExpression argument : call.arguments()) {
+            if (!isTerminalCallOperand(argument)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static boolean isTerminalCallOperand(CanonicalExpression expression) {
+        return isDirectTerminalValue(expression)
+                && !requiresComposedInvocation(expression);
+    }
+
+    /**
+     * I112 / PLAT062-T: emits an admitted terminal call
+     * ({@link #admitsTerminalClosureCall}) as one {@code InvokeClosure*Tail}
+     * operation. The receiver and the arguments are emitted once, left to
+     * right, as its operands; the caller is the operation's own frame. A
+     * root-binding receiver is read directly (the operation projects a
+     * primitive carrier before any generic selection), and a Call1 numeric
+     * argument stays a carrier exactly as for {@code InvokeClosureOne}. The
+     * call keeps its CallTag over the exact call span of the statement.
+     */
+    private void emitTerminalClosureCall(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call) {
+        currentRootEmittedTerminalInvocation = true;
+        java.util.List<CanonicalExpression> arguments = call.arguments();
+        builder.beginSourceSection(
+                call.span().startOffset(),
+                call.span().length());
+        builder.beginTag(StandardTags.CallTag.class);
+        if (arguments.isEmpty()) {
+            builder.beginInvokeClosureZeroTail();
+            emitTerminalCallOperand(builder, call.receiver());
+            builder.endInvokeClosureZeroTail();
+        } else if (arguments.size() == 1) {
+            builder.beginInvokeClosureOneTail();
+            emitTerminalCallOperand(builder, call.receiver());
+            CanonicalExpression argument = arguments.get(0);
+            Object carrier =
+                    argument instanceof CanonicalLiteral literal
+                            ? primitiveNumberLiteralOrNull(literal)
+                            : null;
+            if (carrier != null) {
+                builder.emitLoadConstant(carrier);
+            } else {
+                emitTerminalCallOperand(builder, argument);
+            }
+            builder.endInvokeClosureOneTail();
+        } else {
+            builder.beginInvokeClosureArgumentsTail();
+            emitTerminalCallOperand(builder, call.receiver());
+            builder.beginCollectClosureCallArguments();
+            for (CanonicalExpression argument : arguments) {
+                emitExpression(builder, argument);
+            }
+            builder.endCollectClosureCallArguments();
+            builder.endInvokeClosureArgumentsTail();
+        }
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
+    }
+
+    private void emitTerminalCallOperand(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression operand) {
+        if (operand instanceof CanonicalLookup lookup) {
+            emitLookup(builder, lookup, true);
+        } else {
+            emitExpression(builder, operand);
+        }
     }
 
     private static boolean requiresComposedInvocation(
@@ -7177,11 +7445,16 @@ final class CanonicalToBytecodeLowerer {
         return currentActivationLocal == null && currentRootFrameLocals.isEmpty();
     }
 
+    /*
+     * I112: at root level the creating activation is the root's own frame
+     * argument 0, bound by MaterializeCurrentClosure itself rather than
+     * loaded as an operand; its compact capture remains restricted to the
+     * I092 admission. Inline regions keep their explicit activation operand.
+     */
     private void beginClosureCapture(
             ProtosSemanticBytecodeRootNodeGen.Builder builder) {
-        if (useCompactClosureCapture()) {
-            builder.beginMaterializeCurrentClosure();
-            builder.emitCurrentCallerReference();
+        if (currentActivationLocal == null) {
+            builder.beginMaterializeCurrentClosure(useCompactClosureCapture());
         } else {
             builder.beginMaterializeClosure();
             emitCurrentActivation(builder);
@@ -7190,7 +7463,7 @@ final class CanonicalToBytecodeLowerer {
 
     private void endClosureCapture(
             ProtosSemanticBytecodeRootNodeGen.Builder builder) {
-        if (useCompactClosureCapture()) {
+        if (currentActivationLocal == null) {
             builder.endMaterializeCurrentClosure();
         } else {
             builder.endMaterializeClosure();
@@ -7359,11 +7632,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginMaterializePrimitiveNumericCarrier();
             }
 
-            builder.beginReadRootFrameLocal(
+            builder.emitReadRootFrameLocal(
                     owner,
-                    currentRootFrameLayout.presentContinuityAt(ordinal));
-            builder.emitLoadConstant(name);
-            builder.endReadRootFrameLocal();
+                    currentRootFrameLayout.presentContinuityAt(ordinal),
+                    name);
 
             if (!carrierOperand) {
                 builder.emitLoadConstant(true);
@@ -7391,11 +7663,10 @@ final class CanonicalToBytecodeLowerer {
                     if (!carrierOperand) {
                         builder.beginMaterializePrimitiveNumericCarrier();
                     }
-                    builder.beginReadRootFrameLocal(
+                    builder.emitReadRootFrameLocal(
                             local,
-                            currentRootFrameLayout.presentContinuityAt(ordinal));
-                    builder.emitLoadConstant(resolvedName);
-                    builder.endReadRootFrameLocal();
+                            currentRootFrameLayout.presentContinuityAt(ordinal),
+                            resolvedName);
                     if (!carrierOperand) {
                         builder.emitLoadConstant(true);
                         builder.endMaterializePrimitiveNumericCarrier();

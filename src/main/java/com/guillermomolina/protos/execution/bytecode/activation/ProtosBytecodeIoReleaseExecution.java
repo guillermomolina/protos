@@ -7,7 +7,6 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.bytecode.ContinuationResult;
 import java.util.Objects;
 import java.util.function.BiConsumer;
 
@@ -24,7 +23,8 @@ final class ProtosBytecodeIoReleaseExecution
     private final Object stateLock = new Object();
     private boolean started;
     private boolean finished;
-    private ContinuationResult continuation;
+    /* The retained pending result: a ContinuationResult or an I112 terminal transport. */
+    private Object continuation;
     private ProtosIoReleaseSuspension suspension;
 
     private ProtosBytecodeIoReleaseExecution(
@@ -81,7 +81,7 @@ final class ProtosBytecodeIoReleaseExecution
             throw new IllegalArgumentException(
                     "release-owned C-prime driver dispatched for another lifecycle release");
         }
-        ContinuationResult resumeContinuation = null;
+        Object resumeContinuation = null;
         ProtosIoReleaseSuspension resumeSuspension = null;
         boolean initial = false;
         synchronized (stateLock) {
@@ -110,7 +110,8 @@ final class ProtosBytecodeIoReleaseExecution
             } else {
                 resumeSuspension.releaseWait();
                 outcome = Objects.requireNonNull(
-                        resumeContinuation.continueWith(ProtosNullValue.INSTANCE),
+                        ProtosTailCallContinuation.resume(
+                                resumeContinuation, ProtosNullValue.INSTANCE),
                         "release-owned C-prime continuation returned null");
             }
             driveOutcome(outcome);
@@ -140,10 +141,11 @@ final class ProtosBytecodeIoReleaseExecution
     private void driveOutcome(Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
-            if (!(outcome instanceof ContinuationResult next)) {
+            if (!ProtosTailCallContinuation.isPending(outcome)) {
                 finishCompletion(outcome);
                 return;
             }
+            Object next = outcome;
             ProtosIoReleaseSuspension leaf = releaseSuspensionLeaf(next);
             if (leaf.release() != release) {
                 leaf.releaseWait();
@@ -153,7 +155,7 @@ final class ProtosBytecodeIoReleaseExecution
             if (leaf.dependency().isReady()) {
                 leaf.releaseWait();
                 outcome = Objects.requireNonNull(
-                        next.continueWith(ProtosNullValue.INSTANCE),
+                        ProtosTailCallContinuation.resume(next, ProtosNullValue.INSTANCE),
                         "ready release-owned C-prime continuation returned null");
                 continue;
             }
@@ -203,9 +205,8 @@ final class ProtosBytecodeIoReleaseExecution
         }
     }
 
-    private static ProtosIoReleaseSuspension releaseSuspensionLeaf(ContinuationResult top) {
-        Object current = top;
-        while (current instanceof ContinuationResult nested) current = nested.getResult();
+    private static ProtosIoReleaseSuspension releaseSuspensionLeaf(Object top) {
+        Object current = ProtosTailCallContinuation.suspensionLeaf(top);
         if (!(current instanceof ProtosIoReleaseSuspension suspension)) {
             throw new UnsupportedOperationException(
                     "PLAT030 release-owned C-prime suspension requires a release-owned suspension leaf");

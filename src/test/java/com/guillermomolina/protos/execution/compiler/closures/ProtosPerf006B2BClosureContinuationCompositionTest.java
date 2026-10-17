@@ -111,7 +111,9 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                 module);
                 module.context().createLocalSlot("entry", middle);
 
-                String topCharacters = "entry()";
+                // I112: a final call is terminal; a caller with remaining work
+                // keeps the composed C-prime chain under test.
+                String topCharacters = "result: entry()\nresult";
                 Source topSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
