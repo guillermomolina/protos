@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.375-SNAPSHOT
+
+- `I111` (#919): implement PLAT065-A slice A, selective explicit semantic
+  RootTag.
+  - `ProtosSemanticBytecodeRootNode` disables automatic root tagging
+    (`enableRootTagging = false`); `CanonicalToBytecodeLowerer.emitRootBody`
+    explicitly wraps each genuine module, top-level or Closure activation in
+    `RootTag` -> `Block`. Inline Closure callbacks keep their nested semantic
+    RootTag regions; structured-dispatch and C-prime roots remain untagged.
+  - The root's declared-name frame locals are created before the RootTag
+    Block, so they stay root-scoped and live at the `EnterRoot` location;
+    operation temporaries stay inside the Block.
+  - CLI008 trace capture treats the first active RootTag as the physical
+    semantic root and projects only later RootTags as inline callback frames.
+  - Independent Builder oracles reproduce the explicit geometry; add lazy
+    NORMAL/DEBUG RootTag reparse coverage and annotation checks; reparse
+    epilogue contracts accept the ordered unreachable RootTag Block exit
+    before the implicit root return.
+  - Maintainer validation: make test PASS, make check PASS.
+
 ## 0.3.374-SNAPSHOT
 
 - `I112` (#920): implement ratified PLAT062-T compact terminal Closure

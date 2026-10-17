@@ -35,6 +35,7 @@ import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -538,11 +539,15 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginReturn();
                             builder.emitLoadConstant(ProtosBooleanValue.TRUE);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

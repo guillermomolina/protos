@@ -218,11 +218,15 @@ final class ProtosI101BLiteralOneTest {
                                     bodyStart, bodyLength);
 
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginReturn();
                             builder.emitLoadConstant(1L);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
 
                             builder.endSourceSection();

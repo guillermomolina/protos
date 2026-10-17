@@ -464,7 +464,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
                 assertEquals(
                         2,
                         rootTags(runRoot.getBytecodeNode()),
-                        "automatic RootTag of run plus the inline callback RootTag");
+                        "explicit RootTag of run plus the inline callback RootTag");
                 return result;
             } finally {
                 context.leave();

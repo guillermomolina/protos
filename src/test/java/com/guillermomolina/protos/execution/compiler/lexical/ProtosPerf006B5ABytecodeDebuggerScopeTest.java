@@ -121,6 +121,21 @@ final class ProtosPerf006B5ABytecodeDebuggerScopeTest {
         assertTrue(root.contains("enableRootTagging = false"));
         assertTrue(root.contains("enableRootBodyTagging = false"));
 
+        // I111-A / PLAT065-A: the semantic interpreter tags its roots explicitly.
+        Path semanticPath =
+                Path.of(
+                        "src", "main", "java", "com", "guillermomolina", "protos",
+                        "execution", "bytecode", "activation",
+                        "ProtosSemanticBytecodeRootNode.java");
+        String semantic = Files.readString(semanticPath);
+
+        assertTrue(semantic.contains("enableTagInstrumentation = true"));
+        assertTrue(semantic.contains("enableRootTagging = false"));
+        assertTrue(semantic.contains("enableRootBodyTagging = false"));
+        assertTrue(
+                semantic.contains(
+                        "tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class"));
+
         System.out.println("PERF006_B5A_BYTECODE_TAG_TREE_SCOPE_LIBRARY=YES");
         System.out.println("PERF006_B5A_ROOT_TAG_EXPANSION=NO");
     }

@@ -65,7 +65,8 @@ import java.util.List;
  *       live at the frame's bytecode index, the root is reparsed with source information and
  *       {@link StandardTags.RootTag} only, and every nested semantic RootTag active at that index
  *       contributes one callback frame (innermost first) before the enclosing physical frame. The
- *       automatic root tag is the physical frame itself and is never duplicated. No inline
+ *       first active RootTag, now emitted explicitly by the lowerer, identifies the physical
+ *       semantic root; its frame is projected separately and is never duplicated. No inline
  *       activation, scope or binding is materialized.
  *   <li>I112 / PLAT062-T: a caller whose terminal invocation suspended returned its transport,
  *       so after resumption it is no longer a physical frame. When the occurrence crossed such a
@@ -304,13 +305,22 @@ final class ProtosDiagnosticTraceCapture {
         return false;
     }
 
-    /** Nested semantic RootTag regions active at {@code bytecodeIndex}, outermost first. */
-    private static List<TagTree> activeNestedRootTags(TagTree automaticRoot, int bytecodeIndex) {
+    /**
+     * Nested semantic RootTag regions active at {@code bytecodeIndex},
+     * outermost first. The first active RootTag identifies the physical
+     * semantic root and is projected separately by projectSemanticFrame.
+     */
+    private static List<TagTree> activeNestedRootTags(
+            TagTree tagTree, int bytecodeIndex) {
         List<TagTree> regions = new ArrayList<>();
-        if (automaticRoot == null) {
+        if (tagTree == null) {
             return regions;
         }
-        TagTree current = automaticRoot;
+
+        TagTree current = tagTree;
+        boolean physicalRootSeen =
+                current.hasTag(StandardTags.RootTag.class);
+
         boolean descended = true;
         while (descended) {
             descended = false;
@@ -318,7 +328,11 @@ final class ProtosDiagnosticTraceCapture {
                 if (child.getEnterBytecodeIndex() <= bytecodeIndex
                         && bytecodeIndex <= child.getReturnBytecodeIndex()) {
                     if (child.hasTag(StandardTags.RootTag.class)) {
-                        regions.add(child);
+                        if (physicalRootSeen) {
+                            regions.add(child);
+                        } else {
+                            physicalRootSeen = true;
+                        }
                     }
                     current = child;
                     descended = true;

@@ -489,7 +489,7 @@ final class ProtosPerf026B3BooleanInlineCallbackTest {
     /**
      * Requires exactly one probe call made directly from {@code run}'s own
      * root (no callback root on the stack) and {@code expectedRootTags}
-     * RootTags in {@code run}: its automatic one plus one per inline region.
+     * RootTags in {@code run}: its explicit one plus one per inline region.
      */
     private static Object assertCallbackRootRemoved(String characters, int expectedRootTags)
             throws Exception {

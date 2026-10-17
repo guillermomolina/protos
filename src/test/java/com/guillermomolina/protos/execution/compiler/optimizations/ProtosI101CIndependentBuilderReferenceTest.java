@@ -295,6 +295,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginRoot();
 
                             BytecodeLocal receiver = builder.createLocal("receiver", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
                             BytecodeLocal[] locals = {receiver};
                             ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(
                                     new String[] {"receiver"},
@@ -381,6 +383,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.emitLoadLocal(result);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -428,6 +432,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.beginSource(source);
                     builder.beginSourceSection(outerBodyStart, outerBodyLength);
                     builder.beginRoot();
+                    builder.beginTag(StandardTags.RootTag.class);
+                    builder.beginBlock();
 
                     BytecodeLocal prepared = builder.createLocal("preparedClosureCall", null);
                     BytecodeLocal child = builder.createLocal("childResult", null);
@@ -445,9 +451,13 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     // The inner root is registered in this group before its Closure materializes.
                     builder.beginSourceSection(innerBodyStart, innerBodyLength);
                     builder.beginRoot();
+                    builder.beginTag(StandardTags.RootTag.class);
+                    builder.beginBlock();
                     builder.beginReturn();
                     builder.emitLoadConstant(1L);
                     builder.endReturn();
+                    builder.endBlock();
+                    builder.endTag(StandardTags.RootTag.class);
                     builder.endRoot();
                     builder.endSourceSection();
 
@@ -512,6 +522,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.emitLoadLocal(result);
                     builder.endReturn();
 
+                    builder.endBlock();
+                    builder.endTag(StandardTags.RootTag.class);
                     builder.endRoot();
                     builder.endSourceSection();
                     builder.endSource();
@@ -668,6 +680,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginSourceSection(
                                     bodyStart, bodyLength);
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             // I112 / PLAT062-T: the final call is the
                             // root's terminal invocation; its operands
@@ -709,6 +723,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             endReferenceStatement(builder);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -864,6 +880,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             BytecodeLocal identity =
                                     builder.createLocal(
                                             "identity", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             BytecodeLocal[] locals = {identity};
 
@@ -927,6 +945,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

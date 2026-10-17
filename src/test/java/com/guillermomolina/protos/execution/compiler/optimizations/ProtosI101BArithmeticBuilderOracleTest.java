@@ -33,6 +33,7 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -204,11 +205,15 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginReturn();
                             builder.emitLoadConstant(3L);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -234,6 +239,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
 
                             BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal y = builder.createLocal("y", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
                             builder.beginStoreLocal(x);
@@ -253,6 +260,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.endReturn();
                             builder.endSourceSection();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -280,6 +289,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal y = builder.createLocal("y", null);
                             BytecodeLocal z = builder.createLocal("z", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
                             builder.beginStoreLocal(x);
@@ -305,6 +316,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.endReturn();
                             builder.endSourceSection();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

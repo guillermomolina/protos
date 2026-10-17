@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -33,6 +34,7 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
@@ -129,6 +131,70 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         System.out.println("PERF006_B5B_CALL_TAG_SOURCE_EXACT=PASS");
         System.out.println("PERF006_B5B_PLAT034_EXPRESSION_EQUALS_STATEMENT=PASS");
         System.out.println("PERF006_B5B_PLAT034_ALWAYS_HALT_LOCATIONS=ZERO");
+    }
+
+    @Test
+    void explicitSemanticRootTagReparsesLazilyInNormalAndDebug() throws Exception {
+        for (ProtosExecutionMode mode :
+                List.of(ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG)) {
+            try (LanguageScope scope = languageScope()) {
+                String characters = "target()\nnull";
+                Source source =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        characters,
+                                        "i111-a-explicit-root-tag.protos")
+                                .build();
+                CanonicalSequence sequence = canonicalize(characters);
+                ProtosSemanticBytecodeRootNode root =
+                        new CanonicalToBytecodeLowerer(scope.language(), source, mode)
+                                .lowerRoot(sequence);
+
+                // BytecodeConfig.DEFAULT requests no tag materialization.
+                assertNull(
+                        root.getBytecodeNode().getTagTree(),
+                        mode + ": the TagTree must not be materialized before an update");
+                BytecodeRootNodes<?> group = root.getRootNodes();
+                RootCallTarget callTarget = root.getCallTarget();
+
+                group.update(
+                        ProtosSemanticBytecodeRootNodeGen.newConfigBuilder()
+                                .addSource()
+                                .addTag(StandardTags.RootTag.class)
+                                .build());
+                assertExplicitSemanticRootTag(mode, root, sequence, source);
+                assertSame(group, root.getRootNodes(), mode + ": group identity");
+                assertSame(callTarget, root.getCallTarget(), mode + ": CallTarget identity");
+                assertTrue(group.getNodes().contains(root), mode + ": root group membership");
+
+                group.ensureComplete();
+                assertExplicitSemanticRootTag(mode, root, sequence, source);
+                assertSame(group, root.getRootNodes(), mode + ": group identity");
+                assertSame(callTarget, root.getCallTarget(), mode + ": CallTarget identity");
+            }
+        }
+
+        System.out.println("I111_A_EXPLICIT_ROOT_TAG_LAZY_REPARSE=PASS");
+    }
+
+    private static void assertExplicitSemanticRootTag(
+            ProtosExecutionMode mode,
+            ProtosSemanticBytecodeRootNode root,
+            CanonicalSequence sequence,
+            Source source) {
+        TagTree tree = root.getBytecodeNode().getTagTree();
+        assertNotNull(tree, mode + ": the TagTree must be materialized after the update");
+        List<TagTree> rootTags = collectTags(tree, StandardTags.RootTag.class);
+        assertEquals(1, rootTags.size(), mode + ": exactly one explicit RootTag");
+        assertEquals(
+                0,
+                collectTags(tree, StandardTags.RootBodyTag.class).size(),
+                mode + ": no RootBodyTag");
+        SourceSection section = rootTags.get(0).getSourceSection();
+        assertNotNull(section, mode + ": the RootTag must carry a SourceSection");
+        assertSame(source, section.getSource());
+        assertEquals(sequence.span().startOffset(), section.getCharIndex());
+        assertEquals(sequence.span().length(), section.getCharLength());
     }
 
     @Test
@@ -291,6 +357,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(span.startOffset(), span.length());
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
                             builder.beginTag(StandardTags.StatementTag.class);
                             builder.beginYield();
                             builder.emitLoadArgument(0);
@@ -299,6 +367,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             builder.beginReturn();
                             builder.emitLoadConstant(finalValue);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

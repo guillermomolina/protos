@@ -719,8 +719,11 @@ final class ProtosI109ADynamicLocalEachTest {
 
     /**
      * ensureComplete() puede añadir exclusivamente un epílogo inalcanzable
-     * de limpieza de locales. El prefijo semántico anterior al reparse
-     * debe mantenerse exactamente igual y en el mismo orden.
+     * de limpieza de locales: limpiezas del Block del RootTag explícito
+     * (I111-A), load.null, limpiezas de locales de raíz, a lo sumo un
+     * c.EpilogForReturn (I112) y return, en ese orden. El prefijo
+     * semántico anterior al reparse debe mantenerse exactamente igual y en
+     * el mismo orden.
      */
     private static void i109AssertInstructionsRetained(
             List<String> before,
@@ -744,29 +747,39 @@ final class ProtosI109ADynamicLocalEachTest {
             return;
         }
 
+        int position = 0;
+        // I111-A: unreachable exit cleanup of the explicit RootTag Block.
+        while (position < epilogue.size()
+                && epilogue.get(position).equals("clear.local")) {
+            position++;
+        }
+
         assertTrue(
-                epilogue.size() >= 2,
+                position < epilogue.size(),
                 () -> diagnostic
                         + ": epílogo incompleto " + epilogue);
 
         assertEquals(
                 "load.null",
-                epilogue.get(0),
+                epilogue.get(position++),
                 diagnostic + ": inicio inesperado del epílogo");
 
-        assertEquals(
-                "return",
-                epilogue.get(epilogue.size() - 1),
-                diagnostic + ": final inesperado del epílogo");
-
-        for (String instruction :
-                epilogue.subList(1, epilogue.size() - 1)) {
-            // I112: every root return runs the EpilogForReturn epilogue.
-            assertTrue(
-                    instruction.equals("clear.local")
-                            || instruction.equals("c.EpilogForReturn"),
-                    () -> diagnostic + ": instrucción extra inesperada " + instruction);
+        // The implicit root return clears the root-scoped locals.
+        while (position < epilogue.size()
+                && epilogue.get(position).equals("clear.local")) {
+            position++;
         }
+
+        // I112: every root return runs the EpilogForReturn epilogue.
+        if (position < epilogue.size()
+                && epilogue.get(position).equals("c.EpilogForReturn")) {
+            position++;
+        }
+
+        assertEquals(
+                List.of("return"),
+                epilogue.subList(position, epilogue.size()),
+                diagnostic + ": final inesperado del epílogo");
     }
 
     private static boolean i109HasRootTag(TagTree tree) {

@@ -710,7 +710,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertEquals(
                 2,
                 rootTags(runRoot.getBytecodeNode()),
-                "automatic RootTag of run plus the inline callee semantic RootTag");
+                "explicit RootTag of run plus the inline callee semantic RootTag");
         System.out.println("I096_A_C0_INLINE=YES");
     }
 
@@ -1091,7 +1091,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertEquals(
                 2,
                 rootTags(runRoot.getBytecodeNode()),
-                "automatic RootTag of run plus the inline callee semantic RootTag");
+                "explicit RootTag of run plus the inline callee semantic RootTag");
         assertParity(source, 42);
         System.out.println("I096_B1_C0_BINDING_INLINE=YES");
     }

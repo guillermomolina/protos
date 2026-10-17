@@ -90,8 +90,12 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
  * PLAT042 Candidate B′ tagged semantic source interpreter.
  *
  * <p>Every root of this generated interpreter is a guest-semantic top-level,
- * module or Closure activation produced by {@link CanonicalToBytecodeLowerer};
- * its automatic RootTag is therefore truthful. Object bodies are lowered inline
+ * module or Closure activation produced by {@link CanonicalToBytecodeLowerer}.
+ * I111-A / PLAT065-A: automatic root tagging is disabled. The canonical source
+ * lowerer explicitly tags each genuine module, top-level or Closure activation.
+ * Inline Closure callbacks retain their nested semantic RootTag regions. The
+ * generated interpreter does not infer guest identity from the mere existence
+ * of a physical root. Object bodies are lowered inline
  * and never become roots. Lexically nested Closure roots are created in the same
  * {@code BytecodeRootNodes} parse as their owner, so PERF013 materialized
  * captured accesses use a {@link MaterializedLocalAccessor} of this interpreter
@@ -114,7 +118,7 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
         languageClass = ProtosLanguage.class,
         enableYield = true,
         enableTagInstrumentation = true,
-        enableRootTagging = true,
+        enableRootTagging = false,
         enableRootBodyTagging = false,
         enableMaterializedLocalAccesses = true,
         enableTailCallHandlers = true,

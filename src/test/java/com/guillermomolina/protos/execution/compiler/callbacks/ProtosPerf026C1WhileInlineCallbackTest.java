@@ -113,7 +113,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                 assertEquals(
                         3,
                         rootTags(runRoot.getBytecodeNode()),
-                        "automatic RootTag of run plus the condition and body RootTags");
+                        "explicit RootTag of run plus the condition and body RootTags");
             } finally {
                 context.leave();
             }

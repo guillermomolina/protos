@@ -83,12 +83,13 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
                 root.getRootNodes().ensureComplete();
                 assertEquals(1, rootTags(root.getBytecodeNode()));
+                assertEquals(0, rootBodyTags(root.getBytecodeNode()));
             } finally {
                 context.leave();
             }
         }
         System.out.println("PERF025_C1C_ORDINARY_SOURCE_CLOSURE_CALLTARGET_COUNT=1");
-        System.out.println("PERF025_C1C_SEMANTIC_AUTOMATIC_ROOT_TAG=YES");
+        System.out.println("PERF025_C1C_SEMANTIC_EXPLICIT_ROOT_TAG=YES");
     }
 
     @Test
@@ -115,6 +116,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
                 activationRoot.getRootNodes().ensureComplete();
                 assertEquals(1, rootTags(activationRoot.getBytecodeNode()));
+                assertEquals(0, rootBodyTags(activationRoot.getBytecodeNode()));
             } finally {
                 context.leave();
             }
@@ -170,6 +172,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                             (ProtosSemanticBytecodeRootNode) stack.get(0);
                     callback.getRootNodes().ensureComplete();
                     assertEquals(1, rootTags(callback.getBytecodeNode()));
+                    assertEquals(0, rootBodyTags(callback.getBytecodeNode()));
                 }
             } finally {
                 context.leave();
@@ -289,6 +292,10 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
     private static int rootTags(BytecodeNode bytecodeNode) {
         return countTags(bytecodeNode.getTagTree(), StandardTags.RootTag.class);
+    }
+
+    private static int rootBodyTags(BytecodeNode bytecodeNode) {
+        return countTags(bytecodeNode.getTagTree(), StandardTags.RootBodyTag.class);
     }
 
     private static int countTags(

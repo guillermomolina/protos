@@ -1119,9 +1119,13 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     /**
      * Reparse may append the root's unreachable local-cleanup epilogue.
      * The epilogue may be empty, contain only {@code return}, or be the
-     * complete cleanup epilogue ({@code load.null}, zero or more
-     * {@code clear.local}, {@code return}). The pre-existing semantic instruction prefix must remain identical.
-     * Bytecode indices are normalized by semanticSignature.
+     * complete cleanup epilogue in this exact order: zero or more
+     * {@code clear.local} of the I111-A explicit RootTag Block's own locals
+     * (its unreachable exit), {@code load.null}, zero or more
+     * {@code clear.local} of the root-scoped locals, at most one I112
+     * {@code c.EpilogForReturn}, {@code return}. Each local offset is cleared
+     * at most once. The pre-existing semantic instruction prefix must remain
+     * identical. Bytecode indices are normalized by semanticSignature.
      */
     private static void assertReparsePrefixAndCleanup(
             List<String> before, List<String> after, String message) {
@@ -1138,24 +1142,39 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         if (epilogue.isEmpty() || epilogue.equals(List.of("return"))) {
             return;
         }
+        java.util.Set<String> cleared = new java.util.HashSet<>();
+        int position = 0;
+        // I111-A: unreachable exit cleanup of the explicit RootTag Block.
+        while (position < epilogue.size()
+                && epilogue.get(position).startsWith("clear.local ")) {
+            String instruction = epilogue.get(position++);
+            assertTrue(
+                    cleared.add(instruction),
+                    () -> message + ": local cleared twice in " + epilogue);
+        }
         assertTrue(
-                epilogue.size() >= 2,
+                position < epilogue.size(),
                 () -> message + ": incomplete reparse epilogue " + epilogue);
         assertEquals(
-                "load.null", epilogue.get(0),
-                message + ": reparse epilogue must start with load.null " + epilogue);
-        assertEquals(
-                "return", epilogue.get(epilogue.size() - 1),
-                message + ": reparse epilogue must end with return " + epilogue);
-        for (String instruction : epilogue.subList(1, epilogue.size() - 1)) {
-            // I112: every root return runs the EpilogForReturn epilogue.
+                "load.null", epilogue.get(position++),
+                message + ": reparse epilogue must reach load.null " + epilogue);
+        // The implicit root return clears the root-scoped locals.
+        while (position < epilogue.size()
+                && epilogue.get(position).startsWith("clear.local ")) {
+            String instruction = epilogue.get(position++);
             assertTrue(
-                    instruction.startsWith("clear.local ")
-                            || instruction.startsWith("c.EpilogForReturn"),
-                    () -> message
-                            + ": unexpected reparse epilogue instruction "
-                            + instruction + " in " + epilogue);
+                    cleared.add(instruction),
+                    () -> message + ": local cleared twice in " + epilogue);
         }
+        // I112: every root return runs the EpilogForReturn epilogue.
+        if (position < epilogue.size()
+                && epilogue.get(position).startsWith("c.EpilogForReturn")) {
+            position++;
+        }
+        assertEquals(
+                List.of("return"),
+                epilogue.subList(position, epilogue.size()),
+                message + ": reparse epilogue must end with exactly one return " + epilogue);
     }
 
 
@@ -1284,6 +1303,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                             BytecodeLocal local =
                                     builder.createLocal("value", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
                             BytecodeLocal[] locals = {local};
                             ProtosFrameLexicalLayout layout =
                                     ProtosFrameLexicalLayout.of(
@@ -1326,6 +1347,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.endSourceSection();
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1390,14 +1413,21 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         beforeReparse,
                         afterReparse.subList(0, beforeReparse.size()),
                         "I104-B reparse changed the original instruction prefix");
-                // I112: the root ends with its Return, so no fallthrough
-                // local cleanup is reachable; reparse appends only the
-                // instrumented root return.
+                // I111-A: the root now ends with its explicit RootTag, whose
+                // instrumented fallthrough appends the unreachable implicit
+                // root return: it clears the root-scoped a, b, c and runs the
+                // I112 EpilogForReturn epilogue.
                 assertEquals(
-                        List.of("return"),
+                        List.of(
+                                "load.null",
+                                "clear.local LOCAL_OFFSET=0",
+                                "clear.local LOCAL_OFFSET=1",
+                                "clear.local LOCAL_OFFSET=2",
+                                "c.EpilogForReturn INTEGER=1 NODE_PROFILE=profile",
+                                "return"),
                         afterReparse.subList(
                                 beforeReparse.size(), afterReparse.size()),
-                        "I104-B reparse must append only the instrumented return");
+                        "I104-B reparse must append only the implicit root return epilogue");
 
                 System.out.println("I104_B_BUILDER_ORACLE=PASS");
                 System.out.println("I104_B_REPARSE=PASS");
@@ -1449,6 +1479,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 builder.createLocal("b", null),
                                 builder.createLocal("c", null)
                             };
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
                             String[] names = {"a", "b", "c"};
                             ProtosFrameLexicalLayout layout =
                                     ProtosFrameLexicalLayout.of(
@@ -1496,6 +1528,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.endSourceSection();
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
@@ -1522,11 +1556,15 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.beginSource(source);
                             builder.beginSourceSection(bodyStart, bodyLength);
                             builder.beginRoot();
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginReturn();
                             builder.emitLoadConstant(1L);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();

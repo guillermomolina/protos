@@ -672,7 +672,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
     /**
      * An admitted site inside {@code run}: every probe call sees only the
      * {@code run} root over the module root, and {@code run} carries its own
-     * automatic RootTag plus the single inline callback RootTag.
+     * explicit RootTag plus the single inline callback RootTag.
      */
     private static void assertInlineTopology(
             ProtosSemanticBytecodeRootNode root,
@@ -692,7 +692,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
         assertEquals(
                 2,
                 rootTags(runRoot.getBytecodeNode()),
-                "automatic RootTag of run plus the inline callback RootTag");
+                "explicit RootTag of run plus the inline callback RootTag");
     }
 
     private static void assertInlineTrue(String characters, int expectedCalls)
@@ -752,7 +752,7 @@ final class ProtosPerf026D2AssociationEachInlineCallbackTest {
 
     /**
      * The probing body runs in its own physical semantic root (carrying only
-     * its automatic RootTag) below the {@code run} root.
+     * its explicit RootTag) below the {@code run} root.
      */
     private static void assertPhysicalCallback(String characters) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {

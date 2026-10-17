@@ -615,7 +615,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
     /**
      * An admitted site inside {@code run}: every probe call sees only the
      * {@code run} root over the module root, and {@code run} carries its own
-     * automatic RootTag plus the single inline callback RootTag.
+     * explicit RootTag plus the single inline callback RootTag.
      */
     private static void assertInlineTopology(
             ProtosSemanticBytecodeRootNode root,
@@ -635,7 +635,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
         assertEquals(
                 2,
                 rootTags(runRoot.getBytecodeNode()),
-                "automatic RootTag of run plus the inline callback RootTag");
+                "explicit RootTag of run plus the inline callback RootTag");
     }
 
     private static void assertInlineTrue(
@@ -700,7 +700,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
 
     /**
      * The probing body runs in its own physical semantic root carrying only
-     * its automatic RootTag; an inline body would instead appear as the
+     * its explicit RootTag; an inline body would instead appear as the
      * {@code run} root carrying its own plus the inline RootTag. Only the
      * innermost frame is examined: a callback invoked from a native {@code
      * each} (the copied-home case) may run on a guest carrier whose Truffle

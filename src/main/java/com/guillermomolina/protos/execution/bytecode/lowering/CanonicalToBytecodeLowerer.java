@@ -82,8 +82,9 @@ import java.util.Objects;
  * preserved without manufacturing ReturnHome ownership.</p>
  *
  * <p>PLAT042 Candidate B′: every top-level, module and Closure activation root
- * produced here is a real tagged {@link ProtosSemanticBytecodeRootNode} (its
- * automatic RootTag is the guest semantic root identity) and lexically nested
+ * produced here is a real tagged {@link ProtosSemanticBytecodeRootNode} (I111-A
+ * explicitly emits its RootTag, the guest semantic root identity, when each
+ * physical semantic root is created) and lexically nested
  * Closure roots share that interpreter's {@code BytecodeRootNodes} group.
  * Structured prepared invocations are not lowered here; they enter the untagged
  * {@link ProtosStructuredDispatchLowerer} root once per invocation.</p>
@@ -1032,13 +1033,6 @@ final class CanonicalToBytecodeLowerer {
         builder.beginRoot();
 
         /*
-         * PLAT042 B′ / PERF025-H1: this root is entered directly (no
-         * wrapper) and has no activation prologue. A compact source-call
-         * frame stays compact until an operation that needs the rich
-         * activation loads it through emitCurrentActivation.
-         */
-
-        /*
          * PLAT036 Candidate D, I068 Slice 4: every statically
          * declared binding owned by this genuine execution-context
          * root, including Closure parameters, receives one stable
@@ -1046,6 +1040,10 @@ final class CanonicalToBytecodeLowerer {
          * establish semantic presence: it stays cleared until the
          * binding point (the frame-backed authority, or the PERF025
          * frame-native establishment operation) writes it.
+         *
+         * I111-A: these locals are created before the explicit RootTag
+         * Block so they stay root-scoped and are live at every location of
+         * this root, including the EnterRoot entry location.
          */
         java.util.Map<String, BytecodeLocal> frameLocals =
                 new java.util.LinkedHashMap<>();
@@ -1062,6 +1060,18 @@ final class CanonicalToBytecodeLowerer {
          * already sees a fresh entry.
          */
         frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
+
+        // I111-A: this physical root is a genuine semantic source activation.
+        builder.beginTag(StandardTags.RootTag.class);
+        builder.beginBlock();
+
+        /*
+         * PLAT042 B′ / PERF025-H1: this root is entered directly (no
+         * wrapper) and has no activation prologue. A compact source-call
+         * frame stays compact until an operation that needs the rich
+         * activation loads it through emitCurrentActivation.
+         */
+
         BytecodeLocal[] frameLocalRange = null;
         ProtosFrameLexicalLayout frameLocalLayout = null;
         boolean prologFrameAuthority =
@@ -1431,6 +1441,8 @@ final class CanonicalToBytecodeLowerer {
             }
 
         }
+        builder.endBlock();
+        builder.endTag(StandardTags.RootTag.class);
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
         /*

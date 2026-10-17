@@ -33,6 +33,7 @@ import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -157,6 +158,8 @@ final class ProtosPerf042IdentityBuilderOracleTest {
 
                             BytecodeLocal value =
                                     builder.createLocal("value", null);
+                            builder.beginTag(StandardTags.RootTag.class);
+                            builder.beginBlock();
 
                             builder.beginStoreLocal(value);
                             builder.emitLoadArgument(
@@ -167,6 +170,8 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                             builder.emitLoadLocal(value);
                             builder.endReturn();
 
+                            builder.endBlock();
+                            builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
