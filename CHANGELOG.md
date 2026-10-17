@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.372-SNAPSHOT
+
+- `I110` (#912): enable Boolean boxing elimination in both Truffle
+  Bytecode DSL root families.
+  - Add `boolean.class` to `boxingEliminationTypes` for the semantic and
+    structured roots, preserving the existing `int`/`long`/`double` carriers
+    and all other Bytecode DSL settings.
+  - Keep primitive Java Boolean predicates internal; guest-visible Boolean
+    values remain canonical `ProtosBooleanValue.TRUE/FALSE`.
+  - Add focused branch/local-predicate and uncached/cached regressions for
+    both generated roots; preserve I075/I091 and continuation behavior.
+  - Align the I091 boundary diagnostic and reconcile the generated BCI PE
+    topology baseline after checking zero RISK and zero UNKNOWN transitions.
+  - Maintainer validation: 40 focal JUnit tests PASS, make test PASS,
+    make check PASS. No benchmark improvement is claimed.
+
 ## 0.3.371-SNAPSHOT
 
 - `I109` (#910): implement PLAT063-C shared structured standard

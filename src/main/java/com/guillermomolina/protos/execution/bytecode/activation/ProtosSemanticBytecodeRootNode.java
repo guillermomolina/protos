@@ -117,7 +117,7 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
         enableMaterializedLocalAccesses = true,
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {int.class, long.class, double.class},
+        boxingEliminationTypes = {int.class, long.class, double.class, boolean.class},
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 @OperationProxy(value = ProtosCanonicalBooleanOneNode.class, name = "TryCompactCanonicalBooleanOne")
 @OperationProxy(value = ProtosNumericAddNode.class, name = "TryPrimitiveNumericAdd")

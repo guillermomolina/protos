@@ -161,13 +161,13 @@ CHECKS = [
     (
         "F2_STRUCTURED_ROOT_PRIMITIVES",
         "execution/bytecode/activation/ProtosBytecodeRootNode.java",
-        "boxingEliminationTypes = {int.class, long.class, double.class}",
+        "boxingEliminationTypes = {int.class, long.class, double.class, boolean.class}",
         "Structured Bytecode root admits primitive carriers",
     ),
     (
         "F2_SEMANTIC_ROOT_PRIMITIVES",
         "execution/bytecode/activation/ProtosSemanticBytecodeRootNode.java",
-        "boxingEliminationTypes = {int.class, long.class, double.class}",
+        "boxingEliminationTypes = {int.class, long.class, double.class, boolean.class}",
         "Semantic Bytecode root admits primitive carriers",
     ),
     (

@@ -24,6 +24,8 @@ import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
+import com.oracle.truffle.api.bytecode.BytecodeTier;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumberLiteral;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -171,6 +173,124 @@ final class ProtosI091PrimitiveCarrierRootsTest {
                 assertTrue(right.eval(source).asBoolean());
             }
         }
+    }
+
+
+    @Test
+    void booleanPredicateLocalBranchesInBothGeneratedRoots() {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE.get(null);
+                assertSemanticBooleanPredicate(language);
+                assertStructuredBooleanPredicate(language);
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static void assertSemanticBooleanPredicate(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        language,
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+
+                            BytecodeLocal predicate =
+                                    builder.createLocal("predicate", null);
+                            BytecodeLocal result =
+                                    builder.createLocal("result", null);
+
+                            builder.beginStoreLocal(predicate);
+                            builder.emitLoadArgument(0);
+                            builder.endStoreLocal();
+
+                            builder.beginIfThenElse();
+                            builder.emitLoadLocal(predicate);
+
+                            builder.beginBlock();
+                            builder.beginStoreLocal(result);
+                            builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.beginBlock();
+                            builder.beginStoreLocal(result);
+                            builder.emitLoadConstant(ProtosBooleanValue.FALSE);
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.endIfThenElse();
+
+                            builder.beginReturn();
+                            builder.emitLoadLocal(result);
+                            builder.endReturn();
+
+                            builder.endRoot();
+                        });
+
+        ProtosSemanticBytecodeRootNode root = roots.getNode(0);
+        root.getBytecodeNode().setUncachedThreshold(1);
+
+        assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
+        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(false));
+        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertEquals(BytecodeTier.CACHED, root.getBytecodeNode().getTier());
+    }
+
+    private static void assertStructuredBooleanPredicate(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
+                        language,
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+
+                            BytecodeLocal predicate =
+                                    builder.createLocal("predicate", null);
+                            BytecodeLocal result =
+                                    builder.createLocal("result", null);
+
+                            builder.beginStoreLocal(predicate);
+                            builder.emitLoadArgument(0);
+                            builder.endStoreLocal();
+
+                            builder.beginIfThenElse();
+                            builder.emitLoadLocal(predicate);
+
+                            builder.beginBlock();
+                            builder.beginStoreLocal(result);
+                            builder.emitLoadConstant(ProtosBooleanValue.TRUE);
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.beginBlock();
+                            builder.beginStoreLocal(result);
+                            builder.emitLoadConstant(ProtosBooleanValue.FALSE);
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.endIfThenElse();
+
+                            builder.beginReturn();
+                            builder.emitLoadLocal(result);
+                            builder.endReturn();
+
+                            builder.endRoot();
+                        });
+
+        ProtosBytecodeRootNode root = roots.getNode(0);
+        root.getBytecodeNode().setUncachedThreshold(1);
+
+        assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
+        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(false));
+        assertSame(ProtosBooleanValue.TRUE, root.getCallTarget().call(true));
+        assertEquals(BytecodeTier.CACHED, root.getBytecodeNode().getTier());
     }
 
     private static List<Object> samples() {
