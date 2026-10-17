@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.371-SNAPSHOT
+
+- `I109` (#910): implement PLAT063-C shared structured standard
+  `each` lowering for Array, Bytes, Map, IdentityMap and Environment.
+  - Consolidate five physical iteration branches into one shared
+    Bytecode DSL structured loop using PreparedLocalEachCall.
+  - Preserve collection snapshots, callback semantics, suspension,
+    cancellation, cleanup, Error, NLR and receiver identity.
+  - Add structural, materialization and dynamic regression tests.
+  - Reconcile the generated BCI topology baseline.
+  - Reduce four While, four TryFinally, four IfThenElse and eight
+    local declarations in the structured dispatch lowering.
+  - Maintainer validation: make test PASS, make check PASS.
+  - Functional implementation published in commit eed3098b;
+    this entry completes its omitted publication metadata.
+
 ## 0.3.370-SNAPSHOT
 
 - `I107` (#906): implement PLAT061-B compositional non-suspension facts
