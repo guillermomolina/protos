@@ -202,7 +202,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertInteger(2, stop.binding("result"));
-        stop.assertInstruction("PrepareInlineClosureCall");
+        stop.assertInstruction("InvokeInlineClosureOne");
         System.out.println("PERF025_S3_DIRECT_SOURCE_CLOSURE_CALL_WITHOUT_ACTIVATION=YES");
     }
 
@@ -427,7 +427,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         void assertInstruction(String operation) {
             assertTrue(
                     instructions.stream().anyMatch(name -> name.contains(operation)),
-                    () -> "missing " + operation + " in " + instructions);
+                    () -> "missing operation " + operation);
         }
     }
 

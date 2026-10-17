@@ -8715,7 +8715,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return selected;
     }
 
-    private static PreparedClosureCall prepareSelectedClosureCall(
+    static PreparedClosureCall prepareSelectedClosureCall(
             Object receiver,
             List<?> supplied,
             ProtosActivation caller,

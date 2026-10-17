@@ -6568,19 +6568,21 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        builder.beginIfThenElse();
-
-        builder.beginAdmitsStraightLineSourceCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endAdmitsStraightLineSourceCall();
-
-        builder.beginBlock();
+        /*
+         * I108-A: admission and entry are owned by one semantic
+         * operation. Only a returned PreparedClosureCall requires
+         * the structural continuation/finalization protocol.
+         */
         builder.beginStoreLocal(result);
         builder.beginEnterStraightLineSourceCall();
         builder.emitLoadLocal(preparedCall);
         builder.endEnterStraightLineSourceCall();
         builder.endStoreLocal();
-        builder.endBlock();
+
+        builder.beginIfThenElse();
+        builder.beginIsPreparedClosureInvocation();
+        builder.emitLoadLocal(result);
+        builder.endIsPreparedClosureInvocation();
 
         builder.beginBlock();
         builder.beginStoreLocal(childResult);
@@ -6599,6 +6601,10 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(childResult);
         builder.endFinishClosureCall();
         builder.endStoreLocal();
+        builder.endBlock();
+
+        // An admitted invocation has already produced its final result.
+        builder.beginBlock();
         builder.endBlock();
 
         builder.endIfThenElse();
@@ -9789,22 +9795,64 @@ final class CanonicalToBytecodeLowerer {
         boolean spreadArguments = hasSpreadArgument(call.arguments());
         boolean positionalCall =
                 !spreadArguments && !currentInlineCallbackFrameNative;
-        boolean tryDirectCall =
+        boolean semanticCall =
                 positionalCall && call.arguments().size() <= 1;
         CanonicalClosure inlineLiteral =
                 positionalCall
                         ? inlineClosureLiteralCallCandidate(call)
                         : null;
 
+        /*
+         * I108-B: keep Call0/Call1's scalar-carrier policy unchanged.
+         * CallN/spread use the same result/fallback protocol, but
+         * only after their full argument vector has been constructed.
+         */
+        /*
+         * I108-B frame-native boundary: while an I096 inline callback
+         * executes, its invocation caller operand is a
+         * PreparedInlineLiteralCall, not a ProtosActivation.
+         *
+         * PrepareInlineClosureCall{,One,Arguments} owns conversion of
+         * that carrier into the exact caller authority through
+         * ProtosInlineCallbackFrameBindings.invocationCaller(), using
+         * the live BytecodeNode, VirtualFrame and lexical layout.
+         *
+         * InvokeClosureArguments currently accepts a ProtosActivation
+         * and cannot replace this path without changing that operand
+         * contract. Preserve the existing inline-specific preparation
+         * and structured continuation/finalization here.
+         *
+         * This is a bounded frame-native carrier exception, not a
+         * general permission to retain duplicate ordinary dispatch.
+         */
+        boolean semanticCallN =
+                !currentInlineCallbackFrameNative
+                        && (spreadArguments || call.arguments().size() >= 2);
+        boolean semanticInlineZero =
+                currentInlineCallbackFrameNative
+                        && !spreadArguments
+                        && call.arguments().isEmpty();
+        boolean semanticInlineOne =
+                currentInlineCallbackFrameNative
+                        && !spreadArguments
+                        && call.arguments().size() == 1;
+        boolean semanticInlineArguments =
+                currentInlineCallbackFrameNative
+                        && (spreadArguments
+                                || call.arguments().size() >= 2);
+
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
                         || spreadArguments
-                        || tryDirectCall
+                        || semanticCall
+                        || semanticCallN
+                        || semanticInlineZero
+                        || semanticInlineOne
+                        || semanticInlineArguments
                         || inlineLiteral != null;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
-        boolean carrierDirectArgument = false;
         java.util.List<BytecodeLocal> argumentValues =
                 java.util.List.of();
 
@@ -9852,12 +9900,12 @@ final class CanonicalToBytecodeLowerer {
                             builder.createLocal(
                                     "callArgument",
                                     null);
-                    if (tryDirectCall
+                    if (semanticCall
                             && inlineLiteral == null
                             && primitiveNumericCarrierArgument(argument)) {
-                        // I091-F2: the admitted direct Closure receives a
-                        // primitive carrier; the miss restores a guest value.
-                        carrierDirectArgument = true;
+                        // I091-F2: direct entry retains a primitive
+                        // carrier; InvokeClosureOne projects it when
+                        // preparing an ordinary fallback.
                         emitPrimitiveNumericOperandToLocal(
                                 builder,
                                 argument,
@@ -9909,123 +9957,184 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
 
-        BytecodeLocal directCallResult = null;
+        /*
+         * I108-A: the arity-specialized operation owns direct
+         * admission, its bounded PIC and ordinary fallback
+         * preparation. The caller retains only the structural
+         * continuation/finalization path for a prepared result.
+         */
+        BytecodeLocal closureInvocationOutcome = null;
 
-        if (tryDirectCall) {
-            directCallResult =
-                    builder.createLocal("directCallResult", null);
+        if (semanticCall || semanticCallN || semanticInlineZero || semanticInlineOne || semanticInlineArguments) {
+            closureInvocationOutcome =
+                    builder.createLocal("closureInvocationOutcome", null);
 
-            builder.beginStoreLocal(directCallResult);
-            if (call.arguments().isEmpty()) {
-                builder.beginTryDirectCallZero();
-            } else {
-                builder.beginTryDirectCallOne();
-            }
-
-            builder.emitLoadLocal(receiverValue);
-            emitInvocationCallerOperand(builder);
-
-            if (!call.arguments().isEmpty()) {
+            builder.beginStoreLocal(closureInvocationOutcome);
+            if (semanticInlineZero) {
+                builder.beginInvokeInlineClosureZero(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                builder.emitLoadLocal(receiverValue);
+                emitCurrentInlineCallbackCall(builder);
+                builder.endInvokeInlineClosureZero();
+            } else if (semanticInlineOne) {
+                builder.beginInvokeInlineClosureOne(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                builder.emitLoadLocal(receiverValue);
+                emitCurrentInlineCallbackCall(builder);
                 builder.emitLoadLocal(argumentValues.get(0));
-            }
+                builder.endInvokeInlineClosureOne();
+            } else if (semanticInlineArguments) {
+                builder.beginInvokeInlineClosureArguments(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                builder.emitLoadLocal(receiverValue);
+                emitCurrentInlineCallbackCall(builder);
 
-            if (call.arguments().isEmpty()) {
-                builder.endTryDirectCallZero();
+                if (spreadArguments) {
+                    builder.beginSnapshotClosureCallArguments();
+                    builder.emitLoadLocal(suppliedVector);
+                    builder.endSnapshotClosureCallArguments();
+                } else {
+                    builder.beginCollectClosureCallArguments();
+                    for (BytecodeLocal argumentValue : argumentValues) {
+                        builder.emitLoadLocal(argumentValue);
+                    }
+                    builder.endCollectClosureCallArguments();
+                }
+
+                builder.endInvokeInlineClosureArguments();
+            } else if (semanticCall) {
+                if (call.arguments().isEmpty()) {
+                    builder.beginInvokeClosureZero();
+                } else {
+                    builder.beginInvokeClosureOne();
+                }
+
+                builder.emitLoadLocal(receiverValue);
+                emitInvocationCallerOperand(builder);
+
+                if (!call.arguments().isEmpty()) {
+                    builder.emitLoadLocal(argumentValues.get(0));
+                }
+
+                if (call.arguments().isEmpty()) {
+                    builder.endInvokeClosureZero();
+                } else {
+                    builder.endInvokeClosureOne();
+                }
             } else {
-                builder.endTryDirectCallOne();
+                builder.beginInvokeClosureArguments();
+                builder.emitLoadLocal(receiverValue);
+
+                if (spreadArguments) {
+                    emitCurrentActivation(builder);
+                    builder.beginSnapshotClosureCallArguments();
+                    builder.emitLoadLocal(suppliedVector);
+                    builder.endSnapshotClosureCallArguments();
+                } else {
+                    emitInvocationCallerOperand(builder);
+                    builder.beginCollectClosureCallArguments();
+                    for (BytecodeLocal argumentValue : argumentValues) {
+                        builder.emitLoadLocal(argumentValue);
+                    }
+                    builder.endCollectClosureCallArguments();
+                }
+
+                builder.endInvokeClosureArguments();
             }
             builder.endStoreLocal();
 
             builder.beginIfThenElse();
-            builder.beginIsDirectSendMiss();
-            builder.emitLoadLocal(directCallResult);
-            builder.endIsDirectSendMiss();
+            builder.beginIsPreparedClosureInvocation();
+            builder.emitLoadLocal(closureInvocationOutcome);
+            builder.endIsPreparedClosureInvocation();
 
             builder.beginBlock();
-            if (carrierDirectArgument) {
-                BytecodeLocal stagedArgument = argumentValues.get(0);
-                builder.beginStoreLocal(stagedArgument);
-                builder.beginMaterializePrimitiveNumericCarrier();
-                builder.emitLoadLocal(stagedArgument);
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-                builder.endStoreLocal();
-            }
+            builder.beginStoreLocal(preparedCall);
+            builder.emitLoadLocal(closureInvocationOutcome);
+            builder.endStoreLocal();
         }
 
-        builder.beginStoreLocal(preparedCall);
-        if (spreadArguments) {
-            builder.beginPrepareClosureCallVector();
-            builder.emitLoadLocal(receiverValue);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareClosureCallVector();
-        } else if (call.arguments().isEmpty() && currentInlineCallbackFrameNative) {
-            builder.beginPrepareInlineClosureCall(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            if (stageInputs) {
+        if (!semanticCall && !semanticCallN
+                && !semanticInlineZero
+                && !semanticInlineOne
+                && !semanticInlineArguments) {
+            builder.beginStoreLocal(preparedCall);
+            if (spreadArguments) {
+                builder.beginPrepareClosureCallVector();
                 builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
-            }
-            emitCurrentInlineCallbackCall(builder);
-            builder.endPrepareInlineClosureCall();
-        } else if (call.arguments().isEmpty()) {
-            builder.beginPrepareClosureCall();
-            if (stageInputs) {
-                builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
-            }
-            emitCurrentActivation(builder);
-            builder.endPrepareClosureCall();
-        } else {
-            if (currentInlineCallbackFrameNative) {
-                if (call.arguments().size() == 1) {
-                    builder.beginPrepareInlineClosureCallOne(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
+                emitCurrentActivation(builder);
+                builder.emitLoadLocal(suppliedVector);
+                builder.endPrepareClosureCallVector();
+            } else if (call.arguments().isEmpty() && currentInlineCallbackFrameNative) {
+                builder.beginPrepareInlineClosureCall(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                if (stageInputs) {
+                    builder.emitLoadLocal(receiverValue);
                 } else {
-                    builder.beginPrepareInlineClosureCallArguments(
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
+                    emitExpression(builder, receiver);
                 }
-            } else if (call.arguments().size() == 1) {
-                builder.beginPrepareClosureCallOne();
-            } else {
-                builder.beginPrepareClosureCallArguments();
-            }
-            if (stageInputs) {
-                builder.emitLoadLocal(receiverValue);
-            } else {
-                emitExpression(builder, receiver);
-            }
-            emitInvocationCallerOperand(builder);
-            if (stageInputs) {
-                for (BytecodeLocal argumentValue :
-                        argumentValues) {
-                    builder.emitLoadLocal(argumentValue);
-                }
-            } else {
-                for (CanonicalExpression argument :
-                        call.arguments()) {
-                    emitExpression(builder, argument);
-                }
-            }
-            if (currentInlineCallbackFrameNative) {
-                if (call.arguments().size() == 1) {
-                    builder.endPrepareInlineClosureCallOne();
+                emitCurrentInlineCallbackCall(builder);
+                builder.endPrepareInlineClosureCall();
+            } else if (call.arguments().isEmpty()) {
+                builder.beginPrepareClosureCall();
+                if (stageInputs) {
+                    builder.emitLoadLocal(receiverValue);
                 } else {
-                    builder.endPrepareInlineClosureCallArguments();
+                    emitExpression(builder, receiver);
                 }
-            } else if (call.arguments().size() == 1) {
-                builder.endPrepareClosureCallOne();
+                emitCurrentActivation(builder);
+                builder.endPrepareClosureCall();
             } else {
-                builder.endPrepareClosureCallArguments();
+                if (currentInlineCallbackFrameNative) {
+                    if (call.arguments().size() == 1) {
+                        builder.beginPrepareInlineClosureCallOne(
+                                currentRootFrameNativeLocals,
+                                currentRootFrameNativeLayout);
+                    } else {
+                        builder.beginPrepareInlineClosureCallArguments(
+                                currentRootFrameNativeLocals,
+                                currentRootFrameNativeLayout);
+                    }
+                } else if (call.arguments().size() == 1) {
+                    builder.beginPrepareClosureCallOne();
+                } else {
+                    builder.beginPrepareClosureCallArguments();
+                }
+                if (stageInputs) {
+                    builder.emitLoadLocal(receiverValue);
+                } else {
+                    emitExpression(builder, receiver);
+                }
+                emitInvocationCallerOperand(builder);
+                if (stageInputs) {
+                    for (BytecodeLocal argumentValue :
+                            argumentValues) {
+                        builder.emitLoadLocal(argumentValue);
+                    }
+                } else {
+                    for (CanonicalExpression argument :
+                            call.arguments()) {
+                        emitExpression(builder, argument);
+                    }
+                }
+                if (currentInlineCallbackFrameNative) {
+                    if (call.arguments().size() == 1) {
+                        builder.endPrepareInlineClosureCallOne();
+                    } else {
+                        builder.endPrepareInlineClosureCallArguments();
+                    }
+                } else if (call.arguments().size() == 1) {
+                    builder.endPrepareClosureCallOne();
+                } else {
+                    builder.endPrepareClosureCallArguments();
+                }
             }
+            builder.endStoreLocal();
         }
-        builder.endStoreLocal();
 
 
         emitPreparedInvocation(
@@ -10035,7 +10144,7 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
-        if (tryDirectCall) {
+        if (semanticCall || semanticCallN || semanticInlineZero || semanticInlineOne || semanticInlineArguments) {
             builder.endBlock();
 
             builder.beginBlock();
@@ -10043,7 +10152,7 @@ final class CanonicalToBytecodeLowerer {
             if (!primitiveCarrierResult) {
                 builder.beginMaterializePrimitiveNumericCarrier();
             }
-            builder.emitLoadLocal(directCallResult);
+            builder.emitLoadLocal(closureInvocationOutcome);
             if (!primitiveCarrierResult) {
                 builder.emitLoadConstant(true);
                 builder.endMaterializePrimitiveNumericCarrier();

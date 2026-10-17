@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.373-SNAPSHOT
+
+- `I108` (#909): implement ratified PLAT062-B semantic Closure
+  invocation operations.
+  - Consolidate ordinary Call0, Call1, CallN and spread dispatch into
+    arity-aware Bytecode DSL operations, including frame-native inline
+    callback invocation and definition-keyed bounded PICs.
+  - Preserve D013 post-argument Object.call selection, selected methodHome,
+    generic fallback, dynamic overrides and guest Error semantics.
+  - Retain the B5 ordinary Closure ABI, D203 flexible arguments,
+    ReturnHome/NLR, lexical capture and NORMAL/DEBUG behavior.
+  - Preserve resumable Bytecode Yield/continuation composition for
+    potentially suspending invocations without argument replay.
+  - Add generic-first, PIC saturation, override, suspension and
+    structural Builder-oracle regression coverage.
+  - Update I101/PERF025 physical topology assertions and reconcile the
+    TEST009-D generated BCI baseline: 10 new proven transitions,
+    2 retired, zero RISK and zero UNKNOWN.
+  - Maintainer validation: make test PASS, make check PASS;
+    generated D013 CACHED/UNCACHED topology audit PASS.
+    No runtime performance improvement is claimed.
+
 ## 0.3.372-SNAPSHOT
 
 - `I110` (#912): enable Boolean boxing elimination in both Truffle

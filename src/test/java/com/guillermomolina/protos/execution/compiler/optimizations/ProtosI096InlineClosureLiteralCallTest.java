@@ -87,6 +87,584 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
     private static final int INLINE_DEPTH = 2;
 
+
+    @Test
+    void i108FrameNativeZeroUsesSemanticInvocation()
+            throws Exception {
+        String source = """
+                run: () => {
+                    probe()
+                    target: () => { 7 }
+                    ((fn) => {
+                        fn()
+                    })(target)
+                }
+                run()
+                """;
+
+        Execution normal = execute(false, source);
+        assertInteger(7, normal.value());
+        assertEquals(1, normal.probe().calls.get());
+
+        List<String> names =
+                instructionNames(normal.innermostRoot());
+
+        assertTrue(
+                position(names, "InvokeInlineClosureZero") >= 0,
+                names::toString);
+
+        assertTrue(
+                position(names, "BindInlineClosureFrameParameter") >= 0,
+                names::toString);
+
+        assertTrue(
+                position(names, "IsPreparedClosureInvocation") >= 0,
+                names::toString);
+
+        assertFalse(
+                names.stream().anyMatch(
+                        name -> name.equals("PrepareInlineClosureCall")
+                                || name.endsWith(".PrepareInlineClosureCall")),
+                names::toString);
+
+        assertInteger(7, execute(true, source).value());
+
+        String overridden = """
+                run: () => {
+                    target: () => { 7 }
+                    target.call: () => { 11 }
+                    ((fn) => {
+                        fn()
+                    })(target)
+                }
+                run()
+                """;
+
+        assertInteger(11, execute(false, overridden).value());
+        assertInteger(11, execute(true, overridden).value());
+    }
+
+
+    /**
+     * I108: these inner calls are emitted inside actual
+     * frame-native I096 callback regions. The preceding probe
+     * captures the enclosing run root without observing the
+     * inline callback activation.
+     */
+    @Test
+    void i108FrameNativeOneAndManyUseSemanticInvocation()
+            throws Exception {
+
+        String one = """
+                run: () => {
+                    probe()
+                    target: (x) => { x }
+                    ((fn) => {
+                        fn(41)
+                    })(target)
+                }
+                run()
+                """;
+
+        Execution oneNormal = execute(false, one);
+        assertInteger(41, oneNormal.value());
+        assertEquals(1, oneNormal.probe().calls.get());
+
+        List<String> oneNames =
+                instructionNames(oneNormal.innermostRoot());
+
+        assertTrue(
+                position(oneNames, "InvokeInlineClosureOne") >= 0,
+                oneNames::toString);
+
+        assertTrue(
+                position(oneNames, "IsPreparedClosureInvocation") >= 0,
+                oneNames::toString);
+
+        assertTrue(
+                position(oneNames, "BindInlineClosureFrameParameter") >= 0,
+                oneNames::toString);
+
+        assertFalse(
+                oneNames.stream().anyMatch(
+                        name -> name.equals("PrepareInlineClosureCallOne")
+                                || name.endsWith(
+                                        ".PrepareInlineClosureCallOne")),
+                oneNames::toString);
+
+        assertInteger(41, execute(true, one).value());
+
+        String oneOverride = """
+                run: () => {
+                    probe()
+                    target: (x) => { x }
+                    target.call: (x) => { 91 }
+                    ((fn) => {
+                        fn(41)
+                    })(target)
+                }
+                run()
+                """;
+
+        assertInteger(91, execute(false, oneOverride).value());
+        assertInteger(91, execute(true, oneOverride).value());
+
+        String many = """
+                run: () => {
+                    probe()
+                    target: (a, b) => { 42 }
+                    ((fn) => {
+                        fn(4, 2)
+                    })(target)
+                }
+                run()
+                """;
+
+        Execution manyNormal = execute(false, many);
+        assertInteger(42, manyNormal.value());
+        assertEquals(1, manyNormal.probe().calls.get());
+
+        List<String> manyNames =
+                instructionNames(manyNormal.innermostRoot());
+
+        assertTrue(
+                position(manyNames, "InvokeInlineClosureArguments") >= 0,
+                manyNames::toString);
+
+        assertTrue(
+                position(manyNames, "CollectClosureCallArguments") >= 0,
+                manyNames::toString);
+
+        assertTrue(
+                position(manyNames, "IsPreparedClosureInvocation") >= 0,
+                manyNames::toString);
+
+        assertFalse(
+                manyNames.stream().anyMatch(
+                        name -> name.equals(
+                                "PrepareInlineClosureCallArguments")
+                                || name.endsWith(
+                                        ".PrepareInlineClosureCallArguments")),
+                manyNames::toString);
+
+        assertInteger(42, execute(true, many).value());
+
+        String manyOverride = """
+                run: () => {
+                    probe()
+                    target: (a, b) => { 42 }
+                    target.call: (a, b) => { 92 }
+                    ((fn) => {
+                        fn(4, 2)
+                    })(target)
+                }
+                run()
+                """;
+
+        assertInteger(92, execute(false, manyOverride).value());
+        assertInteger(92, execute(true, manyOverride).value());
+
+        String spread = """
+                run: () => {
+                    probe()
+                    target: (a, b) => { 42 }
+                    values: Array(4, 2)
+                    ((fn, supplied) => {
+                        fn(...supplied)
+                    })(target, values)
+                }
+                run()
+                """;
+
+        Execution spreadNormal = execute(false, spread);
+        assertInteger(42, spreadNormal.value());
+
+        List<String> spreadNames =
+                instructionNames(spreadNormal.innermostRoot());
+
+        assertTrue(
+                position(spreadNames, "InvokeInlineClosureArguments") >= 0,
+                spreadNames::toString);
+
+        assertTrue(
+                position(spreadNames, "SnapshotClosureCallArguments") >= 0,
+                spreadNames::toString);
+
+        assertTrue(
+                position(spreadNames, "AppendInlineSpreadSuppliedArgument") >= 0,
+                spreadNames::toString);
+
+        assertInteger(42, execute(true, spread).value());
+
+        String spreadOverride = """
+                run: () => {
+                    probe()
+                    target: (a, b) => { 42 }
+                    target.call: (a, b) => { 93 }
+                    values: Array(4, 2)
+                    ((fn, supplied) => {
+                        fn(...supplied)
+                    })(target, values)
+                }
+                run()
+                """;
+
+        assertInteger(93, execute(false, spreadOverride).value());
+        assertInteger(93, execute(true, spreadOverride).value());
+    }
+
+
+    /**
+     * I108 frame-native Call0: a source target that may suspend
+     * must return a prepared invocation rather than attempting
+     * direct Java control. Resumption must not replay the body.
+     *
+     * The callback's body contains a Call0 through its parameter
+     * and needs no persistent frame authority of its own.
+     */
+    @Test
+    void i108FrameNativeSuspendingCallZeroPreservesComposition()
+            throws Exception {
+        String source = """
+                run: () => {
+                    step: (() => { 1 }).future()
+                    visits: 0
+                    target: () => {
+                        visits = visits + 1
+                        40 + step.value()
+                    }
+                    result: ((fn) => {
+                        fn()
+                    })(target)
+                    result * 10 + visits
+                }
+                run()
+                """;
+
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "i108-frame-native-call0-suspension.protos",
+                        source,
+                        new ProtosCoreBootstrap()
+                                .bootstrap(CORE)
+                                .newModuleActivation());
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "state=" + outcome.state()
+                        + ", error=" + outcome.error());
+
+        // 41 is the resumed value; visits must remain exactly 1.
+        assertInteger(411, outcome.value());
+
+        try (Context context =
+                Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosSemanticBytecodeRootNode module =
+                        lowerRoot(source);
+
+                module.getRootNodes().ensureComplete();
+
+                assertTrue(
+                        groupRoots(module).stream().anyMatch(
+                                root -> position(
+                                        instructionNames(root),
+                                        "InvokeInlineClosureZero") >= 0),
+                        "The inner Call0 must be emitted as a "
+                                + "frame-native semantic operation");
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+
+    /**
+     * I108: generic-first must not poison a definition-keyed
+     * frame-native PIC. Five distinct definitions exceed its
+     * three-entry specialization limit.
+     *
+     * Every invocation enters the same apply CallTarget and
+     * therefore the same inner semantic call site.
+     */
+    @Test
+    void i108FrameNativeGenericFirstAndPicSaturation()
+            throws Exception {
+        String[][] variants = {
+            {
+                "Call0", "()",
+                "chosen()", "InvokeInlineClosureZero"
+            },
+            {
+                "Call1", "(a)",
+                "chosen(4)", "InvokeInlineClosureOne"
+            },
+            {
+                "CallN", "(a, b)",
+                "chosen(4, 2)", "InvokeInlineClosureArguments"
+            },
+            {
+                "Spread", "(a, b)",
+                "chosen(...values)",
+                "InvokeInlineClosureArguments"
+            }
+        };
+
+        for (String[] variant : variants) {
+            String label = variant[0];
+            String parameters = variant[1];
+            String call = variant[2];
+            String operation = variant[3];
+
+            String source = """
+                    f0: @@PARAMETERS@@ => { 10 }
+                    f1: @@PARAMETERS@@ => { 11 }
+                    f2: @@PARAMETERS@@ => { 12 }
+                    f3: @@PARAMETERS@@ => { 13 }
+                    f4: @@PARAMETERS@@ => { 14 }
+
+                    apply: (fn) => {
+                        probe()
+                        values: Array(4, 2)
+                        ((chosen) => {
+                            @@CALL@@
+                        })(fn)
+                    }
+
+                    f0.call: @@PARAMETERS@@ => { 90 }
+                    v0: apply(f0)
+
+                    f0.removeSlot("call")
+                    v1: apply(f0)
+
+                    v2: apply(f1)
+                    v3: apply(f2)
+                    v4: apply(f3)
+                    v5: apply(f4)
+
+                    f0.call: @@PARAMETERS@@ => { 91 }
+                    v6: apply(f0)
+
+                    f0.removeSlot("call")
+                    v7: apply(f0)
+
+                    v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7
+                    """
+                    .replace("@@PARAMETERS@@", parameters)
+                    .replace("@@CALL@@", call);
+
+            /*
+             * First observation: overridden call (90).
+             * Then canonical 10, 11, 12, 13, 14.
+             * After saturation: overridden 91, canonical 10.
+             */
+            Execution normal = execute(false, source);
+
+            assertInteger(251, normal.value());
+            assertEquals(
+                    8, normal.probe().calls.get(), label);
+
+            ProtosSemanticBytecodeRootNode caller =
+                    normal.innermostRoot();
+
+            List<String> instructions =
+                    instructionNames(caller);
+
+            assertEquals(
+                    1,
+                    count(instructions, operation),
+                    label + ": exactly one inner semantic call site");
+
+            assertTrue(
+                    position(
+                            instructions,
+                            "IsPreparedClosureInvocation") >= 0,
+                    () -> label + ": " + instructions);
+
+            assertTrue(
+                    position(
+                            instructions,
+                            "BindInlineClosureFrameParameter") >= 0,
+                    () -> label + ": " + instructions);
+
+            /*
+             * The probe is outside the inline callback.
+             * All eight captures must identify the same physical
+             * root. This avoids mistaking distinct call sites
+             * for a single PIC's changing receiver definitions.
+             */
+            for (List<RootNode> stack :
+                    normal.probe().stacks) {
+                assertSame(
+                        caller,
+                        stack.get(0),
+                        label + ": physical call site identity");
+            }
+
+            int admitted = position(
+                    instructions,
+                    "AdmitsInlineClosureLiteralCall");
+
+            assertTrue(
+                    admitted >= 0,
+                    () -> label + ": missing inline admission");
+
+            List<String> inlineRegion =
+                    instructions.subList(
+                            admitted, instructions.size());
+
+            /*
+             * This assertion is about emitted bytecode, not a
+             * measurement of runtime activation allocation.
+             * The semantic operation owns the occasional
+             * durable transition when exact caller authority
+             * actually requires it.
+             */
+            assertEquals(
+                    0,
+                    count(
+                            inlineRegion,
+                            "MaterializeInlineCallbackActivation"),
+                    () -> label + ": unexpected explicit "
+                            + "caller materialization");
+
+            if (label.equals("Spread")) {
+                assertTrue(
+                        position(
+                                instructions,
+                                "SnapshotClosureCallArguments") >= 0,
+                        instructions::toString);
+
+                assertTrue(
+                        position(
+                                instructions,
+                                "AppendInlineSpreadSuppliedArgument") >= 0,
+                        instructions::toString);
+            }
+
+            Execution debug = execute(true, source);
+
+            assertInteger(251, debug.value());
+            assertEquals(
+                    8, debug.probe().calls.get(),
+                    label + ": DEBUG parity");
+        }
+    }
+
+    /**
+     * A suspendible Call1/CallN/spread target must use prepared
+     * Bytecode composition. The target increments visits once,
+     * then observes an asynchronous value.
+     *
+     * If the invocation is replayed after suspension, visits
+     * becomes two and the assertion fails.
+     */
+    @Test
+    void i108FrameNativeOneAndManyResumeWithoutReplay()
+            throws Exception {
+        String[][] variants = {
+            {
+                "call1", "(a)",
+                "fn(4)",
+                "step.value() + a",
+                "51"
+            },
+            {
+                "calln", "(a, b)",
+                "fn(4, 2)",
+                "step.value() + a + b",
+                "71"
+            },
+            {
+                "spread", "(a, b)",
+                "fn(...supplied)",
+                "step.value() + a + b",
+                "71"
+            }
+        };
+
+        for (String[] variant : variants) {
+            String label = variant[0];
+
+            String source = """
+                    run: () => {
+                        step: (() => { 1 }).future()
+                        visits: 0
+
+                        target: @@PARAMETERS@@ => {
+                            visits = visits + 1
+                            @@RESULT@@
+                        }
+
+                        values: Array(4, 2)
+
+                        answer: ((fn, supplied) => {
+                            @@CALL@@
+                        })(target, values)
+
+                        answer * 10 + visits
+                    }
+                    run()
+                    """
+                    .replace("@@PARAMETERS@@", variant[1])
+                    .replace("@@CALL@@", variant[2])
+                    .replace("@@RESULT@@", variant[3]);
+
+            ProtosExecutionOutcome outcome =
+                    ProtosTestExecutionSupport.execute(
+                            "i108-frame-native-" + label
+                                    + "-suspension.protos",
+                            source,
+                            new ProtosCoreBootstrap()
+                                    .bootstrap(CORE)
+                                    .newModuleActivation());
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    outcome.state(),
+                    () -> label
+                            + ": state=" + outcome.state()
+                            + ", error=" + outcome.error());
+
+            assertInteger(
+                    Long.parseLong(variant[4]),
+                    outcome.value());
+        }
+    }
+
+
+    @Test
+    void i108FrameNativeSelectedFallbackPreservesMethodHomeAndErrors()
+            throws Exception {
+        String override = """
+                run: () => {
+                    target: () => { 7 }
+                    target.answer: 19
+                    target.call: () => { this.answer }
+                    ((fn) => { fn() })(target)
+                }
+                run()
+                """;
+
+        assertParity(override, 19);
+
+        String invalidCall = """
+                run: () => {
+                    target: () => { 7 }
+                    target.call: 13
+                    Error.handle(() => {
+                        ((fn) => { fn() })(target)
+                    }, (caught) => { 42 })
+                }
+                run()
+                """;
+
+        assertParity(invalidCall, 42);
+    }
+
     @Test
     void zeroArgumentLiteralWithOwnBindingsRunsInlineInCaller() throws Exception {
         String source = """
@@ -113,7 +691,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         // The admission miss keeps the carrier's ordinary physical fallback;
         // I101-A: no ordinary direct-call alternative remains in NORMAL.
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "TryDirectCallZero") < 0, names::toString);
+        assertTrue(position(names, "InvokeClosureZero") < 0, names::toString);
         /*
          * Physical frames and semantic RootTags are separate evidence. The
          * stack proves no callee CallTarget frame exists (only run over the
@@ -156,7 +734,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
         // I101-A: the NORMAL root keeps no ordinary C1 direct-call alternative.
         assertTrue(
-                position(instructionNames(normal.innermostRoot()), "TryDirectCallOne") < 0,
+                position(instructionNames(normal.innermostRoot()), "InvokeClosureOne") < 0,
                 "NORMAL keeps no C1 direct-call alternative");
         assertParity(source, 4115);
         System.out.println("I096_A_C1_OWN_SCOPE=YES");
@@ -443,7 +1021,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         // I101-A: the DEBUG caller holds only the ordinary C1 call, no inline region.
         List<String> runNames = instructionNames(debug.outermostGuestRoot());
         assertTrue(position(runNames, "PrepareInlineClosureLiteralCall") < 0, runNames::toString);
-        assertTrue(position(runNames, "TryDirectCallOne") >= 0, runNames::toString);
+        assertTrue(position(runNames, "InvokeClosureOne") >= 0, runNames::toString);
         System.out.println("I096_A_DEBUG_TOPOLOGY_PRESERVED=YES");
     }
 
@@ -506,7 +1084,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
         assertTrue(prepare >= 0 && admit > prepare, names::toString);
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
-        assertTrue(position(names, "TryDirectCallZero") < 0, names::toString);
+        assertTrue(position(names, "InvokeClosureZero") < 0, names::toString);
         assertEquals(1, count(names, "PrepareInlineClosureLiteralCall"), "one candidate per site");
         List<RootNode> stack = normal.probe().stacks.get(0);
         assertSame(runRoot, stack.get(0));
@@ -557,7 +1135,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 int admit = position(names, "AdmitsInlineClosureLiteralCall");
                 int argument = position(names, "LoadInlineClosureArgument");
                 int fallback = position(names, "LoadInlineLiteralFallbackCall");
-                int direct = position(names, "TryDirectCallOne");
+                int direct = position(names, "InvokeClosureOne");
 
                 assertEquals(1, count(names, "PrepareInlineClosureLiteralCall"));
                 assertTrue(prepare >= 0, names::toString);

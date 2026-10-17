@@ -1216,20 +1216,24 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                         "AdmitsInlineClosureLiteralCall")),
                         mode + " must not inline D203-excluded calls");
 
-                // The three exclusions keep their ordinary physical invocations.
-                for (String operation : List.of(
-                        "PrepareClosureCall",
-                        "PrepareClosureCallArguments",
-                        "PrepareClosureCallVector")) {
-                    assertTrue(
-                            instructions.stream().anyMatch(instruction -> {
-                                String name = instruction.split(" ", 2)[0];
-                                return name.equals(operation)
-                                        || name.equals("c." + operation);
-                            }),
-                            () -> mode + " missing " + operation + " in "
-                                    + instructions);
-                }
+                // I108 preserves ordinary physical invocation through
+                // semantic operations. D203 exclusions must not become
+                // inline-literal calls.
+                List<String> operationNames = instructions.stream()
+                        .map(instruction -> instruction.split(" ", 2)[0])
+                        .toList();
+
+                long callZero = operationNames.stream()
+                        .filter(name -> name.startsWith("c.InvokeClosureZero"))
+                        .count();
+                long callN = operationNames.stream()
+                        .filter(name -> name.startsWith("c.InvokeClosureArguments"))
+                        .count();
+
+                assertEquals(1L, callZero,
+                        mode + ": expected one ordinary Call0");
+                assertEquals(2L, callN,
+                        mode + ": expected ordinary rest and spread calls");
 
                 assertTrue(
                         instructions.stream().noneMatch(

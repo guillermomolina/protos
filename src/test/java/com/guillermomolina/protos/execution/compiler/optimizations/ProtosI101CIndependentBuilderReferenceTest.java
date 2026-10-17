@@ -51,11 +51,11 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I101-C focal evidence: independent Builder oracles for NORMAL roots whose specialization is a
+ * I101-C focal evidence: independent Builder references for NORMAL roots whose specialization is a
  * dynamic guard with a semantically necessary physical fallback.
  *
  * <p>Every expected root is a handwritten {@link ProtosSemanticBytecodeRootNodeGen.Builder}
- * program. The oracles never consult the parser, the canonicalizer, the lowerer or any lowered
+ * program. The references never consult the parser, the canonicalizer, the lowerer or any lowered
  * root; the shared invocation helpers below restate the physical prepared-invocation protocol
  * operation by operation. Only the actual roots come from the production {@code ParsingRequest}
  * path of an entered Context with a published Core.
@@ -64,7 +64,7 @@ import org.junit.jupiter.api.Test;
  * instructions) with every argument name, kind and value. Profiles carry no stable value and
  * compare by kind; metadata constants compare by their exact class.
  */
-final class ProtosI101CGuardedBuilderOracleTest {
+final class ProtosI101CIndependentBuilderReferenceTest {
     private static final java.nio.file.Path CORE = java.nio.file.Path.of("protos", "lib", "core");
 
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
@@ -88,14 +88,12 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 List<RootCallTarget> targets =
                         roots.stream().map(RootNode::getCallTarget).toList();
 
-                ProtosSemanticBytecodeRootNode oracle = handwrittenGuardedNotRoot();
-                // The oracle is a single-root group: it has no module root.
-                assertEquals(1, groupRoots(oracle).size());
+                ProtosSemanticBytecodeRootNode reference = handwrittenGuardedNotRoot();
+                // The reference is a single-root group: it has no module root.
+                assertEquals(1, groupRoots(reference).size());
 
-                List<String> expected = completeSignature(oracle);
+                List<String> expected = completeSignature(reference);
                 List<String> actual = completeSignature(actualRoot);
-                System.out.println("I101_C_NOT_ORACLE_SIGNATURE=" + expected);
-                System.out.println("I101_C_NOT_ACTUAL_SIGNATURE=" + actual);
                 assertEquals(expected, actual, "guarded not root vs independent Builder");
 
                 int guard = indexOfOperation(actual, "TryCompactCanonicalBooleanOne");
@@ -126,7 +124,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 assertSame(targets.get(1), plan.bytecodeActivationTargetForComposition());
                 assertNotSemantics(normal, closure, "NORMAL");
                 assertEquals(actual, signature(actualRoot));
-                System.out.println("I101_C_NOT_BUILDER_ORACLE=PASS");
+                System.out.println("I101_C_NOT_BUILDER_REFERENCE=PASS");
             });
         }
 
@@ -179,20 +177,16 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 List<RootCallTarget> targets =
                         roots.stream().map(RootNode::getCallTarget).toList();
 
-                BytecodeRootNodes<ProtosSemanticBytecodeRootNode> oracle =
+                BytecodeRootNodes<ProtosSemanticBytecodeRootNode> reference =
                         handwrittenGuardedInlineRoots();
-                List<ProtosSemanticBytecodeRootNode> oracleRoots = groupRoots(oracle.getNode(0));
-                // Outer and inner Closure roots; the oracle has no module root.
-                assertEquals(2, oracleRoots.size());
+                List<ProtosSemanticBytecodeRootNode> referenceRoots = groupRoots(reference.getNode(0));
+                // Outer and inner Closure roots; the reference has no module root.
+                assertEquals(2, referenceRoots.size());
 
-                List<String> expectedOuter = completeSignature(oracleRoots.get(0));
-                List<String> expectedInner = completeSignature(oracleRoots.get(1));
+                List<String> expectedOuter = completeSignature(referenceRoots.get(0));
+                List<String> expectedInner = completeSignature(referenceRoots.get(1));
                 List<String> actualOuter = completeSignature(roots.get(1));
                 List<String> actualInner = completeSignature(roots.get(2));
-                System.out.println("I101_C_INLINE_ORACLE_OUTER=" + expectedOuter);
-                System.out.println("I101_C_INLINE_ACTUAL_OUTER=" + actualOuter);
-                System.out.println("I101_C_INLINE_ORACLE_INNER=" + expectedInner);
-                System.out.println("I101_C_INLINE_ACTUAL_INNER=" + actualInner);
                 assertEquals(expectedOuter, actualOuter, "outer root vs independent Builder");
                 assertEquals(expectedInner, actualInner, "inner root vs independent Builder");
 
@@ -232,7 +226,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 for (int repetition = 0; repetition < 2; repetition++) {
                     assertInteger(1, callClosure(normal, closure, ""));
                 }
-                System.out.println("I101_C_INLINE_BUILDER_ORACLE=PASS");
+                System.out.println("I101_C_INLINE_BUILDER_REFERENCE=PASS");
             });
         }
 
@@ -244,7 +238,12 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 List<String> outer = completeSignature(roots.get(1));
                 assertNoOperation(outer, "PrepareInlineClosureLiteralCall");
                 assertNoOperation(outer, "AdmitsInlineClosureLiteralCall");
-                assertTrue(indexOfOperation(outer, "PrepareClosureCall") >= 0,
+                // I108-A: DEBUG retains a physical Closure root,
+                // but ordinary Call0 selection now belongs to InvokeClosureZero.
+                assertNoOperation(outer, "PrepareClosureCall");
+                assertTrue(indexOfOperation(outer, "InvokeClosureZero") >= 0,
+                        outer::toString);
+                assertTrue(indexOfOperation(outer, "IsPreparedClosureInvocation") >= 0,
                         outer::toString);
 
                 ProtosClosureValue closure = assertInstanceOf(
@@ -279,7 +278,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
     private static ProtosSemanticBytecodeRootNode handwrittenGuardedNotRoot() {
         String characters = NOT_WITNESS;
         Source source = Source.newBuilder(
-                        ProtosLanguage.ID, characters, "i101-c-not-oracle.protos")
+                        ProtosLanguage.ID, characters, "i101-c-not-reference.protos")
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
@@ -315,7 +314,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                             BytecodeLocal resumed = builder.createLocal("resumeValue", null);
                             BytecodeLocal result = builder.createLocal("sequenceResult", null);
 
-                            beginOracleStatement(builder, sendStart, sendLength);
+                            beginReferenceStatement(builder, sendStart, sendLength);
                             builder.beginSourceSection(sendStart, sendLength);
                             builder.beginTag(StandardTags.CallTag.class);
                             builder.beginBlock();
@@ -345,7 +344,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                             builder.emitLoadLocal(classification);
                             builder.endIsCanonicalIfTrueTrue();
                             builder.beginBlock();
-                            emitOracleStoreConstant(builder, result, ProtosBooleanValue.FALSE);
+                            emitReferenceStoreConstant(builder, result, ProtosBooleanValue.FALSE);
                             builder.endBlock();
                             builder.beginBlock();
 
@@ -354,7 +353,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                             builder.emitLoadLocal(classification);
                             builder.endIsCanonicalBooleanFalseClass();
                             builder.beginBlock();
-                            emitOracleStoreConstant(builder, result, ProtosBooleanValue.TRUE);
+                            emitReferenceStoreConstant(builder, result, ProtosBooleanValue.TRUE);
                             builder.endBlock();
                             builder.beginBlock();
 
@@ -366,7 +365,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                             builder.emitCurrentCallerReference();
                             builder.endPrepareSendZero();
                             builder.endStoreLocal();
-                            emitOraclePreparedInvocation(builder, result, prepared, child, resumed);
+                            emitReferencePreparedInvocation(builder, result, prepared, child, resumed);
 
                             builder.endBlock();
                             builder.endIfThenElse();
@@ -377,7 +376,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                             builder.endBlock();
                             builder.endTag(StandardTags.CallTag.class);
                             builder.endSourceSection();
-                            endOracleStatement(builder);
+                            endReferenceStatement(builder);
 
                             builder.beginReturn();
                             builder.beginMaterializeReturnCarrier();
@@ -401,7 +400,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
             handwrittenGuardedInlineRoots() {
         String characters = INLINE_WITNESS;
         Source source = Source.newBuilder(
-                        ProtosLanguage.ID, characters, "i101-c-inline-oracle.protos")
+                        ProtosLanguage.ID, characters, "i101-c-inline-reference.protos")
                 .build();
         int outerBodyStart = characters.indexOf('{');
         int outerBodyLength = characters.lastIndexOf('}') + 1 - outerBodyStart;
@@ -413,7 +412,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
         int innerBodyLength = "{ 1 }".length();
         int literalStart = characters.indexOf('1');
 
-        // Oracle-owned metadata constants; only their classes enter the signature.
+        // Reference-owned metadata constants; only their classes enter the signature.
         CanonicalClosure literal = new CanonicalClosure(
                 List.of(),
                 new CanonicalSequence(
@@ -438,7 +437,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                     BytecodeLocal resumed = builder.createLocal("resumeValue", null);
                     BytecodeLocal result = builder.createLocal("sequenceResult", null);
 
-                    beginOracleStatement(builder, callStart, callLength);
+                    beginReferenceStatement(builder, callStart, callLength);
                     builder.beginSourceSection(callStart, callLength);
                     builder.beginTag(StandardTags.CallTag.class);
                     builder.beginBlock();
@@ -487,12 +486,12 @@ final class ProtosI101CGuardedBuilderOracleTest {
                     builder.endStoreLocal();
                     builder.beginSourceSection(innerBodyStart, innerBodyLength);
                     builder.beginTag(StandardTags.RootTag.class);
-                    beginOracleStatement(builder, literalStart, 1);
-                    emitOracleStoreConstant(
+                    beginReferenceStatement(builder, literalStart, 1);
+                    emitReferenceStoreConstant(
                             builder,
                             callbackResult,
                             ProtosNumericValueSupport.integer(1L));
-                    endOracleStatement(builder);
+                    endReferenceStatement(builder);
                     builder.endTag(StandardTags.RootTag.class);
                     builder.endSourceSection();
                     builder.beginStoreLocal(result);
@@ -502,7 +501,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
 
                     // Not admitted: the exact physical fallback of the prepared carrier.
                     builder.beginBlock();
-                    emitOracleInlineLiteralFallback(builder, result, inlineCall, child, resumed);
+                    emitReferenceInlineLiteralFallback(builder, result, inlineCall, child, resumed);
                     builder.endBlock();
 
                     builder.endIfThenElse();
@@ -510,7 +509,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
                     builder.endBlock();
                     builder.endTag(StandardTags.CallTag.class);
                     builder.endSourceSection();
-                    endOracleStatement(builder);
+                    endReferenceStatement(builder);
 
                     builder.beginReturn();
                     builder.emitLoadLocal(result);
@@ -522,22 +521,605 @@ final class ProtosI101CGuardedBuilderOracleTest {
                 });
     }
 
+
+    /**
+     * I108-A+B: complete independent Bytecode Builder references for
+     * dynamic Call0 and CallN.
+     *
+     * The receiver is deliberately not a source Closure. Consequently
+     * both sites must retain the entire generic prepared-result path,
+     * while their caller bytecode is owned by InvokeClosureZero or
+     * InvokeClosureArguments rather than TryDirectCall/PrepareClosureCall.
+     *
+     * The reference never uses the canonicalizer, production lowerer,
+     * or a production root as input.
+     */
+    @Test
+    void i108DynamicCallRootsMatchIndependentBuilder()
+            throws Exception {
+        record Witness(String name, String source, boolean multi,
+                String invocation) {}
+
+        List<Witness> witnesses = List.of(
+                new Witness(
+                        "call-zero",
+                        "() => { null() }",
+                        false,
+                        "InvokeClosureZero"),
+                new Witness(
+                        "call-n",
+                        "() => { null(7, 9) }",
+                        true,
+                        "InvokeClosureArguments"));
+
+        try (Harness normal =
+                new Harness(ProtosExecutionMode.NORMAL)) {
+            normal.run(() -> {
+                for (Witness witness : witnesses) {
+                    ProtosSemanticBytecodeRootNode module =
+                            compile(witness.source(), witness.name());
+
+                    BytecodeRootNodes<?> group =
+                            module.getRootNodes();
+
+                    List<ProtosSemanticBytecodeRootNode> roots =
+                            groupRoots(module);
+
+                    assertEquals(2, roots.size(), witness.name());
+
+                    ProtosSemanticBytecodeRootNode actualRoot =
+                            roots.get(1);
+
+                    RootCallTarget actualTarget =
+                            actualRoot.getCallTarget();
+
+                    ProtosSemanticBytecodeRootNode reference =
+                            handwrittenI108DynamicCallRoot(
+                                    witness.source(), witness.multi());
+
+                    assertEquals(
+                            1,
+                            groupRoots(reference).size(),
+                            witness.name() + " independent group");
+
+                    List<String> expected =
+                            completeSignature(reference);
+
+                    List<String> actual =
+                            completeSignature(actualRoot);
+
+                    assertEquals(
+                            expected,
+                            actual,
+                            witness.name()
+                                    + " complete Builder reference");
+
+                    assertTrue(
+                            indexOfOperation(
+                                    actual, witness.invocation()) >= 0,
+                            witness.name() + " missing semantic invocation");
+
+                    for (String required : List.of(
+                            "IsPreparedClosureInvocation",
+                            "RequiresStructuredDispatch",
+                            "EnterStraightLineSourceCall",
+                            "EnterClosureCall",
+                            "IsContinuationForCall",
+                            "ResumeContinuation")) {
+                        assertTrue(
+                                indexOfOperation(actual, required) >= 0,
+                                witness.name() + ": " + required);
+                    }
+
+                    assertNoOperation(actual, "TryDirectCall");
+                    assertNoOperation(actual, "PrepareClosureCall");
+
+                    group.ensureComplete();
+
+                    assertSame(
+                            actualTarget,
+                            actualRoot.getCallTarget(),
+                            witness.name() + " CallTarget stability");
+
+                    assertEquals(
+                            actual,
+                            signature(actualRoot),
+                            witness.name()
+                                    + " complete-root reparse stability");
+                }
+            });
+        }
+    }
+
+    /**
+     * Independent, single-root Builder model of a parameterless
+     * Closure whose terminal expression invokes null with zero or
+     * two positional arguments. The call is not executed here:
+     * null is chosen solely to make the receiver construction
+     * independent of any Closure materialization or lexical lookup.
+     */
+    private static ProtosSemanticBytecodeRootNode
+            handwrittenI108DynamicCallRoot(
+                    String characters, boolean multi) {
+
+        Source source = Source.newBuilder(
+                        ProtosLanguage.ID,
+                        characters,
+                        "i108-independent-dynamic.protos")
+                .build();
+
+        int bodyStart = characters.indexOf('{');
+        int bodyLength =
+                characters.lastIndexOf('}') + 1 - bodyStart;
+
+        int callStart = characters.indexOf("null(");
+        int callLength = multi
+                ? "null(7, 9)".length()
+                : "null()".length();
+
+        if (bodyStart < 0 || callStart < 0) {
+            throw new AssertionError("Invalid independent witness");
+        }
+
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        LANGUAGE_REF.get(null),
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginSource(source);
+                            builder.beginSourceSection(
+                                    bodyStart, bodyLength);
+                            builder.beginRoot();
+
+                            BytecodeLocal prepared =
+                                    builder.createLocal(
+                                            "preparedClosureCall", null);
+                            BytecodeLocal child =
+                                    builder.createLocal(
+                                            "childResult", null);
+                            BytecodeLocal resumed =
+                                    builder.createLocal(
+                                            "resumeValue", null);
+                            BytecodeLocal result =
+                                    builder.createLocal(
+                                            "sequenceResult", null);
+
+                            beginReferenceStatement(
+                                    builder, callStart, callLength);
+
+                            builder.beginSourceSection(
+                                    callStart, callLength);
+                            builder.beginTag(
+                                    StandardTags.CallTag.class);
+                            builder.beginBlock();
+
+                            // The receiver is evaluated exactly once.
+                            BytecodeLocal receiver =
+                                    builder.createLocal(
+                                            "callReceiver", null);
+                            builder.beginStoreLocal(receiver);
+                            builder.emitLoadConstant(
+                                    ProtosNullValue.INSTANCE);
+                            builder.endStoreLocal();
+
+                            BytecodeLocal first = null;
+                            BytecodeLocal second = null;
+
+                            if (multi) {
+                                first = builder.createLocal(
+                                        "callArgument", null);
+                                builder.beginStoreLocal(first);
+                                builder.emitLoadConstant(
+                                        ProtosNumericValueSupport.integer(7));
+                                builder.endStoreLocal();
+
+                                second = builder.createLocal(
+                                        "callArgument", null);
+                                builder.beginStoreLocal(second);
+                                builder.emitLoadConstant(
+                                        ProtosNumericValueSupport.integer(9));
+                                builder.endStoreLocal();
+                            }
+
+                            BytecodeLocal outcome =
+                                    builder.createLocal(
+                                            "closureInvocationOutcome", null);
+
+                            builder.beginStoreLocal(outcome);
+
+                            if (multi) {
+                                builder.beginInvokeClosureArguments();
+                            } else {
+                                builder.beginInvokeClosureZero();
+                            }
+
+                            builder.emitLoadLocal(receiver);
+                            builder.emitCurrentActivation();
+
+                            if (multi) {
+                                builder.beginCollectClosureCallArguments();
+                                builder.emitLoadLocal(first);
+                                builder.emitLoadLocal(second);
+                                builder.endCollectClosureCallArguments();
+                                builder.endInvokeClosureArguments();
+                            } else {
+                                builder.endInvokeClosureZero();
+                            }
+
+                            builder.endStoreLocal();
+
+                            // The only caller-side classification is
+                            // whether the operation returned a prepared
+                            // invocation that needs structural control.
+                            builder.beginIfThenElse();
+                            builder.beginIsPreparedClosureInvocation();
+                            builder.emitLoadLocal(outcome);
+                            builder.endIsPreparedClosureInvocation();
+
+                            builder.beginBlock();
+
+                            builder.beginStoreLocal(prepared);
+                            builder.emitLoadLocal(outcome);
+                            builder.endStoreLocal();
+
+                            emitReferencePreparedInvocation(
+                                    builder,
+                                    result,
+                                    prepared,
+                                    child,
+                                    resumed);
+
+                            builder.endBlock();
+
+                            // A direct operation result has already
+                            // completed the invocation.
+                            builder.beginBlock();
+                            builder.beginStoreLocal(result);
+                            builder.beginMaterializePrimitiveNumericCarrier();
+                            builder.emitLoadLocal(outcome);
+                            builder.emitLoadConstant(true);
+                            builder.endMaterializePrimitiveNumericCarrier();
+                            builder.endStoreLocal();
+                            builder.endBlock();
+
+                            builder.endIfThenElse();
+
+                            builder.endBlock();
+                            builder.endTag(
+                                    StandardTags.CallTag.class);
+                            builder.endSourceSection();
+
+                            endReferenceStatement(builder);
+
+                            builder.beginReturn();
+                            builder.emitLoadLocal(result);
+                            builder.endReturn();
+
+                            builder.endRoot();
+                            builder.endSourceSection();
+                            builder.endSource();
+                        });
+
+        return nodes.getNode(0);
+    }
+
+
+    /**
+     * I108-A: independent physical Builder reference for a dynamic
+     * Call1 whose receiver is a supplied Closure.
+     *
+     * The operand identity is deliberately a parameter, not a
+     * literal or a statically known Closure binding. This excludes
+     * I096 lexical inlining and exercises InvokeClosureOne.
+     */
+    @Test
+    void i108IdentityCallOneMatchesIndependentBuilder()
+            throws Exception {
+        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+            normal.run(() -> {
+                String source =
+                        "(identity) => { identity(1) }";
+
+                ProtosSemanticBytecodeRootNode module =
+                        compile(source, "i108-identity-call1");
+
+                List<ProtosSemanticBytecodeRootNode> roots =
+                        groupRoots(module);
+
+                assertEquals(2, roots.size());
+
+                ProtosSemanticBytecodeRootNode actualRoot =
+                        roots.get(1);
+
+                RootCallTarget actualTarget =
+                        actualRoot.getCallTarget();
+
+                ProtosSemanticBytecodeRootNode reference =
+                        handwrittenI108IdentityCallOneRoot();
+
+                assertEquals(
+                        1,
+                        groupRoots(reference).size(),
+                        "independent Builder has one root");
+
+                List<String> expected =
+                        completeSignature(reference);
+
+                List<String> actual =
+                        completeSignature(actualRoot);
+
+                assertEquals(
+                        expected,
+                        actual,
+                        "I108 Call1 identity complete Builder signature");
+
+                assertTrue(
+                        indexOfOperation(
+                                actual, "InvokeClosureOne") >= 0);
+
+                assertTrue(
+                        indexOfOperation(
+                                actual, "IsPreparedClosureInvocation") >= 0);
+
+                for (String operation : List.of(
+                        "IsContinuationForCall",
+                        "ResumeContinuation",
+                        "EnterStraightLineSourceCall",
+                        "EnterClosureCall",
+                        "FinishClosureCall")) {
+                    assertTrue(
+                            indexOfOperation(actual, operation) >= 0,
+                            () -> operation + " missing in " + actual);
+                }
+
+                assertNoOperation(actual, "TryDirectCallOne");
+                assertNoOperation(actual, "PrepareClosureCallOne");
+                assertNoOperation(actual, "IsDirectSendMiss");
+
+                module.getRootNodes().ensureComplete();
+
+                assertSame(
+                        actualTarget,
+                        actualRoot.getCallTarget());
+
+                assertEquals(
+                        actual,
+                        signature(actualRoot),
+                        "I108 Call1 reparse stability");
+
+                // Execute the actual production root as well.
+                ProtosClosureValue outer =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                module.getCallTarget().call(
+                                        normal.moduleActivation()));
+
+                assertInteger(
+                        1,
+                        callClosure(
+                                normal,
+                                outer,
+                                "(value) => { value }"));
+            });
+        }
+    }
+
+    /**
+     * Entirely handwritten reference for:
+     *
+     *     (identity) => { identity(1) }
+     *
+     * The actual lowerer is never consulted to construct this
+     * reference. It includes parameter binding, receiver read,
+     * primitive argument staging, semantic Call1, generic fallback,
+     * suspension composition and the return carrier boundary.
+     */
+    private static ProtosSemanticBytecodeRootNode
+            handwrittenI108IdentityCallOneRoot() {
+
+        String characters =
+                "(identity) => { identity(1) }";
+
+        Source source = Source.newBuilder(
+                        ProtosLanguage.ID,
+                        characters,
+                        "i108-independent-identity-call1.protos")
+                .build();
+
+        int bodyStart = characters.indexOf('{');
+        int bodyLength =
+                characters.lastIndexOf('}') + 1 - bodyStart;
+
+        int callStart = characters.indexOf("identity(1)");
+        int callLength = "identity(1)".length();
+
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        LANGUAGE_REF.get(null),
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginSource(source);
+                            builder.beginSourceSection(
+                                    bodyStart, bodyLength);
+                            builder.beginRoot();
+
+                            // The receiver is a real Closure parameter.
+                            BytecodeLocal identity =
+                                    builder.createLocal(
+                                            "identity", null);
+
+                            BytecodeLocal[] locals = {identity};
+
+                            ProtosFrameLexicalLayout layout =
+                                    ProtosFrameLexicalLayout.of(
+                                            new String[] {"identity"},
+                                            ProtosFrameLexicalLayout
+                                                    .localOffsetsOf(locals));
+
+                            builder.beginBindClosureFrameParameter(
+                                    locals, layout, 0);
+                            builder.emitLoadConstant("identity");
+
+                            builder.beginLoadFrameClosureArgument();
+                            builder.emitLoadConstant(0);
+                            builder.endLoadFrameClosureArgument();
+
+                            builder.endBindClosureFrameParameter();
+
+                            // Shared scratch locals of the composed call.
+                            BytecodeLocal prepared =
+                                    builder.createLocal(
+                                            "preparedClosureCall", null);
+
+                            BytecodeLocal child =
+                                    builder.createLocal(
+                                            "childResult", null);
+
+                            BytecodeLocal resumed =
+                                    builder.createLocal(
+                                            "resumeValue", null);
+
+                            BytecodeLocal result =
+                                    builder.createLocal(
+                                            "sequenceResult", null);
+
+                            beginReferenceStatement(
+                                    builder, callStart, callLength);
+
+                            builder.beginSourceSection(
+                                    callStart, callLength);
+
+                            builder.beginTag(
+                                    StandardTags.CallTag.class);
+
+                            builder.beginBlock();
+
+                            // Evaluate the receiver once.
+                            BytecodeLocal receiver =
+                                    builder.createLocal(
+                                            "callReceiver", null);
+
+                            builder.beginStoreLocal(receiver);
+
+                            builder.beginMaterializePrimitiveNumericCarrier();
+
+                            builder.beginReadRootFrameLocal(
+                                    identity,
+                                    layout.presentContinuityAt(0));
+
+                            builder.emitLoadConstant("identity");
+
+                            builder.endReadRootFrameLocal();
+
+                            builder.emitLoadConstant(true);
+                            builder.endMaterializePrimitiveNumericCarrier();
+
+                            builder.endStoreLocal();
+
+                            // I091: the scalar argument is a Long
+                            // carrier until the selected path requires
+                            // a guest numeric value.
+                            BytecodeLocal argument =
+                                    builder.createLocal(
+                                            "callArgument", null);
+
+                            builder.beginStoreLocal(argument);
+                            builder.emitLoadConstant(1L);
+                            builder.endStoreLocal();
+
+                            BytecodeLocal outcome =
+                                    builder.createLocal(
+                                            "closureInvocationOutcome", null);
+
+                            builder.beginStoreLocal(outcome);
+
+                            builder.beginInvokeClosureOne();
+                            builder.emitLoadLocal(receiver);
+                            builder.emitCurrentActivation();
+                            builder.emitLoadLocal(argument);
+                            builder.endInvokeClosureOne();
+
+                            builder.endStoreLocal();
+
+                            // The semantic operation returns either a
+                            // completed value or a PreparedClosureCall.
+                            builder.beginIfThenElse();
+
+                            builder.beginIsPreparedClosureInvocation();
+                            builder.emitLoadLocal(outcome);
+                            builder.endIsPreparedClosureInvocation();
+
+                            // Prepared result: execute the complete
+                            // physical fallback with Bytecode Yield.
+                            builder.beginBlock();
+
+                            builder.beginStoreLocal(prepared);
+                            builder.emitLoadLocal(outcome);
+                            builder.endStoreLocal();
+
+                            emitReferencePreparedInvocation(
+                                    builder,
+                                    result,
+                                    prepared,
+                                    child,
+                                    resumed);
+
+                            builder.endBlock();
+
+                            // Completed direct result.
+                            builder.beginBlock();
+
+                            builder.beginStoreLocal(result);
+                            builder.emitLoadLocal(outcome);
+                            builder.endStoreLocal();
+
+                            builder.endBlock();
+
+                            builder.endIfThenElse();
+
+                            builder.endBlock();
+
+                            builder.endTag(
+                                    StandardTags.CallTag.class);
+
+                            builder.endSourceSection();
+
+                            endReferenceStatement(builder);
+
+                            // A Call1 result may retain its I091
+                            // private primitive carrier.
+                            builder.beginReturn();
+
+                            builder.beginMaterializeReturnCarrier();
+                            builder.emitLoadLocal(result);
+                            builder.endMaterializeReturnCarrier();
+
+                            builder.endReturn();
+
+                            builder.endRoot();
+                            builder.endSourceSection();
+                            builder.endSource();
+                        });
+
+        return nodes.getNode(0);
+    }
+
     // ---- Shared Builder restatement of the physical prepared-invocation protocol. ----
 
-    private static void beginOracleStatement(
+    private static void beginReferenceStatement(
             ProtosSemanticBytecodeRootNodeGen.Builder builder, int start, int length) {
         builder.beginSourceSection(start, length);
         builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
         builder.beginBlock();
     }
 
-    private static void endOracleStatement(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private static void endReferenceStatement(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
         builder.endBlock();
         builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
         builder.endSourceSection();
     }
 
-    private static void emitOracleStoreConstant(
+    private static void emitReferenceStoreConstant(
             ProtosSemanticBytecodeRootNodeGen.Builder builder, BytecodeLocal target, Object value) {
         builder.beginStoreLocal(target);
         builder.emitLoadConstant(value);
@@ -545,7 +1127,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
     }
 
     /** A child continuation is yielded through this root until the child completes. */
-    private static void emitOracleContinuationComposition(
+    private static void emitReferenceContinuationComposition(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -575,24 +1157,22 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.endWhile();
     }
 
-    private static void emitOracleOrdinaryPreparedInvocation(
+    private static void emitReferenceOrdinaryPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
             BytecodeLocal resumed) {
-        builder.beginIfThenElse();
-        builder.beginAdmitsStraightLineSourceCall();
-        builder.emitLoadLocal(prepared);
-        builder.endAdmitsStraightLineSourceCall();
-
-        builder.beginBlock();
         builder.beginStoreLocal(result);
         builder.beginEnterStraightLineSourceCall();
         builder.emitLoadLocal(prepared);
         builder.endEnterStraightLineSourceCall();
         builder.endStoreLocal();
-        builder.endBlock();
+
+        builder.beginIfThenElse();
+        builder.beginIsPreparedClosureInvocation();
+        builder.emitLoadLocal(result);
+        builder.endIsPreparedClosureInvocation();
 
         builder.beginBlock();
         builder.beginStoreLocal(child);
@@ -600,7 +1180,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.emitLoadLocal(prepared);
         builder.endEnterClosureCall();
         builder.endStoreLocal();
-        emitOracleContinuationComposition(builder, prepared, child, resumed);
+        emitReferenceContinuationComposition(builder, prepared, child, resumed);
         builder.beginStoreLocal(result);
         builder.beginFinishClosureCall();
         builder.emitLoadLocal(prepared);
@@ -609,10 +1189,13 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.endStoreLocal();
         builder.endBlock();
 
+        builder.beginBlock();
+        builder.endBlock();
+
         builder.endIfThenElse();
     }
 
-    private static void emitOracleNestedStructuredInvocation(
+    private static void emitReferenceNestedStructuredInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
@@ -623,13 +1206,13 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.emitLoadLocal(prepared);
         builder.endEnterNestedStructuredDispatch();
         builder.endStoreLocal();
-        emitOracleContinuationComposition(builder, prepared, child, resumed);
+        emitReferenceContinuationComposition(builder, prepared, child, resumed);
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(child);
         builder.endStoreLocal();
     }
 
-    private static void emitOracleDispatchedPreparedInvocation(
+    private static void emitReferenceDispatchedPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
@@ -641,11 +1224,11 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.endRequiresStructuredDispatch();
 
         builder.beginBlock();
-        emitOracleNestedStructuredInvocation(builder, result, prepared, child, resumed);
+        emitReferenceNestedStructuredInvocation(builder, result, prepared, child, resumed);
         builder.endBlock();
 
         builder.beginBlock();
-        emitOracleOrdinaryPreparedInvocation(builder, result, prepared, child, resumed);
+        emitReferenceOrdinaryPreparedInvocation(builder, result, prepared, child, resumed);
         builder.endBlock();
 
         builder.endIfThenElse();
@@ -655,7 +1238,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
      * The B-prime physical fallback of a prepared inline carrier. Its completion is a
      * TryFinally, so it also runs on Error, cancellation and control-transfer exits.
      */
-    private static void emitOracleInlineLiteralFallback(
+    private static void emitReferenceInlineLiteralFallback(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal inlineChild,
@@ -676,7 +1259,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.endRequiresStructuredDispatch();
 
         builder.beginBlock();
-        emitOracleNestedStructuredInvocation(builder, result, fallback, child, resumed);
+        emitReferenceNestedStructuredInvocation(builder, result, fallback, child, resumed);
         builder.endBlock();
 
         builder.beginBlock();
@@ -686,7 +1269,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
             builder.endCompleteClosureCall();
         });
         builder.beginBlock();
-        emitOracleOrdinaryPreparedInvocation(builder, result, fallback, child, resumed);
+        emitReferenceOrdinaryPreparedInvocation(builder, result, fallback, child, resumed);
         builder.endBlock();
         builder.endTryFinally();
         builder.endBlock();
@@ -696,7 +1279,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
     }
 
     /** The standard Boolean protocol of a prepared send without inline literal candidates. */
-    private static void emitOracleLocalBooleanPreparedInvocation(
+    private static void emitReferenceLocalBooleanPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
@@ -731,7 +1314,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.emitLoadLocal(structuredBoolean);
         builder.endPrepareInlineStructuredBooleanCallbackCall();
         builder.endStoreLocal();
-        emitOracleInlineLiteralFallback(builder, child, structuredBooleanChild, child, resumed);
+        emitReferenceInlineLiteralFallback(builder, child, structuredBooleanChild, child, resumed);
         builder.beginStoreLocal(result);
         builder.beginFinishStructuredBooleanCallback();
         builder.emitLoadLocal(structuredBoolean);
@@ -754,7 +1337,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.endBlock();
     }
 
-    private static void emitOraclePreparedInvocation(
+    private static void emitReferencePreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
@@ -765,10 +1348,10 @@ final class ProtosI101CGuardedBuilderOracleTest {
         builder.emitLoadLocal(prepared);
         builder.endIsStructuredBooleanCall();
 
-        emitOracleLocalBooleanPreparedInvocation(builder, result, prepared, child, resumed);
+        emitReferenceLocalBooleanPreparedInvocation(builder, result, prepared, child, resumed);
 
         builder.beginBlock();
-        emitOracleDispatchedPreparedInvocation(builder, result, prepared, child, resumed);
+        emitReferenceDispatchedPreparedInvocation(builder, result, prepared, child, resumed);
         builder.endBlock();
 
         builder.endIfThenElse();
@@ -779,7 +1362,7 @@ final class ProtosI101CGuardedBuilderOracleTest {
     /** The production ParsingRequest path of the entered Context. */
     private static ProtosSemanticBytecodeRootNode compile(String characters, String name) {
         Source source = Source.newBuilder(
-                        ProtosLanguage.ID, characters, "i101-c-oracle-" + name + ".protos")
+                        ProtosLanguage.ID, characters, "i101-c-reference-" + name + ".protos")
                 .build();
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
