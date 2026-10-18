@@ -5,8 +5,11 @@ non-normative: each module's own doc comments under
 [`protos/lib/`](../../../protos/lib/) describe its exact contract, and the
 specification under [`spec/`](../../../spec/) wins over any guide prose.
 
-The Standard Library is ordinary Protos code distributed with the toolchain.
-Importing a module grants no authority. A module that writes text, reads a
+The Standard Library is Protos source distributed with the toolchain. A few
+source-backed modules (for example `std:math/Math`, `std:interop`, and
+`std:runtime`) also use a private native facility that the runtime hands to
+that module alone; it is never part of the module's surface. Importing a module
+grants no authority. A module that writes text, reads a
 time, or touches a file does so only through a value you pass to it.
 
 ## Importing a module
@@ -32,17 +35,19 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
+| [Runtime metadata](runtime.md) | `std:runtime` | Runtime, distribution, Engine, platform and Context mode |
 
 ## Native and portable JVM distributions
 
-Every module in these guides is written in Protos and behaves the same in both
-release distributions:
+Every module in these guides is written in Protos, sometimes over a private
+native facility, and behaves the same in both release distributions:
 
 - **Native Linux x86_64** — a self-contained executable for Linux x86_64 with
   dynamic glibc 2.39 or newer. It needs no external JDK. Guest code runs
   interpreter-only: guest JIT compilation is disabled under PLAT045, so
   compute-heavy library work (for example large regex searches) is slower than
-  on the JVM, but results are identical.
+  on the JVM, but results are identical. `std:runtime` deliberately reports which
+  distribution is running through its `platform` field.
 - **Portable JVM** — runs on the supported external runtime, GraalVM
   25.4.4.1.1 (JDK 25.0.4.1.1), with the optimizing runtime and guest JIT.
 

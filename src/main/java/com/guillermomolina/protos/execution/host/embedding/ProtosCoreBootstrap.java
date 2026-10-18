@@ -34,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 public final class ProtosCoreBootstrap {
     private final ProtosSourceFileLoader sourceLoader;
@@ -509,7 +510,26 @@ public final class ProtosCoreBootstrap {
                         ipEndpointPrototype,
                         bufferedReaderFactory,
                         bufferedWriterFactory),
-                semanticTransferFamilies);
+                semanticTransferFamilies,
+                lazyStandardModuleMembers());
+    }
+
+    /**
+     * Deferred runtime-owned initial members of standard modules (D205, LIB022-A).
+     *
+     * <p>Only the suppliers are registered here: each facility is created by
+     * {@link ProtosPrelude#installStandardModuleMembersForRuntime} when an Actor-local instance of
+     * its module initializes, never during Core bootstrap.
+     */
+    private static Map<
+            ProtosModuleKey,
+            Map<String, Supplier<ProtosObjectValue>>>
+            lazyStandardModuleMembers() {
+        return Map.of(
+                ProtosRuntimeMetadataFacility.MODULE_KEY,
+                Map.of(
+                        ProtosRuntimeMetadataFacility.BOOTSTRAP_SLOT,
+                        ProtosRuntimeMetadataFacility::createFacility));
     }
 
     /**

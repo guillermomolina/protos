@@ -134,11 +134,7 @@ public final class ProtosCli {
      * wins, then the Native distribution version, then {@code development}.
      */
     static String versionIdentity(String packageVersion, String distributionVersion) {
-        if (packageVersion != null && !packageVersion.isEmpty()) return packageVersion;
-        if (distributionVersion != null && !distributionVersion.isEmpty()) {
-            return distributionVersion;
-        }
-        return "development";
+        return ProtosVersionIdentity.select(packageVersion, distributionVersion);
     }
 
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {

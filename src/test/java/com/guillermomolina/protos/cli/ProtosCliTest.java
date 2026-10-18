@@ -8,6 +8,7 @@ import com.guillermomolina.protos.execution.ProtosLanguage;
 import com.guillermomolina.protos.execution.ProtosModuleResolver;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
+import com.guillermomolina.protos.execution.ProtosVersionIdentity;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -78,6 +79,22 @@ final class ProtosCliTest {
         assertEquals("9.9.9-native", ProtosCli.versionIdentity("", "9.9.9-native"));
         assertEquals("development", ProtosCli.versionIdentity(null, null));
         assertEquals("development", ProtosCli.versionIdentity(null, ""));
+    }
+
+    @Test
+    void sharedVersionIdentityPolicyMatchesCliPrecedence() {
+        assertEquals("1.2.3", ProtosVersionIdentity.select("1.2.3", "9.9.9"));
+        assertEquals("9.9.9", ProtosVersionIdentity.select(null, "9.9.9"));
+        assertEquals("9.9.9", ProtosVersionIdentity.select("", "9.9.9"));
+        assertEquals("development", ProtosVersionIdentity.select(null, null));
+        assertEquals("development", ProtosVersionIdentity.select(null, ""));
+        for (String packageVersion : new String[] {"1.2.3", "", null}) {
+            for (String distributionVersion : new String[] {"9.9.9", "", null}) {
+                assertEquals(
+                        ProtosVersionIdentity.select(packageVersion, distributionVersion),
+                        ProtosCli.versionIdentity(packageVersion, distributionVersion));
+            }
+        }
     }
 
     @Test

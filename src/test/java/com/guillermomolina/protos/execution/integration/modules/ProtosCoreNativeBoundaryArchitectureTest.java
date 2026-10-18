@@ -100,6 +100,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosLoggingFacility.java", 3),
                     // I090-C std:math/Math private sqrt facility.
                     Map.entry("execution/facilities/ProtosMathFacility.java", 1),
+                    // LIB022-A std:runtime private runtime-metadata facility.
+                    Map.entry("execution/facilities/ProtosRuntimeMetadataFacility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -143,6 +145,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                                     "execution/facilities/ProtosLoggingFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosMathFacility.java")
+                            || relative.equals(
+                                    "execution/facilities/ProtosRuntimeMetadataFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

@@ -403,7 +403,8 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                 || directory.startsWith("library/collections/")) {
             return "conformance/standard-library/collections";
         }
-        for (String data : List.of("library/json", "library/text", "library/test")) {
+        for (String data : List.of(
+                "library/json", "library/text", "library/test", "library/runtime")) {
             if (directory.equals(data) || directory.startsWith(data + "/")) {
                 return "conformance/standard-library/data-text-test";
             }

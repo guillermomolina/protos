@@ -681,3 +681,59 @@ Consequences:
 The existing rule that freeze is shallow is unchanged: no deep freeze is
 introduced. Actor isolation is not weakened, and implementations are not
 required to duplicate immutable data unnecessarily.
+
+## 73. Standard Runtime Metadata (`std:runtime`)
+
+*D205 / LIB022-A.* This section defines one Standard Library module. It does
+not change `import()`, canonical module identity, Actor-local module instances,
+cache-before-execute, failed-initialization eviction, or the Standard Prelude
+Sharing rule above.
+
+```text
+Module:            std:runtime
+Public operations: info/0
+Result:            fresh frozen ordinary Object
+Delegation parent: Object
+Own slots:         exactly five
+Slot values:       String
+Failures:          fresh ordinary Error
+```
+
+The module instance exposes exactly one public slot, `info`. It exposes no
+other operation, facility, helper object, or bootstrap slot, and adds no
+Prelude binding.
+
+`info()` accepts no arguments. Each successful call answers a newly created
+ordinary Object whose parent is `Object`, whose local slots are exactly the five
+below, each holding a semantic `String`, and which is frozen before it becomes
+observable. Distinct calls answer distinct objects; no snapshot is cached or
+shared, and a later call never changes an earlier result.
+
+| Slot | Value |
+|---|---|
+| `implementation` | Exactly `"Protos"`. |
+| `implementationVersion` | The distribution's implementation version: the packaged implementation version when present and nonempty, otherwise the distribution-supplied version when present and nonempty, otherwise `"development"`. It is the same identity reported by the command-line `--version`. Supplied versions are reported verbatim. |
+| `engineVersion` | The nonempty version of the host Engine that owns the currently entered Context. Its format is opaque and implementation-defined. |
+| `platform` | `"NATIVE_IMAGE"` when the runtime executes as an ahead-of-time compiled native image, otherwise `"JVM"`. It does not describe optimization or JIT state. |
+| `executionMode` | The execution mode of the currently entered Context: exactly `"NORMAL"` or `"DEBUG"`. |
+
+Ownership and availability:
+
+-   Every value is observed when `info()` is invoked, from the Context in which
+    the call executes. Importing the module, initializing it, accessing a
+    cached module instance, and unrelated execution retrieve no runtime
+    metadata.
+-   `info()` does not change the execution mode, initialize a debugger, or
+    otherwise alter the observed Context.
+-   Calling `info` with one or more arguments, or when a required metadata
+    source is unavailable, signals a fresh ordinary `Error`. No partially
+    populated snapshot escapes, and no value is fabricated.
+
+Authority: importing `std:runtime` or calling `info()` grants no host, foreign,
+debugging, or inspection authority. A snapshot contains only Strings; it
+exposes no Context, Engine, Actor, Task, Process, executable, or other
+implementation object.
+
+Each Actor that imports `std:runtime` receives its own module instance under
+the ordinary Actor-local module rules; any private machinery that instance
+uses belongs to that Actor-local instance and is not a Prelude-shared object.

@@ -1,0 +1,78 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Runtime: import("std:runtime")
+
+fields: ["implementation", "implementationVersion", "engineVersion", "platform", "executionMode"]
+
+tests: [
+    Test("std:runtime exports exactly info", () => {
+        Assertions.require(Runtime.slotNames().size() == 1)
+        Assertions.require(Runtime.hasSlot("info"))
+        Assertions.require(Runtime.hasSlot("_runtimeMetadataFacility") == false)
+        null
+    }),
+    Test("info answers exactly five String fields", () => {
+        snapshot: Runtime.info()
+        Assertions.require(snapshot.parent() === Object)
+        Assertions.require(snapshot.slotNames().size() == 5)
+        fields.each((name) => {
+            Assertions.require(snapshot.hasSlot(name))
+            Assertions.require(snapshot.slotValue(name).parent() === String)
+        })
+        Assertions.require(snapshot.implementation == "Protos")
+        null
+    }),
+    Test("info snapshots are frozen", () => {
+        snapshot: Runtime.info()
+        Assertions.signals(Error, () => {
+            snapshot.extra: 1
+        })
+        Assertions.signals(Error, () => {
+            snapshot.platform = "changed"
+        })
+        Assertions.require(snapshot.slotNames().size() == 5)
+        null
+    }),
+    Test("every info call answers a distinct snapshot", () => {
+        first: Runtime.info()
+        second: Runtime.info()
+        Assertions.require(first !== second)
+        Assertions.require(first.engineVersion == second.engineVersion)
+        null
+    }),
+    Test("info rejects every argument", () => {
+        Assertions.signals(Error, () => {
+            Runtime.info(1)
+        })
+        Assertions.signals(Error, () => {
+            Runtime.info(1, 2)
+        })
+        null
+    }),
+    Test("metadata reads leave module state unchanged", () => {
+        before: Runtime.slotValue("info")
+        Runtime.info()
+        Runtime.info()
+        Assertions.require(Runtime.slotValue("info") === before)
+        Assertions.require(Runtime.slotNames().size() == 1)
+        Assertions.require(import("std:runtime") === Runtime)
+        null
+    })
+]
+tests.freeze()

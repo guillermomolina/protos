@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.378-SNAPSHOT
+
+- `LIB022-A` (#923): implement D205 B2+ `std:runtime` with lazy standard
+  module members.
+  - `std:runtime` exposes exactly `info/0`, answering a fresh frozen ordinary
+    Object with the five String slots `implementation`,
+    `implementationVersion`, `engineVersion`, `platform` and `executionMode`,
+    observed on demand from the entered Context; any argument or unavailable
+    metadata signals a fresh ordinary Error (spec 0.1.461, `MODULES.md` §73).
+  - `ProtosPrelude` gains deferred standard module members: suppliers are
+    registered at bootstrap and invoked once per Actor-local module
+    initialization of their exact key; their frozen results are private to
+    that module instance and are not Prelude-shared transfer anchors.
+  - `ProtosRuntimeMetadataFacility` is the private native facility;
+    `ProtosVersionIdentity` now owns the version precedence shared with
+    CLI `--version`.
+  - The conformance manifest and the TOOL011 `data-text-test` progress group
+    register `library/runtime`; the native-boundary audit lists the new
+    non-Core facility.
+  - Maintainer validation: make test PASS; make check PASS; make -C
+    build/native test PASS.
+
 ## 0.3.377-SNAPSHOT
 
 - `I111` (#919): implement PLAT065-A slice B, one unified Bytecode DSL

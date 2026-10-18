@@ -31,6 +31,7 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Supplier;
 
 public final class ProtosPrelude {
     private final ProtosObjectValue bindings;
@@ -44,6 +45,10 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
     private final Set<ProtosObjectValue> standardModuleMemberIdentities;
+    private final Map<
+            ProtosModuleKey,
+            Map<String, Supplier<ProtosObjectValue>>>
+            lazyStandardModuleMembers;
     private final Map<ProtosModuleKey, ProtosSemanticTransferFamily> semanticTransferFamilies;
     /*
      * PERF040-E1 pay-as-you-grow: certified by the first specialized numeric
@@ -157,6 +162,43 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeIpEndpointPrototype,
             Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers,
             List<ProtosSemanticTransferFamily> semanticTransferFamilies) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                Map.of());
+    }
+
+    /**
+     * Creates a Prelude that additionally registers deferred standard initial members (LIB022-A).
+     *
+     * <p>{@code lazyStandardModuleMembers} maps one canonical {@link ProtosModuleKey} to member
+     * suppliers that are stored without being invoked. Each supplier runs exactly once per
+     * Actor-local module context created for its key, during that module's initialization, and
+     * must answer a FROZEN object. The created object is private to that module instance: it is
+     * not shared by the Prelude and is therefore not a standard-member transfer anchor. A member
+     * name may not be registered both eagerly and lazily for the same module.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers) {
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -169,6 +211,9 @@ public final class ProtosPrelude {
         this.runtimeIpEndpointPrototype = runtimeIpEndpointPrototype;
         this.standardModuleMembers = copyStandardModuleMembers(standardModuleMembers);
         this.standardModuleMemberIdentities = identitiesOf(this.standardModuleMembers);
+        this.lazyStandardModuleMembers =
+                copyLazyStandardModuleMembers(
+                        lazyStandardModuleMembers, this.standardModuleMembers);
 
         requireFrozenDirectChildOfObject(runtimeIpAddressPrototype, "IpAddress");
         requireFrozenDirectChildOfObject(runtimeIpEndpointPrototype, "IpEndpoint");
@@ -243,6 +288,40 @@ public final class ProtosPrelude {
                                     + "." + name);
                 }
                 moduleMembers.put(name, value);
+            }
+            copy.put(key, Collections.unmodifiableMap(moduleMembers));
+        }
+        return Collections.unmodifiableMap(copy);
+    }
+
+    private static Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+            copyLazyStandardModuleMembers(
+                    Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>> members,
+                    Map<ProtosModuleKey, Map<String, ProtosObjectValue>> eagerMembers) {
+        Objects.requireNonNull(members, "lazyStandardModuleMembers");
+        LinkedHashMap<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>> copy =
+                new LinkedHashMap<>();
+        for (Map.Entry<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>> entry :
+                members.entrySet()) {
+            ProtosModuleKey key =
+                    Objects.requireNonNull(entry.getKey(), "lazy standard module key");
+            Map<String, ProtosObjectValue> eager = eagerMembers.getOrDefault(key, Map.of());
+            LinkedHashMap<String, Supplier<ProtosObjectValue>> moduleMembers =
+                    new LinkedHashMap<>();
+            for (Map.Entry<String, Supplier<ProtosObjectValue>> member :
+                    Objects.requireNonNull(entry.getValue(), "lazy standard module members")
+                            .entrySet()) {
+                String name =
+                        Objects.requireNonNull(member.getKey(), "lazy standard member name");
+                Supplier<ProtosObjectValue> supplier =
+                        Objects.requireNonNull(
+                                member.getValue(), "lazy standard member supplier");
+                if (eager.containsKey(name)) {
+                    throw new IllegalArgumentException(
+                            "standard module member registered both eagerly and lazily: "
+                                    + key.canonicalId() + "." + name);
+                }
+                moduleMembers.put(name, supplier);
             }
             copy.put(key, Collections.unmodifiableMap(moduleMembers));
         }
@@ -513,6 +592,10 @@ public final class ProtosPrelude {
      * <p>This is the only standard-member provisioning path for module creation; it neither
      * imports, caches, nor creates module identity. A {@code null} key (non-module activations)
      * and unregistered keys install nothing.
+     *
+     * <p>After the shared eager members, each deferred member registered for the exact key is
+     * created by invoking its supplier once for this module context; the answer must be a FROZEN
+     * object and becomes a private initial member of this module instance only (LIB022-A).
      */
     public void installStandardModuleMembersForRuntime(
             ProtosModuleKey moduleKey, ProtosObjectValue moduleContext) {
@@ -521,16 +604,39 @@ public final class ProtosPrelude {
             return;
         }
         Map<String, ProtosObjectValue> members = standardModuleMembers.get(moduleKey);
-        if (members == null) {
+        if (members != null) {
+            for (Map.Entry<String, ProtosObjectValue> member : members.entrySet()) {
+                if (moduleContext.hasLocalSlot(member.getKey())) {
+                    throw new IllegalStateException(
+                            "duplicate standard module member: " + moduleKey.canonicalId()
+                                    + "." + member.getKey());
+                }
+                moduleContext.createLocalSlot(member.getKey(), member.getValue());
+            }
+        }
+        Map<String, Supplier<ProtosObjectValue>> deferred =
+                lazyStandardModuleMembers.get(moduleKey);
+        if (deferred == null) {
             return;
         }
-        for (Map.Entry<String, ProtosObjectValue> member : members.entrySet()) {
+        for (Map.Entry<String, Supplier<ProtosObjectValue>> member : deferred.entrySet()) {
+            ProtosObjectValue value = member.getValue().get();
+            if (value == null) {
+                throw new IllegalStateException(
+                        "lazy standard module member supplied null: " + moduleKey.canonicalId()
+                                + "." + member.getKey());
+            }
+            if (!value.isFrozen()) {
+                throw new IllegalStateException(
+                        "lazy standard module member must be frozen: " + moduleKey.canonicalId()
+                                + "." + member.getKey());
+            }
             if (moduleContext.hasLocalSlot(member.getKey())) {
                 throw new IllegalStateException(
                         "duplicate standard module member: " + moduleKey.canonicalId()
                                 + "." + member.getKey());
             }
-            moduleContext.createLocalSlot(member.getKey(), member.getValue());
+            moduleContext.createLocalSlot(member.getKey(), value);
         }
     }
 

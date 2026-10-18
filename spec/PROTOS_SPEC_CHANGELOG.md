@@ -23,6 +23,23 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.461] - 2026-10-18
+
+### D205 / LIB022-A — Standard runtime metadata
+- `spec/semantics/MODULES.md` §73: new Standard Library module `std:runtime`
+  whose only public operation is `info/0`. Each successful call answers a
+  fresh frozen ordinary Object delegating to `Object` with exactly five
+  String slots: `implementation` (`"Protos"`), `implementationVersion` (the
+  CLI `--version` identity), `engineVersion` (the entered Context's Engine),
+  `platform` (`"JVM"` or `"NATIVE_IMAGE"`) and `executionMode` (the entered
+  Context's `"NORMAL"` or `"DEBUG"` mode).
+- Metadata is observed on demand from the currently entered Context, never
+  during import or unrelated execution; any argument or unavailable metadata
+  signals a fresh ordinary Error without fabricating values.
+- Importing the module grants no host, foreign, debugging or inspection
+  authority. Core module identity, Actor-local module instances and
+  execution semantics are unchanged.
+
 ## [0.1.460] - 2026-10-16
 
 ### D203 — Flexible Closure arity and `:` parameter defaults

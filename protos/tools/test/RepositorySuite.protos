@@ -242,7 +242,7 @@ conformanceProgressGroups: Array(
     ),
     conformanceProgressGroup(
         "conformance/standard-library/data-text-test",
-        Array("library/json", "library/text", "library/test"),
+        Array("library/json", "library/text", "library/test", "library/runtime"),
         Array()
     ),
     conformanceProgressGroup(

@@ -1,0 +1,39 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Read-only metadata of the active Protos runtime.
+//!
+//! `info()` answers a fresh frozen ordinary Object, delegating to `Object`,
+//! with exactly five String slots: `implementation`, `implementationVersion`,
+//! `engineVersion`, `platform`, and `executionMode`. Every value is observed
+//! from the currently entered Context when `info()` is called; nothing is
+//! read at import time.
+//!
+//! Importing this module grants no debugging, host access, foreign access,
+//! or inspection authority.
+
+/// Answers a fresh frozen snapshot of the active Protos runtime metadata.
+///
+/// `info()` accepts no arguments. Any argument, or unavailable runtime
+/// metadata, signals a fresh ordinary Error; no partial snapshot escapes.
+info: ((facility) => (...arguments) => {
+    // D203: forwarding the complete supplied vector keeps the facility's
+    // exact zero-argument check.
+    facility.info(...arguments)
+})(_runtimeMetadataFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_runtimeMetadataFacility")
