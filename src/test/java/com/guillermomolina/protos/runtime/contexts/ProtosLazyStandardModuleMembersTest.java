@@ -24,7 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.execution.ProtosInspectFacility;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -84,6 +87,32 @@ final class ProtosLazyStandardModuleMembersTest {
         // A deferred private object is never a Prelude-shared transfer anchor.
         assertFalse(prelude.isStandardModuleMemberForRuntime(firstFacility));
         assertFalse(prelude.isStandardModuleMemberForRuntime(secondFacility));
+    }
+
+    @Test
+    void coreBootstrapDefersTheInspectFacilityToItsModuleProvisioning() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        String slot = ProtosInspectFacility.BOOTSTRAP_SLOT;
+        ProtosModuleKey key = ProtosInspectFacility.MODULE_KEY;
+        assertTrue(prelude.bindings().readLocalSlot(slot).isEmpty());
+
+        ProtosObjectValue unrelated = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(
+                new ProtosModuleKey("std:runtime"), unrelated);
+        assertFalse(unrelated.hasLocalSlot(slot));
+
+        ProtosObjectValue first = prelude.newExecutionContext();
+        ProtosObjectValue second = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(key, first);
+        prelude.installStandardModuleMembersForRuntime(key, second);
+        ProtosObjectValue firstFacility =
+                assertInstanceOf(ProtosObjectValue.class, first.readLocalSlot(slot).orElseThrow());
+        ProtosObjectValue secondFacility =
+                assertInstanceOf(ProtosObjectValue.class, second.readLocalSlot(slot).orElseThrow());
+        assertTrue(firstFacility.isFrozen());
+        assertNotSame(firstFacility, secondFacility);
+        assertFalse(prelude.isStandardModuleMemberForRuntime(firstFacility));
     }
 
     @Test

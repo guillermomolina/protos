@@ -102,6 +102,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosMathFacility.java", 1),
                     // LIB022-A std:runtime private runtime-metadata facility.
                     Map.entry("execution/facilities/ProtosRuntimeMetadataFacility.java", 1),
+                    // LIB022-B std:inspect private inspection facility.
+                    Map.entry("execution/facilities/ProtosInspectFacility.java", 4),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -147,6 +149,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                                     "execution/facilities/ProtosMathFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosRuntimeMetadataFacility.java")
+                            // LIB022-B std:inspect private facility, not Core behavior.
+                            || relative.equals(
+                                    "execution/facilities/ProtosInspectFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

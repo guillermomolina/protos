@@ -737,3 +737,84 @@ implementation object.
 Each Actor that imports `std:runtime` receives its own module instance under
 the ordinary Actor-local module rules; any private machinery that instance
 uses belongs to that Actor-local instance and is not a Prelude-shared object.
+
+## 73A. Standard Runtime Inspection (`std:inspect`)
+
+*D205 / LIB022-B.* This section defines one Standard Library module whose
+availability depends on authority granted by the host. It does not change
+`import()` for any other module, canonical module identity, Actor-local module
+instances, cache-before-execute, failed-initialization eviction, the Standard
+Prelude Sharing rule, or §73.
+
+```text
+Module:            std:inspect
+Public operations: representation/1, callableInfo/1, bytecode/1, truffleTree/1
+Result:            non-empty String
+Text format:       implementation-specific; unstable across versions
+Authority:         Context option protos.Inspect (Boolean, default false)
+Failures:          fresh ordinary Error
+```
+
+The module instance exposes exactly the four public slots above. It exposes no
+other operation, facility, helper object, or bootstrap slot, and adds no
+Prelude binding.
+
+Authority:
+
+-   The only authority is the Context option `protos.Inspect`, a Boolean that
+    defaults to `false` and is fixed for the life of the Context. It is
+    independent of the DEBUG execution mode: enabling DEBUG does not authorize
+    inspection, and enabling `protos.Inspect` does not select DEBUG.
+-   Importing `std:inspect` in a Context without that authority signals a fresh
+    ordinary `Error`. The check is made against the currently entered Context
+    before any cached Actor-local instance is consulted, so a module instance
+    cached earlier never bypasses it.
+-   Every operation re-checks the authority of the currently entered Context;
+    retaining a reference to a module operation grants nothing in a Context
+    without the authority.
+-   Inspection grants no interop, Context, Actor, Process, or Task authority,
+    and gives no foreign value, callback, Process, or Actor any additional
+    authority.
+
+Operations:
+
+-   Every operation accepts exactly one argument. A successful call answers a
+    non-empty `String` whose text is diagnostic and implementation-specific;
+    no text format is specified and it may change between versions. Results
+    contain only Strings and never expose a physical root, call target, or
+    other implementation object.
+-   `representation(value)` answers a shallow classification of `value`'s
+    representation family. It does not enumerate slots, members, elements,
+    String contents, captures, receivers, callbacks, or handles, and invokes
+    no guest code. A value that cannot be classified safely signals an
+    ordinary `Error`.
+-   `callableInfo(closure)` requires a Closure. It describes whether the
+    Closure has a native body or a source definition, and for a source-backed
+    Closure only facts that exist or that are actually obtained, such as its
+    definition's source span and whether its execution plan is prepared. A
+    native Closure is supported when it can be classified.
+-   `bytecode(closure)` and `truffleTree(closure)` require a source-backed
+    Closure with an available source and a legitimate physical projection
+    owned by the currently entered Context. They describe, respectively, the
+    physical Bytecode instructions and the physical node tree of that
+    projection. Neither is the semantic Closure definition, and neither is
+    compiler intermediate representation; no operation reports compilation,
+    optimization, or JIT state.
+-   Preparing or rematerializing an execution plan or a Context-local
+    projection is permitted only on demand, during an explicit inspection
+    request.
+-   No operation calls the inspected Closure.
+
+Failures: wrong arity, a wrong argument type, missing authority, a projection
+not owned by the currently entered Context, an unavailable physical
+representation, and failed preparation or materialization each signal a fresh
+ordinary `Error`. No empty String or other substitute result is answered.
+
+Execution profile: inspection does not change the execution mode of the
+Context, does not alter the NORMAL or DEBUG physical profile, and imposes no
+cost on programs that do not import the module.
+
+Each Actor that imports `std:inspect` in an authorized Context receives its own
+module instance under the ordinary Actor-local module rules; any private
+machinery that instance uses belongs to that Actor-local instance and is not a
+Prelude-shared object.

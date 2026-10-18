@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.379-SNAPSHOT
+
+- `LIB022-B` (#921): implement D205 B2+ `std:inspect`.
+  - `std:inspect` exposes exactly `representation/1`, `callableInfo/1`,
+    `bytecode/1` and `truffleTree/1`, each answering a non-empty
+    implementation-specific diagnostic String; arity, type, authority,
+    ownership, unavailable representation and failed materialization signal
+    fresh ordinary Errors (spec 0.1.462, `MODULES.md` §73A).
+  - New Context option `protos.Inspect` (Boolean, default false, independent
+    of `protos.Debug`) is the only authority. `ProtosModuleRuntime` rejects
+    the import before any Actor-local cache lookup, and every operation
+    re-checks the entered Context.
+  - `ProtosInspectFacility` is the lazily provisioned private native facility.
+    `bytecode` and `truffleTree` resolve the entered Context's own projection
+    through `bytecodeExecutionPlanForEnteredClosure`, accept only semantic
+    activation roots, never call the inspected Closure, render Bytecode
+    without constant operand values, and bound every output at 64 KiB
+    including the truncation marker.
+  - The conformance manifest and the TOOL011 `data-text-test` progress group
+    register `library/inspect` (default-denied import); the native-boundary
+    audit lists the new non-Core facility; `ProtosLazyStandardModuleMembersTest`
+    moves to `runtime/contexts/` to respect the directory file limit.
+  - Maintainer validation: make test PASS; make check PASS; make -C
+    build/native test PASS; make test-protos PASS.
+
 ## 0.3.378-SNAPSHOT
 
 - `LIB022-A` (#923): implement D205 B2+ `std:runtime` with lazy standard

@@ -79,6 +79,19 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             stability = OptionStability.EXPERIMENTAL)
     static final OptionKey<Boolean> DEBUG = new OptionKey<>(false);
 
+    /*
+     * D205 (LIB022-B): the only authority of std:inspect. It selects no execution mode and has
+     * no relation to DEBUG.
+     */
+    @Option(
+            name = "Inspect",
+            help =
+                    "Allow explicit, implementation-specific runtime inspection in this Context."
+                            + " Independent of DEBUG and fixed for the life of the Context.",
+            category = OptionCategory.USER,
+            stability = OptionStability.STABLE)
+    static final OptionKey<Boolean> INSPECT = new OptionKey<>(false);
+
     private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
 
     @Override

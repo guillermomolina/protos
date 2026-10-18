@@ -90,6 +90,14 @@ final class ProtosLanguageContext {
         return executionMode;
     }
 
+    /**
+     * D205 (LIB022-B): whether the host authorized {@code std:inspect} for this Context. Options are
+     * fixed for the life of the Context, so no copy is retained here.
+     */
+    boolean inspectEnabledForRuntime() {
+        return env.getOptions().get(ProtosLanguage.INSPECT);
+    }
+
     ProtosHostBindingsScope hostBindingsScope() {
         return hostBindingsScope;
     }

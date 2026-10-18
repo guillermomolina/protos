@@ -223,6 +223,8 @@ public final class ProtosModuleRuntime {
             ProtosTask task) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
+        // LIB022-B: authority of the entered Context is checked before any cached instance.
+        ProtosInspectFacility.requireAuthorizedImport(key, caller);
 
         ProtosActorModuleState actorState = caller.actorModuleState();
         ProtosActorModuleState.ModuleRecord existing =
@@ -409,6 +411,8 @@ public final class ProtosModuleRuntime {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
+        // LIB022-B: authority of the entered Context is checked before any cached instance.
+        ProtosInspectFacility.requireAuthorizedImport(key, caller);
 
         ProtosActorModuleState actorState = caller.actorModuleState();
         ProtosActorModuleState.ModuleRecord existing = actorState.lookup(key).orElse(null);

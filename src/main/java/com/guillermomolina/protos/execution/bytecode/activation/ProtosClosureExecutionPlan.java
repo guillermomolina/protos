@@ -135,6 +135,15 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.activationRootForTesting();
     }
 
+    /**
+     * D205 (LIB022-B): the physical activation root of this already-built plan, for explicit
+     * {@code std:inspect} diagnostics only. It neither calls the target nor prepares an
+     * activation, and the root never becomes a guest value.
+     */
+    ProtosBytecodeRootNode bytecodeActivationRootForInspection() {
+        return bytecodePlan.activationRootForTesting();
+    }
+
     RootCallTarget bytecodeActivationTargetForComposition() {
         return bytecodePlan.activationTargetForComposition();
     }

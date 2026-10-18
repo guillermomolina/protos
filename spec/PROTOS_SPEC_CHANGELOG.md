@@ -23,6 +23,28 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.462] - 2026-10-18
+
+### D205 / LIB022-B — Standard runtime inspection
+- `spec/semantics/MODULES.md` §73A: new Standard Library module `std:inspect`
+  with exactly four public operations, `representation/1`, `callableInfo/1`,
+  `bytecode/1` and `truffleTree/1`. Each successful call answers a non-empty
+  implementation-specific diagnostic String with no stable format.
+- Authority is exclusively the Context option `protos.Inspect` (Boolean,
+  default `false`, fixed per Context, independent of DEBUG). Importing the
+  module without it signals a fresh ordinary Error, checked before any
+  cached Actor-local instance; every operation re-checks the entered
+  Context.
+- Arity, type, authority, ownership, unavailable representation and failed
+  materialization signal fresh ordinary Errors. `representation` is a
+  shallow classification without contents; `bytecode` and `truffleTree`
+  require a source-backed Closure and describe the entered Context's own
+  physical projection, never the semantic definition or compiler IR.
+- Plan preparation and rematerialization happen only on explicit request;
+  no operation calls the inspected Closure or grants interop, Context,
+  Actor, Process or Task authority. NORMAL/DEBUG profiles,
+  cache-before-execute and Actor-local module instances are unchanged.
+
 ## [0.1.461] - 2026-10-18
 
 ### D205 / LIB022-A — Standard runtime metadata

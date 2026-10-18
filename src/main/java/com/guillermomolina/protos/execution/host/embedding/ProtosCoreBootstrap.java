@@ -529,7 +529,12 @@ public final class ProtosCoreBootstrap {
                 ProtosRuntimeMetadataFacility.MODULE_KEY,
                 Map.of(
                         ProtosRuntimeMetadataFacility.BOOTSTRAP_SLOT,
-                        ProtosRuntimeMetadataFacility::createFacility));
+                        ProtosRuntimeMetadataFacility::createFacility),
+                // LIB022-B: std:inspect; its import is additionally guarded by protos.Inspect.
+                ProtosInspectFacility.MODULE_KEY,
+                Map.of(
+                        ProtosInspectFacility.BOOTSTRAP_SLOT,
+                        ProtosInspectFacility::createFacility));
     }
 
     /**

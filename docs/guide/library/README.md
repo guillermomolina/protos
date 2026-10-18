@@ -6,11 +6,22 @@ non-normative: each module's own doc comments under
 specification under [`spec/`](../../../spec/) wins over any guide prose.
 
 The Standard Library is Protos source distributed with the toolchain. A few
-source-backed modules (for example `std:math/Math`, `std:interop`, and
-`std:runtime`) also use a private native facility that the runtime hands to
-that module alone; it is never part of the module's surface. Importing a module
-grants no authority. A module that writes text, reads a
-time, or touches a file does so only through a value you pass to it.
+source-backed modules (for example `std:math/Math`, `std:interop`,
+`std:runtime`, and `std:inspect`) also use a private native facility that the
+runtime hands to that module alone; it is never part of the module's surface.
+
+Importing a module never grants authority, but modules differ in whether they
+need authority that already exists:
+
+- Almost every module requires none. A module that writes text, reads a time,
+  or touches a file does so only through a value you pass to it.
+- `std:inspect` requires authority the host must already have granted to the
+  Context (the `protos.Inspect` option). Without it, the import itself signals
+  an ordinary `Error`; importing never creates that authority.
+
+`std:runtime` answers portable, semantic facts with a specified shape.
+`std:inspect` answers internal diagnostics whose text is implementation-specific,
+may change between versions, and may be unavailable on some runtimes.
 
 ## Importing a module
 
@@ -36,11 +47,16 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Runtime, distribution, Engine, platform and Context mode |
+| [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |
 
 ## Native and portable JVM distributions
 
 Every module in these guides is written in Protos, sometimes over a private
-native facility, and behaves the same in both release distributions:
+native facility, and behaves the same in both release distributions. The one
+exception is `std:inspect`: its public contract is the same in both, but its
+diagnostic text is implementation-specific, and a physical representation it
+describes may be unavailable on a given runtime, in which case the operation
+signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
 
 - **Native Linux x86_64** — a self-contained executable for Linux x86_64 with
   dynamic glibc 2.39 or newer. It needs no external JDK. Guest code runs
