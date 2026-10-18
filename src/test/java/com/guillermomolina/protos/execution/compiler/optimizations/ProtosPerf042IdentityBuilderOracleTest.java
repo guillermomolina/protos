@@ -39,6 +39,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.graalvm.polyglot.Context;
+import com.oracle.truffle.api.bytecode.BytecodeTier;
+import java.nio.file.Files;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -347,4 +350,463 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             }
         }
     }
+    @Test
+    void bareIdentityTopLevelWithoutRun() throws Exception {
+        String sourceText = """
+                identity: (value) => { value }
+                identity(1)
+                """;
+
+        withCore(module -> {
+            ProtosSemanticBytecodeRootNode root =
+                    parse(sourceText, "bare-identity-smoke");
+
+            assertEquals(2, root.getRootNodes().getNodes().size(),
+                    "Expected top-level and nested identity roots");
+            assertTrue(root == root.getRootNodes().getNode(0),
+                    "The root under test must be top-level");
+            assertEquals("1",
+                    ProtosNumericValueSupport.integerDecimalText(
+                            root.getCallTarget().call(module)));
+        });
+    }
+    @Test
+    void captureIdentityRootAtRequestedTier() throws Exception {
+        Assumptions.assumeTrue(
+                Boolean.getBoolean("protos.perf042.graphCapture"),
+                "PERF042 Tier 1 acquisition is opt-in");
+
+        assertEquals(
+                "false",
+                System.getProperty("polyglot.engine.BackgroundCompilation"),
+                "Graph capture requires synchronous compilation");
+
+        assertEquals(
+                "true",
+                System.getProperty("protos.diagnostic.stableRootIdentity"),
+                "Graph capture requires stable root identities");
+
+        String tierText = System.getProperty(
+                "protos.perf042.graphTier", "1");
+
+        assertTrue(
+                tierText.equals("1") || tierText.equals("2"),
+                "graphTier must be 1 or 2");
+
+        int requestedTier = Integer.parseInt(tierText);
+
+        withCore(module -> {
+            // The source contains only the Closure expression.
+            // Executing its top-level expression obtains the real Closure
+            // and its B5 invocation metadata, not a guest caller.
+            ProtosSemanticBytecodeRootNode sourceRoot =
+                    parse("(value) => { value }", "identity-tier1-source");
+
+            ProtosClosureValue closure = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    sourceRoot.getCallTarget().call(module));
+
+            ProtosSemanticBytecodeRootNode root =
+                    closure.executionPlan().orElseThrow()
+                            .bytecodeActivationRootForTesting();
+
+            root.getRootNodes().ensureSourceInformation();
+
+            Object target = root.getCallTarget();
+            assertTrue(perf042OptimizedCallTarget(target.getClass()),
+                    "Requires the JVM optimizing Truffle runtime");
+
+            String targetName = root.toString();
+
+            assertTrue(
+                    targetName.startsWith("protos-root:")
+                            && !targetName.contains("unavailable"),
+                    "Root cannot be identified in Graal dumps: " + targetName);
+
+            // Exactly the same supplied value and ABI in both JVM lanes.
+            Object argument = ProtosNumericValueSupport.integer(1L);
+
+            // Move the selected Bytecode DSL root naturally from UNCACHED
+            // to CACHED before requesting compiler Tier 1.
+            int calls = 0;
+            while (calls < 128
+                    && root.getBytecodeNode().getTier() != BytecodeTier.CACHED) {
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                closure, module, null, argument);
+
+                root.getCallTarget().call(arguments);
+                calls++;
+            }
+
+            assertEquals(
+                    BytecodeTier.CACHED,
+                    root.getBytecodeNode().getTier(),
+                    "Closure root did not enter the cached interpreter");
+
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_SIDE=lowerer");
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_ROOT=" + targetName);
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_WARMUP_CALLS=" + calls);
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_BYTECODE_TIER="
+                            + root.getBytecodeNode().getTier());
+
+            // Same mechanism as ProtosI101CanonicalLocalGraphTest.
+            // compile(false) requests Tier 1; compile(true) requests Tier 2.
+            boolean compiled = (Boolean) perf042CompilerMethod(
+                    target, "compile", requestedTier == 2);
+
+            Object highestTier = perf042CompilerMethod(
+                    target, "highestCompiledTier");
+
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_COMPILE_RETURN=" + compiled);
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_COMPILED_TIER=" + highestTier);
+
+            assertTrue(compiled, "Compilation did not complete");
+            assertEquals(requestedTier, highestTier, "Unexpected compiler tier");
+
+            assertTrue(
+                    (Boolean) perf042CompilerMethod(target, "isValid"),
+                    "Compiled target is invalid");
+
+            // Print the BGV files attributed to this exact root.
+            // No interpretation or comparison of graph contents.
+            String dumpProperty = System.getProperty(
+                    "jdk.graal.DumpPath", "");
+
+            assertTrue(
+                    !dumpProperty.isBlank(),
+                    "Specify jdk.graal.DumpPath to acquire graph files");
+
+            Path dumpPath = Path.of(dumpProperty);
+            String selector = targetName.split("\\[", 2)[0];
+
+            List<Path> graphFiles;
+            try (var files = Files.walk(dumpPath)) {
+                graphFiles = files
+                        .filter(Files::isRegularFile)
+                        .filter(file -> file.toString().endsWith(".bgv"))
+                        .filter(file ->
+                                file.getFileName().toString()
+                                        .contains(selector))
+                        .sorted()
+                        .toList();
+            }
+
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_BGV_COUNT=" + graphFiles.size());
+
+            for (Path graph : graphFiles) {
+                System.out.println(
+                        "PERF042_TIER" + requestedTier + "_BGV="
+                                + graph.toAbsolutePath());
+            }
+
+            System.out.println(
+                    "PERF042_TIER" + requestedTier + "_CAPTURE="
+                            + (graphFiles.isEmpty()
+                                    ? "NO_ATTRIBUTED_BGV"
+                                    : "READY"));
+        });
+    }
+    @Test
+    void captureCompleteRunRootAtRequestedTier() throws Exception {
+        org.junit.jupiter.api.Assumptions.assumeTrue(
+                Boolean.getBoolean("protos.perf042.graphCapture"),
+                "PERF042 graph acquisition is opt-in");
+
+        assertEquals(
+                "false",
+                System.getProperty("polyglot.engine.BackgroundCompilation"),
+                "Require synchronous compilation");
+        assertEquals(
+                "true",
+                System.getProperty("protos.diagnostic.stableRootIdentity"),
+                "Require stable root identity");
+
+        String tierText = System.getProperty(
+                "protos.perf042.graphTier", "1");
+
+        assertTrue(
+                tierText.equals("1") || tierText.equals("2"),
+                "graphTier must be 1 or 2");
+
+        int requestedTier = Integer.parseInt(tierText);
+
+        // Exact bare program: no synthetic run Closure or wrapper.
+        String sourceText = """
+                identity: (value) => { value }
+                identity(1)
+                """;
+
+        withCore(module -> {
+            assertEquals(ProtosExecutionMode.NORMAL,
+                    ProtosLanguageContext.current().executionMode(),
+                    "PERF042 must run in NORMAL mode");
+            ProtosSemanticBytecodeRootNode root =
+                    parse(sourceText, "bare-identity-program");
+
+            assertEquals(2, root.getRootNodes().getNodes().size(),
+                    "Expected the top-level root and the identity Closure");
+            assertTrue(root == root.getRootNodes().getNode(0),
+                    "The selected root must be the lowerer's top-level root");
+
+            // Preserve existing PERF042_RUN_* keys for graph-capture scripts.
+            System.out.println("PERF042_RUN_BUILDER_MODE=PRODUCTION_TOP_LEVEL");
+            System.out.println("PERF042_RUN_SOURCE=BARE_TWO_STATEMENTS");
+
+
+            Object target = root.getCallTarget();
+
+            assertTrue(
+                    perf042OptimizedCallTarget(target.getClass()),
+                    "Requires optimizing Truffle runtime");
+
+            assertTrue(
+                    target == root.getCallTarget(),
+                    "Must compile the real top-level call target");
+
+            String targetName = root.toString();
+            System.out.println("PERF042_RUN_TIER=" + requestedTier);
+            System.out.println("PERF042_RUN_TARGET=" + targetName);
+
+            assertTrue(
+                    targetName.startsWith("protos-root:")
+                            && !targetName.contains("unavailable"),
+                    "Unattributable top-level root: " + targetName);
+
+            // Execute the real top-level program, not a Closure ABI call.
+            // Use a fresh module activation for each independent evaluation.
+            int calls = 0;
+
+            while (calls < 128
+                    && root.getBytecodeNode().getTier()
+                            != com.oracle.truffle.api.bytecode.BytecodeTier.CACHED) {
+
+                ProtosActivation invocation =
+                        module.prelude().orElseThrow().newModuleActivation();
+                Object result = root.getCallTarget().call(invocation);
+
+                assertEquals(
+                        "1",
+                        ProtosNumericValueSupport.integerDecimalText(result),
+                        "Bare identity program must return identity(1)");
+
+                calls++;
+            }
+
+            assertEquals(
+                    com.oracle.truffle.api.bytecode.BytecodeTier.CACHED,
+                    root.getBytecodeNode().getTier(),
+                    "Top-level program did not reach cached interpreter");
+
+            System.out.println(
+                    "PERF042_RUN_WARMUP_CALLS=" + calls);
+            System.out.println(
+                    "PERF042_RUN_BYTECODE_TIER="
+                            + root.getBytecodeNode().getTier());
+
+            // Compile the real top-level target at the requested tier.
+            boolean compiled = (Boolean) perf042CompilerMethod(
+                    target, "compile", requestedTier == 2);
+
+            Object actualTier = perf042CompilerMethod(
+                    target, "highestCompiledTier");
+
+            System.out.println(
+                    "PERF042_RUN_COMPILE_RETURN=" + compiled);
+            System.out.println(
+                    "PERF042_RUN_COMPILED_TIER=" + actualTier);
+
+            assertTrue(compiled, "Top-level compilation was not completed");
+            assertEquals(
+                    requestedTier,
+                    actualTier,
+                    "Unexpected compiler tier");
+
+            assertTrue(
+                    (Boolean) perf042CompilerMethod(target, "isValid"),
+                    "Compiled top-level target is invalid");
+
+            // Retain the native Graal graphs, independently for each tier.
+            String dumpText =
+                    System.getProperty("jdk.graal.DumpPath", "");
+
+            assertTrue(
+                    !dumpText.isBlank(),
+                    "Specify jdk.graal.DumpPath");
+
+            Path dumpPath = Path.of(dumpText);
+
+            assertTrue(
+                    java.nio.file.Files.isDirectory(dumpPath),
+                    "Graal dump directory does not exist");
+
+            String selector = targetName.split("\\[", 2)[0];
+
+            List<Path> graphs;
+
+            try (var files = java.nio.file.Files.walk(dumpPath)) {
+                graphs = files
+                        .filter(java.nio.file.Files::isRegularFile)
+                        .filter(file ->
+                                file.getFileName().toString()
+                                        .endsWith(".bgv"))
+                        .filter(file ->
+                                file.getFileName().toString()
+                                        .contains(selector))
+                        .sorted()
+                        .toList();
+            }
+
+            System.out.println(
+                    "PERF042_RUN_BGV_COUNT=" + graphs.size());
+
+            for (Path graph : graphs) {
+                System.out.println(
+                        "PERF042_RUN_BGV=" + graph.toAbsolutePath());
+            }
+
+            System.out.println(
+                    "PERF042_RUN_CAPTURE="
+                            + (graphs.isEmpty()
+                                    ? "NO_ATTRIBUTED_BGV"
+                                    : "READY"));
+
+            assertTrue(
+                    !graphs.isEmpty(),
+                    "No BGV attributed to the compiled top-level root");
+
+            // Inspect DEFAULT only after Graal compilation and BGV capture.
+            // Never request COMPLETE on this compiled root.
+            List<String> defaultInstructions = root.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(Instruction::getName).toList();
+
+            long defaultTrace = defaultInstructions.stream()
+                    .filter(name -> name.startsWith("trace.")).count();
+            long defaultTag = defaultInstructions.stream()
+                    .filter(name -> name.startsWith("tag.")).count();
+
+            System.out.println("PERF042_RUN_DEFAULT_INSTRUCTIONS="
+                    + defaultInstructions.size());
+            System.out.println("PERF042_RUN_DEFAULT_SEMANTIC="
+                    + (defaultInstructions.size() - defaultTrace - defaultTag));
+            System.out.println("PERF042_RUN_DEFAULT_TRACE=" + defaultTrace);
+            System.out.println("PERF042_RUN_DEFAULT_TAG=" + defaultTag);
+            System.out.println("PERF042_RUN_DEFAULT_BYTECODE="
+                    + defaultInstructions);
+
+            assertEquals(0L, defaultTrace,
+                    "DEFAULT should not enable instruction tracing");
+            assertEquals(0L, defaultTag,
+                    "DEFAULT should not enable tag instrumentation");
+
+        });
+
+        // Independent Context: COMPLETE must not alter the compiled root.
+        withCore(module -> {
+            assertEquals(ProtosExecutionMode.NORMAL,
+                    ProtosLanguageContext.current().executionMode(),
+                    "COMPLETE inspection must also use NORMAL");
+
+            ProtosSemanticBytecodeRootNode root =
+                    parse(sourceText, "bare-identity-inspection");
+
+            root.getRootNodes().ensureComplete();
+
+            System.out.println(
+                    "PERF042_RUN_INSPECTION_PROFILE=COMPLETE_ISOLATED");
+
+            // Bytecode DSL emitted for the real top-level program.
+            List<String> programBytecode = signature(root);
+
+            long semanticInstructions = root.getBytecodeNode()
+                    .getInstructionsAsList()
+                    .stream()
+                    .map(Instruction::getName)
+                    .filter(name -> !name.startsWith("trace."))
+                    .filter(name -> !name.startsWith("tag."))
+                    .count();
+
+            System.out.println("PERF042_RUN_COMPLETE_TARGET=" + root);
+            System.out.println(
+                    "PERF042_RUN_LOWERER_INSTRUCTIONS="
+                            + programBytecode.size());
+            System.out.println(
+                    "PERF042_RUN_LOWERER_SEMANTIC_INSTRUCTIONS="
+                            + semanticInstructions);
+            System.out.println(
+                    "PERF042_RUN_LOWERER_BYTECODE=" + programBytecode);
+
+            // The source has a top-level root and one nested identity.
+            // Report each physical root separately; never sum their
+            // instruction counts and call that the top-level IR.
+            var group = root.getRootNodes().getNodes();
+
+            System.out.println(
+                    "PERF042_RUN_GROUP_ROOTS=" + group.size());
+
+            for (int index = 0; index < group.size(); index++) {
+                ProtosSemanticBytecodeRootNode member =
+                        assertInstanceOf(
+                                ProtosSemanticBytecodeRootNode.class,
+                                group.get(index));
+
+                List<String> emitted = signature(member);
+                String prefix = "PERF042_RUN_GROUP_" + index;
+
+                System.out.println(
+                        prefix + "_TARGET=" + member);
+                System.out.println(
+                        prefix + "_IS_TOP_LEVEL=" + (member == root));
+                System.out.println(
+                        prefix + "_INSTRUCTIONS=" + emitted.size());
+                System.out.println(
+                        prefix + "_BYTECODE=" + emitted);
+            }
+
+        });
+    }
+    private static boolean perf042OptimizedCallTarget(Class<?> type) {
+        for (Class<?> current = type;
+                current != null;
+                current = current.getSuperclass()) {
+            if (current.getName().equals(
+                    "com.oracle.truffle.runtime.OptimizedCallTarget")) {
+                return true;
+            }
+        }
+        return false;
+    }
+    private static Object perf042CompilerMethod(
+            Object target, String name, Object... arguments) {
+        try {
+            for (Class<?> type = target.getClass();
+                    type != null;
+                    type = type.getSuperclass()) {
+                for (java.lang.reflect.Method method
+                        : type.getDeclaredMethods()) {
+                    if (method.getName().equals(name)
+                            && method.getParameterCount()
+                                    == arguments.length) {
+                        method.setAccessible(true);
+                        return method.invoke(target, arguments);
+                    }
+                }
+            }
+            throw new AssertionError(
+                    "Missing OptimizedCallTarget method " + name);
+        } catch (ReflectiveOperationException error) {
+            throw new AssertionError(
+                    "Cannot invoke OptimizedCallTarget." + name,
+                    error);
+        }
+    }
+
 }

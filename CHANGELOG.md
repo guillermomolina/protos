@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.376-SNAPSHOT
+
+- `PERF042` (#871): publish real identity Closure graph diagnostics.
+  - Preserve the handwritten bound-argument Builder oracle and the
+    original semantic checks for real Closure invocation and parameter
+    binding.
+  - Add opt-in Tier 1 and Tier 2 graph captures for real source roots,
+    including the bare `identity(1)` top-level program and the independent
+    identity Closure root.
+  - Report DEFAULT and COMPLETE Bytecode instruction shapes separately;
+    retain BGV capture and compilation attribution for further analysis.
+  - Exclude artificial no-fallback call experiments and production-only
+    diagnostic operations. No production implementation or semantics change.
+  - Maintainer validation: make test PASS; make check PASS.
+
 ## 0.3.375-SNAPSHOT
 
 - `I111` (#919): implement PLAT065-A slice A, selective explicit semantic
