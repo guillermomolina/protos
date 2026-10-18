@@ -212,6 +212,19 @@ public final class ProtosValueLookup {
     }
 
     /**
+     * I114: the guarded D013 selection of {@code call} starting at the root
+     * Object. The returned stability is registered on the root through the
+     * ordinary selector dependencies, so any create/assign/remove/recreate of
+     * the root's {@code call} invalidates it. Used only to establish or
+     * rebuild the canonical {@code Object.call} certificate.
+     *
+     * @return a protected selection, or null when absent
+     */
+    public static GuardedLookup lookupGuardedCanonicalRootCall() {
+        return lookupGuarded(ProtosObjectValue.rootObject(), "call", null);
+    }
+
+    /**
      * Establishes a shared inherited-member selection for an exact ordinary
      * receiver. The receiver itself must not own {@code name}; lookup and D013
      * dependency registration begin at its exact direct parent.

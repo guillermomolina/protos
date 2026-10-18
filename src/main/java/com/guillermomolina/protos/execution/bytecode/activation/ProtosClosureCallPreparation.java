@@ -462,7 +462,8 @@ final class ProtosClosureCallPreparation {
      * example a fresh closure rebuilt on every loop iteration, or every
      * recursive call) reuses the same Context-owned target without
      * re-deriving it, while the authoritative D013 {@code call} selection is
-     * still performed fresh on every hit (not cached), so a local override on
+     * still decided fresh on every hit (I114: a local-slot presence check plus
+     * the invalidable root certificate), so a local override on
      * one particular instance is observed exactly as before. This is the
      * institution the identity-keyed first tier
      * ({@link #createGuardedDirectClosureCall}) alone omitted, which left
@@ -475,24 +476,21 @@ final class ProtosClosureCallPreparation {
                 receiver, caller.preludeOrNullForRuntime());
     }
 
+    /**
+     * I114: a Closure's delegation parent is fixed to the root Object, so its
+     * D013 {@code call} selection is canonical {@code Object.call} exactly
+     * when the Closure owns no local {@code call} and the root's selection is
+     * certified canonical. Neither check allocates or traverses a chain; the
+     * prelude does not participate for the Closure family and is kept only for
+     * the existing consumers' signature.
+     */
     static ProtosClosureValue directClosureCallSelectionForPreludeOrNull(
             Object receiver, ProtosPrelude prelude) {
-        if (!(receiver instanceof ProtosClosureValue targetClosure)) {
-            return null;
-        }
-        java.util.Optional<ProtosSlotLookupResult> selected;
-        try {
-            selected = ProtosValueLookup.lookup(
-                    receiver, "call", prelude);
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            return null;
-        }
-        if (selected.isEmpty() || targetClosure.nativeBody().isPresent()) {
-            return null;
-        }
-        ProtosSlotLookupResult result = selected.orElseThrow();
-        if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                result.value(), result.home())) {
+        if (!(receiver instanceof ProtosClosureValue targetClosure)
+                || targetClosure.nativeBody().isPresent()
+                || targetClosure.hasLocalCallSlotForRuntime()
+                || !ProtosStandardObjectProtocol
+                        .isCanonicalRootCallSelectionForRuntime()) {
             return null;
         }
         return targetClosure;

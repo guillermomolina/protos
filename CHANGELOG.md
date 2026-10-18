@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.380-SNAPSHOT
+
+- `I114` (#928): make terminal Closure direct-call dispatch admit before the
+  specialization body.
+  - `InvokeClosureOneTail.definitionSource` admits the current instance through
+    a DSL guard (`admittedClosure != null`) evaluated before any cache
+    initializer; its body only builds the B5 arguments for `admittedClosure`
+    and enters the cached `DirectCallNode`. The internal `prepareAndEnter`
+    fallback and its `IndirectCallNode` remain only in `rejectedSource` and
+    `generic`, now marked `@InliningCutoff`; temporary rejections consume no
+    PIC entry.
+  - Closure `call` admission no longer performs a per-instance D013 lookup: a
+    Closure's parent is fixed to the root Object, so admission is local `call`
+    presence (`ProtosObjectValue.hasLocalCallSlotForRuntime`) plus a lazy,
+    invalidable root `Object.call` certificate in
+    `ProtosStandardObjectProtocol` built on
+    `ProtosValueLookup.lookupGuardedCanonicalRootCall`.
+  - `ProtosClosureValue.hasUnobservableInvocationReturnHomeForRuntime` proves
+    the unobservable ReturnHome without constructing a home or rematerializing
+    a plan; the shared Call0/Call1 admission helpers use it.
+  - Terminal `enterDirect` returns synchronous results directly and builds the
+    suspension transport only behind the cold
+    `ProtosTailCallContinuation.deferDirect`.
+  - PERF042 and I112 tests cover admission, ReturnHome proofs, PIC retention
+    across local overrides, receiver/capture identity and Errors. The PERF042
+    `run`/`identity(1)` workload is lowered to the inline Closure-literal path,
+    so the graph fixture uses the aliased terminal form; the
+    After-TruffleTier capture remains pending.
+  - Maintainer validation: make test PASS.
+
 ## 0.3.379-SNAPSHOT
 
 - `LIB022-B` (#921): implement D205 B2+ `std:inspect`.

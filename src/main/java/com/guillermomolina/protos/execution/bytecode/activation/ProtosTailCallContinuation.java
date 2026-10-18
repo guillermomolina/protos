@@ -132,6 +132,19 @@ final class ProtosTailCallContinuation implements TruffleObject {
         return ownerFinishesHere ? owner.finish(outcome) : outcome;
     }
 
+    /**
+     * I114: the transport of an admitted direct terminal entry whose outcome
+     * {@link #isSuspended was proved suspended} by the caller. A direct entry
+     * has no owner, so no prepared call is built; the caller location is
+     * materialized only here, inside the cold transport construction.
+     */
+    static Object deferDirect(
+            Object suspendedOutcome,
+            BytecodeNode callerBytecode,
+            int callerIndex) {
+        return deferred(null, suspendedOutcome, false, callerBytecode, callerIndex);
+    }
+
     @TruffleBoundary
     private static ProtosTailCallContinuation deferred(
             ProtosPreparedCalls.PreparedClosureCall owner,

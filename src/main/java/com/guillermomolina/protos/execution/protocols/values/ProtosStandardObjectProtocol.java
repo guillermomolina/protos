@@ -33,6 +33,8 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -73,6 +75,57 @@ public final class ProtosStandardObjectProtocol {
             ProtosObjectValue home) {
         return behavior == STANDARD_CALL
                 && home.isRootObject();
+    }
+
+    /**
+     * I114 backend-private proof that the D013 selection of {@code call}
+     * starting at the root Object is exactly {@link #STANDARD_CALL} homed at
+     * the root. It holds only the selection's stability; the semantic value
+     * stays in the root slot.
+     */
+    private record CanonicalRootCallCertificate(Assumption stability) {}
+
+    /**
+     * Last published certificate, or null. Lazily established on first use,
+     * never during bootstrap. An invalidated certificate is not a permanent
+     * veto: the next query rebuilds it once canonical {@code Object.call} is
+     * selected again.
+     */
+    private static volatile CanonicalRootCallCertificate canonicalRootCall;
+
+    /**
+     * I114: whether the root Object's inherited {@code call} selection is
+     * still canonical {@code Object.call}. A receiver's local {@code call}
+     * slot always takes precedence and must be checked by the caller. The
+     * valid-certificate check is one volatile read plus an assumption check;
+     * rebuilding runs out of partial evaluation.
+     */
+    public static boolean isCanonicalRootCallSelectionForRuntime() {
+        CanonicalRootCallCertificate certificate = canonicalRootCall;
+        if (certificate != null && certificate.stability().isValid()) {
+            return true;
+        }
+        return rebuildCanonicalRootCallCertificate();
+    }
+
+    @TruffleBoundary
+    private static synchronized boolean rebuildCanonicalRootCallCertificate() {
+        CanonicalRootCallCertificate current = canonicalRootCall;
+        if (current != null && current.stability().isValid()) {
+            return true;
+        }
+        ProtosValueLookup.GuardedLookup selection =
+                ProtosValueLookup.lookupGuardedCanonicalRootCall();
+        if (selection == null) {
+            return false;
+        }
+        if (selection.selected().value() != STANDARD_CALL
+                || selection.selected().home() != ProtosObjectValue.rootObject()) {
+            selection.stability().invalidate();
+            return false;
+        }
+        canonicalRootCall = new CanonicalRootCallCertificate(selection.stability());
+        return true;
     }
 
     static boolean isStandardCallImplementation(

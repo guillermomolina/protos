@@ -299,6 +299,19 @@ public class ProtosObjectValue implements TruffleObject {
         return authorityContains(lexicalBindingAuthority, name);
     }
 
+    /**
+     * I114: whether this object owns a local {@code call} slot, answered from
+     * the single binding authority without reading the value, traversing
+     * parents, or allocating. It therefore observes every authorized mutation
+     * of that authority (create, assign, remove, recreate, composition, copy,
+     * binding, and authority replacement).
+     */
+    public final boolean hasLocalCallSlotForRuntime() {
+        ProtosLexicalBindingAuthority authority = lexicalBindingAuthority;
+        return authority != EMPTY_LEXICAL_BINDINGS
+                && ProtosLexicalBindingAuthorityCalls.contains(authority, "call");
+    }
+
     public Optional<Object> readLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
         return authorityRead(lexicalBindingAuthority, name);

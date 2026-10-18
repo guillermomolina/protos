@@ -1029,6 +1029,151 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
+    // ---- I114. Direct admission is decided by guards; the body only enters ---------
+
+    @Test
+    void i114FreshInstancesAndLocalCallChangesAtOneWarmedTerminalSite() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosBytecodeRootNode root =
+                    lowerRoot(scope.language(), "target(1)", "i114-local-call.protos");
+            assertTerminal(root, "c.InvokeClosureOneTail");
+            root.getBytecodeNode().setUncachedThreshold(0);
+            ProtosActivation creator = activation(prelude, domain);
+            ProtosClosureValue template =
+                    sourceClosureWithHome(scope.language(), creator, "(value) => { value + 1 }",
+                            "i114-local-call-target.protos", ProtosReturnHome.unobservable());
+
+            for (int run = 0; run < 6; run++) {
+                ProtosClosureValue fresh = sibling(template, creator.receiver(), null);
+                assertNotSame(template, fresh);
+                assertSame(template.definition(), fresh.definition());
+                assertInteger(2, callWithTarget(root, prelude, domain, fresh));
+            }
+
+            ProtosClosureValue target = sibling(template, creator.receiver(), null);
+            ProtosObjectValue standardCall = assertInstanceOf(
+                    ProtosObjectValue.class,
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow());
+            for (int round = 0; round < 3; round++) {
+                // A local call introduced after warm-up is selected.
+                target.createLocalSlot(
+                        "call", nativeClosure((activation, supplied) -> new ProtosIntegerValue(77)));
+                assertInteger(77, callWithTarget(root, prelude, domain, target));
+                assertInteger(2, callWithTarget(root, prelude, domain,
+                        sibling(template, creator.receiver(), null)));
+                // A local alias of the standard call is still an override slot
+                // owned by the receiver, not the canonical root selection; it
+                // keeps the ordinary standard-call meaning.
+                target.assignLocalSlot("call", standardCall);
+                assertInteger(2, callWithTarget(root, prelude, domain, target));
+                // Removed: the canonical selection is restored and direct again.
+                target.removeLocalSlot("call");
+                assertInteger(2, callWithTarget(root, prelude, domain, target));
+                assertSame(target, InvokeClosureZero.admittedInstanceOrNull(target, creator));
+            }
+        }
+    }
+
+    @Test
+    void i114DirectEntryUsesTheCurrentReceiverAndLexicalCaptureByReference() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosBytecodeRootNode root =
+                    lowerRoot(scope.language(), "target(1)", "i114-receiver.protos");
+            root.getBytecodeNode().setUncachedThreshold(0);
+            ProtosActivation creator = activation(prelude, domain);
+            ProtosClosureValue self =
+                    sourceClosureWithHome(scope.language(), creator, "(value) => { this }",
+                            "i114-receiver-target.protos", ProtosReturnHome.unobservable());
+            ProtosObjectValue first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            for (int run = 0; run < 4; run++) {
+                assertSame(first, callWithTarget(root, prelude, domain, sibling(self, first, null)));
+                assertSame(second, callWithTarget(root, prelude, domain, sibling(self, second, null)));
+            }
+
+            // D179: the captured binding is shared by reference, so a later
+            // assignment in the creator is observed by the same instance.
+            creator.context().createLocalSlot("seed", new ProtosIntegerValue(10));
+            ProtosBytecodeRootNode captureRoot =
+                    lowerRoot(scope.language(), "target(1)", "i114-capture.protos");
+            captureRoot.getBytecodeNode().setUncachedThreshold(0);
+            ProtosClosureValue adder =
+                    sourceClosureWithHome(scope.language(), creator, "(value) => { seed + value }",
+                            "i114-capture-target.protos", ProtosReturnHome.unobservable());
+            for (int run = 0; run < 4; run++) {
+                creator.context().assignLocalSlot("seed", new ProtosIntegerValue(10 * run));
+                assertInteger(10 * run + 1, callWithTarget(captureRoot, prelude, domain, adder));
+            }
+        }
+    }
+
+    @Test
+    void i114MaterializedHomesAndErrorsKeepTheirOrdinaryOutcome() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosBytecodeRootNode root =
+                    lowerRoot(scope.language(), "target(1)", "i114-homes.protos");
+            root.getBytecodeNode().setUncachedThreshold(0);
+            ProtosActivation creator = activation(prelude, domain);
+            ProtosClosureValue template =
+                    sourceClosureWithHome(scope.language(), creator, "(value) => { value + 1 }",
+                            "i114-homes-target.protos", ProtosReturnHome.unobservable());
+            assertInteger(2, callWithTarget(root, prelude, domain, template));
+
+            // A captured materialized home: same definition and plan, but the
+            // instance is rejected before any target work and runs generically.
+            ProtosReturnHome materialized = new ProtosReturnHome();
+            ProtosClosureValue homed = sibling(template, creator.receiver(), materialized);
+            assertTrue(InvokeClosureZero.admittedInstanceOrNull(homed, creator) == null);
+            for (int run = 0; run < 3; run++) {
+                assertInteger(2, callWithTarget(root, prelude, domain, homed));
+                assertInteger(2, callWithTarget(root, prelude, domain, template));
+            }
+            assertTrue(materialized.isActive(), "a captured home is not completed by its callee");
+
+            // An abrupt Error leaves the direct entry with its own identity,
+            // and the site keeps working afterwards.
+            ProtosClosureValue failing =
+                    sourceClosureWithHome(scope.language(), creator,
+                            "(value) => { value.i114MissingMember() }",
+                            "i114-error-target.protos", ProtosReturnHome.unobservable());
+            for (int run = 0; run < 3; run++) {
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> callWithTarget(root, prelude, domain, failing));
+                assertInteger(2, callWithTarget(root, prelude, domain, template));
+            }
+        }
+    }
+
+    private static Object callWithTarget(
+            ProtosBytecodeRootNode root,
+            ProtosPrelude prelude,
+            ProtosActorExecutionDomain domain,
+            ProtosClosureValue target) {
+        ProtosActivation module = activation(prelude, domain);
+        module.context().createLocalSlot("target", target);
+        return root.getCallTarget().call(module);
+    }
+
+    /** A distinct instance of {@code template}'s definition and prepared plan. */
+    private static ProtosClosureValue sibling(
+            ProtosClosureValue template, Object receiver, ProtosReturnHome returnHome) {
+        return new ProtosClosureValue(
+                template.definition(),
+                template.capturedLexicalContexts(),
+                receiver,
+                template.methodHome().orElse(null),
+                returnHome,
+                template.prelude().orElseThrow(),
+                template.executionPlan().orElseThrow());
+    }
+
     private static ProtosClosureValue uncheckedSourceClosure(
             ProtosLanguage language, ProtosActivation creator, String characters, String name) {
         try {

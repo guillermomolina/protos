@@ -79,6 +79,7 @@ import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -9451,8 +9452,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosClosureCallPreparation.directClosureCallSelectionForPreludeOrNull(
                                     receiver, callerPrelude(caller));
             if (closure == null
-                    || closure.invocationReturnHomeForRuntime()
-                            != ProtosReturnHome.unobservable()) {
+                    || !closure.hasUnobservableInvocationReturnHomeForRuntime()) {
                 return null;
             }
             return closure;
@@ -9473,8 +9473,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * must independently prove the unobservable marker.
              */
             return guarded.closure()
-                            .invocationReturnHomeForRuntime()
-                    == ProtosReturnHome.unobservable();
+                    .hasUnobservableInvocationReturnHomeForRuntime();
         }
 
         static GuardedDirectClosureCallTarget
@@ -9764,10 +9763,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             supplied0));
         }
 
-        /** The terminal counterpart of {@link InvokeClosureOne#definitionSource}. */
+        /**
+         * The terminal counterpart of {@link InvokeClosureOne#definitionSource}.
+         * I114: admission of the current instance is a DSL guard evaluated
+         * before any cache initializer, so when this body runs the direct
+         * decision is already made. A rejected instance falls through to
+         * {@link #rejectedSource} without consuming a cache entry, and a
+         * restored instance re-enters an existing entry. The entered Closure is
+         * always {@code admittedClosure}, never one cached by an entry.
+         */
         @Specialization(
                 excludeForUncached = true,
                 guards = {
+                    "admittedClosure != null",
                     "closureDefinition != null",
                     "closureDefinition == cachedClosureDefinition",
                     "sourcePlan != null",
@@ -9786,6 +9794,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
+                @Bind("admittedInstanceOrNull(receiver, caller)")
+                        ProtosClosureValue admittedClosure,
                 @Bind("sourceDefinitionOrNull(receiver)")
                         CanonicalClosure closureDefinition,
                 @Bind("currentEnteredContext($node)")
@@ -9802,32 +9812,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosClosureExecutionPlan cachedSourcePlan,
                 @Cached("projectionRequired")
                         boolean cachedProjectionRequired,
-                @Cached("definitionTarget(receiver, caller, enteredContext)")
+                @Cached("admittedDefinitionTarget(admittedClosure, enteredContext)")
                         RootCallTarget cachedTarget,
                 @Cached("admittedTailTarget(cachedTarget)")
                         boolean cachedAdmitted,
                 @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node,
-                @Cached IndirectCallNode indirectCall) {
-            ProtosClosureValue closure =
-                    InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
-            if (closure == null) {
-                return prepareAndEnter(
-                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
-            }
+                        DirectCallNode node) {
+            ProtosActivation exactCaller =
+                    PrepareSendArguments.exactCaller(caller);
+
+            Object[] frameArguments =
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            admittedClosure,
+                            exactCaller,
+                            supplied0);
+
             return enterDirect(
                     bytecodeNode,
                     bytecodeIndex,
                     node,
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
-                            closure,
-                            PrepareSendArguments.exactCaller(caller),
-                            supplied0));
+                    frameArguments);
         }
 
         /** See {@link InvokeClosureZero#rejectedSource}. */
         @Specialization(
                 guards = "temporarilyRejectedInstance(receiver, caller)")
+        @InliningCutoff
         public static Object rejectedSource(
                 Object receiver,
                 Object supplied0,
@@ -9841,6 +9851,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization
+        @InliningCutoff
         public static Object generic(
                 Object receiver,
                 Object supplied0,
@@ -9876,7 +9887,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         /*
          * The admitted direct entry of every terminal arity: a synchronous
          * result is the projected guest value; a suspended one is retained
-         * by one terminal transport without an owning prepared call.
+         * by one terminal transport without an owning prepared call. I114:
+         * only the suspension test stays on the normal path; the transport is
+         * built behind the cold deferDirect boundary, never through the
+         * owner-aware completeOrDefer tree.
          */
         static Object enterDirect(
                 BytecodeNode bytecodeNode,
@@ -9889,8 +9903,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             } catch (ProtosBytecodeControlTransferException bridged) {
                 throw bridged.transfer();
             }
-            return ProtosTailCallContinuation.completeOrDefer(
-                    null, outcome, false, bytecodeNode, bytecodeIndex);
+            java.util.Objects.requireNonNull(outcome, "terminal Closure invocation returned null");
+            if (ProtosTailCallContinuation.isSuspended(outcome)) {
+                return ProtosTailCallContinuation.deferDirect(
+                        outcome, bytecodeNode, bytecodeIndex);
+            }
+            return ProtosNumericValueSupport.guestValue(outcome);
         }
 
         /**
@@ -9914,8 +9932,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return guarded != null
                     && guarded.target().getRootNode()
                             instanceof ProtosBytecodeRootNode
-                    && guarded.closure().invocationReturnHomeForRuntime()
-                            == ProtosReturnHome.unobservable();
+                    && guarded.closure()
+                            .hasUnobservableInvocationReturnHomeForRuntime();
         }
 
         /** {@link InvokeClosureZero#admittedTarget} without the non-suspension requirement. */
@@ -9945,11 +9963,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return InvokeClosureZero.temporarilyRejectedInstance(receiver, caller);
         }
 
-        static RootCallTarget definitionTarget(
-                Object receiver,
-                Object caller,
+        /** I114: the per-instance admission guard of {@link #definitionSource}. */
+        @NonIdempotent
+        static ProtosClosureValue admittedInstanceOrNull(
+                Object receiver, Object caller) {
+            return InvokeClosureZero.admittedInstanceOrNull(receiver, caller);
+        }
+
+        /**
+         * Runs only while populating a {@link #definitionSource} entry, after
+         * the instance guard admitted {@code admittedClosure} and the plan
+         * guard proved its plan prepared: admission is not repeated, {@code
+         * call} is not looked up again, and no plan is rematerialized.
+         */
+        static RootCallTarget admittedDefinitionTarget(
+                ProtosClosureValue admittedClosure,
                 ProtosLanguageContext enteredContext) {
-            return InvokeClosureZero.definitionTarget(receiver, caller, enteredContext);
+            if (enteredContext == null) {
+                return null;
+            }
+            return PrepareSendArguments
+                    .fastOrdinarySendTarget(admittedClosure, enteredContext);
         }
 
         static GuardedDirectClosureCallTarget

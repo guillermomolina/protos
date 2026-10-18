@@ -27,12 +27,14 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOne;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureZero;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
@@ -54,7 +56,10 @@ import org.junit.jupiter.api.Test;
  * fresh Closures: fresh instances of one definition share the cached
  * Context-owned target, the target-level proof holds once per definition, and
  * the instance-level proof (ordinary {@code call} selection and unobservable
- * ReturnHome) is re-established for the current instance. Guest workloads
+ * ReturnHome) is re-established for the current instance. I114: that proof is
+ * no longer a full per-instance lookup; it is the Closure's local {@code call}
+ * presence plus the invalidable root {@code Object.call} certificate, and the
+ * ReturnHome half never constructs a home or rematerializes a plan. Guest workloads
  * repeat every call site more often than either cache tier's limit and check
  * that ordinary semantics, including {@code call} overrides added, removed and
  * re-created after warm-up, are preserved.
@@ -651,6 +656,232 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                             "i108-prepared-entry-one.protos",
                             module));
         });
+    }
+
+    @Test
+    void i114AdmissionUsesLocalPresenceAndTheRootCertificate() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    """, "i114-admission-define.protos", module);
+            ProtosClosureValue first = closure("make()\n", module);
+            ProtosClosureValue second = closure("make()\n", module);
+            assertNotSame(first, second);
+            assertSame(first.definition(), second.definition());
+            assertFalse(first.hasLocalCallSlotForRuntime());
+            assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
+
+            // The admitted instance is always the current one.
+            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+            RootCallTarget target =
+                    InvokeClosureOneTail.admittedDefinitionTarget(first, context);
+            assertNotNull(target);
+            assertSame(target, InvokeClosureOneTail.admittedDefinitionTarget(second, context));
+            assertSame(
+                    first.executionPlan().orElseThrow().bytecodeActivationTargetForComposition(),
+                    target);
+            assertNull(InvokeClosureOneTail.admittedDefinitionTarget(first, null));
+
+            // A local call on a fresh Closure: removed and re-created.
+            module.context().createLocalSlot("local", first);
+            evaluate("local.call: (value) => { 100 + value }\n", "i114-local.protos", module);
+            assertTrue(first.hasLocalCallSlotForRuntime());
+            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            evaluate("local.removeSlot(\"call\")\n", "i114-local-remove.protos", module);
+            assertFalse(first.hasLocalCallSlotForRuntime());
+            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            evaluate("local.call: (value) => { 300 + value }\n", "i114-local-recreate.protos", module);
+            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            evaluate("local.removeSlot(\"call\")\n", "i114-local-remove-again.protos", module);
+
+            // A local non-Closure call, and a local alias of STANDARD_CALL:
+            // neither is the canonical root selection.
+            Object standardCall =
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+            second.createLocalSlot("call", ProtosNullValue.INSTANCE);
+            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            second.assignLocalSlot("call", standardCall);
+            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+            second.removeLocalSlot("call");
+            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+
+            // The bootstrapped root Object is frozen: its call selector cannot
+            // change, so the certificate stays valid without registered
+            // dependencies.
+            assertTrue(ProtosObjectValue.rootObject().isFrozen());
+            assertTrue(ProtosStandardObjectProtocol.isCanonicalRootCallSelectionForRuntime());
+            assertSame(first, InvokeClosureOneTail.admittedInstanceOrNull(first, module));
+            assertSame(second, InvokeClosureOneTail.admittedInstanceOrNull(second, module));
+        });
+    }
+
+    @Test
+    void i114ReturnHomeProofNeverConstructsAHomeOrAPlan() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    makeEscaper: () => { (value) => { ^value } }
+                    """, "i114-home-define.protos", module);
+            ProtosClosureValue prepared = closure("make()\n", module);
+            ProtosClosureExecutionPlan plan = prepared.executionPlan().orElseThrow();
+            assertEquivalentHomeProof(true, prepared);
+
+            ProtosClosureValue canonicalCaptured = new ProtosClosureValue(
+                    prepared.definition(), prepared.capturedLexicalContexts(),
+                    prepared.capturedReceiver(), null, ProtosReturnHome.unobservable(),
+                    module.prelude().orElseThrow(), plan);
+            assertEquivalentHomeProof(true, canonicalCaptured);
+
+            ProtosClosureValue materializedCaptured = new ProtosClosureValue(
+                    prepared.definition(), prepared.capturedLexicalContexts(),
+                    prepared.capturedReceiver(), null, new ProtosReturnHome(),
+                    module.prelude().orElseThrow(), plan);
+            assertEquivalentHomeProof(false, materializedCaptured);
+            assertNull(InvokeClosureZero.admittedInstanceOrNull(materializedCaptured, module));
+
+            // The ABI-only primitive marker is not the semantic marker.
+            ProtosClosureValue primitiveMarker = new ProtosClosureValue(
+                    prepared.definition(), prepared.capturedLexicalContexts(),
+                    prepared.capturedReceiver(), null,
+                    ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
+                    module.prelude().orElseThrow(), plan);
+            assertEquivalentHomeProof(false, primitiveMarker);
+
+            assertEquivalentHomeProof(false, closure("makeEscaper()\n", module));
+
+            ProtosClosureValue planless = new ProtosClosureValue(
+                    prepared.definition(), prepared.capturedLexicalContexts(),
+                    prepared.capturedReceiver());
+            assertFalse(planless.hasUnobservableInvocationReturnHomeForRuntime());
+            assertTrue(planless.executionPlan().isEmpty());
+
+            ProtosClosureValue nativeClosure = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow());
+            assertFalse(nativeClosure.hasUnobservableInvocationReturnHomeForRuntime());
+
+            // A deferred plan with a local call override: rejected without
+            // running the rematerializer.
+            int[] rematerializations = {0};
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosClosureValue deferred =
+                    prepared.parallelProjectionDeferred(
+                            List.of(prelude.newExecutionContext()),
+                            ProtosNullValue.INSTANCE,
+                            prelude,
+                            () -> {
+                                rematerializations[0]++;
+                                throw new IllegalStateException(
+                                        "I114: admission must not prepare a plan");
+                            });
+            assertFalse(deferred.hasUnobservableInvocationReturnHomeForRuntime());
+            deferred.createLocalSlot("call", prepared);
+            assertNull(InvokeClosureOneTail.admittedInstanceOrNull(deferred, module));
+            assertNull(InvokeClosureZero.admittedInstanceOrNull(deferred, module));
+            assertEquals(0, rematerializations[0]);
+            assertTrue(deferred.executionPlan().isEmpty());
+        });
+    }
+
+    @Test
+    void i114TerminalDefinitionTierSurvivesOverridesAndRestorations() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    callOne: (f, value) => { f(value) }
+                    late: make()
+                    """, "i114-pic-define.protos", module);
+            enterCachedTier("callOne", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(7, evaluate("callOne(make(), 7)\n", "i114-pic-warm.protos", module));
+            }
+            Object entry = singleEntry("callOne", module);
+            assertTerminalDirectEntryHasNoIndirectFallback(entry);
+            ProtosClosureExecutionPlan plan =
+                    (ProtosClosureExecutionPlan) field(entry, "cachedSourcePlan_");
+            assertSame(plan.bytecodeActivationTargetForComposition(), field(entry, "cachedTarget_"));
+            // No receiver instance is retained by the definition-tier entry.
+            for (Class<?> type = entry.getClass(); type != Object.class; type = type.getSuperclass()) {
+                for (Field declared : type.getDeclaredFields()) {
+                    assertFalse(
+                            ProtosClosureValue.class.isAssignableFrom(declared.getType()),
+                            declared.toString());
+                }
+            }
+
+            for (int round = 0; round < 3; round++) {
+                // Direct -> local override -> generic -> restoration -> direct.
+                evaluate("late.call: (value) => { 100 + value }\n", "i114-pic-override.protos", module);
+                assertInteger(107, evaluate("callOne(late, 7)\n", "i114-pic-overridden.protos", module));
+                evaluate("late.removeSlot(\"call\")\n", "i114-pic-restore.protos", module);
+                assertInteger(7, evaluate("callOne(late, 7)\n", "i114-pic-restored.protos", module));
+
+                assertInteger(7, evaluate("callOne(make(), 7)\n", "i114-pic-fresh.protos", module));
+                assertSame(entry, singleEntry("callOne", module),
+                        "temporary rejections must not consume or discard the entry");
+            }
+        });
+    }
+
+    /**
+     * I114 graph-convergence fixture: the PERF042 reference topology, where
+     * each {@code run} invocation materializes a fresh Closure of one
+     * definition and calls it terminally. A direct {@code identity(1)} on the
+     * locally bound literal is lowered to the inline Closure-literal path
+     * ({@code PrepareInlineClosureLiteralCall}), not to {@code
+     * InvokeClosureOneTail}; the alias {@code f} keeps the same Closure and
+     * definition while reaching the terminal operation under test. The structural assertions prove the installed terminal
+     * specialization; the physical After-TruffleTier criteria require a real
+     * Graal capture of {@code run}'s root by the human executor.
+     */
+    @Test
+    void i114NormalWorkloadInstallsTheTerminalDirectSpecialization() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    run: () => {
+                        identity: (value) => { value }
+                        f: identity
+                        f(1)
+                    }
+                    """, "i114-graph-define.protos", module);
+            enterCachedTier("run", module);
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(1, evaluate("run()\n", "i114-graph-run.protos", module));
+            }
+            List<String> names =
+                    functionRoot("run", module).getBytecodeNode().getInstructionsAsList().stream()
+                            .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                            .toList();
+            assertTrue(names.contains("c.InvokeClosureOneTail"), names::toString);
+            List<Object> entries =
+                    definitionTierEntries("run", InvokeClosureOneTail.class, module);
+            assertSingleAdmittedEntry(entries, 1);
+            assertTerminalDirectEntryHasNoIndirectFallback(entries.get(0));
+        });
+    }
+
+    private static void assertEquivalentHomeProof(boolean expected, ProtosClosureValue closure) {
+        assertEquals(expected, closure.hasUnobservableInvocationReturnHomeForRuntime());
+        assertEquals(
+                expected,
+                closure.invocationReturnHomeForRuntime() == ProtosReturnHome.unobservable());
+    }
+
+    /** I114: the direct specialization caches no indirect fallback call node. */
+    private static void assertTerminalDirectEntryHasNoIndirectFallback(Object entry) {
+        for (Class<?> type = entry.getClass(); type != Object.class; type = type.getSuperclass()) {
+            for (Field declared : type.getDeclaredFields()) {
+                assertFalse(
+                        com.oracle.truffle.api.nodes.IndirectCallNode.class
+                                .isAssignableFrom(declared.getType()),
+                        declared.toString());
+                assertFalse(declared.getName().startsWith("indirectCall"), declared.toString());
+            }
+        }
     }
 
     /**

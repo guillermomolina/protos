@@ -271,6 +271,23 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return new ProtosReturnHome();
     }
 
+    /**
+     * I114: exactly {@code invocationReturnHomeForRuntime() ==
+     * ProtosReturnHome.unobservable()}, without obtaining or constructing a
+     * home and without rematerializing the execution plan. Admission decisions
+     * use this so a rejected Closure never allocates a physical home.
+     */
+    public boolean hasUnobservableInvocationReturnHomeForRuntime() {
+        if (returnHome != null) {
+            return returnHome == ProtosReturnHome.unobservable();
+        }
+        if (nativeBody != null) {
+            return false;
+        }
+        ProtosClosureExecutionPlan plan = executionPlan;
+        return plan != null && plan.returnHomeProvenUnobservableForRuntime();
+    }
+
     public java.util.Optional<ProtosPrelude> prelude() {
         return java.util.Optional.ofNullable(prelude);
     }
