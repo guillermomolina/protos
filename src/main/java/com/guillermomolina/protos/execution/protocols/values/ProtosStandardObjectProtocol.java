@@ -96,36 +96,51 @@ public final class ProtosStandardObjectProtocol {
     /**
      * I114: whether the root Object's inherited {@code call} selection is
      * still canonical {@code Object.call}. A receiver's local {@code call}
-     * slot always takes precedence and must be checked by the caller. The
-     * valid-certificate check is one volatile read plus an assumption check;
-     * rebuilding runs out of partial evaluation.
+     * slot always takes precedence and must be checked by the caller.
      */
     public static boolean isCanonicalRootCallSelectionForRuntime() {
+        return canonicalRootCallAssumptionOrNullForRuntime() != null;
+    }
+
+    /**
+     * I115-A: the stability of the canonical root {@code Object.call}
+     * certificate, or null when the D013 selection of {@code call} starting at
+     * the root Object is not exactly {@link #STANDARD_CALL} homed at the root.
+     *
+     * <p>A returned assumption is valid at return time and is invalidated by
+     * any create/assign/remove/recreate of the root's {@code call}; it is
+     * never an already invalidated one. While it remains valid, repeated
+     * queries return the same instance without rebuilding the certificate,
+     * so a specialization may capture it once and declare it as a guarding
+     * assumption. The valid-certificate check is one volatile read plus an
+     * assumption check; rebuilding runs out of partial evaluation.
+     */
+    public static Assumption canonicalRootCallAssumptionOrNullForRuntime() {
         CanonicalRootCallCertificate certificate = canonicalRootCall;
         if (certificate != null && certificate.stability().isValid()) {
-            return true;
+            return certificate.stability();
         }
         return rebuildCanonicalRootCallCertificate();
     }
 
     @TruffleBoundary
-    private static synchronized boolean rebuildCanonicalRootCallCertificate() {
+    private static synchronized Assumption rebuildCanonicalRootCallCertificate() {
         CanonicalRootCallCertificate current = canonicalRootCall;
         if (current != null && current.stability().isValid()) {
-            return true;
+            return current.stability();
         }
         ProtosValueLookup.GuardedLookup selection =
                 ProtosValueLookup.lookupGuardedCanonicalRootCall();
         if (selection == null) {
-            return false;
+            return null;
         }
         if (selection.selected().value() != STANDARD_CALL
                 || selection.selected().home() != ProtosObjectValue.rootObject()) {
             selection.stability().invalidate();
-            return false;
+            return null;
         }
         canonicalRootCall = new CanonicalRootCallCertificate(selection.stability());
-        return true;
+        return selection.stability();
     }
 
     static boolean isStandardCallImplementation(

@@ -172,6 +172,23 @@ public final class ProtosClosureExecutionPlan {
                 bytecodePlan.rebuildForLanguage(definition, language, profile));
     }
 
+    /**
+     * I115-A: the semantic definition this already-built plan was lowered
+     * from. A stored fact; nothing is recomputed or reanalyzed.
+     */
+    CanonicalClosure definitionForRuntime() {
+        return bytecodePlan.definition();
+    }
+
+    /**
+     * I115-A: the immutable compilation profile this already-built plan's
+     * activation root was lowered under, so direct-call admission can check
+     * it against the executing Context's profile.
+     */
+    ProtosExecutionMode bytecodeProfileForRuntime() {
+        return bytecodePlan.profile();
+    }
+
     /** I101-A: the physical compilation profile the activation root was lowered under. */
     ProtosExecutionMode bytecodeProfileForTesting() {
         return bytecodePlan.profile();

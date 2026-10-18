@@ -39,6 +39,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import java.nio.file.Files;
 import org.junit.jupiter.api.Assumptions;
@@ -336,18 +337,41 @@ final class ProtosPerf042IdentityBuilderOracleTest {
         void run(ProtosActivation module) throws Exception;
     }
 
+    /*
+     * An opt-in graph capture (protos.perf042.graphCapture) runs on its own
+     * Engine with synchronous compilation. The experimental option is set on
+     * that builder rather than as a global polyglot.engine.* system property,
+     * which would also reach the Contexts the Core bootstrap opens and be
+     * rejected there. Ordinary runs keep the default Context unchanged.
+     */
     private static void withCore(CoreTest test) throws Exception {
-        try (Context context =
-                Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosPrelude prelude =
-                        new ProtosCoreBootstrap().bootstrap(CORE);
-                test.run(prelude.newModuleActivation());
-            } finally {
-                context.leave();
+        if (!Boolean.getBoolean("protos.perf042.graphCapture")) {
+            try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+                runCore(context, test);
             }
+            return;
+        }
+        try (Engine engine = Engine.newBuilder(ProtosLanguage.ID)
+                        .allowExperimentalOptions(true)
+                        .option("engine.BackgroundCompilation", "false")
+                        .option("engine.TraceCompilation", "true")
+                        .build();
+                Context context = Context.newBuilder(ProtosLanguage.ID)
+                        .engine(engine)
+                        .build()) {
+            runCore(context, test);
+        }
+    }
+
+    private static void runCore(Context context, CoreTest test) throws Exception {
+        context.initialize(ProtosLanguage.ID);
+        context.enter();
+        try {
+            ProtosPrelude prelude =
+                    new ProtosCoreBootstrap().bootstrap(CORE);
+            test.run(prelude.newModuleActivation());
+        } finally {
+            context.leave();
         }
     }
     @Test
@@ -375,11 +399,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
         Assumptions.assumeTrue(
                 Boolean.getBoolean("protos.perf042.graphCapture"),
                 "PERF042 Tier 1 acquisition is opt-in");
-
-        assertEquals(
-                "false",
-                System.getProperty("polyglot.engine.BackgroundCompilation"),
-                "Graph capture requires synchronous compilation");
+        // Synchronous compilation is configured by withCore on the capture Engine.
 
         assertEquals(
                 "true",
@@ -520,10 +540,33 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                 Boolean.getBoolean("protos.perf042.graphCapture"),
                 "PERF042 graph acquisition is opt-in");
 
-        assertEquals(
-                "false",
-                System.getProperty("polyglot.engine.BackgroundCompilation"),
-                "Require synchronous compilation");
+        /*
+         * Graal's graph dump must be configured at JVM startup.
+         * A Maven -D property visible through System.getProperty()
+         * does not prove that the JVM received the option at startup.
+         */
+        java.util.List<String> vmArguments =
+                java.lang.management.ManagementFactory
+                        .getRuntimeMXBean()
+                        .getInputArguments();
+
+        assertTrue(
+                vmArguments.stream().anyMatch(
+                        argument ->
+                                argument.startsWith("-Djdk.graal.Dump=Truffle:")),
+                "Missing JVM startup option jdk.graal.Dump=Truffle:1");
+
+        assertTrue(
+                vmArguments.stream().anyMatch(
+                        argument ->
+                                argument.startsWith("-Djdk.graal.DumpPath=")),
+                "Missing JVM startup option jdk.graal.DumpPath");
+
+        assertTrue(
+                vmArguments.contains("-Djdk.graal.PrintGraph=File"),
+                "Missing JVM startup option jdk.graal.PrintGraph=File");
+
+        // Synchronous compilation is configured by withCore on the capture Engine.
         assertEquals(
                 "true",
                 System.getProperty("protos.diagnostic.stableRootIdentity"),
@@ -662,6 +705,25 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                                         .contains(selector))
                         .sorted()
                         .toList();
+            }
+
+            if (graphs.isEmpty()) {
+                try (var files = java.nio.file.Files.walk(dumpPath)) {
+                    List<Path> allBgvs = files
+                            .filter(java.nio.file.Files::isRegularFile)
+                            .filter(file -> file.toString().endsWith(".bgv"))
+                            .sorted()
+                            .toList();
+
+                    System.out.println(
+                            "PERF042_RUN_BGV_TOTAL=" + allBgvs.size());
+
+                    allBgvs.stream()
+                            .limit(10)
+                            .forEach(file -> System.out.println(
+                                    "PERF042_RUN_UNMATCHED_BGV="
+                                            + file.toAbsolutePath()));
+                }
             }
 
             System.out.println(

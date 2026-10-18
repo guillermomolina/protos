@@ -305,11 +305,22 @@ public class ProtosObjectValue implements TruffleObject {
      * parents, or allocating. It therefore observes every authorized mutation
      * of that authority (create, assign, remove, recreate, composition, copy,
      * binding, and authority replacement).
+     *
+     * <p>I115-A: the ordinary map-backed authority answers from its own
+     * derived presence bit, maintained by the same put/remove operations
+     * that mutate its map, so no object-level copy can diverge from it. Any
+     * other authority (for example a frame-backed one) keeps the
+     * authoritative {@code contains} query.
      */
     public final boolean hasLocalCallSlotForRuntime() {
         ProtosLexicalBindingAuthority authority = lexicalBindingAuthority;
-        return authority != EMPTY_LEXICAL_BINDINGS
-                && ProtosLexicalBindingAuthorityCalls.contains(authority, "call");
+        if (authority == EMPTY_LEXICAL_BINDINGS) {
+            return false;
+        }
+        if (authority instanceof ProtosMapBackedLexicalBindingAuthority mapBacked) {
+            return mapBacked.hasLocalCallBindingForRuntime();
+        }
+        return ProtosLexicalBindingAuthorityCalls.contains(authority, "call");
     }
 
     public Optional<Object> readLocalSlot(String name) {

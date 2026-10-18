@@ -70,7 +70,7 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
                 + read(
                         "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosPreparedCalls.java")
                 + read(
-                        "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosStructuredControlCalls.java");
+                        "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/structured/ProtosStructuredControlCalls.java");
         String standardObject = read(
                 "src/main/java/com/guillermomolina/protos/execution/protocols/values/ProtosStandardObjectProtocol.java");
         String task = read(

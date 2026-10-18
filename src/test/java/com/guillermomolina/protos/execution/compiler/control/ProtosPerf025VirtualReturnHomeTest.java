@@ -233,6 +233,99 @@ final class ProtosPerf025VirtualReturnHomeTest {
         System.out.println("NATIVE_UNKNOWN_FALLBACK=PRESERVED");
     }
 
+    /**
+     * I115-A: the executable facts of a direct Closure call are independent of
+     * the instance's return home, while the per-instance home proof keeps its
+     * exact classification; establishing either never materializes a home or
+     * changes a captured one.
+     */
+    @Test
+    void i115aExecutableFactsIgnoreReturnHomeWhileTheInstanceProofClassifies() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue prepared = parsedClosure("(value) => { value }", module);
+            ProtosClosureExecutionPlan plan = planOf(prepared);
+            ProtosPrelude prelude = module.prelude().orElseThrow();
+            ProtosLanguageContext context = ProtosLanguageContext.current();
+            RootCallTarget target = plan.bytecodeActivationTargetForComposition();
+
+            assertI115aHome(true, target, prepared, context);
+            assertI115aHome(true, target, withHome(prepared, ProtosReturnHome.unobservable(), prelude), context);
+            ProtosReturnHome captured = new ProtosReturnHome();
+            ProtosClosureValue materialized = withHome(prepared, captured, prelude);
+            assertI115aHome(false, target, materialized, context);
+            assertSame(captured, materialized.returnHome().orElseThrow());
+            assertTrue(captured.isActive());
+            assertI115aHome(false, target, withHome(prepared,
+                    ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(), prelude), context);
+
+            ProtosClosureValue escaper = parsedClosure("(value) => { ^value }", module);
+            assertFalse(planOf(escaper).returnHomeProvenUnobservableForRuntime());
+            assertI115aHome(false, planOf(escaper).bytecodeActivationTargetForComposition(), escaper, context);
+
+            ProtosClosureValue nativeClosure =
+                    ProtosClosureValue.nativeClosure((activation, supplied) -> ProtosNullValue.INSTANCE);
+            assertFalse(nativeClosure.hasUnobservableInvocationReturnHomeForRuntime());
+            assertEquals(null, ProtosClosureCallPreparation
+                    .establishDirectClosureExecutableFactsOrNull(nativeClosure, context));
+            assertEquals(null, ProtosClosureCallPreparation
+                    .directClosureCallSelectionWithoutPreludeOrNull(nativeClosure));
+
+            ProtosClosureValue unprepared =
+                    new ProtosClosureValue(prepared.definition(), List.of(), prepared.capturedReceiver());
+            assertFalse(unprepared.hasUnobservableInvocationReturnHomeForRuntime());
+            assertEquals(null, ProtosClosureCallPreparation
+                    .establishDirectClosureExecutableFactsOrNull(unprepared, context));
+        });
+    }
+
+    /** I115-A: guest call sites keep the generic semantics around direct admission. */
+    @Test
+    void i115aGuestCallSitesRecoverGenericSemantics() throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    callOne: (f, value) => { f(value) }
+                    late: make()
+                    escape: () => {
+                        f: (value) => { ^value }
+                        callOne(f, 7)
+                        0
+                    }
+                    """, module);
+            for (int i = 0; i < 12; i++) {
+                assertInteger(7, evaluate("callOne(make(), 7)\n", module));
+                assertInteger(7, evaluate("escape()\n", module));
+            }
+            evaluate("late.call: (value) => { 100 + value }\n", module);
+            assertInteger(107, evaluate("callOne(late, 7)\n", module));
+            evaluate("late.removeSlot(\"call\")\n", module);
+            assertInteger(7, evaluate("callOne(late, 7)\n", module));
+            assertInteger(7, evaluate("escape()\n", module));
+        });
+    }
+
+    private static ProtosClosureValue withHome(
+            ProtosClosureValue prepared, ProtosReturnHome home, ProtosPrelude prelude) {
+        return new ProtosClosureValue(
+                prepared.definition(), prepared.capturedLexicalContexts(),
+                prepared.capturedReceiver(), null, home, prelude, planOf(prepared));
+    }
+
+    private static void assertI115aHome(
+            boolean unobservable,
+            RootCallTarget target,
+            ProtosClosureValue closure,
+            ProtosLanguageContext context) {
+        ProtosReturnHome before = closure.returnHome().orElse(null);
+        assertEquals(unobservable, closure.hasUnobservableInvocationReturnHomeForRuntime());
+        assertSame(closure, ProtosClosureCallPreparation
+                .directClosureCallSelectionWithoutPreludeOrNull(closure));
+        ProtosClosureCallPreparation.DirectClosureExecutableFacts facts =
+                ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(closure, context);
+        assertSame(target, facts.target());
+        assertSame(before, closure.returnHome().orElse(null));
+    }
+
     private interface CoreBody {
         void run(ProtosActivation module) throws Exception;
     }

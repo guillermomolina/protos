@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
-import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.RootCallTarget;
 import com.guillermomolina.protos.execution.ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget;
@@ -721,11 +720,12 @@ final class ProtosInlineCallbackFrameBindings {
             if (isActivationMaterialized()) {
                 return activation().preludeOrNullForRuntime();
             }
-            ProtosClosureValue closure =
-                    ProtosFrameArguments.compactClosure(compactTargetArguments);
-            return closure.prelude()
-                    .orElse(ProtosFrameArguments.compactCaller(compactTargetArguments)
-                            .preludeOrNullForRuntime());
+            /*
+             * I115-B: the Closure's own prelude, else the caller's, decided
+             * without resolving a deferred caller (the former Optional.orElse
+             * form evaluated the caller eagerly).
+             */
+            return ProtosFrameArguments.preludeOrNull(compactTargetArguments);
         }
 
         /**

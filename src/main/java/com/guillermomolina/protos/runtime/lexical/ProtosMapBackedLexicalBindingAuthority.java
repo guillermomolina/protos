@@ -97,6 +97,16 @@ final class ProtosMapBackedLexicalBindingAuthority
      */
     private LinkedHashMap<String, Object> bindings;
 
+    /*
+     * I115-A derived structural index: true exactly while {@link #bindings}
+     * contains the key "call". The map stays the single semantic store; this
+     * bit only lets direct Closure admission test local {@code call}
+     * presence without a map probe. Not compilation-final: guest mutations
+     * change it, and it is maintained only by putBinding/removeBinding.
+     * Value replacement and SlotCell promotion do not change presence.
+     */
+    private boolean localCallPresent;
+
     private static Object unwrap(Object stored) {
         return stored instanceof SlotCell cell ? cell.value : stored;
     }
@@ -119,6 +129,11 @@ final class ProtosMapBackedLexicalBindingAuthority
         SlotCell cell = new SlotCell(stored);
         bindings.put(name, cell);
         return cell;
+    }
+
+    /** I115-A: whether a local {@code call} binding currently exists. */
+    boolean hasLocalCallBindingForRuntime() {
+        return localCallPresent;
     }
 
     @Override
@@ -179,6 +194,9 @@ final class ProtosMapBackedLexicalBindingAuthority
             return;
         }
         bindings.put(name, value);
+        if ("call".equals(name)) {
+            localCallPresent = true;
+        }
     }
 
     @Override
@@ -188,6 +206,9 @@ final class ProtosMapBackedLexicalBindingAuthority
             return null;
         }
         Object previous = bindings.remove(name);
+        if ("call".equals(name)) {
+            localCallPresent = false;
+        }
         if (bindings.isEmpty()) {
             bindings = null;
         }

@@ -305,6 +305,16 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(executionPlan);
     }
 
+    /**
+     * I115-A: exactly the currently prepared execution plan, or {@code null}
+     * when none is prepared yet. Never runs the rematerializer, synchronizes,
+     * or projects to another Context, so reading it cannot make a deferred
+     * plan eager.
+     */
+    public ProtosClosureExecutionPlan preparedExecutionPlanOrNullForRuntime() {
+        return executionPlan;
+    }
+
     public java.util.Optional<java.util.function.Supplier<ProtosClosureExecutionPlan>>
             executionPlanRematerializerForParallelRuntime() {
         return java.util.Optional.ofNullable(executionPlanRematerializer);

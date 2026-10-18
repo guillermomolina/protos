@@ -20,6 +20,7 @@ package com.guillermomolina.protos.runtime;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -187,6 +188,148 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
                 lexicalAuthority(first),
                 lexicalAuthority(second),
                 "empty bound Closures keep the shared storage-free authority");
+    }
+
+    /*
+     * I115-A: local call presence is a derived bit of the map-backed
+     * authority and must always agree with the authoritative hasLocalSlot.
+     */
+    @Test
+    void localCallPresenceTracksCreateAssignRemoveRecreate() {
+        ProtosClosureValue closure = nativeClosure();
+        assertCallPresence(closure, false);
+
+        closure.createLocalSlot("alpha", 1L);
+        closure.createLocalSlot("beta", 2L);
+        closure.createLocalSlot("gamma", 3L);
+        assertCallPresence(closure, false);
+
+        closure.createLocalSlot("call", 10L);
+        assertCallPresence(closure, true);
+
+        closure.assignLocalSlot("call", 11L);
+        assertCallPresence(closure, true);
+        closure.assignLocalSlot("call", nativeClosure());
+        assertCallPresence(closure, true);
+        closure.assignLocalSlot("call", 12L);
+        assertCallPresence(closure, true);
+
+        closure.removeLocalSlot("call");
+        assertCallPresence(closure, false);
+        assertTrue(closure.hasLocalSlot("alpha"));
+        assertTrue(closure.hasLocalSlot("beta"));
+        assertTrue(closure.hasLocalSlot("gamma"));
+
+        closure.createLocalSlot("call", 13L);
+        assertCallPresence(closure, true);
+
+        closure.removeLocalSlot("alpha");
+        closure.removeLocalSlot("gamma");
+        assertCallPresence(closure, true);
+        closure.removeLocalSlot("call");
+        closure.removeLocalSlot("beta");
+        assertCallPresence(closure, false);
+    }
+
+    @Test
+    void localCallPresenceSurvivesSlotCellPromotionAndReplacement() {
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        object.createLocalSlot("call", 1L);
+        assertNotNull(object.slotCellForGuardedRead("call"));
+        assertCallPresence(object, true);
+        object.assignLocalSlot("call", 2L);
+        assertCallPresence(object, true);
+        object.removeLocalSlot("call");
+        assertCallPresence(object, false);
+        object.createLocalSlot("call", 3L);
+        assertCallPresence(object, true);
+    }
+
+    @Test
+    void localCallPresenceFollowsCompositionAndReservedNames() {
+        ProtosObjectValue withCall =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        withCall.createLocalSlot("alpha", 1L);
+        withCall.createLocalSlot("call", 2L);
+        ProtosObjectValue withoutCall =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        withoutCall.createLocalSlot("beta", 3L);
+
+        ProtosClosureValue composedWithout = nativeClosure();
+        composedWithout.composeLocalSlotsFrom(withoutCall, List.of());
+        assertCallPresence(composedWithout, false);
+
+        ProtosClosureValue composedWith = nativeClosure();
+        composedWith.composeLocalSlotsFrom(withCall, List.of());
+        assertCallPresence(composedWith, true);
+
+        ProtosClosureValue composedReserved = nativeClosure();
+        composedReserved.composeLocalSlotsFrom(withCall, List.of("call"));
+        assertCallPresence(composedReserved, false);
+        assertTrue(composedReserved.hasLocalSlot("alpha"));
+
+        ProtosObjectValue without = withCall.withoutLocalSlot("call");
+        assertCallPresence(without, false);
+        assertCallPresence(withCall, true);
+    }
+
+    @Test
+    void bindMethodCopiesLocalCallPresenceWithoutSharingStorage()
+            throws Exception {
+        ProtosClosureValue stored = nativeClosure();
+        stored.createLocalSlot("call", 1L);
+        stored.createLocalSlot("alpha", 2L);
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosClosureValue bound = stored.bindMethod(receiver, receiver);
+        assertNotSame(stored, bound);
+        assertNotSame(lexicalAuthority(stored), lexicalAuthority(bound));
+        assertCallPresence(bound, true);
+
+        bound.removeLocalSlot("call");
+        assertCallPresence(bound, false);
+        assertCallPresence(stored, true);
+
+        ProtosClosureValue withoutCall = nativeClosure();
+        withoutCall.createLocalSlot("alpha", 3L);
+        assertCallPresence(withoutCall.bindMethod(receiver, receiver), false);
+    }
+
+    @Test
+    void authorityTransferCarriesLocalCallPresenceOfTransferredBindings() {
+        ProtosMapBackedLexicalBindingAuthority source =
+                new ProtosMapBackedLexicalBindingAuthority();
+        source.putBinding("alpha", 1L);
+        source.putBinding("call", 2L);
+        ProtosMapBackedLexicalBindingAuthority target =
+                new ProtosMapBackedLexicalBindingAuthority();
+        assertFalse(target.hasLocalCallBindingForRuntime());
+
+        ProtosLexicalBindingAuthorityCalls.transferAll(source, target);
+        assertTrue(target.hasLocalCallBindingForRuntime());
+        assertTrue(target.containsBinding("call"));
+
+        ProtosMapBackedLexicalBindingAuthority withoutCall =
+                new ProtosMapBackedLexicalBindingAuthority();
+        withoutCall.putBinding("alpha", 1L);
+        ProtosMapBackedLexicalBindingAuthority otherTarget =
+                new ProtosMapBackedLexicalBindingAuthority();
+        ProtosLexicalBindingAuthorityCalls.transferAll(withoutCall, otherTarget);
+        assertFalse(otherTarget.hasLocalCallBindingForRuntime());
+        assertFalse(otherTarget.containsBinding("call"));
+    }
+
+    private static ProtosClosureValue nativeClosure() {
+        return ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> ProtosNullValue.INSTANCE);
+    }
+
+    private static void assertCallPresence(
+            ProtosObjectValue object, boolean expected) {
+        assertEquals(expected, object.hasLocalCallSlotForRuntime());
+        assertEquals(expected, object.hasLocalSlot("call"));
     }
 
     private static Object lexicalAuthority(ProtosObjectValue object)

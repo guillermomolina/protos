@@ -53,11 +53,11 @@ final class ProtosPerf025MapPhysicalIndexTest {
                             + "ProtosStandardIdentityMapProtocol.java");
     private static final Path MAP_QUERY_CALLS =
             Path.of(
-                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
+                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/structured/"
                             + "ProtosStructuredMapQueryCalls.java");
     private static final Path MAP_UPDATE_CALLS =
             Path.of(
-                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
+                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/structured/"
                             + "ProtosStructuredMapUpdateCalls.java");
 
     @Test

@@ -7,6 +7,39 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.382-SNAPSHOT
+
+- `I115` (#931): converge the terminal direct Call1 (`InvokeClosureOneTail`)
+  on a GraalPy-shaped call path, without changing observable semantics.
+  - I115-A: Prelude-free D013 `call` admission of an evaluated receiver; a
+    reusable canonical root `Object.call` assumption; a derived local-`call`
+    presence bit in the map-backed binding authority; and
+    `DirectClosureExecutableFacts` established only at cache installation,
+    projecting a template of another language instance or NORMAL/DEBUG
+    profile through the entered Context, never rematerializing an unprepared
+    plan.
+  - I115-B: both direct tiers (receiver identity and definition) install from
+    those facts and declare the root `Object.call` assumption; each hit
+    re-proves only the instance facts (no local `call`, unobservable
+    ReturnHome, prepared template, projection requirement) after both
+    operands, so a `call` created during argument evaluation still reaches the
+    D013 fallback.
+  - The B5 caller slot of an admitted terminal Call1 may hold the caller's own
+    compact frame arguments instead of a materialized activation (PROVEN and
+    UNKNOWN entries alike); the five-slot layout and offsets are unchanged.
+    Readers that need the exact caller resolve it once, publishing that
+    invocation's single activation; prelude and Task are answered without
+    resolving. Chains are walked iteratively with cycle detection and full
+    header validation.
+  - An entry whose target carries the EFFECTIVE_ROOT non-suspension proof
+    compiles no suspension transport; other entries keep the I114 terminal
+    transport unchanged.
+  - The PERF042 graph-capture oracle sets synchronous compilation on its own
+    Engine instead of a global experimental `polyglot.engine.*` property.
+  - The six `ProtosStructured*` sources move to
+    `bytecode/activation/structured/` (same Java package), restoring the
+    I103 limit of 30 tracked files per directory exceeded since I113.
+
 ## 0.3.381-SNAPSHOT
 
 - `I113` (#927): consolidate the unified Bytecode DSL operation surface of

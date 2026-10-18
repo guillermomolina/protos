@@ -74,7 +74,7 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     private static String structuredCallKinds() throws IOException {
         return read(
                 "src/main/java/com/guillermomolina/protos/"
-                + "execution/bytecode/activation/"
+                + "execution/bytecode/activation/structured/"
                 + "ProtosStructuredCallKind.java");
     }
 

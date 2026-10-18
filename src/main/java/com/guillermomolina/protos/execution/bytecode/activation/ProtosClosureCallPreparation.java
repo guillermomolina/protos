@@ -480,20 +480,149 @@ final class ProtosClosureCallPreparation {
      * I114: a Closure's delegation parent is fixed to the root Object, so its
      * D013 {@code call} selection is canonical {@code Object.call} exactly
      * when the Closure owns no local {@code call} and the root's selection is
-     * certified canonical. Neither check allocates or traverses a chain; the
-     * prelude does not participate for the Closure family and is kept only for
-     * the existing consumers' signature.
+     * certified canonical. The prelude does not participate for the Closure
+     * family and is kept only for the existing consumers' signature.
      */
     static ProtosClosureValue directClosureCallSelectionForPreludeOrNull(
             Object receiver, ProtosPrelude prelude) {
+        return directClosureCallSelectionWithoutPreludeOrNull(receiver);
+    }
+
+    /**
+     * I115-A: the D013 {@code call} selection decision for an already
+     * evaluated receiver, without an activation or a Prelude. Returns the
+     * receiver itself exactly when it is a source-backed Closure owning no
+     * local {@code call} while the root's {@code call} selection is certified
+     * canonical {@code Object.call}; otherwise null, and the caller must use
+     * the generic path. Neither check allocates, traverses a chain, performs
+     * an ordinary lookup, or prepares the invocation.
+     */
+    static ProtosClosureValue directClosureCallSelectionWithoutPreludeOrNull(
+            Object receiver) {
         if (!(receiver instanceof ProtosClosureValue targetClosure)
                 || targetClosure.nativeBody().isPresent()
                 || targetClosure.hasLocalCallSlotForRuntime()
-                || !ProtosStandardObjectProtocol
-                        .isCanonicalRootCallSelectionForRuntime()) {
+                || ProtosStandardObjectProtocol
+                        .canonicalRootCallAssumptionOrNullForRuntime() == null) {
             return null;
         }
         return targetClosure;
+    }
+
+    /**
+     * I115-A per-instance admission for a specialization that already holds
+     * the canonical root {@code Object.call} assumption (from
+     * {@link ProtosStandardObjectProtocol#canonicalRootCallAssumptionOrNullForRuntime})
+     * as one of its guarding assumptions. Valid ONLY under that caller-held
+     * assumption: it does not re-check or re-establish the root selection,
+     * resolve a Prelude, or repeat any lookup. Returns the current receiver
+     * when it is a source-backed Closure owning no local {@code call},
+     * otherwise null. This decides only the {@code call} selection of this
+     * instance; whether a cached executable target applies to it is a
+     * separate check against {@link DirectClosureExecutableFacts}.
+     */
+    static ProtosClosureValue directClosureInstanceUnderGuardedRootCallOrNull(
+            Object receiver) {
+        if (!(receiver instanceof ProtosClosureValue targetClosure)
+                || targetClosure.nativeBody().isPresent()
+                || targetClosure.hasLocalCallSlotForRuntime()) {
+            return null;
+        }
+        return targetClosure;
+    }
+
+    /**
+     * I115-A executable facts for one direct Closure-call cache entry,
+     * established only while installing that entry, never on a call. Keyed by
+     * semantic definition, the Closure's template plan and the entered
+     * Context; it deliberately retains no {@code ProtosClosureValue}, captures,
+     * receiver, method home or return home, so every hit builds the
+     * invocation from the current Closure instance. {@code target} belongs to
+     * {@code enteredContext} (the template's own target, or the Context-owned
+     * projection of the template), and {@code rootCallStability} is the
+     * canonical root {@code Object.call} assumption the entry must declare.
+     */
+    record DirectClosureExecutableFacts(
+            CanonicalClosure definition,
+            ProtosClosureExecutionPlan template,
+            ProtosClosureExecutionPlan effectivePlan,
+            ProtosLanguageContext enteredContext,
+            RootCallTarget target,
+            boolean projectionRequired,
+            Assumption rootCallStability) {}
+
+    /**
+     * I115-A: establishes {@link DirectClosureExecutableFacts} for
+     * {@code closure} in {@code enteredContext}, or returns null when the
+     * Closure is not admissible for a direct call there. Specialization-time
+     * only. A Closure whose plan is not yet prepared is rejected without
+     * running its rematerializer; a projection is obtained only through the
+     * entered Context's existing executable-plan cache, and a target owned by
+     * another Context is never admitted.
+     */
+    static DirectClosureExecutableFacts establishDirectClosureExecutableFactsOrNull(
+            ProtosClosureValue closure,
+            ProtosLanguageContext enteredContext) {
+        if (closure == null
+                || enteredContext == null
+                || closure.nativeBody().isPresent()
+                || closure.definition() == null
+                || closure.hasLocalCallSlotForRuntime()) {
+            return null;
+        }
+        Assumption rootCallStability =
+                ProtosStandardObjectProtocol.canonicalRootCallAssumptionOrNullForRuntime();
+        if (rootCallStability == null) {
+            return null;
+        }
+        CanonicalClosure definition = closure.definition();
+        ProtosClosureExecutionPlan template =
+                closure.preparedExecutionPlanOrNullForRuntime();
+        if (template == null || template.definitionForRuntime() != definition) {
+            return null;
+        }
+
+        /*
+         * A template lowered under another language instance or under another
+         * NORMAL/DEBUG profile (for example a Context of the same Engine with
+         * a different mode) is projected through the entered Context's cache,
+         * never admitted with its own target.
+         */
+        ProtosLanguage enteredLanguage = enteredContext.languageForRuntime();
+        boolean projectionRequired =
+                closure.requiresContextLocalExecutionProjectionForRuntime()
+                        || template.language().orElseThrow() != enteredLanguage
+                        || template.bytecodeProfileForRuntime() != enteredContext.executionMode();
+        ProtosClosureExecutionPlan effectivePlan;
+        if (projectionRequired) {
+            if (template.source().isEmpty()) {
+                return null;
+            }
+            effectivePlan = enteredContext.bytecodeExecutionPlanForDefinition(
+                    definition, template);
+        } else {
+            effectivePlan = template;
+        }
+        if (effectivePlan == null
+                || effectivePlan.definitionForRuntime() != definition
+                || effectivePlan.language().orElseThrow() != enteredLanguage
+                || effectivePlan.bytecodeProfileForRuntime()
+                        != enteredContext.executionMode()) {
+            return null;
+        }
+
+        RootCallTarget target = effectivePlan.bytecodeActivationTargetForComposition();
+        if (target == null || !rootCallStability.isValid()) {
+            return null;
+        }
+        return new DirectClosureExecutableFacts(
+                definition,
+                template,
+                effectivePlan,
+                enteredContext,
+                target,
+                projectionRequired,
+                rootCallStability);
     }
 
     static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
