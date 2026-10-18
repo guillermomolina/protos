@@ -149,7 +149,7 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 

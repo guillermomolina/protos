@@ -67,7 +67,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
     void zeroArgumentDirectCallRunsWithoutRichActivation() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "h1-zero.protos", module);
-            ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(one, module);
+            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(one, module);
 
             assertEquals("1", integerValue(enter(prepared)));
             assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
@@ -82,7 +82,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-identity.protos", module);
             ProtosIntegerValue supplied = integer(42);
-            ProtosBytecodeRootNode.PreparedClosureCall prepared =
+            ProtosPreparedCalls.PreparedClosureCall prepared =
                     fastDirect(identity, module, supplied);
 
             assertSame(supplied, enter(prepared), "the exact supplied value");
@@ -98,12 +98,12 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue defaulted =
                     parsedClosure("(value: 7) => { value }", "h1-default.protos", module);
 
-            ProtosBytecodeRootNode.PreparedClosureCall omitted = fastDirect(defaulted, module);
+            ProtosPreparedCalls.PreparedClosureCall omitted = fastDirect(defaulted, module);
             assertEquals("7", integerValue(enter(omitted)));
             assertSame(defaulted, omitted.targetArguments()[0]);
 
             ProtosIntegerValue supplied = integer(3);
-            ProtosBytecodeRootNode.PreparedClosureCall given =
+            ProtosPreparedCalls.PreparedClosureCall given =
                     fastDirect(defaulted, module, supplied);
             assertSame(supplied, enter(given));
             assertSame(defaulted, given.targetArguments()[0]);
@@ -116,9 +116,9 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-repeated.protos", module);
-            List<ProtosBytecodeRootNode.PreparedClosureCall> calls = new java.util.ArrayList<>();
+            List<ProtosPreparedCalls.PreparedClosureCall> calls = new java.util.ArrayList<>();
             for (int index = 0; index < 4; index++) {
-                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosPreparedCalls.PreparedClosureCall prepared =
                         fastDirect(identity, module, integer(index));
                 assertEquals(Long.toString(index), integerValue(enter(prepared)));
                 assertSame(identity, prepared.targetArguments()[0]);
@@ -127,7 +127,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             assertNotSame(calls.get(0).targetArguments(), calls.get(1).targetArguments());
             // PERF025: `(value) => { value }` is proven return-home unobservable,
             // so no invocation materializes a home of its own.
-            for (ProtosBytecodeRootNode.PreparedClosureCall call : calls) {
+            for (ProtosPreparedCalls.PreparedClosureCall call : calls) {
                 assertTrue(!ProtosFrameArguments.compactReturnHome(call.targetArguments())
                         .isMaterialized());
             }
@@ -141,7 +141,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-on-demand.protos", module);
             ProtosIntegerValue supplied = integer(5);
-            ProtosBytecodeRootNode.PreparedClosureCall prepared =
+            ProtosPreparedCalls.PreparedClosureCall prepared =
                     fastDirect(identity, module, supplied);
             Object[] arguments = prepared.targetArguments();
 
@@ -159,7 +159,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
             // activation; the source-backed 'negated' send does.
             ProtosClosureValue sending =
                     parsedClosure("(value) => { 1 - value.negated() }", "h1-send.protos", module);
-            ProtosBytecodeRootNode.PreparedClosureCall send =
+            ProtosPreparedCalls.PreparedClosureCall send =
                     fastDirect(sending, module, integer(1));
             assertEquals("2", integerValue(enter(send)));
             ProtosActivation callee =
@@ -227,12 +227,12 @@ final class ProtosPerf025H1LazyRootActivationTest {
 
             // D203/I105: excess is ignored and an absent argument binds null, compactly.
             ProtosIntegerValue first = integer(1);
-            ProtosBytecodeRootNode.PreparedClosureCall tooMany =
+            ProtosPreparedCalls.PreparedClosureCall tooMany =
                     fastDirect(identity, module, first, integer(2));
             assertSame(first, enter(tooMany));
             assertSame(identity, tooMany.targetArguments()[0]);
 
-            ProtosBytecodeRootNode.PreparedClosureCall tooFew = fastDirect(identity, module);
+            ProtosPreparedCalls.PreparedClosureCall tooFew = fastDirect(identity, module);
             assertSame(ProtosNullValue.INSTANCE, enter(tooFew));
             assertSame(identity, tooFew.targetArguments()[0]);
         });
@@ -264,16 +264,15 @@ final class ProtosPerf025H1LazyRootActivationTest {
         withCore(module -> {
             ProtosClosureValue identity =
                     parsedClosure("(value) => { value }", "h1-task.protos", module);
-            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> preparedRef =
+            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef =
                     new AtomicReference<>();
             ProtosTask task =
                     module.executionDomain()
                             .createTask(
                                     null,
                                     current -> {
-                                        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                                                ProtosBytecodeRootNode
-                                                        .prepareTaskOwnedDirectClosureIfBytecode(
+                                        ProtosPreparedCalls.PreparedClosureCall prepared =
+                                                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
                                                                 identity,
                                                                 List.of(integer(9)),
                                                                 module,
@@ -347,8 +346,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             .fastOrdinarySendTarget(
                                     zero,
                                     ProtosLanguageContext.currentIfEnteredForRuntime());
-            ProtosBytecodeRootNode.PreparedClosureCall zeroCall =
-                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+            ProtosPreparedCalls.PreparedClosureCall zeroCall =
+                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
                             zeroTarget, zeroActivation);
             Object[] zeroArguments = zeroCall.targetArguments();
 
@@ -382,8 +381,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.actorModuleState(),
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
-            ProtosBytecodeRootNode.PreparedClosureCall oneCall =
-                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+            ProtosPreparedCalls.PreparedClosureCall oneCall =
+                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
                             identityTarget, oneActivation);
             Object[] oneArguments = oneCall.targetArguments();
 
@@ -407,8 +406,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             module.actorModuleState(),
                             module.currentModuleKey().orElse(null),
                             module.executionDomain());
-            ProtosBytecodeRootNode.PreparedClosureCall excessCall =
-                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+            ProtosPreparedCalls.PreparedClosureCall excessCall =
+                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
                             identityTarget, excessActivation);
             Object[] excessArguments = excessCall.targetArguments();
 
@@ -452,8 +451,8 @@ final class ProtosPerf025H1LazyRootActivationTest {
                             .fastOrdinarySendTarget(
                                     method,
                                     ProtosLanguageContext.currentIfEnteredForRuntime());
-            ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(
+            ProtosPreparedCalls.PreparedClosureCall prepared =
+                    ProtosPreparedCalls.PreparedClosureCall.ordinary(
                             target, activation);
             Object[] arguments = prepared.targetArguments();
 
@@ -501,11 +500,11 @@ final class ProtosPerf025H1LazyRootActivationTest {
                 "only the caller's provenance activation exists");
     }
 
-    private static ProtosBytecodeRootNode.PreparedClosureCall fastDirect(
+    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         RootCallTarget target =
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
@@ -522,10 +521,10 @@ final class ProtosPerf025H1LazyRootActivationTest {
                 target);
     }
 
-    private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return prepared.finish(entered);
     }

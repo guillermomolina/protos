@@ -54,7 +54,7 @@ import org.junit.jupiter.api.Test;
  * I101-C focal evidence: independent Builder references for NORMAL roots whose specialization is a
  * dynamic guard with a semantically necessary physical fallback.
  *
- * <p>Every expected root is a handwritten {@link ProtosSemanticBytecodeRootNodeGen.Builder}
+ * <p>Every expected root is a handwritten {@link ProtosBytecodeRootNodeGen.Builder}
  * program. The references never consult the parser, the canonicalizer, the lowerer or any lowered
  * root; the shared invocation helpers below restate the physical prepared-invocation protocol
  * operation by operation. Only the actual roots come from the production {@code ParsingRequest}
@@ -78,17 +78,17 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     void i101CGuardedNotMatchesIndependentBuilderIncludingMiss() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(NOT_WITNESS, "not-normal");
+                ProtosBytecodeRootNode module = compile(NOT_WITNESS, "not-normal");
                 BytecodeRootNodes<?> group = module.getRootNodes();
-                List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
                 // Module and Closure roots only; D203 lowers no arity-rejection root.
                 assertEquals(2, roots.size());
                 assertSame(module, roots.get(0));
-                ProtosSemanticBytecodeRootNode actualRoot = roots.get(1);
+                ProtosBytecodeRootNode actualRoot = roots.get(1);
                 List<RootCallTarget> targets =
                         roots.stream().map(RootNode::getCallTarget).toList();
 
-                ProtosSemanticBytecodeRootNode reference = handwrittenGuardedNotRoot();
+                ProtosBytecodeRootNode reference = handwrittenGuardedNotRoot();
                 // The reference is a single-root group: it has no module root.
                 assertEquals(1, groupRoots(reference).size());
 
@@ -130,11 +130,11 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
         try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
             debug.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(NOT_WITNESS, "not-debug");
+                ProtosBytecodeRootNode module = compile(NOT_WITNESS, "not-debug");
                 BytecodeRootNodes<?> group = module.getRootNodes();
-                List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
                 assertEquals(2, roots.size());
-                ProtosSemanticBytecodeRootNode root = roots.get(1);
+                ProtosBytecodeRootNode root = roots.get(1);
                 RootCallTarget target = root.getCallTarget();
 
                 List<String> signature = completeSignature(root);
@@ -168,18 +168,18 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     void i101CGuardedInlineClosureMatchesIndependentBuilder() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(INLINE_WITNESS, "inline-normal");
+                ProtosBytecodeRootNode module = compile(INLINE_WITNESS, "inline-normal");
                 BytecodeRootNodes<?> group = module.getRootNodes();
-                List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
                 // Module, outer Closure and the inner Closure, which keeps its physical root.
                 assertEquals(3, roots.size());
                 assertSame(module, roots.get(0));
                 List<RootCallTarget> targets =
                         roots.stream().map(RootNode::getCallTarget).toList();
 
-                BytecodeRootNodes<ProtosSemanticBytecodeRootNode> reference =
+                BytecodeRootNodes<ProtosBytecodeRootNode> reference =
                         handwrittenGuardedInlineRoots();
-                List<ProtosSemanticBytecodeRootNode> referenceRoots = groupRoots(reference.getNode(0));
+                List<ProtosBytecodeRootNode> referenceRoots = groupRoots(reference.getNode(0));
                 // Outer and inner Closure roots; the reference has no module root.
                 assertEquals(2, referenceRoots.size());
 
@@ -232,8 +232,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
         try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
             debug.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(INLINE_WITNESS, "inline-debug");
-                List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                ProtosBytecodeRootNode module = compile(INLINE_WITNESS, "inline-debug");
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
                 assertEquals(3, roots.size(), "DEBUG keeps the inner physical root");
                 List<String> outer = completeSignature(roots.get(1));
                 assertNoOperation(outer, "PrepareInlineClosureLiteralCall");
@@ -275,7 +275,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      * and the complete ordinary-send MISS fallback; zero-argument sends return through the I091
      * carrier boundary.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenGuardedNotRoot() {
+    private static ProtosBytecodeRootNode handwrittenGuardedNotRoot() {
         String characters = NOT_WITNESS;
         Source source = Source.newBuilder(
                         ProtosLanguage.ID, characters, "i101-c-not-reference.protos")
@@ -285,8 +285,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         int sendStart = characters.indexOf("receiver.not()");
         int sendLength = "receiver.not()".length();
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -397,7 +397,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      * admission, the inline body under its own RootTag and the B-prime physical fallback, and the
      * inner Closure root, which keeps its physical identity in the group.
      */
-    private static BytecodeRootNodes<ProtosSemanticBytecodeRootNode>
+    private static BytecodeRootNodes<ProtosBytecodeRootNode>
             handwrittenGuardedInlineRoots() {
         String characters = INLINE_WITNESS;
         Source source = Source.newBuilder(
@@ -425,7 +425,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 new SourceSpan(innerStart, innerEnd));
         ProtosClosureExecutionPlanCell literalPlan = ProtosClosureExecutionPlanCell.pendingGroup();
 
-        return ProtosSemanticBytecodeRootNodeGen.create(
+        return ProtosBytecodeRootNodeGen.create(
                 LANGUAGE_REF.get(null),
                 BytecodeConfig.DEFAULT,
                 builder -> {
@@ -565,24 +565,24 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
                 for (Witness witness : witnesses) {
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             compile(witness.source(), witness.name());
 
                     BytecodeRootNodes<?> group =
                             module.getRootNodes();
 
-                    List<ProtosSemanticBytecodeRootNode> roots =
+                    List<ProtosBytecodeRootNode> roots =
                             groupRoots(module);
 
                     assertEquals(2, roots.size(), witness.name());
 
-                    ProtosSemanticBytecodeRootNode actualRoot =
+                    ProtosBytecodeRootNode actualRoot =
                             roots.get(1);
 
                     RootCallTarget actualTarget =
                             actualRoot.getCallTarget();
 
-                    ProtosSemanticBytecodeRootNode reference =
+                    ProtosBytecodeRootNode reference =
                             handwrittenI108DynamicCallRoot(
                                     witness.source(), witness.multi());
 
@@ -648,7 +648,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      * null is chosen solely to make the receiver construction
      * independent of any Closure materialization or lexical lookup.
      */
-    private static ProtosSemanticBytecodeRootNode
+    private static ProtosBytecodeRootNode
             handwrittenI108DynamicCallRoot(
                     String characters, boolean multi) {
 
@@ -671,8 +671,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
             throw new AssertionError("Invalid independent witness");
         }
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -750,21 +750,21 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 String source =
                         "(identity) => { identity(1) }";
 
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         compile(source, "i108-identity-call1");
 
-                List<ProtosSemanticBytecodeRootNode> roots =
+                List<ProtosBytecodeRootNode> roots =
                         groupRoots(module);
 
                 assertEquals(2, roots.size());
 
-                ProtosSemanticBytecodeRootNode actualRoot =
+                ProtosBytecodeRootNode actualRoot =
                         roots.get(1);
 
                 RootCallTarget actualTarget =
                         actualRoot.getCallTarget();
 
-                ProtosSemanticBytecodeRootNode reference =
+                ProtosBytecodeRootNode reference =
                         handwrittenI108IdentityCallOneRoot();
 
                 assertEquals(
@@ -847,7 +847,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      * which owns generic fallback and suspension transport; the
      * return carrier boundary is the root's return epilogue.
      */
-    private static ProtosSemanticBytecodeRootNode
+    private static ProtosBytecodeRootNode
             handwrittenI108IdentityCallOneRoot() {
 
         String characters =
@@ -866,8 +866,8 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         int callStart = characters.indexOf("identity(1)");
         int callLength = "identity(1)".length();
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -958,20 +958,20 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     // ---- Shared Builder restatement of the physical prepared-invocation protocol. ----
 
     private static void beginReferenceStatement(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder, int start, int length) {
+            ProtosBytecodeRootNodeGen.Builder builder, int start, int length) {
         builder.beginSourceSection(start, length);
         builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
         builder.beginBlock();
     }
 
-    private static void endReferenceStatement(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private static void endReferenceStatement(ProtosBytecodeRootNodeGen.Builder builder) {
         builder.endBlock();
         builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
         builder.endSourceSection();
     }
 
     private static void emitReferenceStoreConstant(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder, BytecodeLocal target, Object value) {
+            ProtosBytecodeRootNodeGen.Builder builder, BytecodeLocal target, Object value) {
         builder.beginStoreLocal(target);
         builder.emitLoadConstant(value);
         builder.endStoreLocal();
@@ -979,7 +979,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
     /** A child continuation is yielded through this root until the child completes. */
     private static void emitReferenceContinuationComposition(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal prepared,
             BytecodeLocal child,
             BytecodeLocal resumed) {
@@ -1009,7 +1009,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     private static void emitReferenceOrdinaryPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -1047,7 +1047,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     private static void emitReferenceNestedStructuredInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -1064,7 +1064,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     private static void emitReferenceDispatchedPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -1090,7 +1090,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
      * TryFinally, so it also runs on Error, cancellation and control-transfer exits.
      */
     private static void emitReferenceInlineLiteralFallback(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal inlineChild,
             BytecodeLocal child,
@@ -1131,7 +1131,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
     /** The standard Boolean protocol of a prepared send without inline literal candidates. */
     private static void emitReferenceLocalBooleanPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -1189,7 +1189,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     private static void emitReferencePreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal prepared,
             BytecodeLocal child,
@@ -1211,19 +1211,19 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     // ---- Actual roots, signatures and guest calls. ----
 
     /** The production ParsingRequest path of the entered Context. */
-    private static ProtosSemanticBytecodeRootNode compile(String characters, String name) {
+    private static ProtosBytecodeRootNode compile(String characters, String name) {
         Source source = Source.newBuilder(
                         ProtosLanguage.ID, characters, "i101-c-reference-" + name + ".protos")
                 .build();
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
-        return assertInstanceOf(ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+        return assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> groupRoots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> groupRoots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
@@ -1243,13 +1243,13 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 () -> operation + " in " + signature);
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return signature(root);
     }
 
     /** Every instruction with every argument; nothing is filtered. */
-    private static List<String> signature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
             StringBuilder entry = new StringBuilder(instruction.getName());

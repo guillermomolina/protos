@@ -169,7 +169,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         callCharacters,
                                         "perf006-b2c3b1-composed-call.protos")
                                 .build();
-                ProtosSemanticBytecodeRootNode callerRoot =
+                ProtosBytecodeRootNode callerRoot =
                         new CanonicalToBytecodeLowerer(language, callSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(callCharacters));
 
@@ -221,7 +221,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         missingCharacters,
                                         "perf006-b2c3b1-missing.protos")
                                 .build();
-                ProtosSemanticBytecodeRootNode missingRoot =
+                ProtosBytecodeRootNode missingRoot =
                         new CanonicalToBytecodeLowerer(language, missingSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(missingCharacters));
                 // D203/I105: the absent second argument binds canonical null.

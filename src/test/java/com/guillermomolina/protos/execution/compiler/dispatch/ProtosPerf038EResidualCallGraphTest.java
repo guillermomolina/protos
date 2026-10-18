@@ -137,11 +137,11 @@ final class ProtosPerf038EResidualCallGraphTest {
         withCore(module -> {
             ProtosClosureValue parsed = parsedClosure("(v) => { v }", "perf038e-home.protos", module);
             Object[] arguments = methodCall(parsed, module);
-            ProtosBytecodeRootNode.OrdinarySourceCall unobservable =
+            ProtosPreparedCalls.OrdinarySourceCall unobservable =
                     carrier(arguments, ProtosReturnHome.unobservable(), true);
-            ProtosBytecodeRootNode.OrdinarySourceCall owned =
+            ProtosPreparedCalls.OrdinarySourceCall owned =
                     carrier(arguments, new ProtosReturnHome(), true);
-            ProtosBytecodeRootNode.OrdinarySourceCall captured =
+            ProtosPreparedCalls.OrdinarySourceCall captured =
                     carrier(arguments, new ProtosReturnHome(), false);
             assertFalse(unobservable.hasReturnHomeLifecycle());
             assertTrue(owned.hasReturnHomeLifecycle());
@@ -303,11 +303,11 @@ final class ProtosPerf038EResidualCallGraphTest {
      * The carrier is only inspected, never entered: with a zero supplied count
      * no entry target is selected, so no body target is needed.
      */
-    private static ProtosBytecodeRootNode.OrdinarySourceCall carrier(
+    private static ProtosPreparedCalls.OrdinarySourceCall carrier(
             Object[] arguments, ProtosReturnHome home, boolean owns) {
         return assertInstanceOf(
-                ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                ProtosBytecodeRootNode.PreparedClosureCall.ordinaryCompactPrepared(
+                ProtosPreparedCalls.OrdinarySourceCall.class,
+                ProtosPreparedCalls.PreparedClosureCall.ordinaryCompactPrepared(
                         null, arguments, home, owns, 0));
     }
 

@@ -440,7 +440,7 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
         return task;
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

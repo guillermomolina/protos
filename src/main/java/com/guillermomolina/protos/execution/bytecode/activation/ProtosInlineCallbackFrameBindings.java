@@ -17,9 +17,13 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.oracle.truffle.api.RootCallTarget;
+import com.guillermomolina.protos.execution.ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget;
+import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -47,7 +51,7 @@ import java.util.Map;
  * activation, together with the callback's block-local range and layout.
  * While no activation has been materialized, the block locals are the only
  * possible store of the callback's bindings, exactly as for an unobserved root
- * execution context ({@code ProtosBytecodeRootNode#createCurrentFrameBinding}):
+ * execution context ({@code ProtosFrameLocalBindings#createCurrentFrameBinding}):
  * no Context exists that could be FROZEN or could have removed a binding, so
  * the operations act on the locals directly.
  *
@@ -133,10 +137,10 @@ final class ProtosInlineCallbackFrameBindings {
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         List<Object> observed =
-                ProtosBytecodeRootNode.multipleCreatePrefixOrNull(required, source);
+                ProtosFrameLocalBindings.multipleCreatePrefixOrNull(required, source);
         if (observed == null) {
             observed =
-                    ProtosBytecodeRootNode.observeMultipleCreatePrefix(
+                    ProtosFrameLocalBindings.observeMultipleCreatePrefix(
                             durableActivation(
                                     child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                             required,
@@ -262,7 +266,7 @@ final class ProtosInlineCallbackFrameBindings {
             VirtualFrame frame) {
         if (admitsCapturedAccess(child, lexicalDepth)) {
             Object value =
-                    ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
+                    ProtosCapturedLexicalAccess.readCapturedFrameBindingOrNull(
                             child.unmaterializedCapturedLexicalEnvironment(),
                             name,
                             lexicalDepth,
@@ -298,7 +302,7 @@ final class ProtosInlineCallbackFrameBindings {
             VirtualFrame frame) {
         if (admitsCapturedAccess(child, lexicalDepth)) {
             MaterializedFrame ownerFrame =
-                    ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
+                    ProtosCapturedLexicalAccess.capturedMaterializedOwnerFrameOrNull(
                             accessor,
                             child.unmaterializedCapturedLexicalEnvironment(),
                             name,
@@ -329,7 +333,7 @@ final class ProtosInlineCallbackFrameBindings {
             String name,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        return ProtosBytecodeRootNode.lookupCapturedFallback(
+        return ProtosCapturedLexicalAccess.lookupCapturedFallback(
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name);
@@ -350,7 +354,7 @@ final class ProtosInlineCallbackFrameBindings {
             VirtualFrame frame) {
         if (admitsCapturedAccess(child, lexicalDepth)) {
             CapturedLexicalWriteTarget selected =
-                    ProtosBytecodeRootNode.capturedFrameWriteTargetOrNull(
+                    ProtosCapturedLexicalAccess.capturedFrameWriteTargetOrNull(
                             child.unmaterializedCapturedLexicalEnvironment(),
                             name,
                             lexicalDepth,
@@ -379,7 +383,7 @@ final class ProtosInlineCallbackFrameBindings {
             VirtualFrame frame) {
         if (admitsCapturedAccess(child, lexicalDepth)) {
             CapturedLexicalWriteTarget selected =
-                    ProtosBytecodeRootNode.capturedMaterializedWriteTargetOrNull(
+                    ProtosCapturedLexicalAccess.capturedMaterializedWriteTargetOrNull(
                             accessor,
                             child.unmaterializedCapturedLexicalEnvironment(),
                             name,
@@ -415,7 +419,7 @@ final class ProtosInlineCallbackFrameBindings {
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         try {
-            ProtosBytecodeRootNode.assignCapturedFrameDestination(
+            ProtosCapturedLexicalAccess.assignCapturedFrameDestination(
                     destination, name, frameOrdinal, value);
         } catch (IllegalStateException invalidMutation) {
             throw new ProtosSignalException(
@@ -439,7 +443,7 @@ final class ProtosInlineCallbackFrameBindings {
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         try {
-            ProtosBytecodeRootNode.assignCapturedMaterializedDestination(
+            ProtosCapturedLexicalAccess.assignCapturedMaterializedDestination(
                     accessor, destination, name, value, bytecodeNode);
         } catch (IllegalStateException invalidMutation) {
             throw new ProtosSignalException(
@@ -582,5 +586,183 @@ final class ProtosInlineCallbackFrameBindings {
         child.markFrameBindingsTransferred();
         activation.installFrameLexicalBindingAuthorityForRuntime(durable);
         return activation;
+    }
+
+    /**
+     * PERF025 / PLAT044 B′ pay-as-you-grow callback invocation.
+     *
+     * <p>For the exact canonical ordinary {@code Closure.call} selection of a
+     * source-backed Closure, this carrier keeps only the effective Context-owned
+     * target and the compact direct-Closure frame arguments. No
+     * {@link PreparedClosureCall} and no rich {@link ProtosActivation} are
+     * constructed on the admitted inline path. If PLAT044 admission later
+     * fails, {@link #fallbackCall()} materializes the ordinary compact physical
+     * source call without repeating lookup. A non-canonical selection keeps the
+     * already prepared ordinary fallback, preserving override/alias semantics.
+     */
+    static final class PreparedInlineLiteralCall {
+        private final RootCallTarget bodyTarget;
+        private final Object[] compactTargetArguments;
+        private final PreparedClosureCall fallback;
+        private final boolean ownsReturnHome;
+
+        /*
+         * One-way: set when this invocation's frame-native bindings moved to
+         * the durable authority installed on its activation, before that
+         * activation reached any consumer (ProtosInlineCallbackFrameBindings).
+         */
+        private boolean frameBindingsTransferred;
+
+        private PreparedInlineLiteralCall(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments,
+                PreparedClosureCall fallback,
+                boolean ownsReturnHome) {
+            this.bodyTarget = bodyTarget;
+            this.compactTargetArguments = compactTargetArguments;
+            this.fallback = fallback;
+            this.ownsReturnHome = ownsReturnHome;
+        }
+
+        static PreparedInlineLiteralCall direct(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments) {
+            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
+            java.util.Objects.requireNonNull(
+                    compactTargetArguments, "compactTargetArguments");
+            return new PreparedInlineLiteralCall(
+                    bodyTarget,
+                    compactTargetArguments,
+                    null,
+                    ProtosFrameArguments.compactOwnsReturnHome(
+                            compactTargetArguments));
+        }
+
+        static PreparedInlineLiteralCall fallback(PreparedClosureCall fallback) {
+            return new PreparedInlineLiteralCall(
+                    null,
+                    null,
+                    java.util.Objects.requireNonNull(fallback, "fallback"),
+                    false);
+        }
+
+        boolean admits(ProtosClosureExecutionPlanCell literalPlan) {
+            return fallback == null
+                    && !ownsReturnHome
+                    && bodyTarget
+                            == literalPlan.plan().bytecodeActivationTargetForComposition();
+        }
+
+        boolean requiresStructuredDispatch() {
+            return fallback != null && fallback.requiresStructuredDispatch();
+        }
+
+        PreparedClosureCall fallbackCall() {
+            if (fallback != null) {
+                return fallback;
+            }
+            return PreparedClosureCall.ordinaryCompact(
+                    bodyTarget,
+                    compactTargetArguments);
+        }
+
+        /**
+         * The invocation's one fresh semantic activation, materialized from the
+         * compact arguments by the first semantic or tooling observer and
+         * published back into them, so every later observer of this same
+         * invocation (guest operations, debugger, resumption after a yield)
+         * receives exactly the same instance. A frame-native callback region
+         * never hands this out directly: it goes through {@code
+         * ProtosInlineCallbackFrameBindings}, which first makes the
+         * invocation's bindings durable.
+         */
+        ProtosActivation activation() {
+            if (compactTargetArguments == null) {
+                throw new IllegalStateException(
+                        "non-direct inline callback invocation has no compact activation");
+            }
+            return ProtosFrameArguments.activation(compactTargetArguments);
+        }
+
+        /*
+         * PERF025 lazy inline callback activation. The admitted inline region
+         * runs only a direct carrier, so compactTargetArguments is non-null on
+         * every path below.
+         */
+
+        /** True once {@link #activation()} has been materialized. */
+        boolean isActivationMaterialized() {
+            return !ProtosFrameArguments.isUnmaterializedCompactCall(
+                    compactTargetArguments);
+        }
+
+        /** Supplied positional argument count, without materializing. */
+        int suppliedArgumentCount() {
+            return ProtosFrameArguments.compactSuppliedArgumentCount(
+                    compactTargetArguments);
+        }
+
+        /** Supplied positional argument {@code index}, without materializing. */
+        Object suppliedArgument(int index) {
+            return ProtosFrameArguments.compactSuppliedArgument(
+                    compactTargetArguments, index);
+        }
+
+        /*
+         * PERF025 slice 3 projections. Each answers exactly what the
+         * invocation's activation would, without materializing it.
+         */
+
+        /**
+         * The invocation's prelude: the materialized activation's, otherwise
+         * the one {@link #activation()} would install.
+         */
+        ProtosPrelude prelude() {
+            if (isActivationMaterialized()) {
+                return activation().preludeOrNullForRuntime();
+            }
+            ProtosClosureValue closure =
+                    ProtosFrameArguments.compactClosure(compactTargetArguments);
+            return closure.prelude()
+                    .orElse(ProtosFrameArguments.compactCaller(compactTargetArguments)
+                            .preludeOrNullForRuntime());
+        }
+
+        /**
+         * A caller that is provenance-equivalent to this invocation's
+         * activation for preparing a child invocation or selecting through
+         * this invocation's prelude: the activation itself once materialized,
+         * otherwise the compact caller when the callee inherits every
+         * provenance field from it ({@link
+         * ProtosFrameArguments#compactInheritedProvenanceCaller}), else
+         * {@code null}.
+         */
+        ProtosActivation provenanceCallerOrNull() {
+            if (isActivationMaterialized()) {
+                return activation();
+            }
+            return ProtosFrameArguments.compactInheritedProvenanceCaller(
+                    compactTargetArguments);
+        }
+
+        /** The receiver of a direct Closure invocation: the captured receiver. */
+        Object unmaterializedReceiver() {
+            return ProtosFrameArguments.compactClosure(compactTargetArguments)
+                    .capturedReceiver();
+        }
+
+        /** The captured lexical environment the activation would adopt. */
+        ProtosLexicalEnvironment unmaterializedCapturedLexicalEnvironment() {
+            return ProtosFrameArguments.compactClosure(compactTargetArguments)
+                    .capturedLexicalEnvironmentForRuntime();
+        }
+
+        boolean frameBindingsTransferred() {
+            return frameBindingsTransferred;
+        }
+
+        void markFrameBindingsTransferred() {
+            frameBindingsTransferred = true;
+        }
     }
 }

@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -111,7 +112,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 ProtosPrelude prelude = core();
                 ProtosEnvironmentValue environment = standardEnvironment(prelude, UNSORTED);
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 run: () => {
@@ -310,7 +311,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 Probe probe = new Probe();
                 probe.install(module, environment);
                 module.context().createLocalSlot("gate", gate);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 run: () => {
@@ -333,7 +334,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                 assertEquals(ProtosTask.State.SUSPENDED, task.state());
                 assertEquals(1, probe.calls.get());
                 List<RootNode> firstStack = probe.stacks.get(0);
-                assertInstanceOf(ProtosSemanticBytecodeRootNode.class, firstStack.get(0));
+                assertInstanceOf(ProtosBytecodeRootNode.class, firstStack.get(0));
                 assertSame(root, firstStack.get(1), () -> "inline stack=" + firstStack);
 
                 assertTrue(gate.resolve(ProtosNullValue.INSTANCE, module));
@@ -438,14 +439,16 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
             try {
                 ProtosPrelude prelude = core();
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot("environment.each((name, value) => { probe() })\n");
 
                 root.getCallTarget().call(probe.module(prelude, standardEnvironment(prelude, ONE)));
                 assertEquals(List.of(3), probe.depths(), () -> "stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
-                assertInstanceOf(ProtosSemanticBytecodeRootNode.class, stack.get(0));
-                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
+                assertFalse(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
+                                .isSemanticActivationRoot());
                 assertSame(root, stack.get(2));
             } finally {
                 context.leave();
@@ -513,7 +516,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                                 "m: Map()\n    m[1] = 2\n    m[3] = 4\n    m.each((key, value) => { probe(key, value) })",
                                 "m: IdentityMap()\n    m[1] = 2\n    m[3] = 4\n    m.each((key, value) => { probe(key, value) })")) {
                     Probe probe = new Probe();
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot("run: () => {\n    " + site + "\n}\nrun()\n");
                     root.getCallTarget().call(probe.module(prelude, environment));
                     assertInlineTopology(root, probe, 2);
@@ -618,14 +621,14 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
      * explicit RootTag plus the single inline callback RootTag.
      */
     private static void assertInlineTopology(
-            ProtosSemanticBytecodeRootNode root,
+            ProtosBytecodeRootNode root,
             Probe probe,
             int expectedCalls) {
         assertEquals(expectedCalls, probe.calls.get());
         assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
-        ProtosSemanticBytecodeRootNode runRoot =
+        ProtosBytecodeRootNode runRoot =
                 assertInstanceOf(
-                        ProtosSemanticBytecodeRootNode.class,
+                        ProtosBytecodeRootNode.class,
                         probe.stacks.get(0).get(0));
         for (List<RootNode> stack : probe.stacks) {
             assertSame(runRoot, stack.get(0));
@@ -648,7 +651,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
             try {
                 ProtosPrelude prelude = core();
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+                ProtosBytecodeRootNode root = lowerRoot(characters);
                 assertSame(
                         ProtosBooleanValue.TRUE,
                         root.getCallTarget().call(
@@ -678,16 +681,18 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
             try {
                 ProtosPrelude prelude = core();
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+                ProtosBytecodeRootNode root = lowerRoot(characters);
 
                 root.getCallTarget().call(probe.module(prelude, standardEnvironment(prelude, ONE)));
 
                 assertEquals(1, probe.calls.get(), characters);
                 assertEquals(List.of(4), probe.depths(), () -> characters + " stacks=" + probe.stacks);
                 List<RootNode> stack = probe.stacks.get(0);
-                ProtosSemanticBytecodeRootNode callback =
-                        assertInstanceOf(ProtosSemanticBytecodeRootNode.class, stack.get(0));
-                assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+                ProtosBytecodeRootNode callback =
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
+                assertFalse(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1))
+                                .isSemanticActivationRoot());
                 assertSame(root, stack.get(3));
 
                 callback.getRootNodes().ensureComplete();
@@ -720,14 +725,14 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
                                 ? copiedHomeEnvironment(prelude)
                                 : standardEnvironment(prelude, ONE);
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+                ProtosBytecodeRootNode root = lowerRoot(characters);
 
                 root.getCallTarget().call(probe.module(prelude, environment));
 
                 assertEquals(1, probe.calls.get(), characters);
                 List<RootNode> stack = probe.stacks.get(0);
-                ProtosSemanticBytecodeRootNode callback =
-                        assertInstanceOf(ProtosSemanticBytecodeRootNode.class, stack.get(0));
+                ProtosBytecodeRootNode callback =
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0));
                 assertNotSame(root, callback, () -> characters + " stack=" + describe(stack));
                 callback.getRootNodes().ensureComplete();
                 assertEquals(
@@ -855,7 +860,7 @@ final class ProtosPerf026D3EnvironmentEachInlineCallbackTest {
         return new ProtosCoreBootstrap().bootstrap(CORE);
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "perf026-d3.protos").build();
         CanonicalSequence sequence =

@@ -78,7 +78,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
 
                 ProtosIntegerValue two = integer(2);
                 ProtosIntegerValue three = integer(3);
-                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosPreparedCalls.PreparedClosureCall prepared =
                         fastDirect(add, module, two, three);
 
                 RootCallTarget stableTarget =
@@ -147,9 +147,9 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosClosureValue identity =
                         parsedClosure("(value) => { value }", "perf025-identity.protos", module);
 
-                ProtosBytecodeRootNode.PreparedClosureCall first =
+                ProtosPreparedCalls.PreparedClosureCall first =
                         fastDirect(identity, module, integer(1));
-                ProtosBytecodeRootNode.PreparedClosureCall second =
+                ProtosPreparedCalls.PreparedClosureCall second =
                         fastDirect(identity, module, integer(2));
                 assertEquals("1", integerValue(enter(first)));
                 assertEquals("2", integerValue(enter(second)));
@@ -205,7 +205,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                         parsedClosure(
                                 "(first, ...rest) => { rest }", "perf025-rest.protos", module);
 
-                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosPreparedCalls.PreparedClosureCall prepared =
                         fastDirect(rest, module, integer(1), integer(2), integer(3));
                 ProtosArrayValue bound =
                         assertInstanceOf(ProtosArrayValue.class, enter(prepared));
@@ -241,7 +241,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 "(a, b) => { b - a.negated() }",
                                 "perf025-task-add.protos",
                                 module);
-                AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> preparedRef =
+                AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef =
                         new AtomicReference<>();
 
                 ProtosTask task =
@@ -249,9 +249,8 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                                 .createTask(
                                         null,
                                         current -> {
-                                            ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                                                    ProtosBytecodeRootNode
-                                                            .prepareTaskOwnedDirectClosureIfBytecode(
+                                            ProtosPreparedCalls.PreparedClosureCall prepared =
+                                                    ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
                                                                     add,
                                                                     List.of(integer(4), integer(5)),
                                                                     module,
@@ -380,7 +379,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosClosureValue returning =
                         parsedClosure("() => { ^ 5 }", "perf025-owned-nlr.protos", module);
 
-                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosPreparedCalls.PreparedClosureCall prepared =
                         fastDirect(returning, module);
                 ProtosReturnHome home =
                         ProtosFrameArguments.compactReturnHome(prepared.targetArguments());
@@ -399,11 +398,11 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
         }
     }
 
-    private static ProtosBytecodeRootNode.PreparedClosureCall fastDirect(
+    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         RootCallTarget target =
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
@@ -420,10 +419,10 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 target);
     }
 
-    private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return prepared.finish(entered);
     }

@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
+import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -64,7 +64,7 @@ final class ProtosBytecodeTagTreeNodeExports {
     static boolean hasScope(
             TagTreeNode node,
             Frame frame) {
-        if (frame == null) {
+        if (frame == null || !inSemanticActivationRoot(node)) {
             return false;
         }
         return inlineCallbackCall(node, frame.materialize()) != null
@@ -100,6 +100,18 @@ final class ProtosBytecodeTagTreeNodeExports {
             return new ProtosDebuggerScope(activation, ownInlineBindings);
         }
         return debuggerScope(activation);
+    }
+
+    /*
+     * I111-B: an auxiliary structured/C-prime root of the same generated
+     * interpreter emits no tags, and even a tag location reached there must
+     * never offer a guest scope. Tooling-only.
+     */
+    private static boolean inSemanticActivationRoot(TagTreeNode node) {
+        return node == null
+                || !(node.getBytecodeNode().getBytecodeRootNode()
+                                instanceof ProtosBytecodeRootNode root)
+                || root.isSemanticActivationRoot();
     }
 
     /**
@@ -157,7 +169,7 @@ final class ProtosBytecodeTagTreeNodeExports {
             return;
         }
         BytecodeNode bytecode = node.getBytecodeNode();
-        if (bytecode.getBytecodeRootNode() instanceof ProtosSemanticBytecodeRootNode root) {
+        if (bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root) {
             root.installFrameNativeAuthorityForTooling(
                     activation,
                     bytecode.getBytecodeLocation(node.getEnterBytecodeIndex()),

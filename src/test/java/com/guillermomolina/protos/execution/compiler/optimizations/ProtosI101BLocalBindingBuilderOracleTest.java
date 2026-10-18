@@ -80,7 +80,7 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
 
     private static void compareWithMinimalBuilder(
             String program, String caseName,
-            Supplier<ProtosSemanticBytecodeRootNode> independentBuilder)
+            Supplier<ProtosBytecodeRootNode> independentBuilder)
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -91,17 +91,17 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
                 // Observe the real Protos lowering and its real source-Closure topology.
-                ProtosSemanticBytecodeRootNode module = parse(program, caseName);
-                List<ProtosSemanticBytecodeRootNode> actualRoots = roots(module);
+                ProtosBytecodeRootNode module = parse(program, caseName);
+                List<ProtosBytecodeRootNode> actualRoots = roots(module);
                 // D203/I105: no arity-rejection root accompanies the Closure root.
                 assertEquals(2, actualRoots.size(),
                         "production module and Closure activation");
                 assertSame(module, actualRoots.get(0));
-                ProtosSemanticBytecodeRootNode actual = actualRoots.get(1);
+                ProtosBytecodeRootNode actual = actualRoots.get(1);
 
                 // Independent reference: there must be *no* Protos
                 // layout, activation, guards, tags or fallback inside this builder.
-                ProtosSemanticBytecodeRootNode minimal = independentBuilder.get();
+                ProtosBytecodeRootNode minimal = independentBuilder.get();
                 assertEquals(1, roots(minimal).size(),
                         "minimal Bytecode DSL reference has exactly one root");
 
@@ -154,14 +154,14 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode parse(String program, String name) {
+    private static ProtosBytecodeRootNode parse(String program, String name) {
         Source source = Source.newBuilder(
                         ProtosLanguage.ID, program, "i101-b-" + name + ".protos")
                 .build();
         RootCallTarget callTarget = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
         return assertInstanceOf(
-                ProtosSemanticBytecodeRootNode.class, callTarget.getRootNode());
+                ProtosBytecodeRootNode.class, callTarget.getRootNode());
     }
 
     /**
@@ -169,7 +169,7 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
      * The StoreLocal initializes x; Return/LoadLocal yields its value.
      * Source and expression spans come directly from this case's own source.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenCreateOnlyBuilder() {
+    private static ProtosBytecodeRootNode handwrittenCreateOnlyBuilder() {
         String code = CREATE_ONLY;
         Source source = Source.newBuilder(
                         ProtosLanguage.ID, code, "i101-b-create-only-oracle.protos")
@@ -178,8 +178,8 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         int bodyLength = code.lastIndexOf('}') - bodyStart + 1;
         int creationStart = code.indexOf("x: 1");
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -214,7 +214,7 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
      * Creation and terminal read have distinct source sections.
      * No Protos guards, fallbacks, activation, layout, or auxiliary roots.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenCreateAndReadBuilder() {
+    private static ProtosBytecodeRootNode handwrittenCreateAndReadBuilder() {
         String code = CREATE_AND_READ;
         Source source = Source.newBuilder(
                         ProtosLanguage.ID, code, "i101-b-create-and-read-oracle.protos")
@@ -224,8 +224,8 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         int creationStart = code.indexOf("x: 1");
         int readStart = code.lastIndexOf('x');
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -258,14 +258,14 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
         return nodes.getNode(0);
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> roots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> roots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {

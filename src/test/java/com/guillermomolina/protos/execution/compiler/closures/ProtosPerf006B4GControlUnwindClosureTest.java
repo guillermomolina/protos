@@ -66,7 +66,11 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
         String lowerer = read(
                 "src/main/java/com/guillermomolina/protos/execution/bytecode/lowering/CanonicalToBytecodeLowerer.java");
         String bytecodeRoot = read(
-                "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java");
+                "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java")
+                + read(
+                        "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosPreparedCalls.java")
+                + read(
+                        "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosStructuredControlCalls.java");
         String standardObject = read(
                 "src/main/java/com/guillermomolina/protos/execution/protocols/values/ProtosStandardObjectProtocol.java");
         String task = read(

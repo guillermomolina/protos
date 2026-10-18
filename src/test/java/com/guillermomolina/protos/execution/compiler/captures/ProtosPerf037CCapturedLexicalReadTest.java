@@ -117,7 +117,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             evaluate(NESTED_PROGRAM, module);
             ProtosClosureValue wrap = closure("wrap", module);
             ProtosClosureExecutionPlan ownerPlan = wrap.executionPlan().orElseThrow();
-            ProtosSemanticBytecodeRootNode ownerRoot = ownerPlan.bytecodeActivationRootForTesting();
+            ProtosBytecodeRootNode ownerRoot = ownerPlan.bytecodeActivationRootForTesting();
             ownerRoot.getBytecodeNode().setUncachedThreshold(1);
             assertEquals(BytecodeTier.UNCACHED, ownerRoot.getBytecodeNode().getTier());
 
@@ -350,8 +350,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             assertTrue(deferred.isDeferredForRuntime());
             assertFalse(materialized.isDeferredForRuntime());
 
-            ProtosBytecodeRootNode.CapturedNearerScopeAbsence site =
-                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.create(
+            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence site =
+                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.create(
                             deferred, "slot", 1);
             assertFalse((Boolean) privateField(site, "seenDeferredOwner"));
             assertFalse((Boolean) privateField(site, "seenMaterializedOwner"));
@@ -372,8 +372,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     (Boolean) privateField(site, "seenNoSelection"),
                     "profiles are independent; an unrelated outcome stays unseen");
 
-            ProtosBytecodeRootNode.CapturedNearerScopeAbsence uncached =
-                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.uncached(1);
+            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence uncached =
+                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.uncached(1);
             for (String flag :
                     List.of(
                             "seenMaterializedOwner",
@@ -403,16 +403,16 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                                             closure("() => {\n  slot: 1\n  () => { slot }\n}", module),
                                             module))
                             .capturedLexicalEnvironmentForRuntime();
-            ProtosBytecodeRootNode.CapturedNearerScopeAbsence site =
-                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.create(captured, "slot", 1);
+            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence site =
+                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.create(captured, "slot", 1);
             assertFalse((Boolean) privateField(site, "seenNoSelection"));
             for (int round = 0; round < 3; round++) {
                 site.profileNoSelection();
                 assertTrue((Boolean) privateField(site, "seenNoSelection"));
             }
 
-            ProtosBytecodeRootNode.CapturedNearerScopeAbsence uncached =
-                    ProtosBytecodeRootNode.CapturedNearerScopeAbsence.uncached(1);
+            ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence uncached =
+                    ProtosCapturedLexicalAccess.CapturedNearerScopeAbsence.uncached(1);
             uncached.profileNoSelection();
             assertTrue((Boolean) privateField(uncached, "seenNoSelection"));
         });
@@ -442,7 +442,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("1", integerValue(call(readerA, module)));
             }
-            ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(readerA);
+            ProtosCapturedLexicalAccess.CapturedOwnerFrameCache cache = ownerFrameCache(readerA);
             assertTrue(cache.isRecordedForTesting(), "the PRESENT owner was recorded");
             Assumption continuity = cache.presentContinuityForTesting();
             assertTrue(
@@ -500,7 +500,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("0", integerValue(call(reader, module)), "D179 C0: an ABSENT owner reveals the farther binding");
             }
-            ProtosBytecodeRootNode.CapturedOwnerFrameCache cache = ownerFrameCache(reader);
+            ProtosCapturedLexicalAccess.CapturedOwnerFrameCache cache = ownerFrameCache(reader);
             if (cache.isRecordedForTesting()) {
                 assertNull(
                         cache.presentContinuityForTesting(),
@@ -519,8 +519,8 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     /* PERF037-D: the uncached form never records, so it always checks presence. */
     @Test
     void retiredOwnerFrameCacheNeverAdmitsContinuity() {
-        ProtosBytecodeRootNode.CapturedOwnerFrameCache retired =
-                ProtosBytecodeRootNode.CapturedOwnerFrameCache.retired();
+        ProtosCapturedLexicalAccess.CapturedOwnerFrameCache retired =
+                ProtosCapturedLexicalAccess.CapturedOwnerFrameCache.retired();
         assertFalse(retired.isRecordedForTesting());
         assertNull(retired.presentContinuityForTesting());
         System.out.println("PERF037D_UNCACHED_NO_CONTINUITY=PASS");
@@ -584,11 +584,11 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     private static Object call(ProtosClosureValue closure, ProtosActivation caller) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         RootCallTarget target =
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(closure, entered);
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+        ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
                         closure,
                         caller,
@@ -601,7 +601,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                         target);
         Object result =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return prepared.finish(result);
     }
@@ -665,7 +665,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
     }
 
     /** The owner-frame cache of {@code closure}'s single root-level selection site. */
-    private static ProtosBytecodeRootNode.CapturedOwnerFrameCache ownerFrameCache(
+    private static ProtosCapturedLexicalAccess.CapturedOwnerFrameCache ownerFrameCache(
             ProtosClosureValue closure) throws ReflectiveOperationException {
         Instruction select =
                 single(instructionsOf(closure, "SelectCapturedMaterializedOwnerFrameAtRoot"));
@@ -673,10 +673,10 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             if (argument.getKind() == Instruction.Argument.Kind.NODE_PROFILE) {
                 Object found = findField(
                         argument.asCachedNode(),
-                        ProtosBytecodeRootNode.CapturedOwnerFrameCache.class,
+                        ProtosCapturedLexicalAccess.CapturedOwnerFrameCache.class,
                         3);
                 if (found != null) {
-                    return (ProtosBytecodeRootNode.CapturedOwnerFrameCache) found;
+                    return (ProtosCapturedLexicalAccess.CapturedOwnerFrameCache) found;
                 }
             }
         }

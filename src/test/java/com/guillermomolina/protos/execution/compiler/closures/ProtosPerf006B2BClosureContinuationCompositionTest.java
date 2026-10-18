@@ -69,7 +69,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 CanonicalClosure leafDefinition =
                         closureDefinition(leafCharacters);
 
-                ProtosSemanticBytecodeRootNode syntheticLeafRoot =
+                ProtosBytecodeRootNode syntheticLeafRoot =
                         yieldingLeafRoot(
                                 language,
                                 leafSource,
@@ -122,7 +122,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                 .build();
                 CanonicalSequence topCanonical =
                         canonicalize(topCharacters);
-                ProtosSemanticBytecodeRootNode topRoot =
+                ProtosBytecodeRootNode topRoot =
                         new CanonicalToBytecodeLowerer(
                                         language,
                                         topSource, ProtosExecutionMode.NORMAL)
@@ -302,13 +302,13 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 "PERF006_B2B_DEFAULT_SPREAD_LOWERING=PASS");
     }
 
-    private static ProtosSemanticBytecodeRootNode yieldingLeafRoot(
+    private static ProtosBytecodeRootNode yieldingLeafRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan bodySpan,
             Object finalValue) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

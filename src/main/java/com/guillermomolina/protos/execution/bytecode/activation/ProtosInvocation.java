@@ -106,8 +106,8 @@ public final class ProtosInvocation {
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.prepareTaskOwnedSelectedCallIfBytecode(
+        ProtosPreparedCalls.PreparedClosureCall prepared =
+                ProtosClosureCallPreparation.prepareTaskOwnedSelectedCallIfBytecode(
                         receiver, selected, supplied, caller, task);
         if (prepared != null) {
             return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
@@ -122,7 +122,7 @@ public final class ProtosInvocation {
         ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
         return ProtosBytecodeTaskExecution.invokeNestedSynchronous(
                 task,
-                ProtosBytecodeRootNode.prepareTaskOwnedSelectedNativeForCPrime(
+                ProtosClosureCallPreparation.prepareTaskOwnedSelectedNativeForCPrime(
                         receiver, selected, supplied, caller, task),
                 true,
                 caller);
@@ -285,8 +285,8 @@ public final class ProtosInvocation {
             return false;
         }
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.prepareTaskOwnedSelectedCallIfBytecode(
+        ProtosPreparedCalls.PreparedClosureCall prepared =
+                ProtosClosureCallPreparation.prepareTaskOwnedSelectedCallIfBytecode(
                         receiver,
                         selected,
                         supplied,
@@ -313,10 +313,10 @@ public final class ProtosInvocation {
         }
         ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
 
-        ProtosBytecodeRootNode.PreparedClosureCall nativePrepared;
+        ProtosPreparedCalls.PreparedClosureCall nativePrepared;
         try {
             nativePrepared =
-                    ProtosBytecodeRootNode.prepareTaskOwnedSelectedNativeForCPrime(
+                    ProtosClosureCallPreparation.prepareTaskOwnedSelectedNativeForCPrime(
                             receiver,
                             selected,
                             supplied,

@@ -122,7 +122,7 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
 
         ProtosClosureValue f = closureBinding(module, "f");
         ProtosClosureExecutionPlan ownerPlan = f.executionPlan().orElseThrow();
-        ProtosSemanticBytecodeRootNode ownerRoot = ownerPlan.bytecodeActivationRootForTesting();
+        ProtosBytecodeRootNode ownerRoot = ownerPlan.bytecodeActivationRootForTesting();
 
         ownerRoot.getBytecodeNode().setUncachedThreshold(1);
         assertEquals(BytecodeTier.UNCACHED, ownerRoot.getBytecodeNode().getTier());

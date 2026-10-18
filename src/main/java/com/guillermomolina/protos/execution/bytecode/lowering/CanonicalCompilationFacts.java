@@ -614,7 +614,7 @@ final class CanonicalCompilationFacts {
      * Any unrecognized form keeps the authority. A root that is admitted but
      * whose activation is nonetheless observed at run time takes the
      * in-frame transition of {@link
-     * ProtosBytecodeRootNode#createCurrentFrameBinding}.
+     * ProtosFrameLocalBindings#createCurrentFrameBinding}.
      */
     private static boolean requiresPersistentFrameAuthority(
             CanonicalSequence body,

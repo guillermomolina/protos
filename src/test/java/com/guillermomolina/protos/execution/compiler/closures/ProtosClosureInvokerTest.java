@@ -57,8 +57,8 @@ class ProtosClosureInvokerTest {
 
         ProtosTestExecutionSupport.callEntered(
                 () -> {
-                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                            ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                    ProtosPreparedCalls.PreparedClosureCall prepared =
+                            ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
                                     closure,
                                     List.of(),
                                     activation);
@@ -66,7 +66,7 @@ class ProtosClosureInvokerTest {
                     Object entered =
                             ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
                                     assertInstanceOf(
-                                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                                            ProtosPreparedCalls.OrdinarySourceCall.class,
                                             prepared),
                                     com.oracle.truffle.api.nodes.IndirectCallNode.create());
 

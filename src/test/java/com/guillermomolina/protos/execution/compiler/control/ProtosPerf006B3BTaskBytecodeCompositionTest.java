@@ -69,7 +69,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                 null,
                                 current -> {
                                     module.attachTask(current);
-                                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                                    ProtosPreparedCalls.PreparedClosureCall prepared =
                                             ProtosBytecodeRootNode.PrepareClosureCall.perform(
                                                     child,
                                                     module);
@@ -116,7 +116,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                         topCharacters,
                                         "perf006-b3b-top.protos")
                                 .build();
-                ProtosSemanticBytecodeRootNode topRoot =
+                ProtosBytecodeRootNode topRoot =
                         new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(canonicalize(topCharacters));
                 AtomicInteger segments = new AtomicInteger();
@@ -169,7 +169,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                 null,
                                 current -> {
                                     module.attachTask(current);
-                                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                                    ProtosPreparedCalls.PreparedClosureCall prepared =
                                             ProtosBytecodeRootNode.PrepareClosureCall.perform(
                                                     nativeClosure,
                                                     module);
@@ -201,7 +201,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                             return ProtosNullValue.INSTANCE;
                         });
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+        ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCall.perform(
                         nativeClosure,
                         module);
@@ -210,7 +210,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
         assertSame(
                 ProtosNullValue.INSTANCE,
                 ProtosBytecodeRootNode.EnterClosureCall.nativeCall(
-                        assertInstanceOf(ProtosBytecodeRootNode.NativeCall.class, prepared)));
+                        assertInstanceOf(ProtosPreparedCalls.NativeCall.class, prepared)));
         assertEquals(1, nativeExecutions.get());
         System.out.println("PERF006_B3B_ORDINARY_NATIVE_FAST_PATH=PASS");
     }

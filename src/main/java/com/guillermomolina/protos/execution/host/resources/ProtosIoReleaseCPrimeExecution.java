@@ -363,10 +363,10 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishClosureCall();
+                            builder.beginFinishCPrimeClosureCall();
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishClosureCall();
+                            builder.endFinishCPrimeClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();

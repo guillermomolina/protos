@@ -36,11 +36,12 @@ final class ProtosNativeGeneratedStructurePolicyTest {
     private static final String PACKAGE =
             "com.guillermomolina.protos.execution.";
 
-    private static final String RUNTIME_ROOT =
-            "ProtosBytecodeRootNodeGen";
+    /* I111-B: the former semantic-only generated interpreter name, which must no longer exist. */
+    private static final String FORMER_RUNTIME_ROOT =
+            "ProtosSemanticBytecodeRootNodeGen";
 
     private static final String SEMANTIC_ROOT =
-            "ProtosSemanticBytecodeRootNodeGen";
+            "ProtosBytecodeRootNodeGen";
 
     @TempDir Path temporary;
 
@@ -58,10 +59,9 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                         "com/guillermomolina/protos/execution");
 
         /*
-         * PLAT042 B′: the semantic source interpreter and the untagged
-         * structured/C-prime interpreter share the same tier configuration
-         * (uncached interpreter, tail-call handlers, materialized locals), so
-         * both generate the same structural roles.
+         * I111-B: one generated interpreter serves semantic and auxiliary
+         * structured/C-prime roots, with the tier configuration (uncached
+         * interpreter, tail-call handlers, materialized locals) both used.
          */
         Set<String> interpreterRoles =
                 Set.of(
@@ -73,9 +73,9 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                         "UncachedBytecodeNodeTailCall",
                         "VirtualState");
 
-        assertEquals(
-                interpreterRoles,
-                sensitiveDirectRoles(execution, RUNTIME_ROOT));
+        assertFalse(
+                Files.exists(execution.resolve(FORMER_RUNTIME_ROOT + ".class")),
+                "the unified interpreter must not also be generated under its former name");
 
         assertEquals(
                 interpreterRoles,
@@ -116,19 +116,10 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                                         .substring(prefix.length())
                                         .split(",")));
 
-        String runtime = PACKAGE + RUNTIME_ROOT;
         String semantic = PACKAGE + SEMANTIC_ROOT;
 
         Set<String> required =
                 Set.of(
-                        runtime,
-                        runtime + "$1",
-                        runtime + "$Bytecode",
-                        runtime + "$AbstractBytecodeNode",
-                        runtime + "$UncachedBytecodeNode",
-                        runtime + "$UncachedBytecodeNodeTailCall",
-                        runtime + "$TagNode",
-                        runtime + "$VirtualState",
                         semantic,
                         semantic + "$1",
                         semantic + "$Bytecode",
@@ -146,8 +137,9 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                         + generatorLog);
 
         assertFalse(
-                initialized.contains(
-                        runtime + "$UninitializedBytecodeNode"));
+                initialized.stream()
+                        .anyMatch(name -> name.startsWith(PACKAGE + FORMER_RUNTIME_ROOT)),
+                "native initialization must not name the former interpreter");
 
         assertFalse(
                 initialized.contains(

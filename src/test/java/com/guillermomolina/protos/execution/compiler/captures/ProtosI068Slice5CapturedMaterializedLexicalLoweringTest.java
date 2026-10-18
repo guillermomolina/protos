@@ -90,7 +90,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalLookup.class,
                                 definition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -207,7 +207,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalAssign.class,
                                 definition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -327,7 +327,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalAssign.class,
                                 definition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -367,8 +367,8 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                  * Simulate an RHS effect that creates the same name in the
                  * nearer current context after destination resolution.
                  */
-                ProtosBytecodeRootNode.CapturedLexicalWriteTarget destination =
-                        ProtosSemanticBytecodeRootNode
+                ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
+                        ProtosBytecodeRootNode
                                 .ResolveCapturedWritableLexicalTarget
                                 .perform(
                                         ordinal,
@@ -446,7 +446,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalClosure.class,
                                 sequence.expressions().get(1));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -527,7 +527,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalClosure.class,
                                 sequence.expressions().get(1));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -622,7 +622,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalLookup.class,
                                 innerDefinition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -727,7 +727,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .build();
 
                 CanonicalSequence sequence = canonicalize(characters);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -805,7 +805,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalLookup.class,
                                 createY.value());
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -897,7 +897,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalLookup.class,
                                 definition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -1000,7 +1000,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .build();
 
                 CanonicalSequence sequence = canonicalize(characters);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -1091,7 +1091,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .build();
 
                 CanonicalSequence original = canonicalize(characters);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(original);
 
@@ -1226,7 +1226,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 CanonicalAssign.class,
                                 definition.body().expressions().get(0));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
                                 .lowerRoot(sequence);
 
@@ -1255,8 +1255,8 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
 
-                ProtosBytecodeRootNode.CapturedLexicalWriteTarget destination =
-                        ProtosSemanticBytecodeRootNode
+                ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
+                        ProtosBytecodeRootNode
                                 .ResolveCapturedWritableLexicalTarget
                                 .perform(
                                         ordinal,
@@ -1276,7 +1276,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                ProtosSemanticBytecodeRootNode
+                                ProtosBytecodeRootNode
                                         .AssignCapturedFrameLocal
                                         .perform(
                                                 ordinal,

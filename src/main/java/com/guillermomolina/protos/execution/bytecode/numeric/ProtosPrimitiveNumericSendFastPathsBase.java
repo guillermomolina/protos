@@ -148,7 +148,7 @@ abstract class ProtosPrimitiveNumericSendFastPathsBase extends Node {
     }
 
     static ProtosPrelude callerPrelude(Object caller) {
-        return ProtosSemanticBytecodeRootNode.PrepareSendOne.callerPrelude(caller);
+        return ProtosBytecodeRootNode.PrepareSendOne.callerPrelude(caller);
     }
 
     /** Whether the caller's Prelude certified {@code lane}. */

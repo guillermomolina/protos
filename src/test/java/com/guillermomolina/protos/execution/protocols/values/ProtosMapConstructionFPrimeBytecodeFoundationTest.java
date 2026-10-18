@@ -28,9 +28,8 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosObjectValue inherited =
                 new ProtosObjectValue(prelude.mapPrototype());
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode
-                        .PrepareMapConstructionFactoryCall
+        ProtosPreparedCalls.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.PrepareMapConstructionFactoryCall
                         .perform(activation, inherited);
 
         assertSame(inherited, prepared.activation().receiver());
@@ -39,15 +38,13 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
 
         assertSame(
                 produced,
-                ProtosBytecodeRootNode
-                        .FinishMapConstructionFactoryCall
+                ProtosBytecodeRootNode.FinishMapConstructionFactoryCall
                         .perform(activation, produced));
 
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode
-                                .FinishMapConstructionFactoryCall
+                        ProtosBytecodeRootNode.FinishMapConstructionFactoryCall
                                 .perform(
                                         activation,
                                         ProtosBooleanValue.TRUE));
@@ -64,8 +61,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode
-                                .PrepareMapConstructionFactoryCall
+                        ProtosBytecodeRootNode.PrepareMapConstructionFactoryCall
                                 .perform(activation, copied));
     }
 
@@ -92,9 +88,8 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosStringValue query =
                 new ProtosStringValue("key");
 
-        ProtosBytecodeRootNode.PreparedMapInitialDefinition prepared =
-                ProtosBytecodeRootNode
-                        .PrepareMapInitialDefinition
+        ProtosStructuredMapUpdateCalls.PreparedMapInitialDefinition prepared =
+                ProtosBytecodeRootNode.PrepareMapInitialDefinition
                         .perform(
                                 activation,
                                 map,
@@ -141,9 +136,8 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosStringValue key =
                 new ProtosStringValue("new");
 
-        ProtosBytecodeRootNode.PreparedMapInitialDefinition prepared =
-                ProtosBytecodeRootNode
-                        .PrepareMapInitialDefinition
+        ProtosStructuredMapUpdateCalls.PreparedMapInitialDefinition prepared =
+                ProtosBytecodeRootNode.PrepareMapInitialDefinition
                         .perform(
                                 activation,
                                 map,

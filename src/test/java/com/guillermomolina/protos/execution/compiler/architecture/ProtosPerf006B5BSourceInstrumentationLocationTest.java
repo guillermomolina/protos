@@ -68,7 +68,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-tags.protos")
                             .build();
             CanonicalSequence sequence = canonicalize(characters);
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     new CanonicalToBytecodeLowerer(scope.language(), source, ProtosExecutionMode.NORMAL)
                             .lowerRoot(sequence);
 
@@ -146,7 +146,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                         "i111-a-explicit-root-tag.protos")
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(scope.language(), source, mode)
                                 .lowerRoot(sequence);
 
@@ -158,7 +158,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                 RootCallTarget callTarget = root.getCallTarget();
 
                 group.update(
-                        ProtosSemanticBytecodeRootNodeGen.newConfigBuilder()
+                        ProtosBytecodeRootNodeGen.newConfigBuilder()
                                 .addSource()
                                 .addTag(StandardTags.RootTag.class)
                                 .build());
@@ -179,7 +179,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
 
     private static void assertExplicitSemanticRootTag(
             ProtosExecutionMode mode,
-            ProtosSemanticBytecodeRootNode root,
+            ProtosBytecodeRootNode root,
             CanonicalSequence sequence,
             Source source) {
         TagTree tree = root.getBytecodeNode().getTagTree();
@@ -223,7 +223,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-child.protos")
                             .build();
             CanonicalClosure childDefinition = closureDefinition(childCharacters);
-            ProtosSemanticBytecodeRootNode childRoot =
+            ProtosBytecodeRootNode childRoot =
                     yieldingRoot(
                             scope.language(),
                             childSource,
@@ -236,9 +236,9 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             scope.language(),
                             childSource,
                             childRoot, ProtosExecutionMode.NORMAL);
-            ProtosSemanticBytecodeRootNode childSemanticRoot =
+            ProtosBytecodeRootNode childSemanticRoot =
                     assertInstanceOf(
-                            ProtosSemanticBytecodeRootNode.class,
+                            ProtosBytecodeRootNode.class,
                             childPlan
                                     .bytecodeActivationTargetForComposition()
                                     .getRootNode());
@@ -256,7 +256,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     parentCharacters,
                                     "perf006-b5b-parent.protos")
                             .build();
-            ProtosSemanticBytecodeRootNode parentRoot =
+            ProtosBytecodeRootNode parentRoot =
                     new CanonicalToBytecodeLowerer(scope.language(), parentSource, ProtosExecutionMode.NORMAL)
                             .lowerRoot(canonicalize(parentCharacters));
             parentRoot.getRootNodes().ensureComplete();
@@ -344,13 +344,13 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         System.out.println("PERF006_B5B_COMPLETED_PREFIX_REPLAY=NO");
     }
 
-    private static ProtosSemanticBytecodeRootNode yieldingRoot(
+    private static ProtosBytecodeRootNode yieldingRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

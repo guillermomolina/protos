@@ -22,15 +22,16 @@ import com.oracle.truffle.api.bytecode.BytecodeLocal;
 /**
  * PLAT042 Candidate B′ structured prepared-invocation lowering.
  *
- * <p>This is the only lowering that targets the untagged {@link
- * ProtosBytecodeRootNode} interpreter. It owns the complete structured
- * dispatcher (while, each, ensure, Error.handle, match/case, import,
- * structured collection callbacks and the other structured prepared calls)
- * used by the Task C-prime entry root, the I/O C-prime roots and nested
- * structured dispatch. Ordinary canonical source lowering targets the tagged
- * {@link ProtosSemanticBytecodeRootNode} interpreter instead and enters this
- * dispatcher through exactly one helper CallTarget per structured invocation
- * (see {@code ProtosSemanticBytecodeRootNode.EnterNestedStructuredDispatch}).
+ * <p>It owns the complete structured dispatcher (while, each, ensure,
+ * Error.handle, match/case, import, structured collection callbacks and the
+ * other structured prepared calls) used by the Task C-prime entry root, the
+ * I/O C-prime roots and nested structured dispatch. I111-B: it emits into
+ * auxiliary roots of the single {@link ProtosBytecodeRootNode}
+ * interpreter; those roots are never marked as semantic activations and
+ * carry no tag. Ordinary canonical source lowering emits genuine semantic
+ * roots instead and enters this dispatcher through exactly one helper
+ * CallTarget per structured invocation (see {@code
+ * ProtosBytecodeRootNode.EnterNestedStructuredDispatch}).
  */
 final class ProtosStructuredDispatchLowerer {
     private ProtosStructuredDispatchLowerer() {}
@@ -1536,10 +1537,10 @@ final class ProtosStructuredDispatchLowerer {
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
+        builder.beginFinishCPrimeClosureCall();
         builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
-        builder.endFinishClosureCall();
+        builder.endFinishCPrimeClosureCall();
         builder.endStoreLocal();
     }
 }

@@ -54,11 +54,12 @@ import java.util.List;
  *       capture point; those belong to whoever hosts the terminal boundary (possibly another
  *       Task's guest code) and are cut off by count, so no foreign frame is ever attributed to
  *       this occurrence.
- *   <li>Only {@link ProtosSemanticBytecodeRootNode} roots are guest frames. A generated {@link
+ *   <li>Only {@link ProtosBytecodeRootNode} roots are guest frames. A generated {@link
  *       ContinuationRootNode} normalizes to its semantic source root at the continuation's current
  *       bytecode index (PERF006-B5 location stability), so a resumed activation is projected as
  *       the same semantic frame, never as an artificial continuation frame. Structured-dispatch /
- *       C-prime ({@link ProtosBytecodeRootNode}), host and foreign roots are skipped.
+ *       C-prime auxiliary roots (not semantic activation roots), host and foreign roots are
+ *       skipped.
  *   <li>A frame without a location (the innermost frame: Protos exceptions carry no location node)
  *       uses the position {@link #recordOrigin} stored on the occurrence.
  *   <li>PLAT044 B′ inline callbacks have no physical frame. When an inline callback carrier is
@@ -87,7 +88,7 @@ final class ProtosDiagnosticTraceCapture {
      * live inline callback region.
      */
     private static final BytecodeConfig INLINE_CALLBACK_DIAGNOSTIC_CONFIG =
-            ProtosSemanticBytecodeRootNodeGen.newConfigBuilder()
+            ProtosBytecodeRootNodeGen.newConfigBuilder()
                     .addSource()
                     .addTag(StandardTags.RootTag.class)
                     .build();
@@ -168,7 +169,7 @@ final class ProtosDiagnosticTraceCapture {
                 projectLogicalCaller(signal.resumedTerminalCallerForRuntime(nextLogical++), collector);
             }
             TruffleStackTraceElement element = elements.get(index);
-            ProtosSemanticBytecodeRootNode semantic = semanticRoot(element.getTarget().getRootNode());
+            ProtosBytecodeRootNode semantic = semanticRoot(element.getTarget().getRootNode());
             if (semantic == null) {
                 continue;
             }
@@ -201,7 +202,8 @@ final class ProtosDiagnosticTraceCapture {
 
     private static void projectLogicalCaller(BytecodeLocation caller, Collector collector) {
         if (caller.getBytecodeNode().getBytecodeRootNode()
-                instanceof ProtosSemanticBytecodeRootNode semantic) {
+                        instanceof ProtosBytecodeRootNode semantic
+                && semantic.isSemanticActivationRoot()) {
             projectSemanticFrame(semantic, caller, collector);
         }
     }
@@ -217,11 +219,18 @@ final class ProtosDiagnosticTraceCapture {
         return count[0];
     }
 
-    private static ProtosSemanticBytecodeRootNode semanticRoot(RootNode root) {
+    /*
+     * I111-B: auxiliary structured/C-prime roots of the same generated interpreter are
+     * infrastructure, never guest frames; only a marked semantic activation root projects.
+     */
+    private static ProtosBytecodeRootNode semanticRoot(RootNode root) {
         Object source = root instanceof ContinuationRootNode continuation
                 ? continuation.getSourceRootNode()
                 : root;
-        return source instanceof ProtosSemanticBytecodeRootNode semantic ? semantic : null;
+        return source instanceof ProtosBytecodeRootNode semantic
+                        && semantic.isSemanticActivationRoot()
+                ? semantic
+                : null;
     }
 
     /**
@@ -257,7 +266,7 @@ final class ProtosDiagnosticTraceCapture {
     }
 
     private static void projectSemanticFrame(
-            ProtosSemanticBytecodeRootNode semantic,
+            ProtosBytecodeRootNode semantic,
             BytecodeLocation location,
             Collector collector) {
         String label = semantic.getName();
@@ -412,7 +421,7 @@ final class ProtosDiagnosticTraceCapture {
             return null;
         }
 
-        boolean belongsTo(ProtosSemanticBytecodeRootNode semantic) {
+        boolean belongsTo(ProtosBytecodeRootNode semantic) {
             BytecodeRootNode owner = bytecode.getBytecodeRootNode();
             return owner == semantic;
         }

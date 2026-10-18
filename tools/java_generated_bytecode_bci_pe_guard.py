@@ -92,7 +92,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 BASELINE_SCHEMA = "protos-generated-bytecode-bci-pe-baseline-v1"
-EXPECTED_ROOTS = ("ProtosBytecodeRootNodeGen", "ProtosSemanticBytecodeRootNodeGen")
+EXPECTED_ROOTS = ("ProtosBytecodeRootNodeGen",)
 
 BCI_ASSERTION = "CompilerAsserts.partialEvaluationConstant(bci)"
 MERGE_EXPLODE = "@ExplodeLoop(kind = LoopExplosionKind.MERGE_EXPLODE)"

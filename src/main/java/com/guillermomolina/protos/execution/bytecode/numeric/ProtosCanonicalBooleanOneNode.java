@@ -66,21 +66,21 @@ abstract class ProtosCanonicalBooleanOneNode extends Node {
             @Cached(
                 value = "createMissProfile()",
                 uncached = "uncachedMissProfile()")
-                ProtosSemanticBytecodeRootNode
+                ProtosBytecodeRootNode
                     .CanonicalBooleanMissProfile missProfile) {
         missProfile.observeMiss();
         return CLASS_MISS;
     }
 
-    static ProtosSemanticBytecodeRootNode
+    static ProtosBytecodeRootNode
             .CanonicalBooleanMissProfile createMissProfile() {
-        return ProtosSemanticBytecodeRootNode
+        return ProtosBytecodeRootNode
                 .CanonicalBooleanMissProfile.create();
     }
 
-    static ProtosSemanticBytecodeRootNode
+    static ProtosBytecodeRootNode
             .CanonicalBooleanMissProfile uncachedMissProfile() {
-        return ProtosSemanticBytecodeRootNode
+        return ProtosBytecodeRootNode
                 .CanonicalBooleanMissProfile.uncached();
     }
 

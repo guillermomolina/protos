@@ -388,7 +388,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         for (Class<?> owner :
                 List.of(
                         ProtosFrameLexicalBindingAuthority.class,
-                        ProtosSemanticBytecodeRootNode.class,
+                        ProtosBytecodeRootNode.class,
                         ProtosDebuggerScope.class,
                         ProtosActivation.class)) {
             for (Field field : owner.getDeclaredFields()) {

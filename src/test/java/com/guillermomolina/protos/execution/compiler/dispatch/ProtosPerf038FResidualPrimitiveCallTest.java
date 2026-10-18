@@ -80,14 +80,14 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
                     assertTrue(ProtosFrameArguments.isUnmaterializedInheritingFullHeader(arguments));
                     assertSame(module, ProtosFrameArguments.unmaterializedFullHeaderCaller(arguments));
                     boolean split =
-                            ProtosSemanticBytecodeRootNode.PrepareSendArguments.ownPreludeAbsent(arguments)
-                                    || ProtosSemanticBytecodeRootNode.PrepareSendArguments
+                            ProtosBytecodeRootNode.PrepareSendArguments.ownPreludeAbsent(arguments)
+                                    || ProtosBytecodeRootNode.PrepareSendArguments
                                             .ownPreludeIsCallers(arguments);
                     ProtosActivation general = inherited(arguments);
                     assertEquals(general != null, split);
                     if (general != null) {
                         assertSame(general,
-                                ProtosSemanticBytecodeRootNode.PrepareSendArguments.fullHeaderCaller(
+                                ProtosBytecodeRootNode.PrepareSendArguments.fullHeaderCaller(
                                         arguments));
                     }
                 }
@@ -339,19 +339,19 @@ final class ProtosPerf038FResidualPrimitiveCallTest {
      */
     @Test
     void continuationClassDecisionMatchesTypeTests() {
-        assertTrue(ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+        assertTrue(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                 ContinuationResult.class));
-        assertTrue(ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+        assertTrue(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                 ProtosNativeSuspension.class));
-        assertTrue(ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+        assertTrue(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                 ProtosIoOperationSuspension.class));
-        assertTrue(ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+        assertTrue(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                 ProtosIoReleaseSuspension.class));
         for (Object ordinary : List.of(integer(1), ProtosNullValue.INSTANCE, new Object())) {
-            assertFalse(ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+            assertFalse(ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                     ordinary.getClass()));
             assertEquals(ProtosBytecodeRootNode.IsContinuation.perform(ordinary),
-                    ProtosSemanticBytecodeRootNode.IsContinuation.isContinuationClass(
+                    ProtosBytecodeRootNode.IsContinuation.isContinuationClass(
                             ordinary.getClass()));
         }
         System.out.println("PERF038F_CONTINUATION_CLASS=PASS");

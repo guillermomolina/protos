@@ -35,7 +35,7 @@ import java.util.function.Consumer;
  * <ul>
  *   <li>the lowerer records each semantic root's exact {@link Span} and prints one catalog line
  *       ({@value #CATALOG_PREFIX}...) to {@link System#err}, without compiling anything;
- *   <li>{@link ProtosSemanticBytecodeRootNode#toString()} returns {@link #targetName}: the
+ *   <li>{@link ProtosBytecodeRootNode#toString()} returns {@link #targetName}: the
  *       {@link #selector} followed by the human-readable metadata it was derived from. Generated
  *       continuation roots append their resume index to that text.
  * </ul>
@@ -77,11 +77,11 @@ final class ProtosDiagnosticRootIdentity {
     }
 
     /** Records {@code span} on a freshly lowered root and catalogs it; a reparse keeps the first. */
-    static void record(ProtosSemanticBytecodeRootNode root, Span span) {
+    static void record(ProtosBytecodeRootNode root, Span span) {
         record(root, span, ProtosDiagnosticRootIdentity::writeLine);
     }
 
-    static void record(ProtosSemanticBytecodeRootNode root, Span span, Consumer<String> catalog) {
+    static void record(ProtosBytecodeRootNode root, Span span, Consumer<String> catalog) {
         if (root.diagnosticRootSpan() == null) {
             root.recordDiagnosticRootSpan(span);
             catalog.accept(catalogLine(span));

@@ -67,11 +67,11 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     parse(IDENTITY, "identity-source")
                             .getCallTarget().call(module));
 
-            ProtosSemanticBytecodeRootNode actual =
+            ProtosBytecodeRootNode actual =
                     closure.executionPlan().orElseThrow()
                             .bytecodeActivationRootForTesting();
 
-            ProtosSemanticBytecodeRootNode bound =
+            ProtosBytecodeRootNode bound =
                     handwrittenIdentity();
 
             assertEquals(1, bound.getRootNodes().getNodes().size());
@@ -144,12 +144,12 @@ final class ProtosPerf042IdentityBuilderOracleTest {
      * Graal podrá eliminar el store/load si demuestra que no
      * son observables. El lowerer conserva el binding.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenIdentity() {
+    private static ProtosBytecodeRootNode handwrittenIdentity() {
         String code = "(value) => { value }";
         Source source = source(code, "identity-oracle");
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -184,7 +184,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
     }
 
     private static Object invokeOracle(
-            ProtosSemanticBytecodeRootNode root,
+            ProtosBytecodeRootNode root,
             ProtosClosureValue closure,
             ProtosActivation caller,
             Object value) {
@@ -210,8 +210,8 @@ final class ProtosPerf042IdentityBuilderOracleTest {
 
     private static boolean report(
             String name,
-            ProtosSemanticBytecodeRootNode oracle,
-            ProtosSemanticBytecodeRootNode actual) {
+            ProtosBytecodeRootNode oracle,
+            ProtosBytecodeRootNode actual) {
 
         List<String> expected = signature(oracle);
         List<String> emitted = signature(actual);
@@ -236,7 +236,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
      * cleanup epilogue is not mistaken for executed body operations.
      */
     private static List<String> executionPrefixNames(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
 
         List<String> names = new ArrayList<>();
@@ -258,7 +258,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
     }
 
     private static List<String> signature(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
 
         List<String> result = new ArrayList<>();
@@ -320,14 +320,14 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                 "perf042-" + label + ".protos").build();
     }
 
-    private static ProtosSemanticBytecodeRootNode parse(
+    private static ProtosBytecodeRootNode parse(
             String code, String label) {
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class,
                 ProtosLanguageContext.current().parsePublic(
                         source(code, label)));
         return assertInstanceOf(
-                ProtosSemanticBytecodeRootNode.class,
+                ProtosBytecodeRootNode.class,
                 target.getRootNode());
     }
 
@@ -358,7 +358,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                 """;
 
         withCore(module -> {
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     parse(sourceText, "bare-identity-smoke");
 
             assertEquals(2, root.getRootNodes().getNodes().size(),
@@ -399,14 +399,14 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             // The source contains only the Closure expression.
             // Executing its top-level expression obtains the real Closure
             // and its B5 invocation metadata, not a guest caller.
-            ProtosSemanticBytecodeRootNode sourceRoot =
+            ProtosBytecodeRootNode sourceRoot =
                     parse("(value) => { value }", "identity-tier1-source");
 
             ProtosClosureValue closure = assertInstanceOf(
                     ProtosClosureValue.class,
                     sourceRoot.getCallTarget().call(module));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     closure.executionPlan().orElseThrow()
                             .bytecodeActivationRootForTesting();
 
@@ -548,7 +548,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             assertEquals(ProtosExecutionMode.NORMAL,
                     ProtosLanguageContext.current().executionMode(),
                     "PERF042 must run in NORMAL mode");
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     parse(sourceText, "bare-identity-program");
 
             assertEquals(2, root.getRootNodes().getNodes().size(),
@@ -715,7 +715,7 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     ProtosLanguageContext.current().executionMode(),
                     "COMPLETE inspection must also use NORMAL");
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     parse(sourceText, "bare-identity-inspection");
 
             root.getRootNodes().ensureComplete();
@@ -753,9 +753,9 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                     "PERF042_RUN_GROUP_ROOTS=" + group.size());
 
             for (int index = 0; index < group.size(); index++) {
-                ProtosSemanticBytecodeRootNode member =
+                ProtosBytecodeRootNode member =
                         assertInstanceOf(
-                                ProtosSemanticBytecodeRootNode.class,
+                                ProtosBytecodeRootNode.class,
                                 group.get(index));
 
                 List<String> emitted = signature(member);

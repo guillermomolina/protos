@@ -65,7 +65,7 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                         privateField(activation, "context"),
                         "the compact activation must begin with its guest Context deferred");
 
-                ProtosSemanticBytecodeRootNode root = installingRoot(language);
+                ProtosBytecodeRootNode root = installingRoot(language);
                 assertSame(
                         ProtosNullValue.INSTANCE,
                         root.getCallTarget().call(activation));
@@ -109,9 +109,9 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode installingRoot(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+    private static ProtosBytecodeRootNode installingRoot(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

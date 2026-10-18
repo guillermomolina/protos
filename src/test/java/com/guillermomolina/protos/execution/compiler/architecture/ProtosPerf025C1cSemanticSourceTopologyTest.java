@@ -18,8 +18,11 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -65,7 +68,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
             try {
                 List<RootNode> stack = new ArrayList<>();
                 ProtosActivation module = moduleWithProbe(stack);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 inner: () => { probe() }
@@ -77,11 +80,15 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
                 assertEquals(3, stack.size(), () -> "stack=" + stack);
                 for (RootNode frameRoot : stack) {
-                    assertInstanceOf(ProtosSemanticBytecodeRootNode.class, frameRoot);
+                    assertTrue(
+                            assertInstanceOf(ProtosBytecodeRootNode.class, frameRoot)
+                                    .isSemanticActivationRoot());
                 }
                 assertSame(root, stack.get(2));
 
                 root.getRootNodes().ensureComplete();
+                // I111-B: the reparse keeps the physical root and its semantic identity.
+                assertTrue(root.isSemanticActivationRoot());
                 assertEquals(1, rootTags(root.getBytecodeNode()));
                 assertEquals(0, rootBodyTags(root.getBytecodeNode()));
             } finally {
@@ -99,13 +106,13 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
             context.enter();
             try {
                 ProtosActivation module = moduleWithProbe(new ArrayList<>());
-                ProtosSemanticBytecodeRootNode root = lowerRoot("() => 1");
+                ProtosBytecodeRootNode root = lowerRoot("() => 1");
                 ProtosClosureValue closure =
                         assertInstanceOf(
                                 ProtosClosureValue.class,
                                 root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
-                ProtosSemanticBytecodeRootNode activationRoot =
+                ProtosBytecodeRootNode activationRoot =
                         plan.bytecodeActivationRootForTesting();
 
                 assertSame(
@@ -115,6 +122,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 assertSame(root.getRootNodes(), activationRoot.getRootNodes());
 
                 activationRoot.getRootNodes().ensureComplete();
+                assertTrue(activationRoot.isSemanticActivationRoot());
                 assertEquals(1, rootTags(activationRoot.getBytecodeNode()));
                 assertEquals(0, rootBodyTags(activationRoot.getBytecodeNode()));
             } finally {
@@ -122,6 +130,39 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
             }
         }
         System.out.println("PERF025_C1C_UNIVERSAL_SEMANTIC_WRAPPER=REMOVED");
+    }
+
+    /**
+     * I111-B / PLAT065-A: one generated interpreter. The Task C-prime entry
+     * plan is an auxiliary root of it: never a semantic activation, carrying
+     * no RootTag, also after a reparse that materializes every tag.
+     */
+    @Test
+    void auxiliaryTaskEntryRootSharesTheSingleInterpreterWithoutSemanticIdentity()
+            throws Exception {
+        assertThrows(
+                ClassNotFoundException.class,
+                () -> Class.forName("com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen"));
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosBytecodeRootNode entry =
+                        assertInstanceOf(
+                                ProtosBytecodeRootNode.class,
+                                ProtosTaskCPrimeEntryExecution.planForEnteredContext()
+                                        .target()
+                                        .getRootNode());
+                assertFalse(entry.isSemanticActivationRoot());
+
+                entry.getRootNodes().ensureComplete();
+                assertFalse(entry.isSemanticActivationRoot());
+                assertEquals(0, rootTags(entry.getBytecodeNode()));
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("I111_B_SINGLE_GENERATED_INTERPRETER=YES");
     }
 
     /**
@@ -155,21 +196,21 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 for (String characters : sources) {
                     List<RootNode> stack = new ArrayList<>();
                     ProtosActivation module = moduleWithProbe(stack);
-                    ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+                    ProtosBytecodeRootNode root = lowerRoot(characters);
 
                     root.getCallTarget().call(module);
 
                     assertEquals(2, stack.size(), () -> characters + " stack=" + stack);
                     for (RootNode frameRoot : stack) {
                         assertInstanceOf(
-                                ProtosSemanticBytecodeRootNode.class,
+                                ProtosBytecodeRootNode.class,
                                 frameRoot,
                                 () -> characters + " stack=" + stack);
                     }
                     assertSame(root, stack.get(1));
 
-                    ProtosSemanticBytecodeRootNode callback =
-                            (ProtosSemanticBytecodeRootNode) stack.get(0);
+                    ProtosBytecodeRootNode callback =
+                            (ProtosBytecodeRootNode) stack.get(0);
                     callback.getRootNodes().ensureComplete();
                     assertEquals(1, rootTags(callback.getBytecodeNode()));
                     assertEquals(0, rootBodyTags(callback.getBytecodeNode()));
@@ -194,7 +235,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
             try {
                 List<RootNode> stack = new ArrayList<>();
                 ProtosActivation module = moduleWithProbe(stack);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 (() => {
@@ -206,9 +247,13 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 root.getCallTarget().call(module);
 
                 assertEquals(3, stack.size(), () -> "stack=" + stack);
-                assertInstanceOf(ProtosSemanticBytecodeRootNode.class, stack.get(0));
+                assertTrue(
+                        assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(0))
+                                .isSemanticActivationRoot());
+                // I111-B: the structured dispatcher is an auxiliary root of the same interpreter.
                 ProtosBytecodeRootNode structured =
                         assertInstanceOf(ProtosBytecodeRootNode.class, stack.get(1));
+                assertFalse(structured.isSemanticActivationRoot());
                 assertSame(root, stack.get(2));
 
                 RootCallTarget structuredTarget =
@@ -275,7 +320,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
         return module;
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(
                                 ProtosLanguage.ID,

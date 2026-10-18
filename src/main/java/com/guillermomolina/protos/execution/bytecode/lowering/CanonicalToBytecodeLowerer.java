@@ -82,17 +82,19 @@ import java.util.Objects;
  * preserved without manufacturing ReturnHome ownership.</p>
  *
  * <p>PLAT042 Candidate B′: every top-level, module and Closure activation root
- * produced here is a real tagged {@link ProtosSemanticBytecodeRootNode} (I111-A
+ * produced here is a real tagged {@link ProtosBytecodeRootNode} (I111-A
  * explicitly emits its RootTag, the guest semantic root identity, when each
- * physical semantic root is created) and lexically nested
- * Closure roots share that interpreter's {@code BytecodeRootNodes} group.
- * Structured prepared invocations are not lowered here; they enter the untagged
- * {@link ProtosStructuredDispatchLowerer} root once per invocation.</p>
+ * physical semantic root is created, and I111-B marks it as a semantic
+ * activation root, which no auxiliary root of the same interpreter is) and
+ * lexically nested Closure roots share that interpreter's {@code
+ * BytecodeRootNodes} group. Structured prepared invocations are not lowered
+ * here; they enter the untagged {@link ProtosStructuredDispatchLowerer} root
+ * once per invocation.</p>
  */
 final class CanonicalToBytecodeLowerer {
     /**
      * Name of the Bytecode local holding the {@link
-     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} of a PLAT044 B′ inline
+     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} of a PLAT044 B′ inline
      * literal callback region: the carrier of that invocation's one fresh
      * semantic activation, materialized lazily by its first semantic or
      * tooling observer. Tooling reads it back by name ({@link
@@ -198,7 +200,7 @@ final class CanonicalToBytecodeLowerer {
     private record PendingGroupClosure(
             CanonicalClosure definition,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosSemanticBytecodeRootNode root,
+            ProtosBytecodeRootNode root,
             ProtosClosureExecutionPlanCell cell) {}
 
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
@@ -356,7 +358,7 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PERF025 lazy inline callback activation. True while {@link
      * #currentActivationLocal} holds the {@link
-     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} carrier of a PLAT044
+     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} carrier of a PLAT044
      * B-prime inline callback region rather than an activation; {@link
      * #emitCurrentActivation} then materializes the callback activation
      * through that carrier only where an operation needs it.
@@ -679,7 +681,7 @@ final class CanonicalToBytecodeLowerer {
      * runtime-authority path ({@link #capturedOwnerBytecodeLocal}).
      */
     private ProtosClosureExecutionPlanCell bytecodeClosurePlan(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
         boolean loweredInThisParse = !closureRootsLoweredThisParse.add(definition);
@@ -688,7 +690,7 @@ final class CanonicalToBytecodeLowerer {
             return existing;
         }
 
-        ProtosSemanticBytecodeRootNode nestedRoot =
+        ProtosBytecodeRootNode nestedRoot =
                 lowerNestedClosureRoot(builder, definition);
         // I096-B1: after the nested root restored this root's state.
         currentRootMaterializedClosures.add(definition);
@@ -752,18 +754,18 @@ final class CanonicalToBytecodeLowerer {
         return lowerRoot(sequence).getCallTarget();
     }
 
-    ProtosSemanticBytecodeRootNode lowerRoot(CanonicalSequence sequence) {
+    ProtosBytecodeRootNode lowerRoot(CanonicalSequence sequence) {
         return lowerRoot(sequence, null);
     }
 
-    ProtosSemanticBytecodeRootNode lowerClosureActivationRoot(
+    ProtosBytecodeRootNode lowerClosureActivationRoot(
             CanonicalClosure definition) {
         Objects.requireNonNull(definition, "definition");
         validateSupportedDefaults(definition);
         return lowerRoot(definition.body(), definition);
     }
 
-    private ProtosSemanticBytecodeRootNode lowerRoot(
+    private ProtosBytecodeRootNode lowerRoot(
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition) {
         Objects.requireNonNull(sequence, "sequence");
@@ -774,7 +776,7 @@ final class CanonicalToBytecodeLowerer {
          * pair inside this same open builder (see emitExpression's
          * CanonicalClosure case and lowerNestedClosureRoot below) instead of
          * opening an independent create() call, so owner and child end up in
-         * one shared BytecodeRootNodes<ProtosSemanticBytecodeRootNode> group.
+         * one shared BytecodeRootNodes<ProtosBytecodeRootNode> group.
          *
          * A nested Closure's real ProtosClosureExecutionPlan cannot be built
          * while this create() call is still in progress (getCallTarget()
@@ -797,8 +799,8 @@ final class CanonicalToBytecodeLowerer {
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
         try {
-            BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                    ProtosSemanticBytecodeRootNodeGen.create(
+            BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                    ProtosBytecodeRootNodeGen.create(
                             language,
                             BytecodeConfig.DEFAULT,
                             builder -> {
@@ -860,8 +862,8 @@ final class CanonicalToBytecodeLowerer {
      * <p>I106/I107: {@code rootPlan} was prepared by the caller before this
      * root's builder section opened and is not proven again here.
      */
-    private ProtosSemanticBytecodeRootNode lowerRootInto(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+    private ProtosBytecodeRootNode lowerRootInto(
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
             RootEmissionPlan rootPlan) {
@@ -992,8 +994,8 @@ final class CanonicalToBytecodeLowerer {
      * owner/depth metadata is not lost by re-analyzing this Closure in
      * isolation.
      */
-    private ProtosSemanticBytecodeRootNode lowerNestedClosureRoot(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+    private ProtosBytecodeRootNode lowerNestedClosureRoot(
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         validateSupportedDefaults(definition);
         RootEmissionPlan rootPlan =
@@ -1008,8 +1010,8 @@ final class CanonicalToBytecodeLowerer {
                 rootPlan);
     }
 
-    private ProtosSemanticBytecodeRootNode emitRootBody(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+    private ProtosBytecodeRootNode emitRootBody(
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
             RootEmissionPlan rootPlan) {
@@ -1443,7 +1445,8 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endBlock();
         builder.endTag(StandardTags.RootTag.class);
-        ProtosSemanticBytecodeRootNode result = builder.endRoot();
+        ProtosBytecodeRootNode result = builder.endRoot();
+        result.markSemanticActivationRoot();
         builder.endSourceSection();
         /*
          * I107: the root publishes the EFFECTIVE_ROOT proof consumed from the
@@ -2002,7 +2005,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitNormalDirectScalarLocalBody(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence) {
         java.util.Map<String, Object> known = new java.util.HashMap<>();
         var expressions = sequence.expressions();
@@ -2061,7 +2064,7 @@ final class CanonicalToBytecodeLowerer {
      * its only binding step is the final excess-argument check, which no
      * parameter, default, or body effect can precede; that check is therefore
      * taken by the call's entry-target selection ({@link
-     * ProtosSemanticBytecodeRootNode#selectSourceEntryTarget}) instead of by
+     * ProtosBytecodeRootNode#selectSourceEntryTarget}) instead of by
      * the root's own body. Closures with any parameter keep the in-body
      * algorithm unchanged.
      */
@@ -2658,7 +2661,7 @@ final class CanonicalToBytecodeLowerer {
      * ReadRootFrameLocal path at the same source position.
      */
     private void emitScalarLocalReadToResult(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             BytecodeLocal result) {
         emitScalarLocalRead(builder, lookup, result);
@@ -2682,7 +2685,7 @@ final class CanonicalToBytecodeLowerer {
      * materialization observed earlier is never bypassed.
      */
     private void emitScalarLocalRead(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             BytecodeLocal result) {
         BytecodeLocal local =
@@ -2712,7 +2715,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void beginScalarReadSink(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result) {
         if (result == null) {
             builder.beginReturn();
@@ -2722,7 +2725,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void endScalarReadSink(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result) {
         if (result == null) {
             builder.endReturn();
@@ -2736,7 +2739,7 @@ final class CanonicalToBytecodeLowerer {
      * StatementTag + ExpressionTag around a block.
      */
     private static void beginStatement(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
         SourceSpan span = expression.span();
         builder.beginSourceSection(
@@ -2749,7 +2752,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void endStatement(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         builder.endBlock();
         builder.endTag(
                 StandardTags.StatementTag.class,
@@ -2758,14 +2761,14 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitStatementsToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             BytecodeLocal result) {
         emitStatementsToLocal(builder, sequence.expressions(), result);
     }
 
     private void emitStatementsToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             BytecodeLocal result) {
         // PERF036-A: an admitted scalar assignment needs no invocation staging.
@@ -2978,7 +2981,7 @@ final class CanonicalToBytecodeLowerer {
      * emitting the argument load directly. This is a compile-time choice only.
      */
     private void emitCurrentActivation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
             builder.emitCurrentActivation();
         } else if (currentInlineCallbackFrameNative) {
@@ -2997,12 +3000,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Loads the {@link ProtosBytecodeRootNode.PreparedInlineLiteralCall}
+     * Loads the {@link ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall}
      * carrier operand of an inline frame-native operation; only valid while
      * {@link #currentInlineCallbackFrameNative}.
      */
     private void emitCurrentInlineCallbackCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (!currentInlineCallbackFrameNative
                 || !currentActivationLocalIsInlineCallbackCall) {
             throw new AssertionError("no frame-native inline callback region is active");
@@ -3020,7 +3023,7 @@ final class CanonicalToBytecodeLowerer {
      */
 
     private void beginPrepareSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder, int arity) {
+            ProtosBytecodeRootNodeGen.Builder builder, int arity) {
         if (currentInlineCallbackFrameNative) {
             if (arity == 0) {
                 builder.beginPrepareInlineSendZero(
@@ -3045,7 +3048,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void endPrepareSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder, int arity) {
+            ProtosBytecodeRootNodeGen.Builder builder, int arity) {
         if (currentInlineCallbackFrameNative) {
             if (arity == 0) {
                 builder.endPrepareInlineSendZero();
@@ -3065,7 +3068,7 @@ final class CanonicalToBytecodeLowerer {
 
     /** The caller operand of a send/Closure-call preparation opened above. */
     private void emitInvocationCallerOperand(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentInlineCallbackFrameNative) {
             emitCurrentInlineCallbackCall(builder);
         } else {
@@ -3081,7 +3084,7 @@ final class CanonicalToBytecodeLowerer {
      * #emitInvocationCallerOperand}.
      */
     private void emitSendCallerOperand(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (!currentInlineCallbackFrameNative && currentActivationLocal == null) {
             builder.emitCurrentCallerReference();
         } else {
@@ -3095,7 +3098,7 @@ final class CanonicalToBytecodeLowerer {
      * the root's frame arguments itself, only when it must.
      */
     private void beginMemberRead(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             String name) {
         if (currentInlineCallbackFrameNative) {
             builder.beginReadInlineMember(
@@ -3111,7 +3114,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private void endMemberRead(ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+    private void endMemberRead(ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentInlineCallbackFrameNative) {
             builder.endReadInlineMember();
         } else if (currentActivationLocal == null) {
@@ -3126,7 +3129,7 @@ final class CanonicalToBytecodeLowerer {
      * captured assignment, before its RHS is evaluated.
      */
     private void emitResolveCapturedWriteTarget(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal capturedOwnerLocal) {
@@ -3176,7 +3179,7 @@ final class CanonicalToBytecodeLowerer {
      * destination retained in {@code mutationTarget}.
      */
     private void emitAssignCaptured(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal capturedOwnerLocal,
@@ -3283,7 +3286,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitClosureParameterBindings(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal defaultValue,
             BytecodeLocal defaultPreparedCall,
@@ -3310,7 +3313,7 @@ final class CanonicalToBytecodeLowerer {
      * arguments are ignored without rest, so no upper-bound check is emitted.
      */
     private void emitClosureParameterBindings(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal defaultValue,
             BytecodeLocal defaultPreparedCall,
@@ -3438,7 +3441,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBindDefaultLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             BytecodeLocal defaultValue) {
         if (defaultValue == null) {
@@ -3469,7 +3472,7 @@ final class CanonicalToBytecodeLowerer {
      * source call does not materialize one (PERF025-H1).
      */
     private ParameterBindingForm beginBindClosureParameter(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter) {
         String name = parameter.name();
         int ordinal = frameNativeOrdinal(name);
@@ -3506,7 +3509,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void endBindClosureParameter(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             ParameterBindingForm form) {
         switch (form) {
             case FRAME_NATIVE -> builder.endBindClosureFrameParameter();
@@ -3526,7 +3529,7 @@ final class CanonicalToBytecodeLowerer {
      * CreateCurrentLocalSlot}.
      */
     private void emitCreateCurrentBinding(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal value) {
         String name = create.name();
@@ -3570,7 +3573,7 @@ final class CanonicalToBytecodeLowerer {
      * already-evaluated local).
      */
     private void emitScalarCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
             Runnable emitValue) {
@@ -3611,7 +3614,7 @@ final class CanonicalToBytecodeLowerer {
      * operand to emit.
      */
     private void emitCreateInlineCurrentFrameLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             int ordinal,
             String name) {
         builder.beginCreateInlineCurrentFrameLocal(
@@ -3628,7 +3631,7 @@ final class CanonicalToBytecodeLowerer {
      * emit.
      */
     private void emitCreateCurrentFrameLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             int ordinal,
             String name) {
         if (currentActivationLocal != null) {
@@ -3654,7 +3657,7 @@ final class CanonicalToBytecodeLowerer {
      * Otherwise the unchanged {@code MultipleCreateLocalSlots}.
      */
     private void emitMultipleCreateCurrentBindings(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<String> names,
             BytecodeLocal source) {
         int[] ordinals = new int[names.size()];
@@ -3755,7 +3758,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {}
 
     private ComposedSequenceScratch createComposedSequenceScratch(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions) {
         boolean needed =
                 expressions.stream()
@@ -3774,7 +3777,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDiscardedPrefix(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions) {
         emitDiscardedPrefix(
                 builder,
@@ -3783,7 +3786,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDiscardedPrefix(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> expressions,
             ComposedSequenceScratch scratch) {
         BytecodeLocal preparedCall =
@@ -3859,7 +3862,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDiscardedScalarLocalRead(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
         BytecodeLocal local =
                 currentRootFrameLocals.get(lookup.name());
@@ -3913,7 +3916,7 @@ final class CanonicalToBytecodeLowerer {
      * discarded by the enclosing sequence.
      */
     private void emitCompactClosureCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create) {
         CanonicalClosure closure = (CanonicalClosure) create.value();
         beginStatement(builder, create);
@@ -4025,7 +4028,7 @@ final class CanonicalToBytecodeLowerer {
      * call keeps its CallTag over the exact call span of the statement.
      */
     private void emitTerminalClosureCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call) {
         currentRootEmittedTerminalInvocation = true;
         java.util.List<CanonicalExpression> arguments = call.arguments();
@@ -4066,7 +4069,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitTerminalCallOperand(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression operand) {
         if (operand instanceof CanonicalLookup lookup) {
             emitLookup(builder, lookup, true);
@@ -4122,7 +4125,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodySpreadArgumentVector(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> arguments,
             BytecodeLocal suppliedVector,
             BytecodeLocal preparedCall,
@@ -4175,7 +4178,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultSpreadArgumentVector(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> arguments,
             BytecodeLocal suppliedVector,
             BytecodeLocal preparedCall,
@@ -4228,7 +4231,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyExpressionToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             BytecodeLocal target,
             BytecodeLocal preparedCall,
@@ -4409,7 +4412,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultExpressionToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             BytecodeLocal target,
             BytecodeLocal preparedCall,
@@ -4559,7 +4562,7 @@ final class CanonicalToBytecodeLowerer {
 
 
     private void emitBodyDerivedInequality(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalDerivedInequality inequality,
             BytecodeLocal target,
             BytecodeLocal preparedCall,
@@ -4592,7 +4595,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultDerivedInequality(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalDerivedInequality inequality,
             BytecodeLocal target,
             BytecodeLocal preparedCall,
@@ -4627,7 +4630,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyMapConstruction(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMapConstruction map,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4644,7 +4647,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultMapConstruction(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMapConstruction map,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4661,7 +4664,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitMapConstruction(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMapConstruction map,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4889,7 +4892,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodySequenceToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4925,7 +4928,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void emitLocalNoop(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal local) {
         builder.beginStoreLocal(local);
         builder.emitLoadLocal(local);
@@ -4933,7 +4936,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyObjectLiteral(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalObject object,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4960,7 +4963,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultObjectLiteral(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalObject object,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4987,7 +4990,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyCompose(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCompose compose,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5028,7 +5031,7 @@ final class CanonicalToBytecodeLowerer {
      * Closures nested inside it resolve and capture exactly as before.
      */
     private void emitInlineObjectConstruction(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalObject object,
             BytecodeLocal parent,
             BytecodeLocal result) {
@@ -5095,7 +5098,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5212,7 +5215,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyMultipleCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMultipleCreate create,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5234,7 +5237,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5293,7 +5296,7 @@ final class CanonicalToBytecodeLowerer {
      * instead takes the unchanged authoritative assignment.
      */
     private void emitScalarAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5335,7 +5338,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitResolvedBodyAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5518,7 +5521,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBodyIndexedAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign indexedAssign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5574,7 +5577,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5618,7 +5621,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultMultipleCreate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMultipleCreate create,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5641,7 +5644,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5761,7 +5764,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitDefaultIndexedAssign(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign indexedAssign,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5816,7 +5819,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedSuperSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5893,7 +5896,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedDefaultSuperSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -5974,7 +5977,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedDefaultCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6100,7 +6103,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedDefaultSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -6267,7 +6270,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedPreparedDefaultInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6297,7 +6300,7 @@ final class CanonicalToBytecodeLowerer {
      * entered directly from this root without an intermediate helper root.
      */
     private void emitPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6335,7 +6338,7 @@ final class CanonicalToBytecodeLowerer {
      * dispatch below unchanged.
      */
     private void emitPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6454,7 +6457,7 @@ final class CanonicalToBytecodeLowerer {
      * ({@link #emitLocalInlineLiteralChild}).
      */
     private void emitLocalInlineLiteralWhile(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6601,7 +6604,7 @@ final class CanonicalToBytecodeLowerer {
      * exact physical invocation ({@link #emitLocalInlineLiteralChild}).
      */
     private void emitLocalInlineLiteralEach(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6691,7 +6694,7 @@ final class CanonicalToBytecodeLowerer {
      * the exact physical fallback.
      */
     private void emitLocalInlineLiteralChild(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal child,
             BytecodeLocal childResult,
@@ -6726,7 +6729,7 @@ final class CanonicalToBytecodeLowerer {
      * existing scoped completion discipline.
      */
     private void emitInlineLiteralFallbackInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal child,
             BytecodeLocal childResult,
@@ -6783,7 +6786,7 @@ final class CanonicalToBytecodeLowerer {
 
     /** Operands of a per-child admission: loop state, child, staged literal and plan. */
     private static void emitInlineLiteralChildAdmissionOperands(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal loop,
             BytecodeLocal child,
             InlineLiteralCallback literal) {
@@ -6799,7 +6802,7 @@ final class CanonicalToBytecodeLowerer {
      * invoked locally.
      */
     private void emitDispatchedPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6822,7 +6825,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitNestedStructuredInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6843,7 +6846,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitOrdinaryPreparedInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -6915,7 +6918,7 @@ final class CanonicalToBytecodeLowerer {
      * match. The child TryFinally completes either form.
      */
     private void emitLocalBooleanInvocation(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -7010,7 +7013,7 @@ final class CanonicalToBytecodeLowerer {
      * PLAT044 B′ inline callback region for an admitted literal callback.
      *
      * <p>The region keeps the invocation's {@link
-     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} in {@link
+     * ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall} in {@link
      * #INLINE_CALLBACK_CALL_LOCAL}; entering the region materializes no
      * activation. The callback's fresh semantic activation is materialized
      * from that carrier, exactly once, by the first operation or tooling
@@ -7045,7 +7048,7 @@ final class CanonicalToBytecodeLowerer {
      * continuations, use the existing canonical Bytecode lowering.
      */
     private void emitInlinedClosureBodyStatements(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal result,
             boolean bindParameters) {
@@ -7088,7 +7091,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitInlineLiteralCallback(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal child,
             BytecodeLocal result) {
@@ -7225,7 +7228,7 @@ final class CanonicalToBytecodeLowerer {
      * continuation kind).
      */
     private void emitContinuationComposition(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
@@ -7266,7 +7269,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitBindSuppliedClosureParameter(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             int positionalIndex) {
         ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
@@ -7464,7 +7467,7 @@ final class CanonicalToBytecodeLowerer {
      * I092 admission. Inline regions keep their explicit activation operand.
      */
     private void beginClosureCapture(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
             builder.beginMaterializeCurrentClosure(useCompactClosureCapture());
         } else {
@@ -7474,7 +7477,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void endClosureCapture(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
             builder.endMaterializeCurrentClosure();
         } else {
@@ -7483,7 +7486,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitExpression(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral literal) {
             emitLiteral(builder, literal);
@@ -7574,7 +7577,7 @@ final class CanonicalToBytecodeLowerer {
      * unchanged generic path.
      */
     private void emitLookup(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
         emitLookup(builder, lookup, false);
     }
@@ -7585,7 +7588,7 @@ final class CanonicalToBytecodeLowerer {
      * primitive carrier. Every other read yields a guest value.
      */
     private void emitLookup(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup,
             boolean carrierOperand) {
         if (!currentNormalCallbackScalarLocals.isEmpty()
@@ -7763,7 +7766,7 @@ final class CanonicalToBytecodeLowerer {
      * operand of the guarded primitive numeric chain.
      */
     private void emitGuestCapturedMaterializedRead(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal ownerLocal,
             boolean inlineCallback,
@@ -7792,7 +7795,7 @@ final class CanonicalToBytecodeLowerer {
      * the existing direct path admits it.
      */
     private void emitCapturedMaterializedRead(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal ownerLocal,
             boolean inlineCallback) {
@@ -8041,7 +8044,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitPrimitiveNumericOperandToLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             BytecodeLocal target,
             BytecodeLocal preparedCall,
@@ -8108,7 +8111,7 @@ final class CanonicalToBytecodeLowerer {
      * Receiver and argument staging have already completed.
      */
     private void emitCanonicalIfTrueOneCandidate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression sourceReceiver,
             BytecodeLocal receiverValue,
             BytecodeLocal argument,
@@ -8193,7 +8196,7 @@ final class CanonicalToBytecodeLowerer {
      * Ordinary One is handled by emitCanonicalIfTrueOneCandidate.
      */
     private void emitNativeIfTrueCandidate(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal receiverValue,
             boolean spreadArguments,
             BytecodeLocal suppliedVector,
@@ -8287,7 +8290,7 @@ final class CanonicalToBytecodeLowerer {
 
     /** Native hit of an ifTrue site without an inline literal candidate. */
     private void emitCanonicalIfTrueNative(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal candidate,
             BytecodeLocal result,
             BytecodeLocal childResult,
@@ -8312,7 +8315,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void emitStoreConstant(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal target,
             Object value) {
         builder.beginStoreLocal(target);
@@ -8321,7 +8324,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private static void emitCopyLocal(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal target,
             BytecodeLocal source) {
         builder.beginStoreLocal(target);
@@ -8345,7 +8348,7 @@ final class CanonicalToBytecodeLowerer {
      * The generic result still passes FinishStructuredBooleanCallback.
      */
     private void emitCanonicalIfTrueLiteralSite(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal compact,
             BytecodeLocal receiverValue,
@@ -8554,7 +8557,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -8572,7 +8575,7 @@ final class CanonicalToBytecodeLowerer {
      * send. Arithmetic sites additionally carry their PERF043 fold candidate.
      */
     private void emitPrimitiveNumericAttempt(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal receiverValue,
             BytecodeLocal argumentValue) {
@@ -8630,7 +8633,7 @@ final class CanonicalToBytecodeLowerer {
      * send emit the established ordinary send, with no run-time mode test.
      */
     private void emitComposedSend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -9145,7 +9148,7 @@ final class CanonicalToBytecodeLowerer {
 
     /** I095-C: the NORMAL lowering of a literal receiver with only literal Closures. */
     private void emitNormalBooleanControlLiteral(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             NormalBooleanControlSite site,
             BytecodeLocal result) {
@@ -9178,7 +9181,7 @@ final class CanonicalToBytecodeLowerer {
      * necessary semantic guard of a dynamic receiver.
      */
     private void emitNormalBooleanControl(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             NormalBooleanControlSite site,
             BytecodeLocal result,
@@ -9241,7 +9244,7 @@ final class CanonicalToBytecodeLowerer {
 
     /** One classification test per canonical receiver completing here; then the ordinary send. */
     private void emitNormalBooleanControlSelection(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             NormalBooleanControlSite site,
             java.util.List<Boolean> selecting,
@@ -9292,7 +9295,7 @@ final class CanonicalToBytecodeLowerer {
      * reaches the PLAT043/B-prime sequencing.
      */
     private void emitNormalBooleanControlPath(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             NormalBooleanControlSite site,
             boolean receiver,
@@ -9339,7 +9342,7 @@ final class CanonicalToBytecodeLowerer {
      * lowering (admitted at run time only when actually selected).
      */
     private void emitNormalBooleanControlOrdinarySend(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal receiverValue,
             java.util.List<BytecodeLocal> argumentValues,
@@ -9393,7 +9396,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitNormalInlineControlBody(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure,
             BytecodeLocal result) {
         SourceSpan bodySpan = closure.body().span();
@@ -9451,7 +9454,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedSendUnfolded(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -9899,7 +9902,7 @@ final class CanonicalToBytecodeLowerer {
      * machinery B1 does not establish. Nothing here consults the selector:
      * whether, and for which position, the inline path is taken is decided at
      * run time, after ordinary selection, by {@link
-     * ProtosBytecodeRootNode.PreparedBooleanCall#admitsInlineLiteralCallback}.
+     * ProtosStructuredControlCalls.PreparedBooleanCall#admitsInlineLiteralCallback}.
      */
     private static java.util.List<Integer> inlineLiteralCallbackCandidates(
             java.util.List<CanonicalExpression> arguments) {
@@ -9922,7 +9925,7 @@ final class CanonicalToBytecodeLowerer {
      * Boolean candidates the selector is never consulted; the local loop is
      * taken only after ordinary selection prepared the canonical standard
      * whileTrue with exactly these two staged values ({@link
-     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralWhile}).
+     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralWhile}).
      */
     private static boolean isInlineLiteralWhileCandidate(CanonicalSend send) {
         return send.arguments().size() == 1
@@ -9940,7 +9943,7 @@ final class CanonicalToBytecodeLowerer {
      * the local loop is taken only after ordinary selection prepared the
      * canonical standard Array.each or Bytes.each with exactly this staged
      * value ({@link
-     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralIndexedEach}),
+     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralIndexedEach}),
      * and the formal is then bound by the ordinary parameter binding from the
      * prepared per-element activation.
      */
@@ -9960,9 +9963,9 @@ final class CanonicalToBytecodeLowerer {
      * candidate: the local loop is taken only after ordinary selection
      * prepared the canonical standard Map.each, IdentityMap.each or
      * Environment.each with exactly this staged value ({@link
-     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralAssociationEach},
+     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralAssociationEach},
      * {@link
-     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralEnvironmentEach}),
+     * ProtosPreparedCalls.PreparedClosureCall#admitsInlineLiteralEnvironmentEach}),
      * and both formals are then bound by the ordinary parameter binding from
      * the prepared per-position activation. Any other shape keeps the
      * ordinary path, including its ordinary callback arity behavior.
@@ -10045,7 +10048,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -10057,7 +10060,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     private void emitComposedCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -10529,7 +10532,7 @@ final class CanonicalToBytecodeLowerer {
      *
      * <p>Ordinary {@code call} selection happens exactly once, on the already
      * staged receiver and arguments, through the PLAT044 B′ carrier seam
-     * ({@link ProtosBytecodeRootNode#prepareInlineClosureLiteralCall}). The
+     * ({@link ProtosClosureCallPreparation#prepareInlineClosureLiteralCall}). The
      * body lowered into this root is entered only when the carrier proves that the
      * selection is the canonical standard {@code Object.call} of this
      * literal's own plan target with an unobservable ReturnHome; a nearer or
@@ -10548,7 +10551,7 @@ final class CanonicalToBytecodeLowerer {
      * activation path, and reuses their already lowered roots.
      */
     private void emitInlineClosureLiteralCall(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             ProtosClosureExecutionPlanCell literalPlan,
             BytecodeLocal receiverValue,
@@ -10599,7 +10602,7 @@ final class CanonicalToBytecodeLowerer {
      * and compares by value, so one constant serves every execution domain.
      */
     private void emitLiteral(
-            ProtosSemanticBytecodeRootNodeGen.Builder builder, CanonicalLiteral literal) {
+            ProtosBytecodeRootNodeGen.Builder builder, CanonicalLiteral literal) {
         if (literal.kind() == CanonicalLiteral.Kind.NUMBER
                 && numberLiteralDescriptor(literal) instanceof BigInteger large) {
             builder.beginLargeIntegerLiteral();

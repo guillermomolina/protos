@@ -90,7 +90,7 @@ final class ProtosHostEntrySuspension {
     @TruffleBoundary
     static Object resumeAfterWaits(
             ProtosEmbeddedProcess embedding,
-            ProtosBytecodeRootNode.OrdinarySourceCall prepared,
+            ProtosPreparedCalls.OrdinarySourceCall prepared,
             Object outcome) {
         return drive(embedding, prepared, outcome, false);
     }
@@ -120,8 +120,8 @@ final class ProtosHostEntrySuspension {
                                                                 "host entry requires an owning Core prelude")))
                         .orElseThrow(
                                 () -> new ProtosSignalException(ProtosCoreErrors.newError(caller)));
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.prepareHostEntrySelectedCall(
+        ProtosPreparedCalls.PreparedClosureCall prepared =
+                ProtosClosureCallPreparation.prepareHostEntrySelectedCall(
                         closure, selected, List.of(supplied), caller);
         Object outcome;
         try {
@@ -144,7 +144,7 @@ final class ProtosHostEntrySuspension {
      */
     private static Object drive(
             ProtosEmbeddedProcess embedding,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             Object outcome,
             boolean entryRoot) {
         Objects.requireNonNull(embedding, "embedding");
@@ -183,7 +183,7 @@ final class ProtosHostEntrySuspension {
     private static void awaitReady(
             ProtosEmbeddedProcess embedding,
             ProtosTask.WaitDependency dependency,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             boolean entryRoot,
             Object continuation) {
         ProtosActorExecutionDomain domain = embedding.rootExecutionDomain();

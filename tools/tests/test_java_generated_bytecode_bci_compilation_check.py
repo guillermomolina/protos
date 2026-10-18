@@ -29,7 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import java_generated_bytecode_bci_compilation_check as check  # noqa: E402
 
 DONE = ("[engine] opt done   id=12   ProtosBytecodeRootNodeGen@1a2b |Tier 2|Time   120(  90+30  )ms|AST   40\n"
-        "[engine] opt done   id=13   ProtosSemanticBytecodeRootNodeGen@3c4d |Tier 2|Time   80(  60+20  )ms|AST   9")
+        "[engine] opt done   id=13   ProtosBytecodeRootNodeGen@3c4d |Tier 2|Time   80(  60+20  )ms|AST   9")
 OUTPUT = "600\n200\n"
 GENERATED_FAILURE = """[engine] opt failed id=7    work                    |Tier 2|Time   300|Reason: jdk.graal.compiler.core.common.PermanentBailoutException: Partial evaluation did not reduce value to a constant, is a regular compiler node: 36664|Pi
 	at com.oracle.truffle.api.CompilerAsserts.partialEvaluationConstant(CompilerAsserts.java:111)
@@ -71,10 +71,11 @@ class EvaluateTest(unittest.TestCase):
                          [check.GENERATED_BCI, check.OTHER_PERMANENT])
 
     def test_each_generated_root_must_compile(self):
-        only_structured = DONE.splitlines()[0]
-        result = check.evaluate(only_structured + "\n" + OUTPUT, 0)
+        # I111-B: a compilation of some other root does not prove the generated interpreter compiled.
+        only_other = "[engine] opt done   id=12   ProtosOtherRootNode@1a2b |Tier 2|Time   120(  90+30  )ms|AST   40"
+        result = check.evaluate(only_other + "\n" + OUTPUT, 0)
         self.assertEqual(result["failures"],
-                         ["ROOT_NOT_COMPILED no successful compilation of a ProtosSemanticBytecodeRootNodeGen root"])
+                         ["ROOT_NOT_COMPILED no successful compilation of a ProtosBytecodeRootNodeGen root"])
 
     def test_no_compilation_fails(self):
         result = check.evaluate(OUTPUT, 0)

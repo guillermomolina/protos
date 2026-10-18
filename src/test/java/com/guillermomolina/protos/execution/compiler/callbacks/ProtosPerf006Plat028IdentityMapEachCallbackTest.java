@@ -293,7 +293,7 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -332,7 +332,7 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

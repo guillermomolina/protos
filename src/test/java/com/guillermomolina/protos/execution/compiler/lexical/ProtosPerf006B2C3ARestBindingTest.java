@@ -228,7 +228,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                         restSource, ProtosExecutionMode.NORMAL),
                                 module));
 
-                ProtosSemanticBytecodeRootNode missingRequired =
+                ProtosBytecodeRootNode missingRequired =
                         lowerCall(
                                 language,
                                 "entry()",
@@ -264,7 +264,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
         System.out.println("PERF006_B2C3A_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerCall(
+    private static ProtosBytecodeRootNode lowerCall(
             ProtosLanguage language,
             String characters,
             String sourceName)

@@ -93,7 +93,7 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
     void plat032KeepsLogicalWrapperIdentityWhileCPrimeOwnsSuspendibleControl()
             throws Exception {
         String objectProtocol = readMain("execution/protocols/values/ProtosStandardObjectProtocol.java");
-        String bytecodeRoot = readMain("execution/bytecode/activation/ProtosBytecodeRootNode.java");
+        String bytecodeRoot = readMain("execution/bytecode/activation/ProtosPreparedCalls.java");
 
         assertTrue(objectProtocol.contains("isStandardCallImplementation("));
         assertTrue(objectProtocol.contains("isCanonicalStandardCallSelection("));

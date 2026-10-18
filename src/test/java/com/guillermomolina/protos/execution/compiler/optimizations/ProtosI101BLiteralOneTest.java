@@ -72,7 +72,7 @@ final class ProtosI101BLiteralOneTest {
                         ProtosExecutionMode.NORMAL,
                         ProtosLanguageContext.current().executionMode());
 
-                ProtosSemanticBytecodeRootNode oracle =
+                ProtosBytecodeRootNode oracle =
                         handwrittenLiteralOne();
 
                 Source source = Source.newBuilder(
@@ -84,9 +84,9 @@ final class ProtosI101BLiteralOneTest {
                         RootCallTarget.class,
                         ProtosLanguageContext.current().parsePublic(source));
 
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         assertInstanceOf(
-                                ProtosSemanticBytecodeRootNode.class,
+                                ProtosBytecodeRootNode.class,
                                 target.getRootNode());
 
                 ProtosClosureValue closure = assertInstanceOf(
@@ -94,14 +94,14 @@ final class ProtosI101BLiteralOneTest {
                         module.getCallTarget().call(
                                 prelude.newModuleActivation()));
 
-                ProtosSemanticBytecodeRootNode actual =
+                ProtosBytecodeRootNode actual =
                         closure.executionPlan()
                                 .orElseThrow()
                                 .bytecodeActivationRootForTesting();
 
-                List<ProtosSemanticBytecodeRootNode> roots =
+                List<ProtosBytecodeRootNode> roots =
                         module.getRootNodes().getNodes().stream()
-                                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                                .map(ProtosBytecodeRootNode.class::cast)
                                 .toList();
 
                 // Module and ordinary Closure; D203/I105 lowers no arity rejection.
@@ -198,7 +198,7 @@ final class ProtosI101BLiteralOneTest {
      * This is the target for physical-emission analysis, not
      * a copy of the current Protos lowering.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenLiteralOne() {
+    private static ProtosBytecodeRootNode handwrittenLiteralOne() {
 
         Source source = Source.newBuilder(
                 ProtosLanguage.ID,
@@ -208,8 +208,8 @@ final class ProtosI101BLiteralOneTest {
         int bodyStart = PROGRAM.indexOf('{');
         int bodyLength = PROGRAM.lastIndexOf('}') + 1 - bodyStart;
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -237,7 +237,7 @@ final class ProtosI101BLiteralOneTest {
     }
 
     private static List<String> completeSignature(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return signature(root);
     }
@@ -247,7 +247,7 @@ final class ProtosI101BLiteralOneTest {
      * profiles and physical bytecode indices. Nothing is filtered out.
      */
     private static List<String> signature(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
 
         List<String> lines = new ArrayList<>();
 

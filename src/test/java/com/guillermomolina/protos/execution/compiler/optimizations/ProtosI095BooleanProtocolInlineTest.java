@@ -140,7 +140,7 @@ final class ProtosI095BooleanProtocolInlineTest {
         Execution normal = execute(false, source);
         assertInteger(12, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        ProtosSemanticBytecodeRootNode runRoot = normal.rootOfFirstProbe();
+        ProtosBytecodeRootNode runRoot = normal.rootOfFirstProbe();
         Regions regions = regions(instructionNames(runRoot));
         assertAggressive(regions.onTrue());
         assertAggressive(regions.onFalse());
@@ -766,9 +766,9 @@ final class ProtosI095BooleanProtocolInlineTest {
 
     private record Execution(Object value, Probe probe) {
         /** The guest root that called probe first. */
-        ProtosSemanticBytecodeRootNode rootOfFirstProbe() {
+        ProtosBytecodeRootNode rootOfFirstProbe() {
             return assertInstanceOf(
-                    ProtosSemanticBytecodeRootNode.class,
+                    ProtosBytecodeRootNode.class,
                     probe.stacks.get(0).get(0));
         }
     }
@@ -848,7 +848,7 @@ final class ProtosI095BooleanProtocolInlineTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "i095-d.protos").build();
         CanonicalSequence sequence =
@@ -863,7 +863,7 @@ final class ProtosI095BooleanProtocolInlineTest {
                 .lowerRoot(sequence);
     }
 
-    private static List<String> instructionNames(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> instructionNames(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(Instruction::getName)

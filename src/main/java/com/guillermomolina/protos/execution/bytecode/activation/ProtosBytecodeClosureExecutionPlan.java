@@ -61,7 +61,7 @@ final class ProtosBytecodeClosureExecutionPlan {
     private final ProtosLanguage language;
     private final Source source;
     private final CanonicalBindingAnalysis bindingAnalysis;
-    private final ProtosSemanticBytecodeRootNode activationRoot;
+    private final ProtosBytecodeRootNode activationRoot;
     private final RootCallTarget activationTarget;
     /**
      * I101-A (PLAT058-D): the immutable physical compilation profile under which {@link
@@ -112,7 +112,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosBytecodeRootNode activationRoot,
             ProtosExecutionMode profile) {
         this(
                 definition,
@@ -141,7 +141,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosBytecodeRootNode activationRoot,
             ProtosExecutionMode profile) {
         this(
                 definition,
@@ -165,7 +165,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosSemanticBytecodeRootNode activationRoot,
+            ProtosBytecodeRootNode activationRoot,
             ProtosExecutionMode profile,
             boolean mayObserveReturnHome) {
         this.definition =
@@ -262,7 +262,7 @@ final class ProtosBytecodeClosureExecutionPlan {
         return bindingAnalysis;
     }
 
-    ProtosSemanticBytecodeRootNode activationRootForTesting() {
+    ProtosBytecodeRootNode activationRootForTesting() {
         return activationRoot;
     }
 

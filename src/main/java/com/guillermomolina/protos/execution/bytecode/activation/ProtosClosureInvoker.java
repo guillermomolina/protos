@@ -58,8 +58,8 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.prepareTaskOwnedDirectClosureIfBytecode(
+        ProtosPreparedCalls.PreparedClosureCall prepared =
+                ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
                         closure,
                         supplied,
                         creator,
@@ -75,8 +75,8 @@ public final class ProtosClosureInvoker {
          * Context-cached C-prime root. No evaluator replay state is allocated.
          */
         requireNativeTaskFallbackForRuntime(closure);
-        ProtosBytecodeRootNode.PreparedClosureCall nativePrepared =
-                ProtosBytecodeRootNode.prepareTaskOwnedDirectNativeForCPrime(
+        ProtosPreparedCalls.PreparedClosureCall nativePrepared =
+                ProtosClosureCallPreparation.prepareTaskOwnedDirectNativeForCPrime(
                         closure,
                         supplied,
                         creator,
@@ -273,9 +273,9 @@ public final class ProtosClosureInvoker {
             List<?> supplied,
             ProtosActivation activation) {
         // A non-native synchronous source preparation is always an ordinary source call.
-        ProtosBytecodeRootNode.OrdinarySourceCall prepared =
-                (ProtosBytecodeRootNode.OrdinarySourceCall)
-                        ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+        ProtosPreparedCalls.OrdinarySourceCall prepared =
+                (ProtosPreparedCalls.OrdinarySourceCall)
+                        ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
                                 closure,
                                 supplied,
                                 activation);

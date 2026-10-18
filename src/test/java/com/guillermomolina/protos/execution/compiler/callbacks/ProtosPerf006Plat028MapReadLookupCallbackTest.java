@@ -493,7 +493,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -505,7 +505,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
             ProtosActorExecutionDomain domain,
             ProtosPrelude prelude,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
         ProtosTask task =
                 domain.createTask(
@@ -557,7 +557,7 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

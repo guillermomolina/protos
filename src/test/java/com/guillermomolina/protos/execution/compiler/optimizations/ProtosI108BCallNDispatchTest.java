@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNode.InvokeClosureArguments;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureArguments;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -522,7 +522,7 @@ final class ProtosI108BCallNDispatchTest {
                             """, "i108-structural.protos", module);
 
                     for (Site site : sites) {
-                        ProtosSemanticBytecodeRootNode root =
+                        ProtosBytecodeRootNode root =
                                 functionRoot(site.function(), module);
 
                         RootCallTarget originalTarget =
@@ -577,7 +577,7 @@ final class ProtosI108BCallNDispatchTest {
     }
 
     private static java.util.List<String> instructionNames(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
@@ -767,7 +767,7 @@ final class ProtosI108BCallNDispatchTest {
                 .getBytecodeNode().setUncachedThreshold(0);
     }
 
-    private static ProtosSemanticBytecodeRootNode functionRoot(
+    private static ProtosBytecodeRootNode functionRoot(
             String function, ProtosActivation module) {
         ProtosClosureValue closure = assertInstanceOf(
                 ProtosClosureValue.class,

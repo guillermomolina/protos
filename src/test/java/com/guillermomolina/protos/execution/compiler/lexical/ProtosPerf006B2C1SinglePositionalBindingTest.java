@@ -45,7 +45,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 module.context().createLocalSlot("entry", closure);
                 String topChars = "entry(token)";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-top.protos").build();
-                ProtosSemanticBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
+                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
                 assertSame(token, top.getCallTarget().call(module));
             } finally { context.leave(); }
         }
@@ -65,7 +65,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 module.context().createLocalSlot("entry", semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource, ProtosExecutionMode.NORMAL), module));
                 String topChars = "entry()";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-arity-top.protos").build();
-                ProtosSemanticBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
+                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
                 // D203/I105: an absent argument binds canonical null.
                 assertSame(ProtosNullValue.INSTANCE, top.getCallTarget().call(module));
             } finally { context.leave(); }

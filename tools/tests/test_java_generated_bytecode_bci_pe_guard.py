@@ -204,7 +204,7 @@ def root_source(root, *cached_classes):
     return ROOT_TEMPLATE % dict(root=root, cached="\n".join(cached_classes) or cached(root))
 
 
-ROOT_A, ROOT_B = guard.EXPECTED_ROOTS
+(ROOT_A,) = guard.EXPECTED_ROOTS
 
 
 def analyze(sources):
@@ -212,7 +212,7 @@ def analyze(sources):
 
 
 def analyze_root(text, root=ROOT_A):
-    sources = {ROOT_A: root_source(ROOT_A), ROOT_B: root_source(ROOT_B)}
+    sources = {ROOT_A: root_source(ROOT_A)}
     sources[root] = text
     return analyze(sources)
 
@@ -360,14 +360,13 @@ class ClassificationTest(unittest.TestCase):
                         result.failures)
 
     def test_13_missing_generated_root_fails(self):
-        result = analyze({ROOT_A: root_source(ROOT_A)})
-        self.assertIn("GENERATED_ROOT_MISSING %s.java" % ROOT_B, result.failures)
+        result = analyze({})
+        self.assertIn("GENERATED_ROOT_MISSING %s.java" % ROOT_A, result.failures)
         with tempfile.TemporaryDirectory() as directory:
             generated = Path(directory) / "annotations" / "p"
             generated.mkdir(parents=True)
-            (generated / (ROOT_A + ".java")).write_text(root_source(ROOT_A), encoding="utf-8")
             _, failures = guard.discover(Path(directory))
-            self.assertEqual(failures, ["GENERATED_ROOT_MISSING %s.java under %s" % (ROOT_B, directory)])
+            self.assertEqual(failures, ["GENERATED_ROOT_MISSING %s.java under %s" % (ROOT_A, directory)])
             _, failures = guard.discover(Path(directory) / "absent")
             self.assertTrue(failures[0].startswith("GENERATED_SOURCES_MISSING"))
 
@@ -382,17 +381,19 @@ class ClassificationTest(unittest.TestCase):
             "                            String s = \"bci = sp;\";\n                            bci += 2;"))
         self.assertEqual((transition.kind, transition.status), (guard.SEQUENTIAL_CONSTANT_DELTA, guard.PROVEN))
 
-    def test_18_two_roots_are_independent(self):
-        risky = root_source(ROOT_B, cached(ROOT_B, cases="""
+    def test_18_other_sources_are_independent_of_the_generated_root(self):
+        # I111-B: one generated interpreter; another generated class never affects it.
+        other = "ProtosOtherRootNodeGen"
+        risky = root_source(other, cached(other, cases="""
                         case Instructions.OP :
                             bci = this.resumeBci;
                             break;
 """))
-        result = analyze({ROOT_A: root_source(ROOT_A), ROOT_B: risky})
+        result = analyze({ROOT_A: root_source(ROOT_A), other: risky})
         statuses_a = {each.status for each in transitions(result, ROOT_A)}
-        statuses_b = {each.status for each in transitions(result, ROOT_B)}
         self.assertNotIn(guard.RISK, statuses_a)
-        self.assertIn(guard.RISK, statuses_b)
+        self.assertNotIn(other, result.roots)
+        self.assertEqual(result.failures, [])
 
     def test_19_cached_and_tail_call_dispatches_are_separate(self):
         source = root_source(ROOT_A, cached(ROOT_A), cached(ROOT_A, name="CachedBytecodeNodeTailCall"))
@@ -480,7 +481,7 @@ class BaselineTest(unittest.TestCase):
         status, output = self.run_check()
         self.assertEqual(status, 0, output)
         self.assertIn("BCI_TRANSITION_RISK=0", output)
-        self.assertIn("GENERATED_ROOTS_FOUND=2", output)
+        self.assertIn("GENERATED_ROOTS_FOUND=1", output)
 
     def test_14_duplicate_baseline_entry_fails(self):
         data = dict(self.data)
@@ -544,7 +545,7 @@ class BaselineTest(unittest.TestCase):
         self.assertIn("BCI_TRANSITION_RISK=1", output)
 
     def test_missing_generated_root_fails_check(self):
-        (self.generated / (ROOT_B + ".java")).unlink()
+        (self.generated / (ROOT_A + ".java")).unlink()
         status, output = self.run_check()
         self.assertEqual(status, 1)
         self.assertIn("GENERATED_ROOT_MISSING", output)

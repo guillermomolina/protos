@@ -93,7 +93,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
             try {
                 new ProtosCoreBootstrap().bootstrap(CORE);
 
-                ProtosSemanticBytecodeRootNode literal =
+                ProtosBytecodeRootNode literal =
                         roots(parse("() => { 2 }", "constant-two")).get(1);
                 List<String> expected = completeSignature(literal);
 
@@ -104,7 +104,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                         "4 - 2",
                         "1 * 2",
                         "4 / 2")) {
-                    ProtosSemanticBytecodeRootNode folded =
+                    ProtosBytecodeRootNode folded =
                             roots(parse(
                                     "() => { " + expression + " }",
                                     "constant-fold")).get(1);
@@ -131,7 +131,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
 
     private static void compare(
             String program, String caseName, long resultValue,
-            Supplier<ProtosSemanticBytecodeRootNode> manual) throws Exception {
+            Supplier<ProtosBytecodeRootNode> manual) throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -140,15 +140,15 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                         ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
-                ProtosSemanticBytecodeRootNode module = parse(program, caseName);
-                List<ProtosSemanticBytecodeRootNode> realRoots = roots(module);
+                ProtosBytecodeRootNode module = parse(program, caseName);
+                List<ProtosBytecodeRootNode> realRoots = roots(module);
                 // D203/I105: no arity-rejection root accompanies the Closure root.
                 assertEquals(2, realRoots.size(),
                         "module and ordinary Closure root");
                 assertSame(module, realRoots.get(0));
-                ProtosSemanticBytecodeRootNode actual = realRoots.get(1);
+                ProtosBytecodeRootNode actual = realRoots.get(1);
 
-                ProtosSemanticBytecodeRootNode oracle = manual.get();
+                ProtosBytecodeRootNode oracle = manual.get();
                 assertEquals(1, roots(oracle).size(),
                         "An independent builder has one executable root");
 
@@ -193,13 +193,13 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode handwrittenLiteralAdd() {
+    private static ProtosBytecodeRootNode handwrittenLiteralAdd() {
         String code = LITERAL_ADD;
         Source source = source(code, "literal-add-oracle");
         int bodyStart = code.indexOf('{');
         int bodyLength = code.lastIndexOf('}') + 1 - bodyStart;
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null), BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginSource(source);
@@ -221,7 +221,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         return nodes.getNode(0);
     }
 
-    private static ProtosSemanticBytecodeRootNode handwrittenLocalPlusLiteral() {
+    private static ProtosBytecodeRootNode handwrittenLocalPlusLiteral() {
         String code = LOCAL_AND_LITERAL;
         Source source = source(code, "local-plus-literal-oracle");
         int bodyStart = code.indexOf('{');
@@ -229,8 +229,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         int xStart = code.indexOf("x: 1");
         int yStart = code.indexOf("y: x + 1");
         int terminalStart = code.lastIndexOf('y');
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null), BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginSource(source);
@@ -269,7 +269,7 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         return nodes.getNode(0);
     }
 
-    private static ProtosSemanticBytecodeRootNode handwrittenLocalPlusLocal() {
+    private static ProtosBytecodeRootNode handwrittenLocalPlusLocal() {
         String code = TWO_LOCALS;
         Source source = source(code, "local-plus-local-oracle");
         int bodyStart = code.indexOf('{');
@@ -278,8 +278,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         int yStart = code.indexOf("y: 2");
         int zStart = code.indexOf("z: x + y");
         int terminalStart = code.lastIndexOf('z');
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null), BytecodeConfig.DEFAULT,
                         builder -> {
                             builder.beginSource(source);
@@ -330,20 +330,20 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                 "i101-b-" + label + ".protos").build();
     }
 
-    private static ProtosSemanticBytecodeRootNode parse(String code, String label) {
+    private static ProtosBytecodeRootNode parse(String code, String label) {
         RootCallTarget callTarget = assertInstanceOf(RootCallTarget.class,
                 ProtosLanguageContext.current().parsePublic(source(code, label)));
-        return assertInstanceOf(ProtosSemanticBytecodeRootNode.class,
+        return assertInstanceOf(ProtosBytecodeRootNode.class,
                 callTarget.getRootNode());
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> roots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> roots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast).toList();
+                .map(ProtosBytecodeRootNode.class::cast).toList();
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         List<String> result = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {

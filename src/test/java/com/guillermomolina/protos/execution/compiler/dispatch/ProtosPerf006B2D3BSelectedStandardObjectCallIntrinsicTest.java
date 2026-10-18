@@ -394,7 +394,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                                         characters,
                                         "perf006-b2d3b-call-tag.protos")
                                 .build();
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(
                                         language,
                                         source, ProtosExecutionMode.NORMAL)
@@ -501,7 +501,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         .build();
         CanonicalClosure definition =
                 closureDefinition(characters);
-        ProtosSemanticBytecodeRootNode root =
+        ProtosBytecodeRootNode root =
                 yieldingRoot(
                         language,
                         source,
@@ -517,13 +517,13 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                 creator);
     }
 
-    private static ProtosSemanticBytecodeRootNode yieldingRoot(
+    private static ProtosBytecodeRootNode yieldingRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

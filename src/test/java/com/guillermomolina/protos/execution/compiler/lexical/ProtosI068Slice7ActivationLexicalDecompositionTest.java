@@ -72,7 +72,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
         withEnteredLanguage(
                 (language, module) -> {
                     String characters = "x: 1\nx";
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(language, characters, "i068-slice7-current.protos");
 
                     List<String> instructions = instructionNames(root);
@@ -93,7 +93,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                             "x: 1\n"
                                     + "() => x";
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(language, characters, "i068-slice7-captured.protos");
 
                     ProtosClosureValue closure =
@@ -135,7 +135,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                                     + "x: 1\n"
                                     + "before }";
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(language, characters, "i068-slice7-candidate.protos");
 
                     ProtosClosureValue closure =
@@ -173,7 +173,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
         withEnteredLanguage(
                 (language, module) -> {
                     String characters = "Context";
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(language, characters, "i068-slice7-dynamic.protos");
 
                     List<String> instructions = instructionNames(root);
@@ -185,7 +185,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                 });
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName) {
@@ -201,7 +201,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
     }
 
     private static List<String> instructionNames(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()

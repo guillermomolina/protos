@@ -111,7 +111,8 @@ public final class ProtosRootTaskExecution {
     }
     private static boolean isProductionBytecodeRoot(CallTarget target) {
         return target instanceof RootCallTarget rootTarget
-                && rootTarget.getRootNode() instanceof ProtosSemanticBytecodeRootNode;
+                && rootTarget.getRootNode() instanceof ProtosBytecodeRootNode root
+                && root.isSemanticActivationRoot();
     }
 
 }

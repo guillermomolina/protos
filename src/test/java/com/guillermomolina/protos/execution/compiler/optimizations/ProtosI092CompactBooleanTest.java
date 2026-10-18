@@ -851,9 +851,15 @@ final class ProtosI092CompactBooleanTest {
                 names.toString());
         assertTrue(fallback > miss && generic > fallback, names.toString());
         assertTrue(nativeBranch > generic, names.toString());
-        assertFalse(Arrays.stream(ProtosBytecodeRootNode.class.getDeclaredClasses())
-                .anyMatch(type -> type.getSimpleName()
-                        .equals("CompactCanonicalBooleanCall")));
+        for (Class<?> owner : List.of(
+                ProtosBytecodeRootNode.class,
+                ProtosPreparedCalls.class,
+                ProtosClosureCallPreparation.class)) {
+            assertFalse(Arrays.stream(owner.getDeclaredClasses())
+                    .anyMatch(type -> type.getSimpleName()
+                            .equals("CompactCanonicalBooleanCall")),
+                    owner.getName());
+        }
     }
 
     /**
@@ -882,10 +888,10 @@ final class ProtosI092CompactBooleanTest {
                                                 ProtosLanguage.ID, characters, name)
                                         .build()));
                 var module = assertInstanceOf(
-                        ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+                        ProtosBytecodeRootNode.class, target.getRootNode());
                 module.getRootNodes().ensureComplete();
                 var run = assertInstanceOf(
-                        ProtosSemanticBytecodeRootNode.class,
+                        ProtosBytecodeRootNode.class,
                         module.getRootNodes().getNode(1));
                 return run.getBytecodeNode().getInstructionsAsList().stream()
                         .map(Instruction::getName)
@@ -963,7 +969,10 @@ final class ProtosI092CompactBooleanTest {
     /** The native path has no carrier for a standard ifTrue activation. */
     private static void assertNoSyntheticIfTrueActivation() {
         for (Class<?> root : List.of(
-                ProtosBytecodeRootNode.class, ProtosSemanticBytecodeRootNode.class)) {
+                ProtosBytecodeRootNode.class,
+                ProtosPreparedCalls.class,
+                ProtosClosureCallPreparation.class,
+                ProtosStructuredControlCalls.class)) {
             assertFalse(Arrays.stream(root.getDeclaredClasses())
                     .map(Class::getSimpleName)
                     .anyMatch(name -> name.equals("PreparedNativeIfTrueCallback")

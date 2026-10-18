@@ -77,7 +77,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                     fixture.module.context().createLocalSlot("seed", seed);
                     fixture.module.context().createLocalSlot("replacement", replacement);
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: seed\n"
@@ -149,7 +149,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                                         return ProtosNullValue.INSTANCE;
                                     }));
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n" + "context.removeSlot(\"x\")\n" + "x = touch()");
@@ -194,7 +194,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void rhsRemovalOfSelectedCurrentBindingIsMutationErrorNotRetarget() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n"
@@ -218,7 +218,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void rhsRemoveThenRecreateInSameContextReceivesTheWrite() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n"
@@ -269,7 +269,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void closedCurrentContextRemainsWritable() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n"
@@ -290,7 +290,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void frozenCurrentContextRejectsWriteAndPreservesValue() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n"
@@ -314,7 +314,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void presentNullRemainsDistinctFromAbsent() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(fixture.language, "x: 1\n" + "x = null\n" + "x = null");
                     assertCurrentFrameLocalWritePath(root.getBytecodeNode());
 
@@ -330,7 +330,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     void rhsControlTransferAttemptsNoWrite() throws Exception {
         withFixture(
                 fixture -> {
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lower(
                                     fixture.language,
                                     "x: 1\n" + "boom: () => missingName\n" + "x = boom()");
@@ -364,7 +364,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                     ProtosObjectValue initial = newObject();
                     ProtosObjectValue recreated = newObject();
                     ProtosObjectValue rhs = newObject();
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             createSelectYieldAssignRoot(fixture.language, initial);
                     ProtosObjectValue executionContext = fixture.module.context();
 
@@ -392,7 +392,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         withFixture(
                 fixture -> {
                     ProtosObjectValue initial = newObject();
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             createSelectYieldAssignRoot(fixture.language, initial);
                     ProtosObjectValue executionContext = fixture.module.context();
 
@@ -431,7 +431,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             lower(fixture.language, "undeclared = 1").getBytecodeNode());
 
                     // Explicit member assignment.
-                    ProtosSemanticBytecodeRootNode member =
+                    ProtosBytecodeRootNode member =
                             lower(fixture.language, "o: { x: 1 }\n" + "o.x = 2\n" + "o.x");
                     List<String> memberNames = instructionNames(member.getBytecodeNode());
                     assertTrue(
@@ -473,10 +473,10 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
      * destination selected and retained, then the RHS suspends; the resume
      * value becomes the RHS written through the same constant accessor.
      */
-    private static ProtosSemanticBytecodeRootNode createSelectYieldAssignRoot(
+    private static ProtosBytecodeRootNode createSelectYieldAssignRoot(
             ProtosLanguage language, ProtosObjectValue initial) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -635,7 +635,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         return lower(fixture.language, characters).getCallTarget().call(fixture.module);
     }
 
-    private static ProtosSemanticBytecodeRootNode lower(ProtosLanguage language, String characters) {
+    private static ProtosBytecodeRootNode lower(ProtosLanguage language, String characters) {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "perf028-a.protos").build();
         return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(characters));
     }

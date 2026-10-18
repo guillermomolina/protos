@@ -144,7 +144,7 @@ final class ProtosI109ADynamicLocalEachTest {
                         + "}\n"
                         + "run()\n";
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(scope.language(), program,
                                 "i109-a-suspend-" + each.name());
 
@@ -235,7 +235,7 @@ final class ProtosI109ADynamicLocalEachTest {
                                 + "(caught) => { 42 })\n"
                             : run + "run()\n";
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(
                                     scope.language(),
                                     program,
@@ -294,7 +294,7 @@ final class ProtosI109ADynamicLocalEachTest {
                         + "}\n"
                         + "run()\n";
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 scope.language(),
                                 program,
@@ -354,7 +354,7 @@ final class ProtosI109ADynamicLocalEachTest {
 
                         installProbe(module, visits, sawCPrime);
 
-                        ProtosSemanticBytecodeRootNode root =
+                        ProtosBytecodeRootNode root =
                                 lowerRoot(
                                         scope.language(),
                                         program,
@@ -446,7 +446,7 @@ final class ProtosI109ADynamicLocalEachTest {
                         + "}\n"
                         + "run()\n";
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 scope.language(),
                                 program,
@@ -581,7 +581,7 @@ final class ProtosI109ADynamicLocalEachTest {
                     String diagnostic =
                             each.name() + " / " + mode;
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             lowerRoot(
                                     scope.language(),
                                     program,
@@ -591,10 +591,10 @@ final class ProtosI109ADynamicLocalEachTest {
 
                     var group = root.getRootNodes();
 
-                    List<ProtosSemanticBytecodeRootNode> before =
+                    List<ProtosBytecodeRootNode> before =
                             group.getNodes().stream()
                                     .map(
-                                            ProtosSemanticBytecodeRootNode.class
+                                            ProtosBytecodeRootNode.class
                                                     ::cast)
                                     .toList();
 
@@ -622,10 +622,10 @@ final class ProtosI109ADynamicLocalEachTest {
                             group, root.getRootNodes(),
                             diagnostic + ": group identity");
 
-                    List<ProtosSemanticBytecodeRootNode> after =
+                    List<ProtosBytecodeRootNode> after =
                             group.getNodes().stream()
                                     .map(
-                                            ProtosSemanticBytecodeRootNode.class
+                                            ProtosBytecodeRootNode.class
                                                     ::cast)
                                     .toList();
 
@@ -638,7 +638,7 @@ final class ProtosI109ADynamicLocalEachTest {
                             index < before.size();
                             index++) {
 
-                        ProtosSemanticBytecodeRootNode node =
+                        ProtosBytecodeRootNode node =
                                 after.get(index);
 
                         String detail =
@@ -706,7 +706,7 @@ final class ProtosI109ADynamicLocalEachTest {
     }
 
     private static List<String> i109SemanticInstructions(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
@@ -826,7 +826,8 @@ final class ProtosI109ADynamicLocalEachTest {
                                 if (frame.getCallTarget()
                                         instanceof RootCallTarget target
                                         && target.getRootNode()
-                                        instanceof ProtosBytecodeRootNode) {
+                                                instanceof ProtosBytecodeRootNode root
+                                        && !root.isSemanticActivationRoot()) {
                                     sawCPrime.set(true);
                                 }
                                 return null;
@@ -898,7 +899,7 @@ final class ProtosI109ADynamicLocalEachTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation module,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current -> ProtosBytecodeTaskExecution.execute(
@@ -922,7 +923,7 @@ final class ProtosI109ADynamicLocalEachTest {
                 domain);
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String name)
@@ -934,7 +935,7 @@ final class ProtosI109ADynamicLocalEachTest {
                 ProtosExecutionMode.NORMAL);
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String name,

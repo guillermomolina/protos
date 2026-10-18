@@ -191,7 +191,7 @@ final class ProtosPerf032ExecutionModeTest {
         try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.DEBUG)) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
-            ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+            ProtosPreparedCalls.OrdinarySourceCall prepared =
                     session.processContextForTesting()
                             .callForRuntime(() -> prepareNoArguments(adapter));
             assertB5ZeroArgumentHeader(adapter, prepared.targetArguments());
@@ -225,8 +225,8 @@ final class ProtosPerf032ExecutionModeTest {
             session.processContextForTesting()
                     .callForRuntime(
                             () -> {
-                                ProtosSemanticBytecodeRootNode root =
-                                        (ProtosSemanticBytecodeRootNode)
+                                ProtosBytecodeRootNode root =
+                                        (ProtosBytecodeRootNode)
                                                 adapter.target.getRootNode();
                                 root.getRootNodes().ensureComplete();
                                 TagTreeNode location =
@@ -589,7 +589,7 @@ final class ProtosPerf032ExecutionModeTest {
         assertEquals(0, ProtosFrameArguments.compactSuppliedArgumentCount(arguments));
     }
 
-    private static ProtosBytecodeRootNode.OrdinarySourceCall prepareNoArguments(
+    private static ProtosPreparedCalls.OrdinarySourceCall prepareNoArguments(
             ProtosHostExecutableClosure adapter) {
         try {
             return adapter.prepare(new Object[0], null);

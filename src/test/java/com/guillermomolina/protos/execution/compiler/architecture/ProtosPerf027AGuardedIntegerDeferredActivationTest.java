@@ -27,7 +27,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;

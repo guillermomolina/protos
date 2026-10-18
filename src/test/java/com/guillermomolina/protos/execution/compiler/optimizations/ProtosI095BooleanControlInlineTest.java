@@ -208,7 +208,7 @@ final class ProtosI095BooleanControlInlineTest {
         Execution normal = execute(false, source);
         assertInteger(42, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        ProtosSemanticBytecodeRootNode runRoot = normal.rootOfFirstProbe();
+        ProtosBytecodeRootNode runRoot = normal.rootOfFirstProbe();
         // Materializes the tag tree read below.
         runRoot.getRootNodes().ensureComplete();
         assertTrue(rootTags(runRoot.getBytecodeNode()) >= 2,
@@ -562,9 +562,9 @@ final class ProtosI095BooleanControlInlineTest {
 
     private record Execution(Object value, Probe probe) {
         /** The guest root that called probe first. */
-        ProtosSemanticBytecodeRootNode rootOfFirstProbe() {
+        ProtosBytecodeRootNode rootOfFirstProbe() {
             return assertInstanceOf(
-                    ProtosSemanticBytecodeRootNode.class,
+                    ProtosBytecodeRootNode.class,
                     probe.stacks.get(0).get(0));
         }
     }
@@ -648,7 +648,7 @@ final class ProtosI095BooleanControlInlineTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "i095-c.protos").build();
         CanonicalSequence sequence =
@@ -663,7 +663,7 @@ final class ProtosI095BooleanControlInlineTest {
                 .lowerRoot(sequence);
     }
 
-    private static List<String> instructionNames(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> instructionNames(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return instructionNames(root.getBytecodeNode());
     }

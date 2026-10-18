@@ -329,7 +329,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName)
                         .build();
         CanonicalClosure definition = closureDefinition(characters);
-        ProtosSemanticBytecodeRootNode root =
+        ProtosBytecodeRootNode root =
                 yieldingRoot(
                         language,
                         source,
@@ -345,13 +345,13 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
                 creator);
     }
 
-    private static ProtosSemanticBytecodeRootNode yieldingRoot(
+    private static ProtosBytecodeRootNode yieldingRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

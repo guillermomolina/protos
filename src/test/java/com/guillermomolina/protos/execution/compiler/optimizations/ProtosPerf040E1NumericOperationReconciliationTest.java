@@ -516,7 +516,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             assertTrue(source.contains("@OperationProxy.Proxyable("), node.getSimpleName());
         }
         String root = Files.readString(
-                EXECUTION_SOURCES.resolve("bytecode/activation/ProtosSemanticBytecodeRootNode.java"));
+                EXECUTION_SOURCES.resolve("bytecode/activation/ProtosBytecodeRootNode.java"));
         assertFalse(root.contains("TryPrimitiveNumericSendOne"));
         for (int index = 0; index < NODES.size(); index++) {
             String node = NODES.get(index).getSimpleName();
@@ -1032,12 +1032,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         RootCallTarget target =
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
                         closure, entered);
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+        ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
                         closure,
                         caller,
@@ -1051,12 +1051,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         Object result =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
                         assertInstanceOf(
-                                ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                                ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return ProtosNumericValueSupport.guestValue(prepared.finish(result));
     }
 
-    private static ProtosSemanticBytecodeRootNode rootOf(ProtosClosureValue closure) {
+    private static ProtosBytecodeRootNode rootOf(ProtosClosureValue closure) {
         return closure.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
     }
 

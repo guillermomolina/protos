@@ -32,10 +32,10 @@ synchronous Truffle compilation:
   -Dpolyglot.engine.TraceCompilation=true   (evidence that compilation ran)
 
 The program loops (BRANCH_BACKWARD), branches, signals an Error caught by
-Error.handle (ProtosBytecodeRootNode TryCatch handler-table re-entry), runs
+Error.handle (auxiliary structured-root TryCatch handler-table re-entry), runs
 ensure cleanup (TryFinally), and performs a non-local return
-(control-flow-exception path) inside ordinary closures (ProtosSemantic
-BytecodeRootNode). It must produce the exact expected output, at least one
+(control-flow-exception path) inside ordinary closures (semantic roots; I111-B:
+both kinds of root belong to ProtosBytecodeRootNodeGen). It must produce the exact expected output, at least one
 compilation must complete, and no permanent compilation failure may carry the
 partialEvaluationConstant assertion. Other permanent failures are reported
 but belong to the general dynamic-compilation family, not to TEST009-D.
@@ -112,7 +112,7 @@ EXPECTED_OUTPUT = ("600", "200")
 
 PE_CONSTANT_MARKERS = ("partialevaluationconstant", "reduce value to a constant")
 GENERATED_DISPATCH_MARKERS = ("BytecodeRootNodeGen",)
-GENERATED_ROOTS = ("ProtosBytecodeRootNodeGen", "ProtosSemanticBytecodeRootNodeGen")
+GENERATED_ROOTS = ("ProtosBytecodeRootNodeGen",)
 
 GENERATED_BCI = "GENERATED_BCI_PE_CONSTANT"
 OTHER_PE_CONSTANT = "OTHER_PE_CONSTANT"

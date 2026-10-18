@@ -111,22 +111,30 @@ final class ProtosPerf006B5ABytecodeDebuggerScopeTest {
         Path rootPath =
                 Path.of(
                         "src", "main", "java", "com", "guillermomolina", "protos",
-                        "execution", "bytecode", "activation", "ProtosBytecodeRootNode.java");
-        String root = Files.readString(rootPath);
+                        "execution", "bytecode", "activation", "ProtosSemanticBytecodeRootNode.java");
+        // I111-B: the unified interpreter is ProtosBytecodeRootNode; its former name is gone.
+        assertFalse(Files.exists(rootPath));
+        try (java.util.stream.Stream<Path> sources =
+                Files.walk(Path.of("src", "main", "java"))) {
+            long generators =
+                    sources.filter(path -> path.toString().endsWith(".java"))
+                            .filter(path -> {
+                                try {
+                                    return Files.readString(path).contains("\n@GenerateBytecode(");
+                                } catch (java.io.IOException e) {
+                                    throw new java.io.UncheckedIOException(e);
+                                }
+                            })
+                            .count();
+            assertEquals(1, generators, "exactly one @GenerateBytecode interpreter");
+        }
 
-        assertTrue(root.contains("enableTagInstrumentation = true"));
-        assertTrue(
-                root.contains(
-                        "tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class"));
-        assertTrue(root.contains("enableRootTagging = false"));
-        assertTrue(root.contains("enableRootBodyTagging = false"));
-
-        // I111-A / PLAT065-A: the semantic interpreter tags its roots explicitly.
+        // I111-A / PLAT065-A: the single interpreter tags semantic roots explicitly.
         Path semanticPath =
                 Path.of(
                         "src", "main", "java", "com", "guillermomolina", "protos",
                         "execution", "bytecode", "activation",
-                        "ProtosSemanticBytecodeRootNode.java");
+                        "ProtosBytecodeRootNode.java");
         String semantic = Files.readString(semanticPath);
 
         assertTrue(semantic.contains("enableTagInstrumentation = true"));

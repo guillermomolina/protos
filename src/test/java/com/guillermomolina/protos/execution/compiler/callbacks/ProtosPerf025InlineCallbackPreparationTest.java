@@ -68,7 +68,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             context.enter();
             try {
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 run: () => {
@@ -84,7 +84,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                 root.getCallTarget().call(probe.module());
 
-                ProtosSemanticBytecodeRootNode callbackHost =
+                ProtosBytecodeRootNode callbackHost =
                         probe.callbackHost.get();
                 assertNotNull(
                         callbackHost,
@@ -179,7 +179,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             context.enter();
             try {
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(
                                 """
                                 run: () => {
@@ -193,7 +193,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                 root.getCallTarget().call(probe.module());
 
-                ProtosSemanticBytecodeRootNode callbackHost =
+                ProtosBytecodeRootNode callbackHost =
                         probe.callbackHost.get();
                 assertNotNull(
                         callbackHost,
@@ -313,10 +313,10 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             context.enter();
             try {
                 Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+                ProtosBytecodeRootNode root = lowerRoot(characters);
                 root.getCallTarget().call(probe.module());
 
-                ProtosSemanticBytecodeRootNode callbackHost =
+                ProtosBytecodeRootNode callbackHost =
                         probe.callbackHost.get();
 
                 assertNotNull(
@@ -400,7 +400,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
     }
 
     private static List<String> instructionNames(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
 
         return root.getBytecodeNode()
@@ -410,7 +410,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 .toList();
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             String characters) {
         Source source =
                 Source.newBuilder(
@@ -438,7 +438,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
      * the first semantic frame observed here is the enclosing Closure root.
      */
     private static final class Probe {
-        private final AtomicReference<ProtosSemanticBytecodeRootNode>
+        private final AtomicReference<ProtosBytecodeRootNode>
                 callbackHost = new AtomicReference<>();
 
         ProtosActivation module() throws Exception {
@@ -463,7 +463,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                                                             if (root
                                                                     instanceof
-                                                                    ProtosSemanticBytecodeRootNode
+                                                                    ProtosBytecodeRootNode
                                                                             semantic) {
                                                                 callbackHost
                                                                         .compareAndSet(

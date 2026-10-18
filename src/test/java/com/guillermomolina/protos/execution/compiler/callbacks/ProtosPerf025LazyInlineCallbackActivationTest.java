@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
+import com.guillermomolina.protos.execution.ProtosInlineCallbackFrameBindings.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -236,7 +236,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         .call(probe.module());
 
                 assertEquals(4, probe.calls.size());
-                ProtosSemanticBytecodeRootNode host = probe.host.get();
+                ProtosBytecodeRootNode host = probe.host.get();
                 host.getRootNodes().ensureComplete();
                 List<String> names =
                         host.getBytecodeNode().getInstructionsAsList().stream()
@@ -664,7 +664,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
             try {
                 CarrierProbe probe = new CarrierProbe();
                 lowerRoot(characters).getCallTarget().call(probe.module());
-                ProtosSemanticBytecodeRootNode host = probe.host.get();
+                ProtosBytecodeRootNode host = probe.host.get();
                 assertNotNull(host, "probe must observe the run root");
                 host.getRootNodes().ensureComplete();
                 List<Instruction> instructions = host.getBytecodeNode().getInstructionsAsList();
@@ -717,7 +717,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 () -> "missing " + operation + " in " + names);
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "perf025-lazy-inline.protos")
                         .build();
@@ -758,7 +758,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
      * </ul>
      */
     private static final class CarrierProbe {
-        final AtomicReference<ProtosSemanticBytecodeRootNode> host = new AtomicReference<>();
+        final AtomicReference<ProtosBytecodeRootNode> host = new AtomicReference<>();
         final List<Observation> calls = new ArrayList<>();
         final List<ProtosObjectValue> observed = new ArrayList<>();
         final List<java.util.Map<String, Object>> observedAtProbe = new ArrayList<>();
@@ -809,7 +809,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                                         root instanceof ContinuationRootNode continuation
                                                 ? continuation.getSourceRootNode()
                                                 : root;
-                                if (!(source instanceof ProtosSemanticBytecodeRootNode semantic)) {
+                                if (!(source instanceof ProtosBytecodeRootNode semantic)) {
                                     return null;
                                 }
                                 host.compareAndSet(null, semantic);
@@ -836,7 +836,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
          */
         private static PreparedInlineLiteralCall liveCarrier(
                 FrameInstance frame,
-                ProtosSemanticBytecodeRootNode semantic) {
+                ProtosBytecodeRootNode semantic) {
             BytecodeFrame located = BytecodeFrame.get(frame, FrameInstance.FrameAccess.READ_ONLY);
             if (located != null) {
                 Object[] names = located.getLocalNames();
@@ -873,7 +873,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
          * continuation, the materialized source frame it carries as an
          * argument.
          */
-        private static Frame sourceFrame(Frame frame, ProtosSemanticBytecodeRootNode semantic) {
+        private static Frame sourceFrame(Frame frame, ProtosBytecodeRootNode semantic) {
             if (frame.getFrameDescriptor() == semantic.getFrameDescriptor()) {
                 return frame;
             }

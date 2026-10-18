@@ -38,26 +38,26 @@ import org.junit.jupiter.api.Test;
  * I072 Phase D structural discriminator: an ordinary source-backed,
  * nonsuspending call must use a lean call representation that never
  * physically carries native-body, structured-control-capability, or
- * module-initialization state, and {@link ProtosBytecodeRootNode.PreparedClosureCall}
+ * module-initialization state, and {@link ProtosPreparedCalls.PreparedClosureCall}
  * itself must be a small dispatch surface rather than a universal carrier
  * class. See PLAT040 Candidate F' and the I072 Phase D implementation report.
  */
 class ProtosI072PhaseDPreparedCallSeparationTest {
     @Test
     void preparedClosureCallIsADispatchInterfaceNotAUniversalCarrier() {
-        assertTrue(ProtosBytecodeRootNode.PreparedClosureCall.class.isInterface());
+        assertTrue(ProtosPreparedCalls.PreparedClosureCall.class.isInterface());
         assertNotEquals(
-                ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                ProtosBytecodeRootNode.NativeCall.class);
+                ProtosPreparedCalls.OrdinarySourceCall.class,
+                ProtosPreparedCalls.NativeCall.class);
         assertNotEquals(
-                ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                ProtosBytecodeRootNode.ModuleInitializationCall.class);
+                ProtosPreparedCalls.OrdinarySourceCall.class,
+                ProtosPreparedCalls.ModuleInitializationCall.class);
     }
 
     /**
      * TEST009-H: the terminal lifecycle operations must preserve the concrete
      * prepared-call representation instead of erasing it to a single
-     * {@link ProtosBytecodeRootNode.PreparedClosureCall} specialization, in both
+     * {@link ProtosPreparedCalls.PreparedClosureCall} specialization, in both
      * generated interpreters that declare them. PERF038-E: the semantic
      * {@code FinishClosureCall} specializes ordinary source calls twice, with and
      * without a return-home lifecycle; every other operation has exactly one
@@ -67,14 +67,14 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     void terminalLifecycleOperationsSpecializeOnConcreteRepresentations() {
         Set<Class<?>> representations =
                 Set.of(
-                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                        ProtosBytecodeRootNode.NativeCall.class,
-                        ProtosBytecodeRootNode.ImmediateResultCall.class,
-                        ProtosBytecodeRootNode.ModuleInitializationCall.class);
+                        ProtosPreparedCalls.OrdinarySourceCall.class,
+                        ProtosPreparedCalls.NativeCall.class,
+                        ProtosPreparedCalls.ImmediateResultCall.class,
+                        ProtosPreparedCalls.ModuleInitializationCall.class);
         for (Class<?> representation : representations) {
             assertTrue(Modifier.isFinal(representation.getModifiers()), representation.getName());
             assertTrue(
-                    ProtosBytecodeRootNode.PreparedClosureCall.class.isAssignableFrom(
+                    ProtosPreparedCalls.PreparedClosureCall.class.isAssignableFrom(
                             representation),
                     representation.getName());
         }
@@ -83,8 +83,8 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                 List.of(
                         ProtosBytecodeRootNode.CompleteClosureCall.class,
                         ProtosBytecodeRootNode.FinishClosureCall.class,
-                        ProtosSemanticBytecodeRootNode.CompleteClosureCall.class,
-                        ProtosSemanticBytecodeRootNode.FinishClosureCall.class)) {
+                        ProtosBytecodeRootNode.CompleteClosureCall.class,
+                        ProtosBytecodeRootNode.FinishClosureCall.class)) {
             List<Class<?>> receivers =
                     Arrays.stream(operation.getDeclaredMethods())
                             .filter(method -> Modifier.isStatic(method.getModifiers()))
@@ -93,14 +93,14 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                             .collect(java.util.stream.Collectors.toList());
 
             assertFalse(
-                    receivers.contains(ProtosBytecodeRootNode.PreparedClosureCall.class),
+                    receivers.contains(ProtosPreparedCalls.PreparedClosureCall.class),
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
             Set<Class<?>> expectedReceivers =
                     new java.util.HashSet<>(representations);
             int expectedCount =
-                    operation == ProtosSemanticBytecodeRootNode.CompleteClosureCall.class
-                                    || operation == ProtosSemanticBytecodeRootNode.FinishClosureCall.class
+                    operation == ProtosBytecodeRootNode.CompleteClosureCall.class
+                                    || operation == ProtosBytecodeRootNode.FinishClosureCall.class
                             ? representations.size() + 1
                             : representations.size();
             assertEquals(
@@ -123,15 +123,15 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     void entryOperationSpecializesOnConcreteRepresentations() {
         java.util.Map<Class<?>, Long> expected =
                 java.util.Map.of(
-                        ProtosBytecodeRootNode.ImmediateResultCall.class, 1L,
-                        ProtosBytecodeRootNode.NativeCall.class, 1L,
-                        ProtosBytecodeRootNode.OrdinarySourceCall.class, 2L,
-                        ProtosBytecodeRootNode.ModuleInitializationCall.class, 3L);
+                        ProtosPreparedCalls.ImmediateResultCall.class, 1L,
+                        ProtosPreparedCalls.NativeCall.class, 1L,
+                        ProtosPreparedCalls.OrdinarySourceCall.class, 2L,
+                        ProtosPreparedCalls.ModuleInitializationCall.class, 3L);
 
         for (Class<?> operation :
                 List.of(
                         ProtosBytecodeRootNode.EnterClosureCall.class,
-                        ProtosSemanticBytecodeRootNode.EnterClosureCall.class)) {
+                        ProtosBytecodeRootNode.EnterClosureCall.class)) {
             List<java.lang.reflect.Method> specializations =
                     Arrays.stream(operation.getDeclaredMethods())
                             .filter(
@@ -148,24 +148,24 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                             java.util.stream.Collectors.counting()));
 
             assertFalse(
-                    receivers.containsKey(ProtosBytecodeRootNode.PreparedClosureCall.class),
+                    receivers.containsKey(ProtosPreparedCalls.PreparedClosureCall.class),
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
             java.util.Map<Class<?>, Long> expectedForOperation =
                     new java.util.HashMap<>(expected);
             expectedForOperation.put(
-                    ProtosBytecodeRootNode.OrdinarySourceCall.class, 3L);
+                    ProtosPreparedCalls.OrdinarySourceCall.class, 3L);
 
             assertEquals(expectedForOperation, receivers, operation.getName());
 
             assertEquals(
                     List.of(
-                            List.of(ProtosBytecodeRootNode.NativeCall.class)),
+                            List.of(ProtosPreparedCalls.NativeCall.class)),
                     specializations.stream()
                             .filter(
                                     method ->
                                             method.getParameterTypes()[0]
-                                                    == ProtosBytecodeRootNode.NativeCall.class)
+                                                    == ProtosPreparedCalls.NativeCall.class)
                             .map(method -> List.of(method.getParameterTypes()))
                             .sorted(java.util.Comparator.comparingInt(List::size))
                             .collect(java.util.stream.Collectors.toList()),
@@ -173,8 +173,8 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
 
             for (Class<?> source :
                     List.of(
-                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                            ProtosBytecodeRootNode.ModuleInitializationCall.class)) {
+                            ProtosPreparedCalls.OrdinarySourceCall.class,
+                            ProtosPreparedCalls.ModuleInitializationCall.class)) {
                 List<Class<?>> sourceCallNodes =
                         specializations.stream()
                                 .filter(method -> method.getParameterTypes()[0] == source)
@@ -183,7 +183,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                 .map(parameters -> parameters[parameters.length - 1])
                                 .collect(java.util.stream.Collectors.toList());
                 List<Class<?>> expectedSourceCallNodes =
-                        source == ProtosBytecodeRootNode.OrdinarySourceCall.class
+                        source == ProtosPreparedCalls.OrdinarySourceCall.class
                                 ? List.of(
                                         com.oracle.truffle.api.nodes.DirectCallNode.class,
                                         com.oracle.truffle.api.nodes.DirectCallNode.class,
@@ -203,25 +203,24 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     }
 
     /**
-     * TEST009-J: no Bytecode DSL operation of either generated interpreter
-     * erases the prepared call to the {@link
-     * ProtosBytecodeRootNode.PreparedClosureCall} interface, except the
+     * TEST009-J: no Bytecode DSL operation of the generated interpreter
+     * (I111-B: the single one, which now declares every operation) erases the prepared call to the {@link
+     * ProtosPreparedCalls.PreparedClosureCall} interface, except the
      * still-pending continuation family. Structured-dispatch selection and
      * preparation cover exactly the four concrete representations, and
-     * nested structured entry accepts only {@link ProtosBytecodeRootNode.NativeCall}.
+     * nested structured entry accepts only {@link ProtosPreparedCalls.NativeCall}.
      */
     @Test
     void structuredDispatchOperationsSpecializeOnConcreteRepresentations() {
         Set<String> pendingGenericOperations = Set.of("ResumeContinuation");
         Set<Class<?>> representations =
                 Set.of(
-                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                        ProtosBytecodeRootNode.NativeCall.class,
-                        ProtosBytecodeRootNode.ImmediateResultCall.class,
-                        ProtosBytecodeRootNode.ModuleInitializationCall.class);
+                        ProtosPreparedCalls.OrdinarySourceCall.class,
+                        ProtosPreparedCalls.NativeCall.class,
+                        ProtosPreparedCalls.ImmediateResultCall.class,
+                        ProtosPreparedCalls.ModuleInitializationCall.class);
 
-        for (Class<?> root :
-                List.of(ProtosBytecodeRootNode.class, ProtosSemanticBytecodeRootNode.class)) {
+        for (Class<?> root : List.of(ProtosBytecodeRootNode.class)) {
             List<String> structuredFamily = new java.util.ArrayList<>();
             for (Class<?> operation : root.getDeclaredClasses()) {
                 List<java.lang.reflect.Method> specializations = specializations(operation);
@@ -234,8 +233,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                 .anyMatch(
                                         type ->
                                                 type
-                                                        == ProtosBytecodeRootNode
-                                                                .PreparedClosureCall.class);
+                                                        == ProtosPreparedCalls.PreparedClosureCall.class);
                 if (!pendingGenericOperations.contains(operation.getSimpleName())) {
                     assertFalse(
                             generic,
@@ -250,7 +248,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                 .collect(java.util.stream.Collectors.toSet());
                 if (operation.getSimpleName().equals("EnterNestedStructuredDispatch")) {
                     assertEquals(
-                            Set.of(ProtosBytecodeRootNode.NativeCall.class),
+                            Set.of(ProtosPreparedCalls.NativeCall.class),
                             receivers,
                             operation.getName());
                 } else if (operation.getSimpleName().matches(
@@ -277,14 +275,14 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     }
 
     /**
-     * TEST009-J: only {@link ProtosBytecodeRootNode.NativeCall} owns the
+     * TEST009-J: only {@link ProtosPreparedCalls.NativeCall} owns the
      * structured capability surface; the other representations neither
      * override it nor physically carry structured state.
      */
     @Test
     void onlyNativeCallOwnsStructuredCapabilities() {
         List<String> capabilityMethods =
-                Arrays.stream(ProtosBytecodeRootNode.PreparedClosureCall.class.getDeclaredMethods())
+                Arrays.stream(ProtosPreparedCalls.PreparedClosureCall.class.getDeclaredMethods())
                         .filter(java.lang.reflect.Method::isDefault)
                         .map(java.lang.reflect.Method::getName)
                         .filter(
@@ -296,16 +294,16 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                         .collect(java.util.stream.Collectors.toList());
         assertFalse(capabilityMethods.isEmpty());
 
-        Set<String> nativeDeclared = declaredMethodNames(ProtosBytecodeRootNode.NativeCall.class);
+        Set<String> nativeDeclared = declaredMethodNames(ProtosPreparedCalls.NativeCall.class);
         assertTrue(
                 nativeDeclared.containsAll(capabilityMethods),
                 "NativeCall must own every structured capability: " + capabilityMethods);
 
         for (Class<?> absent :
                 List.of(
-                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
-                        ProtosBytecodeRootNode.ImmediateResultCall.class,
-                        ProtosBytecodeRootNode.ModuleInitializationCall.class)) {
+                        ProtosPreparedCalls.OrdinarySourceCall.class,
+                        ProtosPreparedCalls.ImmediateResultCall.class,
+                        ProtosPreparedCalls.ModuleInitializationCall.class)) {
             Set<String> declared = declaredMethodNames(absent);
             assertTrue(
                     capabilityMethods.stream().noneMatch(declared::contains),
@@ -326,25 +324,25 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
      */
     @Test
     void specializedStructuredOperationsPreserveAbsentCapabilityBehavior() {
-        ProtosBytecodeRootNode.ImmediateResultCall immediate =
+        ProtosPreparedCalls.ImmediateResultCall immediate =
                 assertInstanceOf(
-                        ProtosBytecodeRootNode.ImmediateResultCall.class,
-                        ProtosBytecodeRootNode.PreparedClosureCall.immediateResult("result"));
+                        ProtosPreparedCalls.ImmediateResultCall.class,
+                        ProtosPreparedCalls.PreparedClosureCall.immediateResult("result"));
 
         assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
-        assertFalse(ProtosSemanticBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
+        assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
         assertFalse(ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
-        assertFalse(ProtosSemanticBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
+        assertFalse(ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
         assertThrows(
                 IllegalStateException.class,
                 () -> ProtosBytecodeRootNode.PrepareStructuredEnsureCall.immediate(immediate));
         assertThrows(
                 IllegalStateException.class,
-                () -> ProtosSemanticBytecodeRootNode.PrepareStructuredBooleanCall.immediate(
+                () -> ProtosBytecodeRootNode.PrepareStructuredBooleanCall.immediate(
                         immediate));
         assertThrows(
                 IllegalStateException.class,
-                () -> ProtosSemanticBytecodeRootNode.PrepareStructuredIndexedEachCall.immediate(
+                () -> ProtosBytecodeRootNode.PrepareStructuredIndexedEachCall.immediate(
                         immediate));
     }
 
@@ -367,7 +365,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
     void ordinarySourceCallNeverPhysicallyDeclaresSpecialCallState() {
         Set<String> fieldNames =
                 Arrays.stream(
-                                ProtosBytecodeRootNode.OrdinarySourceCall.class
+                                ProtosPreparedCalls.OrdinarySourceCall.class
                                         .getDeclaredFields())
                         .map(Field::getName)
                         .collect(java.util.stream.Collectors.toSet());
@@ -392,15 +390,15 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(closure, List.of());
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+        ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosTestExecutionSupport.callEntered(
                         () ->
-                                ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                                ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
                                         closure,
                                         List.of(),
                                         activation));
 
-        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared);
+        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared);
         assertFalse(prepared.isNative());
         assertFalse(prepared.isImmediate());
         assertFalse(prepared.requiresStructuredDispatch());
@@ -420,7 +418,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
 
         ProtosTestExecutionSupport.callEntered(
                 () ->
-                        ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                        ProtosClosureCallPreparation.prepareSynchronousSourceClosureForRuntime(
                                 closure,
                                 List.of(),
                                 activation));

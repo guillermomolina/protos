@@ -363,7 +363,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         lowerRoot(source);
 
                 module.getRootNodes().ensureComplete();
@@ -467,7 +467,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
             assertEquals(
                     8, normal.probe().calls.get(), label);
 
-            ProtosSemanticBytecodeRootNode caller =
+            ProtosBytecodeRootNode caller =
                     normal.innermostRoot();
 
             List<String> instructions =
@@ -682,7 +682,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(42, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
 
-        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
         runRoot.getRootNodes().ensureComplete();
         List<String> names = instructionNames(runRoot.getBytecodeNode());
         int prepare = position(names, "PrepareInlineClosureLiteralCall");
@@ -979,14 +979,14 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         f
                         """, module);
 
-                var admitted = ProtosBytecodeRootNode.prepareInlineClosureLiteralCall(
+                var admitted = ProtosClosureCallPreparation.prepareInlineClosureLiteralCall(
                         canonical, module, new Object[] {integerArgument(module)});
                 assertTrue(admitted.admits(planCell(canonical)),
                         "canonical selection of the literal's own plan is admitted");
                 assertFalse(admitted.admits(planCell(other)),
                         "definition identity of another literal never admits");
 
-                var rejected = ProtosBytecodeRootNode.prepareInlineClosureLiteralCall(
+                var rejected = ProtosClosureCallPreparation.prepareInlineClosureLiteralCall(
                         overridden, module, new Object[] {integerArgument(module)});
                 assertFalse(rejected.admits(planCell(overridden)),
                         "an instance-level call override is never inlined");
@@ -1015,7 +1015,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertTrue(
                 debug.probe().depths().get(0) > INLINE_DEPTH,
                 debug.probe()::toString);
-        ProtosSemanticBytecodeRootNode callee = debug.innermostRoot();
+        ProtosBytecodeRootNode callee = debug.innermostRoot();
         callee.getRootNodes().ensureComplete();
         assertEquals(1, rootTags(callee.getBytecodeNode()), "the callee's own RootTag");
         // I101-A: the DEBUG caller holds only the ordinary C1 call, no inline region.
@@ -1048,7 +1048,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         for (String source : sources) {
             Execution normal = execute(false, source);
             assertInteger(5, normal.value());
-            ProtosSemanticBytecodeRootNode runRoot = normal.outermostGuestRoot();
+            ProtosBytecodeRootNode runRoot = normal.outermostGuestRoot();
             List<String> names = instructionNames(runRoot);
             assertFalse(
                     names.stream().anyMatch(name -> name.contains("InlineClosureLiteralCall")),
@@ -1077,7 +1077,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(42, normal.value());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
 
-        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
         runRoot.getRootNodes().ensureComplete();
         List<String> names = instructionNames(runRoot.getBytecodeNode());
         int prepare = position(names, "PrepareInlineClosureLiteralCall");
@@ -1115,10 +1115,10 @@ final class ProtosI096InlineClosureLiteralCallTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode module = lowerRoot(source);
+                ProtosBytecodeRootNode module = lowerRoot(source);
                 module.getRootNodes().ensureComplete();
 
-                List<ProtosSemanticBytecodeRootNode> callers =
+                List<ProtosBytecodeRootNode> callers =
                         groupRoots(module).stream()
                                 .filter(root ->
                                         count(instructionNames(root),
@@ -1128,7 +1128,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 assertEquals(1, callers.size(),
                         "exactly one Root contains the I096 C1 inline site");
 
-                ProtosSemanticBytecodeRootNode caller = callers.get(0);
+                ProtosBytecodeRootNode caller = callers.get(0);
                 List<String> names = instructionNames(caller);
 
                 int prepare = position(names, "PrepareInlineClosureLiteralCall");
@@ -1462,7 +1462,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """);
         assertInteger(42, debug.value());
         assertTrue(debug.probe().depths().get(0) > INLINE_DEPTH, debug.probe()::toString);
-        ProtosSemanticBytecodeRootNode callee = debug.innermostRoot();
+        ProtosBytecodeRootNode callee = debug.innermostRoot();
         callee.getRootNodes().ensureComplete();
         assertEquals(1, rootTags(callee.getBytecodeNode()), "the callee's own RootTag");
         System.out.println("I096_B1_DEBUG_TOPOLOGY_PRESERVED=YES");
@@ -1488,15 +1488,15 @@ final class ProtosI096InlineClosureLiteralCallTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode module = lowerRoot(source);
-                List<ProtosSemanticBytecodeRootNode> before =
+                ProtosBytecodeRootNode module = lowerRoot(source);
+                List<ProtosBytecodeRootNode> before =
                         groupRoots(module);
                 List<Integer> regionsBefore = candidateRegions(before);
                 assertTrue(regionsBefore.stream().mapToInt(Integer::intValue).sum() >= 1,
                         regionsBefore::toString);
 
                 module.getRootNodes().ensureComplete();
-                List<ProtosSemanticBytecodeRootNode> after =
+                List<ProtosBytecodeRootNode> after =
                         groupRoots(module);
                 assertEquals(before.size(), after.size());
                 for (int i = 0; i < before.size(); i++) {
@@ -1709,7 +1709,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(207, normal.value());
         assertEquals(4, normal.probe().calls.get());
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
-        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
         assertSame(runRoot, normal.probe().stacks.get(0).get(0));
         List<String> names = instructionNames(runRoot);
         // f(2, 3), f(4, 5), f(1, r) and g(...) are four distinct eligible
@@ -1902,7 +1902,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(42, normal.value());
         List<List<RootNode>> stacks = normal.probe().stacks;
         assertEquals(2, stacks.size(), normal.probe()::toString);
-        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
         assertEquals(INLINE_DEPTH, stacks.get(0).size(), normal.probe()::toString);
         assertEquals(INLINE_DEPTH + 1, stacks.get(1).size(), normal.probe()::toString);
         assertTrue(stacks.get(1).get(0) != runRoot, "inner keeps its own CallTarget");
@@ -1986,7 +1986,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertInteger(83, normal.value());
         List<List<RootNode>> stacks = normal.probe().stacks;
         assertEquals(3, stacks.size(), normal.probe()::toString);
-        ProtosSemanticBytecodeRootNode runRoot = normal.innermostRoot();
+        ProtosBytecodeRootNode runRoot = normal.innermostRoot();
         assertEquals(INLINE_DEPTH, stacks.get(0).size(), normal.probe()::toString);
         for (int call = 1; call < 3; call++) {
             assertEquals(INLINE_DEPTH + 1, stacks.get(call).size(), normal.probe()::toString);
@@ -2180,7 +2180,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode module = lowerRoot(source);
+                ProtosBytecodeRootNode module = lowerRoot(source);
                 module.getRootNodes().ensureComplete();
                 assertEquals(
                         1,
@@ -2245,7 +2245,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertTrue(
                 position(instructionNames(
                                 assertInstanceOf(
-                                        ProtosSemanticBytecodeRootNode.class, stack.get(1))),
+                                        ProtosBytecodeRootNode.class, stack.get(1))),
                         "AdmitsInlineClosureLiteralCall") >= 0,
                 "the guarded region exists and rejected the owned ReturnHome");
         assertParity(moduleLiteral, 5);
@@ -2258,7 +2258,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
      * creates nested Closures over the callee's own activation, loaded from
      * the carrier, and never uses the frame-native callback materialization.
      */
-    private static List<String> nestedInlineRegion(ProtosSemanticBytecodeRootNode caller) {
+    private static List<String> nestedInlineRegion(ProtosBytecodeRootNode caller) {
         List<String> names = instructionNames(caller);
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
         assertTrue(admit >= 0, names::toString);
@@ -2283,8 +2283,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode module = lowerRoot(admitted);
-                List<ProtosSemanticBytecodeRootNode> before = groupRoots(module);
+                ProtosBytecodeRootNode module = lowerRoot(admitted);
+                List<ProtosBytecodeRootNode> before = groupRoots(module);
                 List<Integer> regionsBefore = candidateRegions(before);
                 assertEquals(
                         groupRoots(lowerRoot(notCandidate)).size(),
@@ -2292,7 +2292,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                         "no nested root is lowered twice");
 
                 module.getRootNodes().ensureComplete();
-                List<ProtosSemanticBytecodeRootNode> after = groupRoots(module);
+                List<ProtosBytecodeRootNode> after = groupRoots(module);
                 assertEquals(before.size(), after.size());
                 for (int i = 0; i < before.size(); i++) {
                     assertSame(before.get(i), after.get(i), "root order at " + i);
@@ -2313,7 +2313,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
      * the carrier's physical fallback.
      */
     private static void assertInlineSiteWithParameters(
-            ProtosSemanticBytecodeRootNode caller, int parameters) {
+            ProtosBytecodeRootNode caller, int parameters) {
         List<String> names = instructionNames(caller);
         int prepare = position(names, "PrepareInlineClosureLiteralCall");
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
@@ -2328,14 +2328,14 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 "caller RootTag plus the inline callee semantic RootTag");
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> groupRoots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> groupRoots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(node -> assertInstanceOf(ProtosSemanticBytecodeRootNode.class, node))
+                .map(node -> assertInstanceOf(ProtosBytecodeRootNode.class, node))
                 .toList();
     }
 
-    private static List<Integer> candidateRegions(List<ProtosSemanticBytecodeRootNode> roots) {
+    private static List<Integer> candidateRegions(List<ProtosBytecodeRootNode> roots) {
         return roots.stream()
                 .map(root -> count(
                         instructionNames(root.getBytecodeNode()),
@@ -2349,17 +2349,17 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
     private record Execution(Object value, Probe probe) {
         /** The innermost guest root of the first probe call. */
-        ProtosSemanticBytecodeRootNode innermostRoot() {
+        ProtosBytecodeRootNode innermostRoot() {
             return assertInstanceOf(
-                    ProtosSemanticBytecodeRootNode.class,
+                    ProtosBytecodeRootNode.class,
                     probe.stacks.get(0).get(0));
         }
 
         /** {@code run}'s root: the guest root directly below the module root. */
-        ProtosSemanticBytecodeRootNode outermostGuestRoot() {
+        ProtosBytecodeRootNode outermostGuestRoot() {
             List<RootNode> stack = probe.stacks.get(0);
             return assertInstanceOf(
-                    ProtosSemanticBytecodeRootNode.class,
+                    ProtosBytecodeRootNode.class,
                     stack.get(stack.size() - 2));
         }
     }
@@ -2445,7 +2445,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         return cell;
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
+    private static ProtosBytecodeRootNode lowerRoot(String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "i096-a.protos").build();
         CanonicalSequence sequence =
@@ -2460,7 +2460,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 .lowerRoot(sequence);
     }
 
-    private static List<String> instructionNames(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> instructionNames(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return instructionNames(root.getBytecodeNode());
     }

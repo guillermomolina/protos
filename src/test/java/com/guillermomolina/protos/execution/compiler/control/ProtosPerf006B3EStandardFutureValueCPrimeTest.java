@@ -465,7 +465,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
 
     private static ProtosTask execute(
             Harness harness,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return execute(
                 harness.domain(),
                 harness.activation(),
@@ -475,7 +475,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -485,7 +485,7 @@ final class ProtosPerf006B3EStandardFutureValueCPrimeTest {
                                 activation));
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

@@ -120,7 +120,7 @@ class InputTest(unittest.TestCase):
 
     def test_inputs_are_validated(self):
         self.assertEqual(diag.input_problems(SELECTOR, "method", "1", CASE_ARGS), [])
-        for selector in ("", "protos-root:0123", "ProtosSemanticBytecodeRootNodeGen@59ef67f9",
+        for selector in ("", "protos-root:0123", "ProtosBytecodeRootNodeGen@59ef67f9",
                          SELECTOR + ",x", SELECTOR.upper(), "protos-root:"):
             self.assertTrue(diag.input_problems(selector, "method", "1", CASE_ARGS), selector)
         self.assertTrue(diag.input_problems(SELECTOR, "both", "1", CASE_ARGS))
@@ -218,7 +218,7 @@ class ClassifyTest(unittest.TestCase):
 class CatalogTest(unittest.TestCase):
 
     def test_catalog_is_deterministic_address_free_and_counts_duplicates(self):
-        lines = [catalog_line(start=40), "noise ProtosSemanticBytecodeRootNodeGen@59ef67f9",
+        lines = [catalog_line(start=40), "noise ProtosBytecodeRootNodeGen@59ef67f9",
                  catalog_line(OTHER, "TOP_LEVEL", start=0, length=99), catalog_line(start=40)]
         first = diag.parse_catalog("\n".join(lines))
         second = diag.parse_catalog("\n".join(reversed(lines)))
@@ -308,7 +308,7 @@ class DiagnoseTest(unittest.TestCase):
         self.assertEqual(status, 1)
 
     def test_invalid_input_runs_nothing_and_prints_usage(self):
-        status, commands, out, _ = self.run_diagnose("", selector="ProtosSemanticBytecodeRootNodeGen@59ef67f9")
+        status, commands, out, _ = self.run_diagnose("", selector="ProtosBytecodeRootNodeGen@59ef67f9")
         self.assertEqual((status, commands), (1, []))
         self.assertIn("TRUFFLE_ROOT_DIAGNOSTIC=%s" % diag.ACQUISITION_FAILED, out.splitlines())
         self.assertIn("make diagnose-truffle-root", out)
@@ -403,7 +403,7 @@ class RealCompilationProbeTest(unittest.TestCase):
             bgv.write_bytes(b"BIGV")
             plain = (
                 "[engine] opt done   engine=1  id=7  "
-                "ProtosSemanticBytecodeRootNodeGen@100 |Tier 2|"
+                "ProtosBytecodeRootNodeGen@100 |Tier 2|"
             )
             output = plain + "\n600\n200\n"
             self.assertEqual(

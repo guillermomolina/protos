@@ -118,7 +118,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                     session.processContextForTesting()
                             .callForRuntime(
                                     () -> {
-                                        ProtosBytecodeRootNode.OrdinarySourceCall call;
+                                        ProtosPreparedCalls.OrdinarySourceCall call;
                                         try {
                                             call = adapter.prepare(new Object[0], null);
                                         } catch (ArityException unexpected) {
@@ -155,7 +155,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         System.out.println("PROTOS_TASK_CREATED=NO");
     }
 
-    private static ProtosBytecodeRootNode.OrdinarySourceCall prepareNoArguments(
+    private static ProtosPreparedCalls.OrdinarySourceCall prepareNoArguments(
             ProtosHostExecutableClosure adapter) {
         try {
             return adapter.prepare(new Object[0], null);
@@ -183,9 +183,9 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                             () -> {
                                 assertTrue(
                                         adapter.target.getRootNode()
-                                                instanceof ProtosSemanticBytecodeRootNode);
-                                ProtosSemanticBytecodeRootNode root =
-                                        (ProtosSemanticBytecodeRootNode)
+                                                instanceof ProtosBytecodeRootNode);
+                                ProtosBytecodeRootNode root =
+                                        (ProtosBytecodeRootNode)
                                                 adapter.target.getRootNode();
 
                                 // DEBUG mode carries provenance before any tag tree exists.
@@ -207,7 +207,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                 TagTreeNode location =
                                         (TagTreeNode) root.getBytecodeNode().getTagTree();
 
-                                ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                                ProtosPreparedCalls.OrdinarySourceCall prepared =
                                         prepareNoArguments(adapter);
                                 Object[] arguments = prepared.targetArguments();
 

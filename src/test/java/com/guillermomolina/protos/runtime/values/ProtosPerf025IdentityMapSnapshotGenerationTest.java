@@ -51,7 +51,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
     private static final Path BYTECODE_ROOT =
             Path.of(
                     "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
-                            + "ProtosBytecodeRootNode.java");
+                            + "ProtosStructuredEachCalls.java");
 
     @Test
     void unpublishedMutationStaysInPlaceAndSnapshotsReuseViews()
@@ -306,7 +306,7 @@ final class ProtosPerf025IdentityMapSnapshotGenerationTest {
                         "static final class PreparedIdentityMapEachCall");
         int identityMapEachEnd =
                 bytecodeSource.indexOf(
-                        "public static final class IsStructuredIdentityMapEachCall",
+                        "static final class PreparedMapEachCall",
                         identityMapEachStart);
 
         assertTrue(

@@ -80,12 +80,12 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void nlrDeadInvocationsDoNotMaterializeAReturnHome() throws Exception {
         withCore(module -> {
             ProtosClosureValue constant = parsedClosure("() => 42", module);
-            ProtosBytecodeRootNode.PreparedClosureCall first = fastDirect(constant, module);
+            ProtosPreparedCalls.PreparedClosureCall first = fastDirect(constant, module);
             assertVirtualHome(first);
             assertInteger(42, enter(first));
 
             ProtosClosureValue identity = parsedClosure("(value) => value", module);
-            ProtosBytecodeRootNode.PreparedClosureCall second =
+            ProtosPreparedCalls.PreparedClosureCall second =
                     fastDirect(identity, module, integer(5));
             assertVirtualHome(second);
             assertInteger(5, enter(second));
@@ -102,7 +102,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
             throws Exception {
         withCore(module -> {
             ProtosClosureValue outer = parsedClosure("() => {\n    () => 42\n}", module);
-            ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(outer, module);
+            ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(outer, module);
             assertVirtualHome(prepared);
             ProtosClosureValue child =
                     assertInstanceOf(ProtosClosureValue.class, enter(prepared));
@@ -124,13 +124,13 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void directAndDefaultReturnKeepPhysicalHomeLifecycle() throws Exception {
         withCore(module -> {
             ProtosClosureValue direct = parsedClosure("() => ^42", module);
-            ProtosBytecodeRootNode.PreparedClosureCall call = fastDirect(direct, module);
+            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(direct, module);
             ProtosReturnHome home = assertPhysicalActiveHome(call);
             assertInteger(42, enter(call));
             assertFalse(home.isActive(), "the owned physical home completes with the call");
 
             ProtosClosureValue defaulted = parsedClosure("(x: ^42) => x", module);
-            ProtosBytecodeRootNode.PreparedClosureCall defaultCall =
+            ProtosPreparedCalls.PreparedClosureCall defaultCall =
                     fastDirect(defaulted, module);
             ProtosReturnHome defaultHome = assertPhysicalActiveHome(defaultCall);
             assertInteger(42, enter(defaultCall));
@@ -144,7 +144,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
     void descendantReturnRetainsOwnerHomeAtAnyDepth() throws Exception {
         withCore(module -> {
             ProtosClosureValue outer = parsedClosure("() => {\n    () => ^42\n}", module);
-            ProtosBytecodeRootNode.PreparedClosureCall call = fastDirect(outer, module);
+            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(outer, module);
             ProtosReturnHome home = assertPhysicalActiveHome(call);
             ProtosClosureValue child =
                     assertInstanceOf(ProtosClosureValue.class, enter(call));
@@ -152,7 +152,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
 
             ProtosClosureValue transitive =
                     parsedClosure("() => {\n    () => {\n        () => ^42\n    }\n}", module);
-            ProtosBytecodeRootNode.PreparedClosureCall transitiveCall =
+            ProtosPreparedCalls.PreparedClosureCall transitiveCall =
                     fastDirect(transitive, module);
             ProtosReturnHome transitiveHome = assertPhysicalActiveHome(transitiveCall);
             ProtosClosureValue middle =
@@ -207,7 +207,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
             ProtosClosureValue run =
                     parsedClosure("() => {\n    true.ifTrue(() => {\n        41 + 1\n    })\n}", module);
             assertTrue(planOf(run).returnHomeProvenUnobservableForRuntime());
-            ProtosBytecodeRootNode.PreparedClosureCall call = fastDirect(run, module);
+            ProtosPreparedCalls.PreparedClosureCall call = fastDirect(run, module);
             assertVirtualHome(call);
             assertInteger(42, enter(call));
         });
@@ -265,7 +265,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
         return closure.executionPlan().orElseThrow();
     }
 
-    private static void assertVirtualHome(ProtosBytecodeRootNode.PreparedClosureCall call) {
+    private static void assertVirtualHome(ProtosPreparedCalls.PreparedClosureCall call) {
         assertSame(
                 ProtosReturnHome.unobservable(),
                 ProtosFrameArguments.compactReturnHome(call.targetArguments()),
@@ -274,7 +274,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
     }
 
     private static ProtosReturnHome assertPhysicalActiveHome(
-            ProtosBytecodeRootNode.PreparedClosureCall call) {
+            ProtosPreparedCalls.PreparedClosureCall call) {
         ProtosReturnHome home = ProtosFrameArguments.compactReturnHome(call.targetArguments());
         assertTrue(home.isMaterialized());
         assertTrue(home.isActive());
@@ -286,11 +286,11 @@ final class ProtosPerf025VirtualReturnHomeTest {
         return enter(fastDirect(parsedClosure(characters, module), module));
     }
 
-    private static ProtosBytecodeRootNode.PreparedClosureCall fastDirect(
+    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         RootCallTarget target =
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
@@ -307,10 +307,10 @@ final class ProtosPerf025VirtualReturnHomeTest {
                 target);
     }
 
-    private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return prepared.finish(entered);
     }

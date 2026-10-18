@@ -59,7 +59,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     void normalRootHasNoArityCheckAndIsTheDirectSemanticTarget() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-root.protos", module);
-            ProtosSemanticBytecodeRootNode root = planRoot(one);
+            ProtosBytecodeRootNode root = planRoot(one);
 
             assertNone(instructionNames(root), UPPER_BOUND_CHECK);
             assertSame(root, target(one).getRootNode(), "no universal wrapper root");
@@ -76,7 +76,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-valid.protos", module);
             for (int index = 0; index < 4; index++) {
-                ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(one, module);
+                ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(one, module);
                 assertSame(target(one), prepared.bodyTarget());
                 assertEquals("1", integerValue(enter(prepared)));
                 assertSame(one, prepared.targetArguments()[0], "no activation was materialized");
@@ -93,14 +93,14 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-excess.protos", module);
 
             ProtosIntegerValue supplied = integer(5);
-            ProtosBytecodeRootNode.PreparedClosureCall single = fastDirect(one, module, supplied);
+            ProtosPreparedCalls.PreparedClosureCall single = fastDirect(one, module, supplied);
             assertSame(target(one), single.bodyTarget());
             assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, single.targetArguments().length);
             assertSame(supplied, single.targetArguments()[ProtosFrameArguments.HEADER_LENGTH]);
             assertEquals("1", integerValue(enter(single)));
             assertSame(one, single.targetArguments()[0], "excess arguments materialize nothing");
 
-            ProtosBytecodeRootNode.PreparedClosureCall several =
+            ProtosPreparedCalls.PreparedClosureCall several =
                     fastDirect(one, module, integer(1), integer(2), integer(3));
             assertSame(target(one), several.bodyTarget());
             assertEquals("1", integerValue(enter(several)));
@@ -121,8 +121,8 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                             richActivation(one, module, integer(1)))));
 
             ProtosActivation rich = richActivation(one, module, integer(2));
-            ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                    ProtosBytecodeRootNode.PreparedClosureCall.ordinary(target(one), rich);
+            ProtosPreparedCalls.PreparedClosureCall prepared =
+                    ProtosPreparedCalls.PreparedClosureCall.ordinary(target(one), rich);
             assertSame(target(one), prepared.bodyTarget());
             assertEquals("1", integerValue(enter(prepared)));
             assertSame(rich, prepared.targetArguments()[0], "no second activation");
@@ -225,7 +225,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     void reparseKeepsTheSingleRoot() throws Exception {
         withCore(module -> {
             ProtosClosureValue one = parsedClosure("() => { 1 }", "g6-source.protos", module);
-            ProtosSemanticBytecodeRootNode root = planRoot(one);
+            ProtosBytecodeRootNode root = planRoot(one);
 
             // Materializing source information reparses the whole group.
             root.getRootNodes().ensureSourceInformation();
@@ -247,7 +247,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             assertEquals(ProtosTask.State.COMPLETED, valid.state());
             assertEquals("1", integerValue(valid.result().orElseThrow()));
 
-            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> prepared =
+            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> prepared =
                     new AtomicReference<>();
             ProtosTask excess = runTaskOwned(one, module, List.of(integer(1)), prepared);
             assertEquals(ProtosTask.State.COMPLETED, excess.state());
@@ -359,15 +359,14 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
             ProtosClosureValue closure,
             ProtosActivation module,
             List<?> supplied,
-            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> preparedRef) {
+            AtomicReference<ProtosPreparedCalls.PreparedClosureCall> preparedRef) {
         ProtosTask task =
                 module.executionDomain()
                         .createTask(
                                 null,
                                 current -> {
-                                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                                            ProtosBytecodeRootNode
-                                                    .prepareTaskOwnedDirectClosureIfBytecode(
+                                    ProtosPreparedCalls.PreparedClosureCall prepared =
+                                            ProtosClosureCallPreparation.prepareTaskOwnedDirectClosureIfBytecode(
                                                             closure, supplied, module, current);
                                     preparedRef.set(prepared);
                                     ProtosBytecodeTaskExecution.executePreparedClosure(
@@ -391,7 +390,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
         return activation;
     }
 
-    private static ProtosSemanticBytecodeRootNode planRoot(ProtosClosureValue closure) {
+    private static ProtosBytecodeRootNode planRoot(ProtosClosureValue closure) {
         return closure.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
     }
 
@@ -400,11 +399,11 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                 closure, ProtosLanguageContext.currentIfEnteredForRuntime());
     }
 
-    private static ProtosBytecodeRootNode.PreparedClosureCall fastDirect(
+    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
             ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
         ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
                 closure,
@@ -418,10 +417,10 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                 target(closure));
     }
 
-    private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
                         IndirectCallNode.create());
         return prepared.finish(entered);
     }
@@ -441,7 +440,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                 ProtosClosureValue.class, evaluate(characters, name, activation));
     }
 
-    private static List<String> instructionNames(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> instructionNames(ProtosBytecodeRootNode root) {
         return root.getBytecodeNode().getInstructionsAsList().stream()
                 .map(Instruction::getName)
                 .toList();

@@ -85,7 +85,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                                 return ProtosNullValue.INSTANCE;
                             }));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(
                             scope.language(),
                             "body.ensure(cleanup)",
@@ -146,7 +146,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                                 return supplied.get(0);
                             }));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(
                             scope.language(),
                             "Error.handle(body, handler)",
@@ -191,7 +191,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                                 return ProtosNullValue.INSTANCE;
                             }));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(
                             scope.language(),
                             "array.each(probe)",
@@ -244,7 +244,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                     "value",
                     new ProtosObjectValue(ProtosObjectValue.rootObject()));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(
                             scope.language(),
                             "map.atPut(key, value)",
@@ -347,7 +347,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                                 callbackCalls.incrementAndGet();
                                 return ProtosBooleanValue.TRUE;
                             }));
-            ProtosSemanticBytecodeRootNode site =
+            ProtosBytecodeRootNode site =
                     lowerRoot(scope.language(), "flag.ifTrue(callback)",
                             "perf015-boolean-warm.protos");
 
@@ -431,7 +431,7 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

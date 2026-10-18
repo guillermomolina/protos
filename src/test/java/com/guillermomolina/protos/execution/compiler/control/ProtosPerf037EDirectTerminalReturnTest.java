@@ -98,7 +98,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
     void terminalFloatReturnsPrimitiveOnlyToAcceptingCaller() throws Exception {
         withCore(module -> {
             ProtosClosureValue run = closure("() => { 1.5 }", module);
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     run.executionPlan()
                             .orElseThrow()
                             .bytecodeActivationRootForTesting();
@@ -238,7 +238,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                                     + "}",
                             module);
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     run.executionPlan()
                             .orElseThrow()
                             .bytecodeActivationRootForTesting();
@@ -658,8 +658,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                 ProtosLanguageContext.currentIfEnteredForRuntime();
 
         ProtosClosureValue selected =
-                ProtosBytecodeRootNode
-                        .directClosureCallSelectionOrNull(
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(
                                 closure, caller);
         assertSame(closure, selected);
 
@@ -667,7 +666,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                 ProtosBytecodeRootNode.PrepareSendArguments
                         .fastOrdinarySendTarget(closure, entered);
 
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+        ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments
                         .fastDirect(
                                 closure,
@@ -684,8 +683,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
                 ProtosBytecodeRootNode.EnterClosureCall
                         .ordinaryIndirect(
                                 assertInstanceOf(
-                                        ProtosBytecodeRootNode
-                                                .OrdinarySourceCall.class,
+                                        ProtosPreparedCalls.OrdinarySourceCall.class,
                                         prepared),
                                 IndirectCallNode.create());
 

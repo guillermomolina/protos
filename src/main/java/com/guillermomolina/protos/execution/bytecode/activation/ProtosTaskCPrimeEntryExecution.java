@@ -63,7 +63,7 @@ final class ProtosTaskCPrimeEntryExecution {
 
     static void execute(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+            ProtosPreparedCalls.PreparedClosureCall prepared) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(prepared, "prepared");
         ProtosBytecodeTaskExecution.executePreparedEntry(

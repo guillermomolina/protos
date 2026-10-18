@@ -62,7 +62,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode root = installThenTwiceYieldingRoot(LANGUAGE_REF.get(null));
+                ProtosBytecodeRootNode root = installThenTwiceYieldingRoot(LANGUAGE_REF.get(null));
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue executionContext = module.context();
 
@@ -139,7 +139,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode root = installThenReadRoot(LANGUAGE_REF.get(null));
+                ProtosBytecodeRootNode root = installThenReadRoot(LANGUAGE_REF.get(null));
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue executionContext = module.context();
 
@@ -183,9 +183,9 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * The root installs the frame lexical authority and returns the direct
      * {@code ReadFrameLocal} of {@code x}.
      */
-    private static ProtosSemanticBytecodeRootNode installThenReadRoot(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+    private static ProtosBytecodeRootNode installThenReadRoot(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -221,9 +221,9 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * the frame lexical authority, suspends twice without ever writing {@code
      * x}, and finally returns the direct {@code ReadFrameLocal} of {@code x}.
      */
-    private static ProtosSemanticBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+    private static ProtosBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

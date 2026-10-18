@@ -17,6 +17,12 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.ImmediateResultCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.ModuleInitializationCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.NativeCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.OrdinarySourceCall;
+import com.guillermomolina.protos.execution.ProtosPreparedCalls.PreparedClosureCall;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
@@ -37,7 +43,7 @@ import java.util.Objects;
  * real pending result (the child root's own {@link ContinuationResult} with
  * its frame, a nested transport, or the native/I/O suspension descriptor of a
  * native leaf) together with the {@link
- * ProtosBytecodeRootNode.PreparedClosureCall} that still owns the invocation's
+ * ProtosPreparedCalls.PreparedClosureCall} that still owns the invocation's
  * completion. It is never allocated for a synchronous result, never exposes a
  * guest value, and is never a new preparation: resuming it continues the
  * suspended state, never the invocation from its beginning.
@@ -70,14 +76,14 @@ import java.util.Objects;
 final class ProtosTailCallContinuation implements TruffleObject {
     private enum State { PENDING, RESUMING, DONE }
 
-    private final ProtosBytecodeRootNode.PreparedClosureCall owner;
+    private final ProtosPreparedCalls.PreparedClosureCall owner;
     private final boolean ownerFinishesHere;
     private final BytecodeLocation callerLocation;
     private Object pending;
     private State state = State.PENDING;
 
     private ProtosTailCallContinuation(
-            ProtosBytecodeRootNode.PreparedClosureCall owner,
+            ProtosPreparedCalls.PreparedClosureCall owner,
             Object pending,
             boolean ownerFinishesHere,
             BytecodeLocation callerLocation) {
@@ -99,19 +105,19 @@ final class ProtosTailCallContinuation implements TruffleObject {
      *     structured C-prime root) applies the owner's completion
      */
     static Object completeOrDefer(
-            ProtosBytecodeRootNode.PreparedClosureCall owner,
+            ProtosPreparedCalls.PreparedClosureCall owner,
             Object outcome,
             boolean ownerFinishesHere) {
         return completeOrDefer(owner, outcome, ownerFinishesHere, null, -1);
     }
 
     /**
-     * {@link #completeOrDefer(ProtosBytecodeRootNode.PreparedClosureCall, Object, boolean)} for a
+     * {@link #completeOrDefer(ProtosPreparedCalls.PreparedClosureCall, Object, boolean)} for a
      * terminal call at {@code callerIndex} of {@code callerBytecode}; that location is
      * materialized only if a transport is created.
      */
     static Object completeOrDefer(
-            ProtosBytecodeRootNode.PreparedClosureCall owner,
+            ProtosPreparedCalls.PreparedClosureCall owner,
             Object outcome,
             boolean ownerFinishesHere,
             BytecodeNode callerBytecode,
@@ -128,7 +134,7 @@ final class ProtosTailCallContinuation implements TruffleObject {
 
     @TruffleBoundary
     private static ProtosTailCallContinuation deferred(
-            ProtosBytecodeRootNode.PreparedClosureCall owner,
+            ProtosPreparedCalls.PreparedClosureCall owner,
             Object outcome,
             boolean ownerFinishesHere,
             BytecodeNode callerBytecode,
@@ -354,5 +360,95 @@ final class ProtosTailCallContinuation implements TruffleObject {
         if (ownerFinishesHere) {
             owner.complete();
         }
+    }
+
+    /**
+     * I112 / PLAT062-T terminal execution of a prepared call selected inside a
+     * terminal invocation operation ({@code InvokeClosure*Tail}). It selects
+     * the entry of the four existing representations exactly as {@link
+     * EnterClosureCall} and {@link EnterNestedStructuredDispatch} do, then
+     * completes the call here: a synchronous result is finished directly; a
+     * suspended one is returned as one {@link ProtosTailCallContinuation}
+     * retaining this call as the owner of its pending completion.
+     *
+     * <p>A structured native call enters the Context's existing C-prime
+     * dispatcher root, which keeps ownership of its own finish, ensure and
+     * handler regions and cleanup; this method then never finishes the same
+     * call again and only adapts the dispatcher boundary. Every other
+     * representation is finished, or completed on an abrupt exit, exactly
+     * once by this method or by its transport.
+     */
+    static Object executeTerminalPreparedCall(
+            PreparedClosureCall prepared,
+            IndirectCallNode indirectCall,
+            BytecodeNode callerBytecode,
+            int callerIndex) {
+        boolean ownerFinishesHere = !prepared.requiresStructuredDispatch();
+        Object outcome;
+        try {
+            outcome = enterTerminalPreparedCall(prepared, indirectCall);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            Object handled;
+            try {
+                handled = prepared.handleControlTransfer(bridged.transfer());
+            } catch (RuntimeException | Error escaped) {
+                if (ownerFinishesHere) {
+                    prepared.complete();
+                }
+                throw escaped;
+            }
+            return ownerFinishesHere ? prepared.finish(handled) : handled;
+        } catch (AbstractTruffleException failure) {
+            prepared.failIfModuleInitialization();
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw failure;
+        } catch (ControlFlowException transfer) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw transfer;
+        } catch (RuntimeException failure) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw prepared.mapRuntimeFailure(failure);
+        } catch (Error failure) {
+            if (ownerFinishesHere) {
+                prepared.complete();
+            }
+            throw failure;
+        }
+        return ProtosTailCallContinuation.completeOrDefer(
+                prepared, outcome, ownerFinishesHere, callerBytecode, callerIndex);
+    }
+
+    private static Object enterTerminalPreparedCall(
+            PreparedClosureCall prepared,
+            IndirectCallNode indirectCall) {
+        if (prepared instanceof OrdinarySourceCall ordinary) {
+            return indirectCall.call(ordinary.bodyTarget(), ordinary.targetArguments());
+        }
+        if (prepared instanceof NativeCall nativeCall) {
+            if (nativeCall.requiresStructuredDispatch()) {
+                return indirectCall.call(
+                        ProtosTaskCPrimeEntryExecution.structuredDispatchTargetForEnteredContext(),
+                        nativeCall.activation(),
+                        nativeCall);
+            }
+            return nativeCall.enterNative();
+        }
+        if (prepared instanceof ImmediateResultCall immediate) {
+            return immediate.enterImmediate();
+        }
+        if (prepared instanceof ModuleInitializationCall module) {
+            if (module.isImmediate()) {
+                return module.enterImmediate();
+            }
+            return indirectCall.call(module.bodyTarget(), module.targetArguments());
+        }
+        throw new IllegalStateException(
+                "unsupported prepared Closure call representation");
     }
 }

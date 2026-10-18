@@ -59,7 +59,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNode.InvokeClosureZero;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureZero;
 import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
@@ -88,7 +88,7 @@ final class ProtosI112TailContinuationTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), IDENTITY, "i112-identity.protos");
             assertTerminal(root, "c.InvokeClosureOneTail");
 
@@ -106,7 +106,7 @@ final class ProtosI112TailContinuationTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i112-transitions.protos");
             assertTerminal(root, "c.InvokeClosureOneTail");
             root.getBytecodeNode().setUncachedThreshold(0);
@@ -139,7 +139,7 @@ final class ProtosI112TailContinuationTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i112-override.protos");
             root.getBytecodeNode().setUncachedThreshold(0);
             ProtosClosureValue target =
@@ -195,7 +195,7 @@ final class ProtosI112TailContinuationTest {
 
             // A composed argument is not a terminal operand: the established
             // composition keeps D013 post-argument selection.
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(mutate())", "i112-selection.protos");
             assertFalse(signature(root).stream().anyMatch(entry -> entry.contains("Tail")));
             assertInteger(55, root.getCallTarget().call(module));
@@ -212,7 +212,7 @@ final class ProtosI112TailContinuationTest {
                             ProtosReturnHome.unobservable());
             second.context().createLocalSlot("target", fresh);
             second.context().createLocalSlot("argument", new ProtosIntegerValue(3));
-            ProtosSemanticBytecodeRootNode terminal =
+            ProtosBytecodeRootNode terminal =
                     lowerRoot(scope.language(), "target(argument)", "i112-selection-terminal.protos");
             assertTerminal(terminal, "c.InvokeClosureOneTail");
             assertInteger(3, terminal.getCallTarget().call(second));
@@ -229,7 +229,7 @@ final class ProtosI112TailContinuationTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i112-pic.protos");
             root.getBytecodeNode().setUncachedThreshold(0);
             List<ProtosClosureValue> targets = new ArrayList<>();
@@ -286,7 +286,7 @@ final class ProtosI112TailContinuationTest {
                                         scope.language(), module, body,
                                         "i112-waiter.protos"));
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerRoot(scope.language(), "waiter()", "i112-waiter-top.protos");
                 assertTerminal(root, "c.InvokeClosureZeroTail");
                 if (directEntry) {
@@ -397,7 +397,7 @@ final class ProtosI112TailContinuationTest {
                             ProtosClosureValue.class,
                             ProtosValueLookup.readMember(body, "ensure", prelude).orElseThrow()));
 
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "ensurer(cleanup)", "i112-ensure-top.protos");
             assertTerminal(root, "c.InvokeClosureOneTail");
             ProtosTask task = execute(domain, module, root);
@@ -713,11 +713,11 @@ final class ProtosI112TailContinuationTest {
 
     @Test
     void eachContextOwnsItsRootsAndTerminalCaches() throws Exception {
-        List<ProtosSemanticBytecodeRootNode> roots = new ArrayList<>();
+        List<ProtosBytecodeRootNode> roots = new ArrayList<>();
         for (int round = 0; round < 2; round++) {
             try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
                 harness.run(() -> {
-                    ProtosSemanticBytecodeRootNode module = compile(IDENTITY, "contexts");
+                    ProtosBytecodeRootNode module = compile(IDENTITY, "contexts");
                     assertInteger(1, module.getCallTarget().call(harness.moduleActivation()));
                     assertInteger(1, module.getCallTarget().call(harness.moduleActivation()));
                     roots.add(module);
@@ -741,7 +741,7 @@ final class ProtosI112TailContinuationTest {
         try (Engine engine = Engine.create(ProtosLanguage.ID);
                 ProtosPolyglotExecutionContext first = openContext(engine);
                 ProtosPolyglotExecutionContext second = openContext(engine)) {
-            ProtosSemanticBytecodeRootNode[] site = new ProtosSemanticBytecodeRootNode[1];
+            ProtosBytecodeRootNode[] site = new ProtosBytecodeRootNode[1];
             ProtosClosureValue[] carried = new ProtosClosureValue[1];
             RootCallTarget[] firstTarget = new RootCallTarget[1];
 
@@ -785,7 +785,7 @@ final class ProtosI112TailContinuationTest {
                         rebound.requireContextLocalExecutionProjectionForRuntime();
                         module.context().createLocalSlot("target", rebound);
 
-                        ProtosSemanticBytecodeRootNode secondSite = uncheckedLowerRoot(
+                        ProtosBytecodeRootNode secondSite = uncheckedLowerRoot(
                                 LANGUAGE_REF.get(null), "target(1)", "i112-cross-context-site.protos");
                         assertTerminal(secondSite, "c.InvokeClosureOneTail");
                         assertNotSame(site[0], secondSite);
@@ -830,7 +830,7 @@ final class ProtosI112TailContinuationTest {
     void prologueInstalledModuleAuthorityKeepsBindingsVisible() throws Exception {
         try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
             harness.run(() -> {
-                ProtosSemanticBytecodeRootNode root = compile(
+                ProtosBytecodeRootNode root = compile(
                         "identity: (value) => { value }\nlater: () => { identity }\nobserve(later)",
                         "prolog-authority");
                 List<String> names = signature(root).stream()
@@ -864,7 +864,7 @@ final class ProtosI112TailContinuationTest {
     void prologueInstalledModuleReadObservesRemovalAndRecreation() throws Exception {
         try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
             harness.run(() -> {
-                ProtosSemanticBytecodeRootNode root = compile(
+                ProtosBytecodeRootNode root = compile(
                         "identity: (value) => { value }\nchange()\nidentity(1)", "d179");
                 assertFalse(signature(root).stream()
                         .anyMatch(entry -> entry.startsWith("c.InstallFrameLexicalAuthority")));
@@ -908,7 +908,7 @@ final class ProtosI112TailContinuationTest {
                         "a: 1\na",
                         "identity: (value) => { value }\nresult: identity(1)\nresult",
                         "identity: (value) => { value }\nidentity(identity(1))")) {
-                    ProtosSemanticBytecodeRootNode root = compile(program, "not-admitted");
+                    ProtosBytecodeRootNode root = compile(program, "not-admitted");
                     assertTrue(
                             signature(root).stream().anyMatch(
                                     entry -> entry.startsWith("c.InstallFrameLexicalAuthority")),
@@ -925,16 +925,16 @@ final class ProtosI112TailContinuationTest {
     void reparseKeepsTheSamePhysicalDecisionsWithoutDuplicatingRoots() throws Exception {
         try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
             harness.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(IDENTITY, "reparse");
+                ProtosBytecodeRootNode module = compile(IDENTITY, "reparse");
                 // The first completion adds instrumentation; a second one adds nothing.
                 module.getRootNodes().ensureComplete();
                 List<List<String>> before = new ArrayList<>();
-                for (ProtosSemanticBytecodeRootNode root : groupRoots(module)) {
+                for (ProtosBytecodeRootNode root : groupRoots(module)) {
                     before.add(signature(root));
                 }
                 RootCallTarget target = module.getCallTarget();
                 module.getRootNodes().ensureComplete();
-                List<ProtosSemanticBytecodeRootNode> after = groupRoots(module);
+                List<ProtosBytecodeRootNode> after = groupRoots(module);
                 assertEquals(2, after.size(), "no root is duplicated by a reparse");
                 for (int index = 0; index < after.size(); index++) {
                     assertEquals(before.get(index), signature(after.get(index)));
@@ -952,7 +952,7 @@ final class ProtosI112TailContinuationTest {
         for (ProtosExecutionMode mode : List.of(ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG)) {
             try (Harness harness = new Harness(mode)) {
                 harness.run(() -> {
-                    ProtosSemanticBytecodeRootNode module = compile(IDENTITY, "tags-" + mode);
+                    ProtosBytecodeRootNode module = compile(IDENTITY, "tags-" + mode);
                     module.getRootNodes().ensureComplete();
                     List<String> instructions = signature(module);
                     boolean terminal = instructions.stream()
@@ -991,7 +991,7 @@ final class ProtosI112TailContinuationTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosSemanticBytecodeRootNode root =
+            ProtosBytecodeRootNode root =
                     lowerRoot(scope.language(), "target(1)", "i112-uncached.protos");
             root.getBytecodeNode().setUncachedThreshold(4);
             ProtosActivation creator = activation(prelude, domain);
@@ -1039,7 +1039,7 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode uncheckedLowerRoot(
+    private static ProtosBytecodeRootNode uncheckedLowerRoot(
             ProtosLanguage language, String characters, String name) {
         try {
             return lowerRoot(language, characters, name);
@@ -1048,7 +1048,7 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
-    private static void assertTerminal(ProtosSemanticBytecodeRootNode root, String operation) {
+    private static void assertTerminal(ProtosBytecodeRootNode root, String operation) {
         List<String> instructions = signature(root);
         assertTrue(
                 instructions.stream().anyMatch(entry -> entry.split(" ", 2)[0].equals(operation)),
@@ -1101,11 +1101,11 @@ final class ProtosI112TailContinuationTest {
                 });
     }
 
-    private static List<Instruction> instructions(ProtosSemanticBytecodeRootNode root) {
+    private static List<Instruction> instructions(ProtosBytecodeRootNode root) {
         return root.getBytecodeNode().getInstructionsAsList();
     }
 
-    private static List<String> signature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : instructions(root)) {
             StringBuilder entry = new StringBuilder(instruction.getName());
@@ -1117,10 +1117,10 @@ final class ProtosI112TailContinuationTest {
         return entries;
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> groupRoots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> groupRoots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
@@ -1169,7 +1169,7 @@ final class ProtosI112TailContinuationTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -1183,7 +1183,7 @@ final class ProtosI112TailContinuationTest {
             ProtosActorExecutionDomain domain,
             ProtosPrelude prelude,
             ProtosActivation activation,
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
         ProtosTask task =
                 domain.createTask(
@@ -1235,7 +1235,7 @@ final class ProtosI112TailContinuationTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosSemanticBytecodeRootNode lowerRoot(
+    private static ProtosBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)
@@ -1246,7 +1246,7 @@ final class ProtosI112TailContinuationTest {
     }
 
     /** The production ParsingRequest path of the entered Context. */
-    private static ProtosSemanticBytecodeRootNode compile(String characters, String name) {
+    private static ProtosBytecodeRootNode compile(String characters, String name) {
         Source source = Source.newBuilder(
                         ProtosLanguage.ID,
                         characters,
@@ -1254,7 +1254,7 @@ final class ProtosI112TailContinuationTest {
                 .build();
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
-        return assertInstanceOf(ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+        return assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
     }
 
     private record Execution(ProtosTask task, ProtosFutureValue future) {}

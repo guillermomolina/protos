@@ -545,7 +545,7 @@ class Test009DUnchangedTest(unittest.TestCase):
 
     def test_d_still_reports_other_permanent_failures_without_owning_them(self):
         done = ("[engine] opt done   id=1   ProtosBytecodeRootNodeGen@1 |Tier 2\n"
-                "[engine] opt done   id=2   ProtosSemanticBytecodeRootNodeGen@2 |Tier 2")
+                "[engine] opt done   id=2   ProtosBytecodeRootNodeGen@2 |Tier 2")
         result = bci_check.evaluate("\n".join([done, GRAPH_TOO_BIG, "600", "200"]), 0)
         self.assertEqual(result["OTHER_PERMANENT_FAILURES"], 1)
         self.assertEqual(result["failures"], [])

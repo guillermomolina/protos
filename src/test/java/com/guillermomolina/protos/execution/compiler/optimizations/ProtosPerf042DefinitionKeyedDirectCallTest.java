@@ -26,8 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNode.InvokeClosureOne;
-import com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNode.InvokeClosureZero;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOne;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureZero;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -606,7 +606,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                     """, "i108-prepared-entry-define.protos", module);
 
             for (String function : List.of("callZero", "callOne")) {
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         functionRoot(function, module);
                 root.getRootNodes().ensureComplete();
 
@@ -661,7 +661,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
         functionRoot(function, module).getBytecodeNode().setUncachedThreshold(0);
     }
 
-    private static ProtosSemanticBytecodeRootNode functionRoot(
+    private static ProtosBytecodeRootNode functionRoot(
             String function, ProtosActivation module) {
         ProtosClosureValue closure = assertInstanceOf(
                 ProtosClosureValue.class,
@@ -776,7 +776,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                                     ? "null"
                                     : actual.getClass().getName())
                             + ", preparedCall="
-                            + (actual instanceof ProtosBytecodeRootNode.PreparedClosureCall)
+                            + (actual instanceof ProtosPreparedCalls.PreparedClosureCall)
                             + ", value=" + String.valueOf(actual),
                     invalidType);
         }

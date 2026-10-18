@@ -51,10 +51,14 @@ final class ProtosPerf025MapPhysicalIndexTest {
             Path.of(
                     "src/main/java/com/guillermomolina/protos/execution/protocols/values/"
                             + "ProtosStandardIdentityMapProtocol.java");
-    private static final Path BYTECODE_ROOT =
+    private static final Path MAP_QUERY_CALLS =
             Path.of(
                     "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
-                            + "ProtosBytecodeRootNode.java");
+                            + "ProtosStructuredMapQueryCalls.java");
+    private static final Path MAP_UPDATE_CALLS =
+            Path.of(
+                    "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/"
+                            + "ProtosStructuredMapUpdateCalls.java");
 
     @Test
     void mapIndexPreservesCollisionOrderReplacementAndReinsertion() {
@@ -169,7 +173,8 @@ final class ProtosPerf025MapPhysicalIndexTest {
     void productiveSearchOwnersCannotRegressToWholeMapSnapshots() throws Exception {
         String mapProtocol = Files.readString(MAP_PROTOCOL);
         String identityMapProtocol = Files.readString(IDENTITY_MAP_PROTOCOL);
-        String bytecodeRoot = Files.readString(BYTECODE_ROOT);
+        String bytecodeRoot =
+                Files.readString(MAP_QUERY_CALLS) + Files.readString(MAP_UPDATE_CALLS);
 
         assertTrue(
                 mapProtocol.contains(

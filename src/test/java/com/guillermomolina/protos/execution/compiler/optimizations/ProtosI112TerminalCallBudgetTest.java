@@ -224,9 +224,9 @@ final class ProtosI112TerminalCallBudgetTest {
                 RootCallTarget.class,
                 ProtosLanguageContext.current().parsePublic(source));
 
-        ProtosSemanticBytecodeRootNode module =
+        ProtosBytecodeRootNode module =
                 assertInstanceOf(
-                        ProtosSemanticBytecodeRootNode.class,
+                        ProtosBytecodeRootNode.class,
                         target.getRootNode());
 
         /*
@@ -237,9 +237,9 @@ final class ProtosI112TerminalCallBudgetTest {
          */
         module.getRootNodes().ensureSourceInformation();
 
-        List<ProtosSemanticBytecodeRootNode> roots =
+        List<ProtosBytecodeRootNode> roots =
                 module.getRootNodes().getNodes().stream()
-                        .map(ProtosSemanticBytecodeRootNode.class::cast)
+                        .map(ProtosBytecodeRootNode.class::cast)
                         .toList();
 
         List<List<String>> signatures = new ArrayList<>();
@@ -259,7 +259,7 @@ final class ProtosI112TerminalCallBudgetTest {
                 .append('\n');
 
         for (int rootIndex = 0; rootIndex < roots.size(); rootIndex++) {
-            ProtosSemanticBytecodeRootNode root = roots.get(rootIndex);
+            ProtosBytecodeRootNode root = roots.get(rootIndex);
 
             List<String> signature = fullSignature(root);
             signatures.add(signature);
@@ -332,7 +332,7 @@ final class ProtosI112TerminalCallBudgetTest {
     }
 
     private static List<String> fullSignature(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
 
         List<String> entries = new ArrayList<>();
 
@@ -428,8 +428,8 @@ final class ProtosI112TerminalCallBudgetTest {
     }
 
     private record Census(
-            ProtosSemanticBytecodeRootNode module,
-            List<ProtosSemanticBytecodeRootNode> roots,
+            ProtosBytecodeRootNode module,
+            List<ProtosBytecodeRootNode> roots,
             List<List<String>> signatures,
             int total,
             String fullReport) {

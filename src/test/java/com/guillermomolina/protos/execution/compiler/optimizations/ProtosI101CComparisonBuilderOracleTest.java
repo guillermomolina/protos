@@ -76,17 +76,17 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
-                ProtosSemanticBytecodeRootNode literalModule =
+                ProtosBytecodeRootNode literalModule =
                         parse(LITERAL, "literal-true");
-                ProtosSemanticBytecodeRootNode comparisonModule =
+                ProtosBytecodeRootNode comparisonModule =
                         parse(COMPARISON, "comparison");
 
-                ProtosSemanticBytecodeRootNode literal =
+                ProtosBytecodeRootNode literal =
                         verifiedClosureRoot(literalModule, LITERAL);
-                ProtosSemanticBytecodeRootNode comparison =
+                ProtosBytecodeRootNode comparison =
                         verifiedClosureRoot(comparisonModule, COMPARISON);
 
-                ProtosSemanticBytecodeRootNode oracle =
+                ProtosBytecodeRootNode oracle =
                         handwrittenBooleanOracle();
 
                 assertEquals(1, roots(oracle).size());
@@ -226,9 +226,9 @@ final class ProtosI101CComparisonBuilderOracleTest {
                 int index = 0;
                 for (Case testCase : cases) {
                     String program = "() => { " + testCase.expression() + " }";
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "family-" + index);
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             verifiedClosureRoot(module, program);
 
                     Object value = invoke(
@@ -282,9 +282,9 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
                 for (Case testCase : cases) {
                     String program = "() => { " + testCase.body() + " }";
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "locals-" + index);
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             verifiedClosureRoot(module, program);
 
                     assertSame(
@@ -401,10 +401,10 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     String program =
                             "() => { " + testCase.expression() + " }";
 
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "matrix-" + index);
 
-                    ProtosSemanticBytecodeRootNode actual =
+                    ProtosBytecodeRootNode actual =
                             verifiedClosureRoot(module, program);
 
                     Object result = invoke(
@@ -477,10 +477,10 @@ final class ProtosI101CComparisonBuilderOracleTest {
                     String program =
                             "() => { " + testCase.body() + " }";
 
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "locals-" + index);
 
-                    ProtosSemanticBytecodeRootNode actual =
+                    ProtosBytecodeRootNode actual =
                             verifiedClosureRoot(module, program);
 
                     Object result = invoke(
@@ -525,14 +525,14 @@ final class ProtosI101CComparisonBuilderOracleTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode handwrittenBooleanOracle() {
+    private static ProtosBytecodeRootNode handwrittenBooleanOracle() {
         Source source = source(COMPARISON, "comparison-oracle");
 
         int bodyStart = COMPARISON.indexOf('{');
         int bodyLength = COMPARISON.lastIndexOf('}') + 1 - bodyStart;
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -556,16 +556,16 @@ final class ProtosI101CComparisonBuilderOracleTest {
         return nodes.getNode(0);
     }
 
-    private static ProtosSemanticBytecodeRootNode verifiedClosureRoot(
-            ProtosSemanticBytecodeRootNode module, String program) {
-        List<ProtosSemanticBytecodeRootNode> group = roots(module);
+    private static ProtosBytecodeRootNode verifiedClosureRoot(
+            ProtosBytecodeRootNode module, String program) {
+        List<ProtosBytecodeRootNode> group = roots(module);
 
         // D203/I105: no arity-rejection root accompanies the Closure root.
         assertEquals(2, group.size(),
                 "Module and executable Closure");
         assertSame(module, group.get(0));
 
-        ProtosSemanticBytecodeRootNode closure = group.get(1);
+        ProtosBytecodeRootNode closure = group.get(1);
 
         assertSource(closure, program);
 
@@ -573,7 +573,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
     }
 
     private static void assertSource(
-            ProtosSemanticBytecodeRootNode root, String program) {
+            ProtosBytecodeRootNode root, String program) {
         root.getRootNodes().ensureComplete();
         // Source sections are optional with this Bytecode configuration.
         if (root.getSourceSection() != null) {
@@ -585,12 +585,12 @@ final class ProtosI101CComparisonBuilderOracleTest {
     }
 
     private static void assertStableReparse(
-            ProtosSemanticBytecodeRootNode module) {
+            ProtosBytecodeRootNode module) {
         BytecodeRootNodes<?> group = module.getRootNodes();
 
-        List<ProtosSemanticBytecodeRootNode> before = roots(module);
+        List<ProtosBytecodeRootNode> before = roots(module);
         List<RootCallTarget> targets = before.stream()
-                .map(ProtosSemanticBytecodeRootNode::getCallTarget)
+                .map(ProtosBytecodeRootNode::getCallTarget)
                 .toList();
 
         List<List<String>> signatures = before.stream()
@@ -600,7 +600,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
         group.ensureComplete();
         group.ensureComplete();
 
-        List<ProtosSemanticBytecodeRootNode> after = roots(module);
+        List<ProtosBytecodeRootNode> after = roots(module);
 
         assertSame(group, module.getRootNodes());
         assertEquals(before.size(), after.size());
@@ -614,8 +614,8 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
     private static Object invoke(
             ProtosPrelude prelude,
-            ProtosSemanticBytecodeRootNode module,
-            ProtosSemanticBytecodeRootNode expectedRoot,
+            ProtosBytecodeRootNode module,
+            ProtosBytecodeRootNode expectedRoot,
             String label) {
         ProtosClosureValue closure = assertInstanceOf(
                 ProtosClosureValue.class,
@@ -670,9 +670,9 @@ final class ProtosI101CComparisonBuilderOracleTest {
                 for (Case entry : cases) {
                     String program =
                             "() => { " + entry.expression() + " }";
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "dynamic-" + index);
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             roots(module).get(1);
                     List<String> instructions = completeSignature(root);
 
@@ -755,7 +755,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                 for (Case entry : cases) {
                     String program =
                             "() => { " + entry.expression() + " }";
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             parse(program, "override-" + index);
 
                     int beforeCalls = calls[0];
@@ -791,7 +791,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
      */
     private static Object i101C1InvokeCapturedSubject(
             ProtosPrelude prelude,
-            ProtosSemanticBytecodeRootNode module,
+            ProtosBytecodeRootNode module,
             Object subject,
             String label) {
         ProtosActivation owner = prelude.newModuleActivation();
@@ -815,7 +815,7 @@ final class ProtosI101CComparisonBuilderOracleTest {
                 "i101-c1-" + label + ".protos").build();
     }
 
-    private static ProtosSemanticBytecodeRootNode parse(
+    private static ProtosBytecodeRootNode parse(
             String code, String label) {
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class,
@@ -823,19 +823,19 @@ final class ProtosI101CComparisonBuilderOracleTest {
                         source(code, label)));
 
         return assertInstanceOf(
-                ProtosSemanticBytecodeRootNode.class,
+                ProtosBytecodeRootNode.class,
                 target.getRootNode());
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> roots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> roots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
     private static List<String> completeSignature(
-            ProtosSemanticBytecodeRootNode root) {
+            ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
 
         List<String> result = new ArrayList<>();

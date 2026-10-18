@@ -48,9 +48,6 @@ main() {
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterClosureCall_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$PrepareSendArguments_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$ResumeContinuation_Node'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$EnterClosureCall_Node'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$PrepareSendArguments_Node'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$ResumeContinuation_Node'
     )
 
     for class in "${inline_support_generated[@]}"; do
@@ -67,10 +64,6 @@ main() {
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$1'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$Bytecode'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$AbstractBytecodeNode'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$1'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$Bytecode'
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$AbstractBytecodeNode'
     )
 
     append_initial_bytecode_policy() {
@@ -118,10 +111,6 @@ main() {
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen' \
         || return 1
 
-    append_initial_bytecode_policy \
-        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen' \
-        || return 1
-
     for class in "${bytecode_structural_generated[@]}"; do
         path="${classes_dir}/${class//./\/}.class"
         if [[ ! -f "${path}" ]]; then
@@ -137,10 +126,7 @@ main() {
         find "${execution_dir}" \
             -maxdepth 1 \
             -type f \
-            \( \
-                -name 'ProtosBytecodeRootNodeGen$*_Node.class' \
-                -o -name 'ProtosSemanticBytecodeRootNodeGen$*_Node.class' \
-            \) \
+            -name 'ProtosBytecodeRootNodeGen$*_Node.class' \
             -printf '%f\n' \
             | sort
     )

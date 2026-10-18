@@ -63,7 +63,7 @@ final class ProtosBytecodeTaskExecution {
 
     static void executePreparedClosure(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+            ProtosPreparedCalls.PreparedClosureCall prepared) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(prepared, "prepared");
         if (prepared.isNative() || prepared.isImmediate()) {
@@ -79,7 +79,7 @@ final class ProtosBytecodeTaskExecution {
     static void executePreparedEntry(
             ProtosTask task,
             CallTarget target,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+            ProtosPreparedCalls.PreparedClosureCall prepared) {
         Objects.requireNonNull(task, "task");
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(prepared, "prepared");
@@ -100,7 +100,7 @@ final class ProtosBytecodeTaskExecution {
 
     private static void resumePreparedPublished(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             Object continuation,
             ProtosTask.WaitDependency dependency) {
         runPreparedSegment(
@@ -125,7 +125,7 @@ final class ProtosBytecodeTaskExecution {
 
     private static void runPreparedSegment(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             java.util.function.Supplier<Object> segment) {
         try {
             Object outcome =
@@ -178,7 +178,7 @@ final class ProtosBytecodeTaskExecution {
 
     private static void drivePreparedOutcome(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
@@ -363,7 +363,7 @@ final class ProtosBytecodeTaskExecution {
      */
     static Object invokeNestedSynchronous(
             ProtosTask task,
-            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ProtosPreparedCalls.PreparedClosureCall prepared,
             boolean entryRoot,
             ProtosActivation errorSite) {
         Objects.requireNonNull(task, "task");

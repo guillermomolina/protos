@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.377-SNAPSHOT
+
+- `I111` (#919): implement PLAT065-A slice B, one unified Bytecode DSL
+  interpreter.
+  - `ProtosBytecodeRootNode` is the only `@GenerateBytecode` interpreter; the
+    former semantic interpreter class is renamed to it and the former
+    structured/C-prime interpreter and its generated class are removed.
+    Structured-dispatch, Task C-prime and I/O C-prime roots are auxiliary
+    roots of the same interpreter.
+  - Physical roots are classified per root: `emitRootBody` marks genuine
+    semantic activations (`isSemanticActivationRoot()`); auxiliary roots stay
+    untagged, never record CLI008 origins, never project trace frames or
+    debugger scopes and are never admitted as program root tasks.
+    `enableRootTagging` stays disabled.
+  - The 80 duplicated operation implementations are merged into their
+    surviving operations (249 delegations removed); auxiliary roots keep the
+    complete prepared-call finish through `FinishCPrimeClosureCall`.
+  - Prepared-call protocol state moves to domain owners
+    (`ProtosPreparedCalls`, structured control/each/map call families, send
+    and Closure-call preparation, captured lexical access, frame-local
+    bindings); terminal prepared-call execution moves to
+    `ProtosTailCallContinuation`. I112 prologue, epilogue, terminal
+    operations and the FULL instruction budget are unchanged.
+  - Native Image init policy, generated-code tooling and structure tests
+    target the single generator; PE guard baselines are relocated after
+    entry-by-entry review (no new risk, unchanged proofs).
+  - Maintainer validation: make test PASS; make check PASS.
+
 ## 0.3.376-SNAPSHOT
 
 - `PERF042` (#871): publish real identity Closure graph diagnostics.

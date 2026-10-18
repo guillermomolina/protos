@@ -79,8 +79,8 @@ final class ProtosI101CanonicalLocalGraphTest {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
             ProtosStandaloneHostedSession.PreparedTopLevel prepared = session.prepareTopLevel("run");
             ProtosHostExecutableClosure host = prepared.hostExecutableForTesting();
-            ProtosSemanticBytecodeRootNode root = assertInstanceOf(
-                    ProtosSemanticBytecodeRootNode.class, host.target.getRootNode());
+            ProtosBytecodeRootNode root = assertInstanceOf(
+                    ProtosBytecodeRootNode.class, host.target.getRootNode());
             // Reflective access keeps OptimizedCallTarget out of class verification: the
             // ordinary suite cannot link it, and this test is skipped there.
             Object target = host.target;
@@ -146,7 +146,7 @@ final class ProtosI101CanonicalLocalGraphTest {
         }
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         List<String> result = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
             StringBuilder item = new StringBuilder(instruction.getName());

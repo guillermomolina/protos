@@ -211,7 +211,7 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL);
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         lowerer.lowerRoot(canonicalize(characters));
 
                 ProtosFrameLexicalLayout before =
@@ -282,8 +282,8 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
         /* The layout derives its local offsets from the first parse's locals. */
         ProtosFrameLexicalLayout[] layoutHolder = new ProtosFrameLexicalLayout[1];
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -383,6 +383,6 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     }
 
     private record Fixture(
-            ProtosSemanticBytecodeRootNode root,
+            ProtosBytecodeRootNode root,
             ProtosFrameLexicalLayout layout) {}
 }

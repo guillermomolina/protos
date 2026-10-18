@@ -55,7 +55,7 @@ import org.junit.jupiter.api.Test;
  *
  * <p>Signatures carry every instruction with every argument; nothing is
  * filtered before a strict comparison. The oracle is a handwritten {@link
- * ProtosSemanticBytecodeRootNodeGen.Builder} program that never consults the
+ * ProtosBytecodeRootNodeGen.Builder} program that never consults the
  * parser, canonicalizer, lowerer or the analysis under test.
  */
 final class ProtosI107ContinuationEmissionTest {
@@ -76,8 +76,8 @@ final class ProtosI107ContinuationEmissionTest {
     void nestedConstantControlFoldsToTheIndependentOracle() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(NESTED, "nested");
-                ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                ProtosBytecodeRootNode module = compile(NESTED, "nested");
+                ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> expected = completeSignature(handwrittenLiteralRoot(NESTED, 7L));
                 List<String> actual = completeSignature(activation);
                 System.out.println("I107_ORACLE_SIGNATURE=" + expected);
@@ -98,7 +98,7 @@ final class ProtosI107ContinuationEmissionTest {
                 module.getRootNodes().ensureComplete();
                 assertEquals(actual, signature(activation));
                 assertSame(target, activation.getCallTarget());
-                ProtosSemanticBytecodeRootNode equivalent =
+                ProtosBytecodeRootNode equivalent =
                         activationRoot(compile(NESTED, "again"));
                 assertEquals(expected, completeSignature(equivalent));
                 assertTrue(activation.provablyNonSuspendingBody());
@@ -114,7 +114,7 @@ final class ProtosI107ContinuationEmissionTest {
     void unprovenNestingKeepsTheGenericTopology() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(NESTED_UNPROVEN, "unproven");
+                ProtosBytecodeRootNode module = compile(NESTED_UNPROVEN, "unproven");
                 List<String> actual = completeSignature(activationRoot(module));
                 List<String> folded = completeSignature(activationRoot(compile(NESTED, "folded")));
                 assertHasContinuation(actual);
@@ -132,8 +132,8 @@ final class ProtosI107ContinuationEmissionTest {
     void debugKeepsTheOrdinarySendAndContinuation() throws Exception {
         try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
             debug.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(NESTED, "debug");
-                ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                ProtosBytecodeRootNode module = compile(NESTED, "debug");
+                ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> actual = completeSignature(activation);
                 assertHasContinuation(actual);
                 assertTrue(groupRoots(module).size() > 2);
@@ -162,8 +162,8 @@ final class ProtosI107ContinuationEmissionTest {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
                 for (Case test : cases) {
-                    ProtosSemanticBytecodeRootNode module = compile(test.source(), "safe");
-                    ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                    ProtosBytecodeRootNode module = compile(test.source(), "safe");
+                    ProtosBytecodeRootNode activation = activationRoot(module);
                     List<String> instructions = completeSignature(activation);
                     assertNoContinuation(instructions);
                     assertTrue(activation.provablyNonSuspendingBody(), test.source());
@@ -190,7 +190,7 @@ final class ProtosI107ContinuationEmissionTest {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
                 for (String source : sources) {
-                    ProtosSemanticBytecodeRootNode activation =
+                    ProtosBytecodeRootNode activation =
                             activationRoot(compile(source, "unknown"));
                     completeSignature(activation);
                     if (!source.contains("self")) {
@@ -225,7 +225,7 @@ final class ProtosI107ContinuationEmissionTest {
                             completeSignature(activationRoot(compile(source, "fallback")));
                     assertHasContinuation(instructions);
                 }
-                ProtosSemanticBytecodeRootNode replaced =
+                ProtosBytecodeRootNode replaced =
                         compile("() => { f: () => { 1 }\n f = () => { 2 }\n f() }", "replace");
                 assertInteger(2, callClosure(normal, closureOf(normal, replaced)));
             });
@@ -252,8 +252,8 @@ final class ProtosI107ContinuationEmissionTest {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
                 for (Case test : terminal) {
-                    ProtosSemanticBytecodeRootNode module = compile(test.source(), "terminal");
-                    ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                    ProtosBytecodeRootNode module = compile(test.source(), "terminal");
+                    ProtosBytecodeRootNode activation = activationRoot(module);
                     List<String> instructions = completeSignature(activation);
                     assertTrue(
                             instructions.stream().anyMatch(
@@ -282,7 +282,7 @@ final class ProtosI107ContinuationEmissionTest {
                                     normal, closureOf(normal, module), test.argument()));
                 }
 
-                ProtosSemanticBytecodeRootNode nonTerminal =
+                ProtosBytecodeRootNode nonTerminal =
                         activationRoot(compile("(f) => { f()\n 1 }", "non-terminal"));
                 List<String> composed = completeSignature(nonTerminal);
                 assertHasContinuation(composed);
@@ -303,9 +303,9 @@ final class ProtosI107ContinuationEmissionTest {
                 """;
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         compile(source, "inline-fallback");
-                ProtosSemanticBytecodeRootNode activation = activationRoot(module);
+                ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> actual = completeSignature(activation);
 
                 assertHasContinuation(actual);
@@ -319,12 +319,12 @@ final class ProtosI107ContinuationEmissionTest {
                 assertEquals(actual, signature(activation));
                 assertFalse(activation.provablyNonSuspendingBody());
 
-                ProtosSemanticBytecodeRootNode equivalent =
+                ProtosBytecodeRootNode equivalent =
                         activationRoot(compile(source, "inline-fallback-reparse"));
                 assertEquals(actual, completeSignature(equivalent));
                 assertFalse(equivalent.provablyNonSuspendingBody());
 
-                ProtosSemanticBytecodeRootNode safe =
+                ProtosBytecodeRootNode safe =
                         activationRoot(compile("() => { 1 }", "independent-root"));
                 completeSignature(safe);
                 assertTrue(safe.provablyNonSuspendingBody());
@@ -341,7 +341,7 @@ final class ProtosI107ContinuationEmissionTest {
         }
         try (Harness two = new Harness(ProtosExecutionMode.NORMAL)) {
             two.run(() -> {
-                ProtosSemanticBytecodeRootNode activation = activationRoot(compile(NESTED, "two"));
+                ProtosBytecodeRootNode activation = activationRoot(compile(NESTED, "two"));
                 assertEquals(first, completeSignature(activation));
                 assertTrue(activation.provablyNonSuspendingBody());
             });
@@ -352,14 +352,14 @@ final class ProtosI107ContinuationEmissionTest {
      * Handwritten NORMAL Closure root returning one Long literal carrier, with the source section
      * of {@code characters}' outermost body.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenLiteralRoot(
+    private static ProtosBytecodeRootNode handwrittenLiteralRoot(
             String characters, long value) {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i107-oracle.protos")
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -404,7 +404,7 @@ final class ProtosI107ContinuationEmissionTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode compile(String characters, String name) {
+    private static ProtosBytecodeRootNode compile(String characters, String name) {
         Source source = Source.newBuilder(
                         ProtosLanguage.ID,
                         characters,
@@ -412,27 +412,27 @@ final class ProtosI107ContinuationEmissionTest {
                 .build();
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
-        return assertInstanceOf(ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+        return assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
     }
 
-    private static ProtosSemanticBytecodeRootNode activationRoot(
-            ProtosSemanticBytecodeRootNode module) {
+    private static ProtosBytecodeRootNode activationRoot(
+            ProtosBytecodeRootNode module) {
         return groupRoots(module).get(1);
     }
 
-    private static List<ProtosSemanticBytecodeRootNode> groupRoots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> groupRoots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return signature(root);
     }
 
-    private static List<String> signature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
             StringBuilder entry = new StringBuilder(instruction.getName());
@@ -495,7 +495,7 @@ final class ProtosI107ContinuationEmissionTest {
     }
 
     private static ProtosClosureValue closureOf(
-            Harness harness, ProtosSemanticBytecodeRootNode module) {
+            Harness harness, ProtosBytecodeRootNode module) {
         return assertInstanceOf(
                 ProtosClosureValue.class,
                 module.getCallTarget().call(harness.moduleActivation()));

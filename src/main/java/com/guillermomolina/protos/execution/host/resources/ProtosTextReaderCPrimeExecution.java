@@ -271,10 +271,10 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(sourceResult);
-                            builder.beginFinishClosureCall();
+                            builder.beginFinishCPrimeClosureCall();
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishClosureCall();
+                            builder.endFinishCPrimeClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();

@@ -62,7 +62,7 @@ final class ProtosBug018FrameLexicalAuthorityReadAfterOwnerTierTransitionTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosSemanticBytecodeRootNode root = installingRoot(LANGUAGE_REF.get(null));
+                ProtosBytecodeRootNode root = installingRoot(LANGUAGE_REF.get(null));
                 root.getBytecodeNode().setUncachedThreshold(1);
                 assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
 
@@ -120,9 +120,9 @@ final class ProtosBug018FrameLexicalAuthorityReadAfterOwnerTierTransitionTest {
      * {@code x}, {@code y} and {@code z} are statically allocated frame-backed
      * locals. The root installs the frame lexical authority and returns.
      */
-    private static ProtosSemanticBytecodeRootNode installingRoot(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+    private static ProtosBytecodeRootNode installingRoot(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

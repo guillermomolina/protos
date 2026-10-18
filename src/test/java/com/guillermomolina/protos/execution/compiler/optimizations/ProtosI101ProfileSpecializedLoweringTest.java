@@ -58,7 +58,7 @@ import org.junit.jupiter.api.io.TempDir;
  * representation of the primary constant Boolean-control witness.
  *
  * <p>The expected NORMAL activation root of {@code () => { true.ifTrue() { 1 } }} is a handwritten
- * {@link ProtosSemanticBytecodeRootNodeGen.Builder} program authored from the language root
+ * {@link ProtosBytecodeRootNodeGen.Builder} program authored from the language root
  * contract (a parameterless Closure root with one terminal statement returning the literal's
  * Long carrier; D203/I105 lowers no arity-rejection root). It never consults the parser, the
  * canonicalizer, the lowerer or any lowered root. Real roots always come from the production
@@ -92,9 +92,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     void foldedWitnessMatchesDirectLiteralAndHandwrittenOracle() throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode oracle = handwrittenLiteralOneActivationRoot();
-                ProtosSemanticBytecodeRootNode direct = activationRoot(compile(DIRECT, "direct"));
-                ProtosSemanticBytecodeRootNode folded =
+                ProtosBytecodeRootNode oracle = handwrittenLiteralOneActivationRoot();
+                ProtosBytecodeRootNode direct = activationRoot(compile(DIRECT, "direct"));
+                ProtosBytecodeRootNode folded =
                         activationRoot(compile(WITNESS, "witness"));
 
                 List<String> expected = completeSignature(oracle);
@@ -117,7 +117,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 assertTrue(direct.provablyNonSuspendingBody());
                 assertTrue(folded.provablyNonSuspendingBody());
                 // An unfolded site (its callback body is a send) does not keep the capability.
-                ProtosSemanticBytecodeRootNode unfolded =
+                ProtosBytecodeRootNode unfolded =
                         activationRoot(compile("() => { true.ifTrue() { 1 + 0 } }", "unfolded"));
                 assertTrue(!unfolded.provablyNonSuspendingBody());
                 System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS");
@@ -134,9 +134,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             throws Exception {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         compile(UNARY, "i104-unary");
-                ProtosSemanticBytecodeRootNode production =
+                ProtosBytecodeRootNode production =
                         activationRoot(module);
 
                 List<String> previous =
@@ -178,7 +178,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
         try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
             debug.run(() -> {
-                ProtosSemanticBytecodeRootNode production =
+                ProtosBytecodeRootNode production =
                         activationRoot(compile(UNARY, "i104-debug"));
                 List<String> instructions = completeSignature(production);
                 assertTrue(
@@ -197,9 +197,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
             normal.run(() -> {
                 for (String characters : List.of(DIRECT, WITNESS)) {
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             compile(characters, "topology-" + characters.length());
-                    List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                    List<ProtosBytecodeRootNode> roots = groupRoots(module);
                     /*
                      * Roots are numbered when opened: the module root and the Closure root it
                      * creates. The folded callback is never lowered, so it has no root.
@@ -228,8 +228,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     void debugWitnessKeepsTheOrdinarySendAndPhysicalCallback() throws Exception {
         try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
             debug.run(() -> {
-                ProtosSemanticBytecodeRootNode module = compile(WITNESS, "debug-witness");
-                List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                ProtosBytecodeRootNode module = compile(WITNESS, "debug-witness");
+                List<ProtosBytecodeRootNode> roots = groupRoots(module);
                 // Module, Closure and the callback root.
                 assertEquals(3, roots.size());
 
@@ -245,7 +245,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 .anyMatch(entry -> entry.contains("IsCompactCanonicalBooleanMiss")),
                         activation::toString);
 
-                ProtosSemanticBytecodeRootNode callback = roots.get(2);
+                ProtosBytecodeRootNode callback = roots.get(2);
                 assertNotNull(callback.getSourceSection());
                 // A Closure root spans its body sequence, as the direct Closure root does.
                 assertEquals("1", callback.getSourceSection().getCharacters().toString());
@@ -273,10 +273,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
             try (Harness harness = new Harness(mode, null)) {
                 harness.run(() -> {
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             compile(WITNESS, "reparse-" + mode);
                     BytecodeRootNodes<?> group = module.getRootNodes();
-                    List<ProtosSemanticBytecodeRootNode> roots = groupRoots(module);
+                    List<ProtosBytecodeRootNode> roots = groupRoots(module);
                     List<RootCallTarget> targets =
                             roots.stream().map(RootNode::getCallTarget).toList();
                     List<List<String>> semantic =
@@ -285,7 +285,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     group.ensureComplete();
                     List<List<String>> complete =
                             roots.stream().map(root -> signature(root)).toList();
-                    for (ProtosSemanticBytecodeRootNode root : roots) {
+                    for (ProtosBytecodeRootNode root : roots) {
                         assertNotNull(root.getSourceSection(), mode.toString());
                     }
                     group.ensureComplete();
@@ -293,8 +293,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     assertSame(group, module.getRootNodes());
                     assertEquals(roots, groupRoots(module), mode.toString());
                     for (int index = 0; index < roots.size(); index++) {
-                        ProtosSemanticBytecodeRootNode root =
-                                (ProtosSemanticBytecodeRootNode) group.getNode(index);
+                        ProtosBytecodeRootNode root =
+                                (ProtosBytecodeRootNode) group.getNode(index);
                         assertSame(roots.get(index), root);
                         assertSame(targets.get(index), root.getCallTarget());
                         assertOnlyInstrumentationAdded(
@@ -479,7 +479,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
             try (Harness harness = new Harness(mode, null)) {
                 harness.run(() -> {
-                    ProtosSemanticBytecodeRootNode module =
+                    ProtosBytecodeRootNode module =
                             compile(program, "omitted-callbacks-" + mode);
                     List<String> run = completeSignature(groupRoots(module).get(1));
                     long inlineSites = run.stream()
@@ -533,7 +533,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     for (int index = 0; index < cases.size(); index++) {
                         Case test = cases.get(index);
                         String name = "boundary-" + index;
-                        ProtosSemanticBytecodeRootNode module = compile(test.closure(), name);
+                        ProtosBytecodeRootNode module = compile(test.closure(), name);
                         List<String> actual = completeSignature(activationRoot(module));
                         if (test.folded() != null) {
                             List<String> folded = completeSignature(activationRoot(
@@ -587,17 +587,17 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         Case example = cases.get(index);
                         String label = "d203-" + mode + "-" + index;
 
-                        ProtosSemanticBytecodeRootNode module =
+                        ProtosBytecodeRootNode module =
                                 compile(example.definition(), label);
 
                         BytecodeRootNodes<?> group = module.getRootNodes();
-                        List<ProtosSemanticBytecodeRootNode> roots =
+                        List<ProtosBytecodeRootNode> roots =
                                 groupRoots(module);
 
                         assertEquals(2, roots.size(),
                                 "D203 must not create an arity-rejection root");
 
-                        ProtosSemanticBytecodeRootNode body = roots.get(1);
+                        ProtosBytecodeRootNode body = roots.get(1);
                         RootCallTarget target = body.getCallTarget();
 
                         group.ensureComplete();
@@ -629,7 +629,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         ProtosActivation caller = harness.moduleActivation();
                         caller.context().createLocalSlot("candidate", closure);
 
-                        ProtosSemanticBytecodeRootNode invocation =
+                        ProtosBytecodeRootNode invocation =
                                 compile(
                                         "candidate(" + example.arguments() + ")",
                                         label + "-call");
@@ -745,11 +745,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                     assertEquals(mode, plan.bytecodeProfileForTesting());
 
-                    ProtosSemanticBytecodeRootNode root =
+                    ProtosBytecodeRootNode root =
                             plan.bytecodeActivationRootForTesting();
 
                     BytecodeRootNodes<?> group = root.getRootNodes();
-                    List<ProtosSemanticBytecodeRootNode> roots =
+                    List<ProtosBytecodeRootNode> roots =
                             groupRoots(root);
                     RootCallTarget target = root.getCallTarget();
 
@@ -879,10 +879,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                     .executionPlan().orElseThrow();
                     assertEquals(mode, plan.bytecodeProfileForTesting());
 
-                    ProtosSemanticBytecodeRootNode activation =
+                    ProtosBytecodeRootNode activation =
                             plan.bytecodeActivationRootForTesting();
                     BytecodeRootNodes<?> group = activation.getRootNodes();
-                    List<ProtosSemanticBytecodeRootNode> roots =
+                    List<ProtosBytecodeRootNode> roots =
                             groupRoots(activation);
 
                     List<RootCallTarget> targets = roots.stream()
@@ -907,7 +907,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     assertEquals(roots, groupRoots(activation));
 
                     for (int index = 0; index < roots.size(); index++) {
-                        ProtosSemanticBytecodeRootNode root =
+                        ProtosBytecodeRootNode root =
                                 roots.get(index);
 
                         assertSame(
@@ -934,7 +934,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 mode + " " + family.name());
                     }
 
-                    List<ProtosSemanticBytecodeRootNode> guarded =
+                    List<ProtosBytecodeRootNode> guarded =
                             roots.stream()
                                     .filter(root -> signature(root).stream()
                                             .anyMatch(instruction ->
@@ -1226,7 +1226,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
                 assertEquals(mode, plan.bytecodeProfileForTesting());
 
-                ProtosSemanticBytecodeRootNode root =
+                ProtosBytecodeRootNode root =
                         plan.bytecodeActivationRootForTesting();
 
                 List<String> instructions = completeSignature(root);
@@ -1279,7 +1279,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * materialization, are represented identically. D203/I105: no
      * excess-argument check follows the binding.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenUnaryIdentityRoot(
+    private static ProtosBytecodeRootNode handwrittenUnaryIdentityRoot(
             boolean fused) {
         String characters = UNARY;
         Source source = Source.newBuilder(
@@ -1292,8 +1292,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
         int readStart = characters.lastIndexOf("value");
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -1365,9 +1365,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
         try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
             normal.run(() -> {
-                ProtosSemanticBytecodeRootNode module =
+                ProtosBytecodeRootNode module =
                         compile(source, "i104-b-normal");
-                ProtosSemanticBytecodeRootNode actual =
+                ProtosBytecodeRootNode actual =
                         activationRoot(module);
 
                 List<String> beforeReparse = semanticSignature(actual);
@@ -1452,7 +1452,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         }
     }
 
-    private static ProtosSemanticBytecodeRootNode handwrittenI104BRoot(
+    private static ProtosBytecodeRootNode handwrittenI104BRoot(
             boolean compact) {
         String characters = "(a, b, c) => { b }";
         Source source = Source.newBuilder(
@@ -1465,8 +1465,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
         int lookupStart = characters.lastIndexOf('b');
 
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -1542,14 +1542,14 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * direct return of the Long carrier of {@code 1}. Ordinary guest-value materialization is
      * handled by the call boundary; D203/I105 nests no arity-rejection root.
      */
-    private static ProtosSemanticBytecodeRootNode handwrittenLiteralOneActivationRoot() {
+    private static ProtosBytecodeRootNode handwrittenLiteralOneActivationRoot() {
         String characters = DIRECT;
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i101-a-oracle.protos")
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> nodes =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
+                ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -1573,25 +1573,25 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /** The production ParsingRequest path of the entered Context. */
-    private static ProtosSemanticBytecodeRootNode compile(String characters, String name) {
+    private static ProtosBytecodeRootNode compile(String characters, String name) {
         Source source = Source.newBuilder(ProtosLanguage.ID, characters, "i101-a-" + name + ".protos")
                 .build();
         RootCallTarget target = assertInstanceOf(
                 RootCallTarget.class, ProtosLanguageContext.current().parsePublic(source));
-        return assertInstanceOf(ProtosSemanticBytecodeRootNode.class, target.getRootNode());
+        return assertInstanceOf(ProtosBytecodeRootNode.class, target.getRootNode());
     }
 
     /** The Closure root created by a module whose only statement is a Closure literal. */
-    private static ProtosSemanticBytecodeRootNode activationRoot(
-            ProtosSemanticBytecodeRootNode module) {
+    private static ProtosBytecodeRootNode activationRoot(
+            ProtosBytecodeRootNode module) {
         return groupRoots(module).get(1);
     }
 
     /** The roots of {@code root}'s group in group order. */
-    private static List<ProtosSemanticBytecodeRootNode> groupRoots(
-            ProtosSemanticBytecodeRootNode root) {
+    private static List<ProtosBytecodeRootNode> groupRoots(
+            ProtosBytecodeRootNode root) {
         return root.getRootNodes().getNodes().stream()
-                .map(ProtosSemanticBytecodeRootNode.class::cast)
+                .map(ProtosBytecodeRootNode.class::cast)
                 .toList();
     }
 
@@ -1617,13 +1617,13 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         }
     }
 
-    private static List<String> completeSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> completeSignature(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return signature(root);
     }
 
     /** Every instruction with every argument; nothing is filtered. */
-    private static List<String> signature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
             StringBuilder entry = new StringBuilder(instruction.getName());
@@ -1644,7 +1644,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * Reparse comparison only: the instructions other than tag and trace instrumentation, whose
      * insertion is the expected metadata expansion and shifts bytecode indices.
      */
-    private static List<String> semanticSignature(ProtosSemanticBytecodeRootNode root) {
+    private static List<String> semanticSignature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
             if (instruction.getName().startsWith("tag.")

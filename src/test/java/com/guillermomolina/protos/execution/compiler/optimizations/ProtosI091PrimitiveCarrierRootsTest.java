@@ -192,8 +192,8 @@ final class ProtosI091PrimitiveCarrierRootsTest {
     }
 
     private static void assertSemanticBooleanPredicate(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {
@@ -232,7 +232,7 @@ final class ProtosI091PrimitiveCarrierRootsTest {
                             builder.endRoot();
                         });
 
-        ProtosSemanticBytecodeRootNode root = roots.getNode(0);
+        ProtosBytecodeRootNode root = roots.getNode(0);
         root.getBytecodeNode().setUncachedThreshold(1);
 
         assertEquals(BytecodeTier.UNCACHED, root.getBytecodeNode().getTier());
@@ -320,8 +320,8 @@ final class ProtosI091PrimitiveCarrierRootsTest {
             ProtosLanguage language,
             Object value,
             boolean constant) {
-        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
-                ProtosSemanticBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

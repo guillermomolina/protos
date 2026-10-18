@@ -45,14 +45,12 @@ final class ProtosI091NumericStructuralAdmissionTest {
 
             assertThrows(
                     ProtosSignalException.class,
-                    () -> ProtosBytecodeRootNode
-                            .RequireObjectMutationTarget
+                    () -> ProtosBytecodeRootNode.RequireObjectMutationTarget
                             .perform(activation, number));
 
             assertThrows(
                     ProtosSignalException.class,
-                    () -> ProtosBytecodeRootNode
-                            .ComposeLocalSlots
+                    () -> ProtosBytecodeRootNode.ComposeLocalSlots
                             .perform(activation, number, reserved));
         }
     }

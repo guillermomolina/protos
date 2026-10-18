@@ -116,8 +116,8 @@ class ProtosAPlusExecutionProjectionTest {
             Object result =
                     context.callEntered(
                             () -> {
-                                ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                                        ProtosBytecodeRootNode.PrepareSendArguments.perform(
+                                ProtosPreparedCalls.PreparedClosureCall prepared =
+                                        ProtosBytecodeRootNode.PrepareSendArguments.performForActivation(
                                                 receiver,
                                                 "match",
                                                 caller,
@@ -128,7 +128,7 @@ class ProtosAPlusExecutionProjectionTest {
                                 Object entered =
                                         ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
                                                 assertInstanceOf(
-                                                        ProtosBytecodeRootNode.OrdinarySourceCall
+                                                        ProtosPreparedCalls.OrdinarySourceCall
                                                                 .class,
                                                         prepared),
                                                 IndirectCallNode.create());

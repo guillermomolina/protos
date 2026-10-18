@@ -204,7 +204,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             HostEntryExtent previous =
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
-                ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                ProtosPreparedCalls.OrdinarySourceCall prepared =
                         receiver.prepare(supplied);
                 return finishEntry(
                         embedding,
@@ -237,7 +237,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             HostEntryExtent previous =
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
             try {
-                ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                ProtosPreparedCalls.OrdinarySourceCall prepared =
                         receiver.prepare(supplied);
                 return finishEntry(
                         embedding,
@@ -262,7 +262,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
          */
         private static Object finishEntry(
                 ProtosEmbeddedProcess embedding,
-                ProtosBytecodeRootNode.OrdinarySourceCall prepared,
+                ProtosPreparedCalls.OrdinarySourceCall prepared,
                 Object outcome) {
             // I112: a terminal transport is pending exactly like a ContinuationResult.
             if (ProtosTailCallContinuation.isPending(outcome)) {
@@ -355,7 +355,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * The compact prepared call one session-adapter execution enters; package-visible for
      * structural tests. A session adapter never raises {@link UnsupportedTypeException}.
      */
-    ProtosBytecodeRootNode.OrdinarySourceCall prepare(Object[] arguments, Node node)
+    ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] arguments, Node node)
             throws ArityException {
         try {
             return prepare(admitArguments(arguments, node));
@@ -368,8 +368,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance, in
      * NORMAL and DEBUG alike.
      */
-    private ProtosBytecodeRootNode.OrdinarySourceCall prepare(Object[] supplied) {
-        return (ProtosBytecodeRootNode.OrdinarySourceCall)
-                ProtosBytecodeRootNode.finishDirectClosureCall(closure, target, supplied, caller);
+    private ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] supplied) {
+        return (ProtosPreparedCalls.OrdinarySourceCall)
+                ProtosClosureCallPreparation.finishDirectClosureCall(closure, target, supplied, caller);
     }
 }
