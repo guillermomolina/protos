@@ -20,10 +20,14 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
@@ -258,5 +262,236 @@ final class ProtosFrameLocalBindings {
             observed.add(array.indexedAt(index));
         }
         return observed;
+    }
+
+    /**
+     * I113 (from {@code BindRequiredFrameParameter}): retain the established
+     * rich-activation and duplicate-binding semantics.
+     */
+    @TruffleBoundary
+    static void bindRequiredFrameParameterSlow(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            int ordinal,
+            String name,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            MaterializedFrame frame) {
+        ProtosActivation activation =
+                ProtosFrameArguments.activation(frame.getArguments());
+        Object value =
+                ProtosBytecodeRootNode.LoadClosureArgument.perform(
+                        activation, ordinal);
+        ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                frameBackedLocals,
+                frameBackedLayout,
+                ordinal,
+                activation,
+                name,
+                value,
+                bytecodeNode,
+                bytecodeIndex,
+                frame);
+    }
+
+    /**
+     * I113 (from {@code BindClosureFrameParameter}): the unchanged
+     * authoritative binding, including duplicate-creation Errors and
+     * activation materialization. The caller materializes the frame before
+     * entering the boundary so no VirtualFrame escapes.
+     */
+    @TruffleBoundary
+    static void bindClosureFrameParameterSlow(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            int ordinal,
+            Object[] arguments,
+            String name,
+            Object value,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            MaterializedFrame frame) {
+        ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                frameBackedLocals, frameBackedLayout, ordinal,
+                ProtosFrameArguments.activation(arguments), name, value,
+                bytecodeNode, bytecodeIndex, frame);
+    }
+
+    /** I113 (from {@code BindUnaryFrameParameter}): the authoritative unary binding. */
+    @TruffleBoundary
+    static void bindUnaryFrameParameterAuthoritatively(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            int ordinal,
+            String name,
+            Object[] arguments,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            MaterializedFrame frame) {
+        ProtosActivation activation =
+                ProtosFrameArguments.activation(arguments);
+        Object value =
+                ProtosBytecodeRootNode.LoadClosureArgument.perform(
+                        activation, 0);
+        ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                frameBackedLocals,
+                frameBackedLayout,
+                ordinal,
+                activation,
+                name,
+                value,
+                bytecodeNode,
+                bytecodeIndex,
+                frame);
+    }
+
+    /**
+     * PERF034-B (from {@code CreateCurrentFrameLocal}): keep rich-activation
+     * transitions and duplicate-creation errors outside the compiled ordinary
+     * compact-local path.
+     *
+     * The frame is materialized before entering the boundary. This
+     * preserves the existing authoritative creation implementation
+     * without allowing a VirtualFrame to escape compilation.
+     */
+    @TruffleBoundary
+    static Object createCurrentFrameLocalSlow(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            int ordinal,
+            Object[] arguments,
+            String name,
+            Object value,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            MaterializedFrame frame) {
+        return ProtosBytecodeRootNode.CreateCurrentFrameLocal.performForActivation(
+                frameBackedLocals, frameBackedLayout, ordinal,
+                ProtosFrameArguments.activation(arguments), name, value,
+                bytecodeNode, bytecodeIndex, frame);
+    }
+
+    /**
+     * PERF034-B (from {@code ReadRootFrameLocal}): observed contexts retain
+     * the authoritative D179 presence-aware fallback, but do not expand that
+     * machinery into the compiled unobserved compact-local read.
+     */
+    @TruffleBoundary
+    static Object readRootFrameLocalSlow(
+            LocalAccessor accessor,
+            Assumption presenceContinuity,
+            Object[] arguments,
+            String name,
+            BytecodeNode bytecodeNode,
+            MaterializedFrame frame) {
+        // I091: the lowered consumer materializes a retained carrier.
+        return readRetainingCarrier(
+                accessor,
+                presenceContinuity,
+                ProtosFrameArguments.activation(arguments),
+                name,
+                bytecodeNode,
+                frame);
+    }
+
+    /**
+     * I091: {@link ProtosBytecodeRootNode.ReadFrameLocal#perform} without
+     * materializing a frame-retained primitive carrier, for a lowered read
+     * whose consumer materializes it (or is an operand of the guarded numeric
+     * chain). Deliberately not a boundary: the ordinary read stays inlinable.
+     */
+    static Object readRetainingCarrier(
+            LocalAccessor accessor,
+            Assumption presenceContinuity,
+            ProtosActivation activation,
+            String name,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (activation.hasGenuineExecutionContextForRuntime()
+                && (presenceContinuity.isValid()
+                        || !accessor.isCleared(bytecodeNode, frame))) {
+            return accessor.getObject(bytecodeNode, frame);
+        }
+
+        /*
+         * Once continuity has been invalidated, D179 C0 remains exactly
+         * presence-aware: a cleared genuine execution-context local is
+         * semantically ABSENT and resumes lexical/receiver fallback.
+         * Legacy/internal activations whose current lexical context is an
+         * ordinary ProtosObjectValue use the same fallback.
+         */
+        return ProtosLexicalFallback.readByName(activation, name)
+                .orElseThrow(
+                        () ->
+                                new ProtosSignalException(
+                                        ProtosCoreErrors.newUnqualifiedLookupError(
+                                                activation)));
+    }
+
+    /** The generic String-keyed write target of {@code name}, or the slot-not-found Error. */
+    static ResolvedLexicalWriteTarget resolveWritableLexicalTarget(
+            ProtosActivation activation, String name) {
+        ResolvedLexicalWriteTarget selected = selectByNameOrNull(activation, name);
+        if (selected == null) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newSlotNotFound(activation));
+        }
+        return selected;
+    }
+
+    /**
+     * TEST009-K: the residual String-keyed destination walk is a host boundary, like
+     * {@link ProtosLexicalFallback#readByName}. Statically proven bindings select their
+     * destination through the frame-backed operations and never reach it.
+     */
+    @TruffleBoundary
+    private static ResolvedLexicalWriteTarget selectByNameOrNull(
+            ProtosActivation activation,
+            String name) {
+        if (activation.currentContextHasLocalSlotForRuntime(name)) {
+            return ResolvedLexicalWriteTarget.currentContext();
+        }
+
+        for (ProtosLexicalEnvironment lexical =
+                        activation.capturedLexicalEnvironmentForRuntime();
+                lexical != null;
+                lexical = lexical.outer()) {
+            if (lexical.hasLocalSlotForRuntime(name)) {
+                return ResolvedLexicalWriteTarget.object(
+                        lexical.context());
+            }
+        }
+
+        if (activation.receiver()
+                        instanceof ProtosObjectValue ordinaryReceiver
+                && ordinaryReceiver.hasLocalSlot(name)) {
+            return ResolvedLexicalWriteTarget.object(
+                    ordinaryReceiver);
+        }
+
+        return null;
+    }
+
+    /** Assigns {@code value} through a resolved generic write target. */
+    static Object assignResolvedLexicalTarget(
+            ProtosActivation activation,
+            ResolvedLexicalWriteTarget destination,
+            String name,
+            Object value) {
+        try {
+            if (destination.currentContext) {
+                activation.assignCurrentLocalSlotForRuntime(
+                        name,
+                        value);
+            } else {
+                destination.object.assignLocalSlot(
+                        name,
+                        value);
+            }
+        } catch (IllegalStateException invalidMutation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+        return value;
     }
 }

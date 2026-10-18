@@ -89,7 +89,10 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                     Arrays.stream(operation.getDeclaredMethods())
                             .filter(method -> Modifier.isStatic(method.getModifiers()))
                             .filter(method -> Modifier.isPublic(method.getModifiers()))
-                            .map(method -> method.getParameterTypes()[0])
+                            // I113: skip FinishClosureCall's projectGuestBoundary constant.
+                            .map(method -> method.getParameterTypes()[0] == boolean.class
+                                    ? method.getParameterTypes()[1]
+                                    : method.getParameterTypes()[0])
                             .collect(java.util.stream.Collectors.toList());
 
             assertFalse(
@@ -103,6 +106,11 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                                     || operation == ProtosBytecodeRootNode.FinishClosureCall.class
                             ? representations.size() + 1
                             : representations.size();
+            if (operation == ProtosBytecodeRootNode.CompleteClosureCall.class) {
+                // I113: the former CompleteIfTrueSiteOuter, an ifTrue site with no outer call.
+                expectedReceivers.add(com.guillermomolina.protos.runtime.ProtosNullValue.class);
+                expectedCount++;
+            }
             assertEquals(
                     expectedCount,
                     receivers.size(),
@@ -244,7 +252,13 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                 Set<Class<?>> receivers =
                         specializations.stream()
                                 .filter(method -> method.getParameterCount() > 0)
-                                .map(method -> method.getParameterTypes()[0])
+                                // I113: skip a leading discriminating constant operand.
+                                .map(method -> method.getParameterTypes()[0]
+                                                                == ProtosStructuredCallKind.class
+                                                        || method.getParameterTypes()[0]
+                                                                == boolean.class
+                                                ? method.getParameterTypes()[1]
+                                                : method.getParameterTypes()[0])
                                 .collect(java.util.stream.Collectors.toSet());
                 if (operation.getSimpleName().equals("EnterNestedStructuredDispatch")) {
                     assertEquals(
@@ -331,19 +345,22 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
 
         assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
         assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
-        assertFalse(ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
-        assertFalse(ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
+        assertFalse(ProtosBytecodeRootNode.IsStructuredCall.immediate(
+                ProtosStructuredCallKind.BOOLEAN, immediate));
+        assertFalse(ProtosBytecodeRootNode.IsStructuredCall.immediate(
+                ProtosStructuredCallKind.BOOLEAN, immediate));
         assertThrows(
                 IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredEnsureCall.immediate(immediate));
+                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
+                        ProtosStructuredCallKind.ENSURE, immediate));
         assertThrows(
                 IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredBooleanCall.immediate(
-                        immediate));
+                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
+                        ProtosStructuredCallKind.BOOLEAN, immediate));
         assertThrows(
                 IllegalStateException.class,
-                () -> ProtosBytecodeRootNode.PrepareStructuredIndexedEachCall.immediate(
-                        immediate));
+                () -> ProtosBytecodeRootNode.PrepareStructuredCall.immediate(
+                        ProtosStructuredCallKind.INDEXED_EACH, immediate));
     }
 
     private static List<java.lang.reflect.Method> specializations(Class<?> operation) {

@@ -244,9 +244,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsBufferedByteWriterStepRequired();
+                            builder.beginIsResultKind(ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED);
                             builder.emitLoadLocal(runFirst);
-                            builder.endIsBufferedByteWriterStepRequired();
+                            builder.endIsResultKind();
                             builder.beginBlock();
 
                             builder.beginStoreLocal(runFirst);
@@ -257,10 +257,10 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareBufferedByteWriterFirstCall();
+                            builder.beginIoPrepareTargetCall(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareBufferedByteWriterFirstCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -278,9 +278,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -298,44 +298,44 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapBufferedByteWriterTargetInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(targetResult);
-                            builder.endWrapBufferedByteWriterTargetInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(invocation);
-                            builder.beginBufferedByteWriterTargetInvocationFailed();
+                            builder.beginIoInvocationFailed();
                             builder.emitLoadArgument(1);
-                            builder.endBufferedByteWriterTargetInvocationFailed();
+                            builder.endIoInvocationFailed();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitBufferedByteWriterTargetFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitBufferedByteWriterTargetFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -346,26 +346,26 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeBufferedByteWriterTargetFutureWait();
+                            builder.beginIoResumeOperationFutureWait("BufferedWriter");
                             builder.emitLoadArgument(0);
                             builder.emitLoadLocal(yielded);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeBufferedByteWriterTargetFutureWait();
+                            builder.endIoResumeOperationFutureWait();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();
 
                             builder.beginStoreLocal(runFlush);
-                            builder.beginApplyBufferedByteWriterFirstOutcome();
+                            builder.beginApplyBufferedByteWriterOutcome(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endApplyBufferedByteWriterFirstOutcome();
+                            builder.endApplyBufferedByteWriterOutcome();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsBufferedByteWriterStepRequired();
+                            builder.beginIsResultKind(ProtosResultKind.BUFFERED_WRITER_STEP_REQUIRED);
                             builder.emitLoadLocal(runFlush);
-                            builder.endIsBufferedByteWriterStepRequired();
+                            builder.endIsResultKind();
                             builder.beginBlock();
 
                             builder.beginStoreLocal(runFlush);
@@ -376,10 +376,10 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareBufferedByteWriterFlushCall();
+                            builder.beginIoPrepareTargetCall(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareBufferedByteWriterFlushCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -397,9 +397,9 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -417,44 +417,44 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapBufferedByteWriterTargetInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(targetResult);
-                            builder.endWrapBufferedByteWriterTargetInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(invocation);
-                            builder.beginBufferedByteWriterTargetInvocationFailed();
+                            builder.beginIoInvocationFailed();
                             builder.emitLoadArgument(1);
-                            builder.endBufferedByteWriterTargetInvocationFailed();
+                            builder.endIoInvocationFailed();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitBufferedByteWriterTargetFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitBufferedByteWriterTargetFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -465,20 +465,20 @@ public final class ProtosBufferedByteWriterCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeBufferedByteWriterTargetFutureWait();
+                            builder.beginIoResumeOperationFutureWait("BufferedWriter");
                             builder.emitLoadArgument(0);
                             builder.emitLoadLocal(yielded);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeBufferedByteWriterTargetFutureWait();
+                            builder.endIoResumeOperationFutureWait();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();
 
                             builder.beginStoreLocal(runFlush);
-                            builder.beginApplyBufferedByteWriterFollowupOutcome();
+                            builder.beginApplyBufferedByteWriterOutcome(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endApplyBufferedByteWriterFollowupOutcome();
+                            builder.endApplyBufferedByteWriterOutcome();
                             builder.endStoreLocal();
 
                             builder.endBlock();

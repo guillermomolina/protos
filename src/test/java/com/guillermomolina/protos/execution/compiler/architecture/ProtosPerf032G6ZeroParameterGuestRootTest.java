@@ -406,6 +406,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                 ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
                 closure,
                 caller,
                 supplied,

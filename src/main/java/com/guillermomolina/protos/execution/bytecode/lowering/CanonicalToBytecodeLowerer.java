@@ -2983,17 +2983,17 @@ final class CanonicalToBytecodeLowerer {
     private void emitCurrentActivation(
             ProtosBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
-            builder.emitCurrentActivation();
+            builder.emitCurrentActivation(false);
         } else if (currentInlineCallbackFrameNative) {
-            builder.beginMaterializeInlineCallbackActivation(
+            builder.beginLoadInlineCallbackContext(false,
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             builder.emitLoadLocal(currentActivationLocal);
-            builder.endMaterializeInlineCallbackActivation();
+            builder.endLoadInlineCallbackContext();
         } else if (currentActivationLocalIsInlineCallbackCall) {
-            builder.beginLoadInlineCallbackActivation();
+            builder.beginLoadInlineLiteralCallPart(false);
             builder.emitLoadLocal(currentActivationLocal);
-            builder.endLoadInlineCallbackActivation();
+            builder.endLoadInlineLiteralCallPart();
         } else {
             builder.emitLoadLocal(currentActivationLocal);
         }
@@ -3086,7 +3086,7 @@ final class CanonicalToBytecodeLowerer {
     private void emitSendCallerOperand(
             ProtosBytecodeRootNodeGen.Builder builder) {
         if (!currentInlineCallbackFrameNative && currentActivationLocal == null) {
-            builder.emitCurrentCallerReference();
+            builder.emitCurrentActivation(true);
         } else {
             emitInvocationCallerOperand(builder);
         }
@@ -3135,42 +3135,42 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal capturedOwnerLocal) {
         if (capturedOwnerLocal != null) {
             if (currentInlineCallbackFrameNative) {
-                builder.beginResolveInlineCapturedMaterializedWritableLexicalTarget(
+                builder.beginAccessInlineCapturedMaterializedLocal(true,
                         capturedOwnerLocal,
                         currentRootFrameNativeLocals,
                         currentRootFrameNativeLayout);
                 emitCurrentInlineCallbackCall(builder);
             } else {
-                builder.beginResolveCapturedMaterializedWritableLexicalTarget(
+                builder.beginAccessCapturedMaterializedLocal(true,
                         capturedOwnerLocal);
                 emitCurrentActivation(builder);
             }
             builder.emitLoadConstant(assign.name());
             builder.emitLoadConstant(captured.lexicalDepth());
             if (currentInlineCallbackFrameNative) {
-                builder.endResolveInlineCapturedMaterializedWritableLexicalTarget();
+                builder.endAccessInlineCapturedMaterializedLocal();
             } else {
-                builder.endResolveCapturedMaterializedWritableLexicalTarget();
+                builder.endAccessCapturedMaterializedLocal();
             }
             return;
         }
         int frameOrdinal = frameBackedOrdinal(captured.identity());
         if (currentInlineCallbackFrameNative) {
-            builder.beginResolveInlineCapturedWritableLexicalTarget(
+            builder.beginAccessInlineCapturedFrameLocal(true,
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout,
                     frameOrdinal);
             emitCurrentInlineCallbackCall(builder);
         } else {
-            builder.beginResolveCapturedWritableLexicalTarget(frameOrdinal);
+            builder.beginAccessCapturedFrameLocal(true, frameOrdinal);
             emitCurrentActivation(builder);
         }
         builder.emitLoadConstant(assign.name());
         builder.emitLoadConstant(captured.lexicalDepth());
         if (currentInlineCallbackFrameNative) {
-            builder.endResolveInlineCapturedWritableLexicalTarget();
+            builder.endAccessInlineCapturedFrameLocal();
         } else {
-            builder.endResolveCapturedWritableLexicalTarget();
+            builder.endAccessCapturedFrameLocal();
         }
     }
 
@@ -3337,28 +3337,28 @@ final class CanonicalToBytecodeLowerer {
                 int restOrdinal = frameNativeOrdinal(parameter.name());
                 int indexedRestOrdinal = indexedParameterOrdinal(parameter);
                 if (restOrdinal >= 0) {
-                    builder.beginBindClosureFrameRest(
+                    builder.beginBindInlineClosureFrameParameter(
                             currentRootFrameNativeLocals,
                             currentRootFrameNativeLayout,
                             restOrdinal);
                     emitCurrentActivation(builder);
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
-                    builder.endBindClosureFrameRest();
+                    builder.endBindInlineClosureFrameParameter();
                 } else if (indexedRestOrdinal >= 0) {
-                    builder.beginBindClosureIndexedRest(
+                    builder.beginBindClosureIndexedParameter(true,
                             currentRootIndexedParameterLayout,
                             indexedRestOrdinal);
                     emitCurrentActivation(builder);
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
-                    builder.endBindClosureIndexedRest();
+                    builder.endBindClosureIndexedParameter();
                 } else {
-                    builder.beginBindClosureRest();
+                    builder.beginBindClosureParameter(true);
                     emitCurrentActivation(builder);
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
-                    builder.endBindClosureRest();
+                    builder.endBindClosureParameter();
                 }
                 continue;
             }
@@ -3495,14 +3495,14 @@ final class CanonicalToBytecodeLowerer {
         }
         ordinal = indexedParameterOrdinal(parameter);
         if (ordinal >= 0) {
-            builder.beginBindClosureIndexedParameter(
+            builder.beginBindClosureIndexedParameter(false,
                     currentRootIndexedParameterLayout,
                     ordinal);
             emitCurrentActivation(builder);
             builder.emitLoadConstant(name);
             return ParameterBindingForm.INDEXED;
         }
-        builder.beginBindClosureParameter();
+        builder.beginBindClosureParameter(false);
         emitCurrentActivation(builder);
         builder.emitLoadConstant(name);
         return ParameterBindingForm.NAMED;
@@ -3667,11 +3667,11 @@ final class CanonicalToBytecodeLowerer {
             frameNative = ordinals[index] >= 0;
         }
         if (!frameNative) {
-            builder.beginMultipleCreateLocalSlots();
+            builder.beginCreateCurrentLocalSlot();
             emitCurrentActivation(builder);
             builder.emitLoadConstant(multipleCreateNamesConstant(names));
             builder.emitLoadLocal(source);
-            builder.endMultipleCreateLocalSlots();
+            builder.endCreateCurrentLocalSlot();
             return;
         }
         boolean inline = currentInlineCallbackFrameNative;
@@ -4358,7 +4358,7 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            builder.beginIdentity();
+            builder.beginIdentity(false);
             builder.emitLoadLocal(leftValue);
             builder.emitLoadLocal(rightValue);
             builder.endIdentity();
@@ -4373,10 +4373,10 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            builder.beginNotIdentity();
+            builder.beginIdentity(true);
             builder.emitLoadLocal(leftValue);
             builder.emitLoadLocal(rightValue);
-            builder.endNotIdentity();
+            builder.endIdentity();
             builder.endStoreLocal();
             return;
         }
@@ -4513,7 +4513,7 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            builder.beginIdentity();
+            builder.beginIdentity(false);
             builder.emitLoadLocal(leftValue);
             builder.emitLoadLocal(rightValue);
             builder.endIdentity();
@@ -4528,10 +4528,10 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
-            builder.beginNotIdentity();
+            builder.beginIdentity(true);
             builder.emitLoadLocal(leftValue);
             builder.emitLoadLocal(rightValue);
-            builder.endNotIdentity();
+            builder.endIdentity();
             builder.endStoreLocal();
             return;
         }
@@ -4715,10 +4715,10 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(preparedCall);
-        builder.beginPrepareMapConstructionFactoryCall();
+        builder.beginMapConstructionFactoryCall(false);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(factoryValue);
-        builder.endPrepareMapConstructionFactoryCall();
+        builder.endMapConstructionFactoryCall();
         builder.endStoreLocal();
 
         emitPreparedInvocation(
@@ -4729,10 +4729,10 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(mapValue);
-        builder.beginFinishMapConstructionFactoryCall();
+        builder.beginMapConstructionFactoryCall(true);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(factoryResult);
-        builder.endFinishMapConstructionFactoryCall();
+        builder.endMapConstructionFactoryCall();
         builder.endStoreLocal();
 
         for (CanonicalMapConstruction.Entry entry : map.entries()) {
@@ -4802,23 +4802,23 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareMapInitialDefinition();
             builder.endStoreLocal();
 
-            builder.beginEnterMapInitialDefinitionComparison();
+            builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
             builder.emitLoadLocal(initialDefinition);
-            builder.endEnterMapInitialDefinitionComparison();
+            builder.endStructuredAdvance();
 
             builder.beginTryFinally(
                     () -> {
-                        builder.beginLeaveMapInitialDefinitionComparison();
+                        builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                         builder.emitLoadLocal(initialDefinition);
-                        builder.endLeaveMapInitialDefinitionComparison();
+                        builder.endStructuredAdvance();
                     });
 
             builder.beginBlock();
 
             builder.beginStoreLocal(preparedCall);
-            builder.beginPrepareMapInitialDefinitionHashCall();
+            builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
             builder.emitLoadLocal(initialDefinition);
-            builder.endPrepareMapInitialDefinitionHashCall();
+            builder.endStructuredPrepareChildCall();
             builder.endStoreLocal();
 
             emitPreparedInvocation(
@@ -4831,36 +4831,36 @@ final class CanonicalToBytecodeLowerer {
             builder.endBlock();
             builder.endTryFinally();
 
-            builder.beginAcceptMapInitialDefinitionHashResult();
+            builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
             builder.emitLoadLocal(initialDefinition);
             builder.emitLoadLocal(callbackResult);
-            builder.endAcceptMapInitialDefinitionHashResult();
+            builder.endStructuredAcceptChildOutcome();
 
             builder.beginWhile();
 
-            builder.beginMapInitialDefinitionNeedsEquality();
+            builder.beginStructuredHasNext(ProtosStructuredPhase.EQUALITY);
             builder.emitLoadLocal(initialDefinition);
-            builder.endMapInitialDefinitionNeedsEquality();
+            builder.endStructuredHasNext();
 
             builder.beginBlock();
 
-            builder.beginEnterMapInitialDefinitionComparison();
+            builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
             builder.emitLoadLocal(initialDefinition);
-            builder.endEnterMapInitialDefinitionComparison();
+            builder.endStructuredAdvance();
 
             builder.beginTryFinally(
                     () -> {
-                        builder.beginLeaveMapInitialDefinitionComparison();
+                        builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                         builder.emitLoadLocal(initialDefinition);
-                        builder.endLeaveMapInitialDefinitionComparison();
+                        builder.endStructuredAdvance();
                     });
 
             builder.beginBlock();
 
             builder.beginStoreLocal(preparedCall);
-            builder.beginPrepareMapInitialDefinitionEqualityCall();
+            builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
             builder.emitLoadLocal(initialDefinition);
-            builder.endPrepareMapInitialDefinitionEqualityCall();
+            builder.endStructuredPrepareChildCall();
             builder.endStoreLocal();
 
             emitPreparedInvocation(
@@ -4873,17 +4873,17 @@ final class CanonicalToBytecodeLowerer {
             builder.endBlock();
             builder.endTryFinally();
 
-            builder.beginAcceptMapInitialDefinitionEqualityResult();
+            builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
             builder.emitLoadLocal(initialDefinition);
             builder.emitLoadLocal(callbackResult);
-            builder.endAcceptMapInitialDefinitionEqualityResult();
+            builder.endStructuredAcceptChildOutcome();
 
             builder.endBlock();
             builder.endWhile();
 
-            builder.beginFinishMapInitialDefinition();
+            builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
             builder.emitLoadLocal(initialDefinition);
-            builder.endFinishMapInitialDefinition();
+            builder.endStructuredAdvance();
         }
 
         builder.beginStoreLocal(result);
@@ -5195,12 +5195,12 @@ final class CanonicalToBytecodeLowerer {
         emitBodyExpressionToLocal(
                 builder, create.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginCreateLocalSlot();
+        builder.beginMutateLocalSlot(ProtosSlotMutation.CREATE);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
-        builder.endCreateLocalSlot();
+        builder.endMutateLocalSlot();
         builder.endStoreLocal();
     }
 
@@ -5437,10 +5437,10 @@ final class CanonicalToBytecodeLowerer {
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveWritableLexicalTarget();
+            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
             emitCurrentActivation(builder);
             builder.emitLoadConstant(assign.name());
-            builder.endResolveWritableLexicalTarget();
+            builder.endAccessNamedLexical();
             builder.endStoreLocal();
         }
 
@@ -5474,12 +5474,12 @@ final class CanonicalToBytecodeLowerer {
                     mutationTarget,
                     value);
         } else if (assign.target().isPresent()) {
-            builder.beginAssignLocalSlot();
+            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN);
             emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
-            builder.endAssignLocalSlot();
+            builder.endMutateLocalSlot();
         } else if (currentFrameLocal != null) {
             if (currentActivationLocal == null) {
                 builder.beginAssignRootFrameLocal(currentFrameLocal);
@@ -5506,12 +5506,12 @@ final class CanonicalToBytecodeLowerer {
                 builder.endAssignCurrentFrameLocal();
             }
         } else {
-            builder.beginAssignResolvedLexicalTarget();
+            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN_RESOLVED);
             emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
-            builder.endAssignResolvedLexicalTarget();
+            builder.endMutateLocalSlot();
         }
         if (carrierAssignment) {
             builder.emitLoadConstant(true);
@@ -5611,12 +5611,12 @@ final class CanonicalToBytecodeLowerer {
         emitDefaultExpressionToLocal(
                 builder, create.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginCreateLocalSlot();
+        builder.beginMutateLocalSlot(ProtosSlotMutation.CREATE);
         emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
-        builder.endCreateLocalSlot();
+        builder.endMutateLocalSlot();
         builder.endStoreLocal();
     }
 
@@ -5702,10 +5702,10 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveWritableLexicalTarget();
+            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.RESOLVE_WRITE);
             emitCurrentActivation(builder);
             builder.emitLoadConstant(assign.name());
-            builder.endResolveWritableLexicalTarget();
+            builder.endAccessNamedLexical();
             builder.endStoreLocal();
         }
 
@@ -5721,12 +5721,12 @@ final class CanonicalToBytecodeLowerer {
                     mutationTarget,
                     value);
         } else if (assign.target().isPresent()) {
-            builder.beginAssignLocalSlot();
+            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN);
             emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
-            builder.endAssignLocalSlot();
+            builder.endMutateLocalSlot();
         } else if (currentFrameLocal != null) {
             if (currentActivationLocal == null) {
                 builder.beginAssignRootFrameLocal(currentFrameLocal);
@@ -5753,12 +5753,12 @@ final class CanonicalToBytecodeLowerer {
                 builder.endAssignCurrentFrameLocal();
             }
         } else {
-            builder.beginAssignResolvedLexicalTarget();
+            builder.beginMutateLocalSlot(ProtosSlotMutation.ASSIGN_RESOLVED);
             emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
-            builder.endAssignResolvedLexicalTarget();
+            builder.endMutateLocalSlot();
         }
         builder.endStoreLocal();
     }
@@ -5863,13 +5863,13 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
-            builder.beginPrepareSuperSendVector();
+            builder.beginPrepareClosureCallVector(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareSuperSendVector();
+            builder.endPrepareClosureCallVector();
         } else {
-            builder.beginPrepareSuperSendArguments();
+            builder.beginPrepareClosureCallArguments(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
             if (stageInputs) {
@@ -5881,7 +5881,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpression(builder, argument);
                 }
             }
-            builder.endPrepareSuperSendArguments();
+            builder.endPrepareClosureCallArguments();
         }
         builder.endStoreLocal();
 
@@ -5943,13 +5943,13 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
-            builder.beginPrepareSuperSendVector();
+            builder.beginPrepareClosureCallVector(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
-            builder.endPrepareSuperSendVector();
+            builder.endPrepareClosureCallVector();
         } else {
-            builder.beginPrepareSuperSendArguments();
+            builder.beginPrepareClosureCallArguments(true);
             builder.emitLoadConstant(send.message());
             emitCurrentActivation(builder);
             if (stageInputs) {
@@ -5961,7 +5961,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpression(builder, argument);
                 }
             }
-            builder.endPrepareSuperSendArguments();
+            builder.endPrepareClosureCallArguments();
         }
         builder.endStoreLocal();
 
@@ -6064,13 +6064,13 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(preparedCall);
         if (spreadArguments) {
-            builder.beginPrepareClosureCallVector();
+            builder.beginPrepareClosureCallVector(false);
             builder.emitLoadLocal(receiverValue);
             emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareClosureCallVector();
         } else {
-            builder.beginPrepareDefaultClosureCallArguments();
+            builder.beginPrepareClosureCallArguments(false);
             if (stageInputs) {
                 builder.emitLoadLocal(receiverValue);
             } else {
@@ -6088,7 +6088,7 @@ final class CanonicalToBytecodeLowerer {
                     emitExpression(builder, argument);
                 }
             }
-            builder.endPrepareDefaultClosureCallArguments();
+            builder.endPrepareClosureCallArguments();
         }
         builder.endStoreLocal();
         emitComposedPreparedDefaultInvocation(
@@ -6212,9 +6212,9 @@ final class CanonicalToBytecodeLowerer {
             }
 
             builder.beginIfThenElse();
-            builder.beginIsCompactCanonicalBooleanMiss();
+            builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
             builder.emitLoadLocal(nativeIfTrue);
-            builder.endIsCompactCanonicalBooleanMiss();
+            builder.endIsResultKind();
             builder.beginBlock();
         }
 
@@ -6375,16 +6375,16 @@ final class CanonicalToBytecodeLowerer {
         if (inlineEach != null) {
             builder.beginIfThenElse();
             if (inlineEach.twoParameter()) {
-                builder.beginAdmitsInlineLiteralTwoParameterEach();
+                builder.beginAdmitsInlineLiteralEach(true);
             } else {
-                builder.beginAdmitsInlineLiteralIndexedEach();
+                builder.beginAdmitsInlineLiteralEach(false);
             }
             builder.emitLoadLocal(preparedCall);
             builder.emitLoadLocal(inlineEach.callback().literal());
             if (inlineEach.twoParameter()) {
-                builder.endAdmitsInlineLiteralTwoParameterEach();
+                builder.endAdmitsInlineLiteralEach();
             } else {
-                builder.endAdmitsInlineLiteralIndexedEach();
+                builder.endAdmitsInlineLiteralEach();
             }
 
             emitLocalInlineLiteralEach(
@@ -6400,9 +6400,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredBooleanCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredBooleanCall();
+        builder.endIsStructuredCall();
 
         emitLocalBooleanInvocation(
                 builder,
@@ -6482,9 +6482,9 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredWhile);
-        builder.beginPrepareStructuredWhileCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.WHILE);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredWhileCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         /*
@@ -6504,9 +6504,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareInlineStructuredWhileConditionCall();
+        builder.beginStructuredPrepareInlineChildCall(false);
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareInlineStructuredWhileConditionCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -6516,13 +6516,13 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue,
                 inlineWhile.condition().definition(),
                 () -> {
-                    builder.beginAdmitsInlineLiteralWhileCondition();
+                    builder.beginAdmitsInlineLiteralWhileChild(false);
                     emitInlineLiteralChildAdmissionOperands(
                             builder,
                             structuredWhile,
                             structuredWhileChild,
                             inlineWhile.condition());
-                    builder.endAdmitsInlineLiteralWhileCondition();
+                    builder.endAdmitsInlineLiteralWhileChild();
                 });
         builder.beginStructuredWhileCondition();
         builder.emitLoadLocal(structuredWhile);
@@ -6532,9 +6532,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareInlineStructuredWhileBodyCall();
+        builder.beginStructuredPrepareInlineChildCall(true);
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareInlineStructuredWhileBodyCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -6544,13 +6544,13 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue,
                 inlineWhile.body().definition(),
                 () -> {
-                    builder.beginAdmitsInlineLiteralWhileBody();
+                    builder.beginAdmitsInlineLiteralWhileChild(true);
                     emitInlineLiteralChildAdmissionOperands(
                             builder,
                             structuredWhile,
                             structuredWhileChild,
                             inlineWhile.body());
-                    builder.endAdmitsInlineLiteralWhileBody();
+                    builder.endAdmitsInlineLiteralWhileChild();
                 });
         builder.beginStoreLocal(structuredWhileBodyResult);
         builder.beginStructuredWhileRetainBodyResult();
@@ -6563,10 +6563,10 @@ final class CanonicalToBytecodeLowerer {
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginStructuredWhileResult();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredWhile);
         builder.emitLoadLocal(structuredWhileBodyResult);
-        builder.endStructuredWhileResult();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -6627,26 +6627,26 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(structuredEach);
         if (inlineEach.twoParameter()) {
-            builder.beginPrepareStructuredTwoParameterEachCall();
+            builder.beginPrepareStructuredCall(ProtosStructuredCallKind.TWO_PARAMETER_EACH);
             builder.emitLoadLocal(preparedCall);
-            builder.endPrepareStructuredTwoParameterEachCall();
+            builder.endPrepareStructuredCall();
         } else {
-            builder.beginPrepareStructuredIndexedEachCall();
+            builder.beginPrepareStructuredCall(ProtosStructuredCallKind.INDEXED_EACH);
             builder.emitLoadLocal(preparedCall);
-            builder.endPrepareStructuredIndexedEachCall();
+            builder.endPrepareStructuredCall();
         }
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginStructuredLocalEachHasNext();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredEach);
-        builder.endStructuredLocalEachHasNext();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredEachChild);
-        builder.beginPrepareInlineStructuredLocalEachChildCall();
+        builder.beginStructuredPrepareInlineChildCall(false);
         builder.emitLoadLocal(structuredEach);
-        builder.endPrepareInlineStructuredLocalEachChildCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -6664,17 +6664,17 @@ final class CanonicalToBytecodeLowerer {
                             callback);
                     builder.endAdmitsInlineLiteralLocalEachChild();
                 });
-        builder.beginAdvanceStructuredLocalEach();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredEach);
-        builder.endAdvanceStructuredLocalEach();
+        builder.endStructuredAdvance();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredLocalEach();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredEach);
-        builder.endFinishStructuredLocalEach();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -6740,9 +6740,9 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("inlineCallbackFallback", null);
 
         builder.beginStoreLocal(fallback);
-        builder.beginLoadInlineLiteralFallbackCall();
+        builder.beginLoadInlineLiteralCallPart(true);
         builder.emitLoadLocal(child);
-        builder.endLoadInlineLiteralFallbackCall();
+        builder.endLoadInlineLiteralCallPart();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
@@ -6863,9 +6863,9 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginIsPreparedClosureInvocation();
+        builder.beginIsResultKind(ProtosResultKind.PREPARED_CLOSURE_INVOCATION);
         builder.emitLoadLocal(result);
-        builder.endIsPreparedClosureInvocation();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         builder.beginStoreLocal(childResult);
@@ -6879,7 +6879,7 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
+        builder.beginFinishClosureCall(false);
         builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
         builder.endFinishClosureCall();
@@ -6939,21 +6939,21 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredBooleanCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredBooleanCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginStructuredBooleanHasCallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanHasCallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredBooleanChild);
-        builder.beginPrepareInlineStructuredBooleanCallbackCall();
+        builder.beginStructuredPrepareInlineChildCall(false);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endPrepareInlineStructuredBooleanCallbackCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
 
         for (InlineLiteralCallback inlineCallback : inlineCallbacks) {
@@ -6988,18 +6988,18 @@ final class CanonicalToBytecodeLowerer {
         }
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredBooleanCallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredBoolean);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredBooleanCallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
         builder.endBlock();
 
         builder.beginBlock();
         builder.beginStoreLocal(result);
-        builder.beginStructuredBooleanImmediateResult();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanImmediateResult();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
         builder.endBlock();
 
@@ -7516,11 +7516,11 @@ final class CanonicalToBytecodeLowerer {
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.THIS
                     && currentInlineCallbackFrameNative) {
                 // CONTEXT is a real observer and keeps LoadIntrinsic.
-                builder.beginLoadInlineCallbackReceiver(
+                builder.beginLoadInlineCallbackContext(true,
                         currentRootFrameNativeLocals,
                         currentRootFrameNativeLayout);
                 emitCurrentInlineCallbackCall(builder);
-                builder.endLoadInlineCallbackReceiver();
+                builder.endLoadInlineCallbackContext();
                 return;
             }
             builder.beginLoadIntrinsic();
@@ -7536,17 +7536,17 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalIdentity identity) {
-            builder.beginIdentity();
+            builder.beginIdentity(false);
             emitExpression(builder, identity.left());
             emitExpression(builder, identity.right());
             builder.endIdentity();
             return;
         }
         if (expression instanceof CanonicalNotIdentity identity) {
-            builder.beginNotIdentity();
+            builder.beginIdentity(true);
             emitExpression(builder, identity.left());
             emitExpression(builder, identity.right());
-            builder.endNotIdentity();
+            builder.endIdentity();
             return;
         }
         throw new AssertionError(
@@ -7559,7 +7559,7 @@ final class CanonicalToBytecodeLowerer {
      * statically {@link CanonicalBindingResolution.Resolved} in the exact
      * genuine execution-context scope currently being lowered compiles
      * straight to a {@code ReadFrameLocal} of its own stable {@link
-     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing the generic {@code Lookup} operation and exact name-based
+     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing the generic {@code AccessNamedLexical} operation and exact name-based
      * lexical fallback entirely. This uses the
      * same accessor-based mechanism the installed frame-backed authority uses
      * to write this local (see {@code ProtosFrameLexicalBindingAuthority}),
@@ -7722,14 +7722,14 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
                 if (currentInlineCallbackFrameNative) {
-                    builder.beginReadInlineCapturedFrameLocal(
+                    builder.beginAccessInlineCapturedFrameLocal(false,
                             currentRootFrameNativeLocals,
                             currentRootFrameNativeLayout,
                             frameBackedOrdinal(captured.identity()));
                     emitCurrentInlineCallbackCall(builder);
                     builder.emitLoadConstant(captured.identity().name());
                     builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.endReadInlineCapturedFrameLocal();
+                    builder.endAccessInlineCapturedFrameLocal();
                     return;
                 }
                 if (ownerLocal != null) {
@@ -7745,19 +7745,19 @@ final class CanonicalToBytecodeLowerer {
                             captured.lexicalDepth());
                     return;
                 }
-                builder.beginReadCapturedFrameLocal(
+                builder.beginAccessCapturedFrameLocal(false,
                         frameBackedOrdinal(captured.identity()));
                 emitCurrentActivation(builder);
                 builder.emitLoadConstant(captured.identity().name());
                 builder.emitLoadConstant(captured.lexicalDepth());
-                builder.endReadCapturedFrameLocal();
+                builder.endAccessCapturedFrameLocal();
                 return;
             }
         }
-        builder.beginLookup();
+        builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.LOOKUP);
         emitCurrentActivation(builder);
         builder.emitLoadConstant(lookup.name());
-        builder.endLookup();
+        builder.endAccessNamedLexical();
     }
 
     /*
@@ -7806,49 +7806,49 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(selectedOwnerFrame);
         if (inlineCallback) {
-            builder.beginSelectInlineCapturedMaterializedOwnerFrame(
+            builder.beginAccessInlineCapturedMaterializedLocal(false,
                     ownerLocal,
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             emitCurrentInlineCallbackCall(builder);
             builder.emitLoadConstant(name);
             builder.emitLoadConstant(captured.lexicalDepth());
-            builder.endSelectInlineCapturedMaterializedOwnerFrame();
+            builder.endAccessInlineCapturedMaterializedLocal();
         } else if (currentActivationLocal == null) {
             builder.emitSelectCapturedMaterializedOwnerFrameAtRoot(
                     ownerLocal, name, captured.lexicalDepth());
         } else {
-            builder.beginSelectCapturedMaterializedOwnerFrame(ownerLocal);
+            builder.beginAccessCapturedMaterializedLocal(false, ownerLocal);
             emitCurrentActivation(builder);
             builder.emitLoadConstant(name);
             builder.emitLoadConstant(captured.lexicalDepth());
-            builder.endSelectCapturedMaterializedOwnerFrame();
+            builder.endAccessCapturedMaterializedLocal();
         }
         builder.endStoreLocal();
 
         builder.beginConditional();
-        builder.beginIsCapturedOwnerFrameSelected();
+        builder.beginIsResultKind(ProtosResultKind.CAPTURED_OWNER_FRAME_SELECTED);
         builder.emitLoadLocal(selectedOwnerFrame);
-        builder.endIsCapturedOwnerFrameSelected();
+        builder.endIsResultKind();
 
         builder.beginLoadLocalMaterialized(ownerLocal);
         builder.emitLoadLocal(selectedOwnerFrame);
         builder.endLoadLocalMaterialized();
 
         if (inlineCallback) {
-            builder.beginReadInlineCapturedFallback(
+            builder.beginLoadInlineClosureArgument(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             emitCurrentInlineCallbackCall(builder);
             builder.emitLoadConstant(name);
-            builder.endReadInlineCapturedFallback();
+            builder.endLoadInlineClosureArgument();
         } else if (currentActivationLocal == null) {
             builder.emitReadCapturedFallbackAtRoot(name);
         } else {
-            builder.beginReadCapturedFallback();
+            builder.beginAccessNamedLexical(ProtosNamedLexicalAccess.CAPTURED_FALLBACK);
             emitCurrentActivation(builder);
             builder.emitLoadConstant(name);
-            builder.endReadCapturedFallback();
+            builder.endAccessNamedLexical();
         }
         builder.endConditional();
         builder.endBlock();
@@ -8158,9 +8158,9 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginIsCanonicalIfTrueTrue();
+        builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
         builder.emitLoadLocal(classification);
-        builder.endIsCanonicalIfTrueTrue();
+        builder.endIsCanonicalBooleanClass();
 
         // TRUE: only this branch prepares a callback and observes caller.
         builder.beginBlock();
@@ -8211,7 +8211,7 @@ final class CanonicalToBytecodeLowerer {
 
         if (spreadArguments) {
             if (currentInlineCallbackFrameNative) {
-                builder.beginTryCompactCanonicalBooleanInlineVector();
+                builder.beginTryCompactCanonicalBooleanVector();
             } else {
                 builder.beginTryCompactCanonicalBooleanVector();
             }
@@ -8220,7 +8220,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(suppliedVector);
 
             if (currentInlineCallbackFrameNative) {
-                builder.endTryCompactCanonicalBooleanInlineVector();
+                builder.endTryCompactCanonicalBooleanVector();
             } else {
                 builder.endTryCompactCanonicalBooleanVector();
             }
@@ -8238,9 +8238,9 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginIsCanonicalIfTrueTrue();
+        builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
         builder.emitLoadLocal(classification);
-        builder.endIsCanonicalIfTrueTrue();
+        builder.endIsCanonicalBooleanClass();
 
         // TRUE: prepare a callback only after canonical selection.
         builder.beginBlock();
@@ -8296,9 +8296,9 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         builder.beginIfThenElse();
-        builder.beginIsCompactCanonicalBooleanNoCallback();
+        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_NO_CALLBACK);
         builder.emitLoadLocal(candidate);
-        builder.endIsCompactCanonicalBooleanNoCallback();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         builder.beginStoreLocal(result);
@@ -8345,7 +8345,7 @@ final class CanonicalToBytecodeLowerer {
      * finally completes it once, after the callback, on normal, Error,
      * non-local-return and cancellation exits. A non-Boolean generic selection
      * keeps the unchanged prepared-invocation dispatch and its own completion.
-     * The generic result still passes FinishStructuredBooleanCallback.
+     * The generic result still passes StructuredFinishWithChildResult.
      */
     private void emitCanonicalIfTrueLiteralSite(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -8373,9 +8373,9 @@ final class CanonicalToBytecodeLowerer {
         emitStoreConstant(builder, inlineChild, ProtosNullValue.INSTANCE);
 
         builder.beginStoreLocal(genericMiss);
-        builder.beginIsCompactCanonicalBooleanMiss();
+        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
         builder.emitLoadLocal(compact);
-        builder.endIsCompactCanonicalBooleanMiss();
+        builder.endIsResultKind();
         builder.endStoreLocal();
 
         // Generic selection: same lifecycle position as the ordinary send.
@@ -8395,9 +8395,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginTryFinally(
                 () -> {
-                    builder.beginCompleteIfTrueSiteOuter();
+                    builder.beginCompleteClosureCall();
                     builder.emitLoadLocal(outer);
-                    builder.endCompleteIfTrueSiteOuter();
+                    builder.endCompleteClosureCall();
                 });
         builder.beginBlock();
 
@@ -8407,28 +8407,28 @@ final class CanonicalToBytecodeLowerer {
         // Generic: emitLocalBooleanInvocation, with admission deferred.
         builder.beginBlock();
         builder.beginIfThenElse();
-        builder.beginIsStructuredBooleanCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredBooleanCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         emitCopyLocal(builder, outer, preparedCall);
         builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredBooleanCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredBooleanCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginStructuredBooleanHasCallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanHasCallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(child);
-        builder.beginPrepareInlineStructuredBooleanCallbackCall();
+        builder.beginStructuredPrepareInlineChildCall(false);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endPrepareInlineStructuredBooleanCallbackCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
@@ -8448,10 +8448,10 @@ final class CanonicalToBytecodeLowerer {
         emitInlineLiteralFallbackInvocation(
                 builder, childResult, child, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredBooleanCallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredBoolean);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredBooleanCallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
         builder.endBlock();
         builder.endIfThenElse();
@@ -8459,9 +8459,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(result);
-        builder.beginStructuredBooleanImmediateResult();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanImmediateResult();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
         builder.endBlock();
         builder.endIfThenElse();
@@ -8477,9 +8477,9 @@ final class CanonicalToBytecodeLowerer {
         // Native: no PreparedBooleanCall, PrepareSend or generic dispatch.
         builder.beginBlock();
         builder.beginIfThenElse();
-        builder.beginIsCompactCanonicalBooleanNoCallback();
+        builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_NO_CALLBACK);
         builder.emitLoadLocal(compact);
-        builder.endIsCompactCanonicalBooleanNoCallback();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         emitStoreConstant(builder, result, ProtosNullValue.INSTANCE);
@@ -8488,10 +8488,10 @@ final class CanonicalToBytecodeLowerer {
         // The selected callback; outer stays null, no ifTrue activation exists.
         builder.beginBlock();
         builder.beginIfThenElse();
-        builder.beginAdmitsNativeIfTrueInline();
+        builder.beginAdmitsInlineClosureLiteralCall();
         builder.emitLoadLocal(compact);
         builder.emitLoadConstant(literalPlan);
-        builder.endAdmitsNativeIfTrueInline();
+        builder.endAdmitsInlineClosureLiteralCall();
 
         builder.beginBlock();
         emitCopyLocal(builder, inlineChild, compact);
@@ -8509,9 +8509,9 @@ final class CanonicalToBytecodeLowerer {
 
         // The site's only inline callback region.
         builder.beginIfThen();
-        builder.beginIsNativeIfTrueInlineCallback();
+        builder.beginIsResultKind(ProtosResultKind.INLINE_LITERAL_CALL);
         builder.emitLoadLocal(inlineChild);
-        builder.endIsNativeIfTrueInlineCallback();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         emitInlineLiteralCallback(builder, definition, inlineChild, childResult);
@@ -8519,10 +8519,10 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(genericMiss);
         builder.beginBlock();
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredBooleanCallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredBoolean);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredBooleanCallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
         builder.endBlock();
         builder.beginBlock();
@@ -9265,13 +9265,13 @@ final class CanonicalToBytecodeLowerer {
         boolean receiver = selecting.get(index);
         builder.beginIfThenElse();
         if (receiver) {
-            builder.beginIsCanonicalIfTrueTrue();
+            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
             builder.emitLoadLocal(classification);
-            builder.endIsCanonicalIfTrueTrue();
+            builder.endIsCanonicalBooleanClass();
         } else {
-            builder.beginIsCanonicalBooleanFalseClass();
+            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_FALSE);
             builder.emitLoadLocal(classification);
-            builder.endIsCanonicalBooleanFalseClass();
+            builder.endIsCanonicalBooleanClass();
         }
         builder.beginBlock();
         emitNormalBooleanControlPath(builder, send, site, receiver, result);
@@ -9603,9 +9603,9 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
 
             builder.beginIfThenElse();
-            builder.beginIsPrimitiveNumericSendMiss();
+            builder.beginIsResultKind(ProtosResultKind.PRIMITIVE_NUMERIC_SEND_MISS);
             builder.emitLoadLocal(primitiveNumericAttempt);
-            builder.endIsPrimitiveNumericSendMiss();
+            builder.endIsResultKind();
             builder.beginBlock();
             // Any internal carriers must become guest values before normal D013.
             builder.beginStoreLocal(receiverValue);
@@ -9680,9 +9680,9 @@ final class CanonicalToBytecodeLowerer {
             }
 
             builder.beginIfThenElse();
-            builder.beginIsCompactCanonicalBooleanMiss();
+            builder.beginIsResultKind(ProtosResultKind.COMPACT_BOOLEAN_MISS);
             builder.emitLoadLocal(compactBooleanResult);
-            builder.endIsCompactCanonicalBooleanMiss();
+            builder.endIsResultKind();
             builder.beginBlock();
         }
 
@@ -9711,9 +9711,9 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
 
             builder.beginIfThenElse();
-            builder.beginIsDirectSendMiss();
+            builder.beginIsResultKind(ProtosResultKind.DIRECT_SEND_MISS);
             builder.emitLoadLocal(directSendResult);
-            builder.endIsDirectSendMiss();
+            builder.endIsResultKind();
 
             /*
              * Miss: the original prepared-call protocol, including
@@ -10333,9 +10333,9 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
 
             builder.beginIfThenElse();
-            builder.beginIsPreparedClosureInvocation();
+            builder.beginIsResultKind(ProtosResultKind.PREPARED_CLOSURE_INVOCATION);
             builder.emitLoadLocal(closureInvocationOutcome);
-            builder.endIsPreparedClosureInvocation();
+            builder.endIsResultKind();
 
             builder.beginBlock();
             builder.beginStoreLocal(preparedCall);
@@ -10349,7 +10349,7 @@ final class CanonicalToBytecodeLowerer {
                 && !semanticInlineArguments) {
             builder.beginStoreLocal(preparedCall);
             if (spreadArguments) {
-                builder.beginPrepareClosureCallVector();
+                builder.beginPrepareClosureCallVector(false);
                 builder.emitLoadLocal(receiverValue);
                 emitCurrentActivation(builder);
                 builder.emitLoadLocal(suppliedVector);
@@ -10388,7 +10388,7 @@ final class CanonicalToBytecodeLowerer {
                 } else if (call.arguments().size() == 1) {
                     builder.beginPrepareClosureCallOne();
                 } else {
-                    builder.beginPrepareClosureCallArguments();
+                    builder.beginPrepareClosureCallArguments(false);
                 }
                 if (stageInputs) {
                     builder.emitLoadLocal(receiverValue);

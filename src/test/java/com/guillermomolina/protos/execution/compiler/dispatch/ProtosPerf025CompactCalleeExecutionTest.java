@@ -330,9 +330,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertContains(
                     instructionNames(rest),
                     "BindRequiredFrameParameter");
+            // I113: in an ordinary root the shared BindInlineClosureFrameParameter
+            // instruction is the frame-backed rest binding (former BindClosureFrameRest).
             assertContains(
                     instructionNames(rest),
-                    "BindClosureFrameRest");
+                    "BindInlineClosureFrameParameter");
 
             ProtosArrayValue empty1 =
                     assertInstanceOf(
@@ -1532,17 +1534,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         withCore(module -> {
             ProtosClosureValue rest = closure("(head, ...tail) => { tail }", module);
             assertNone(instructionNames(rest), "InstallFrameLexicalAuthority");
-            ProtosFrameLexicalLayout restLayout = layoutOf(rest, "BindClosureFrameRest");
+            ProtosFrameLexicalLayout restLayout = layoutOf(rest, "BindInlineClosureFrameParameter");
             assertEquals(
                     List.of(restLayout.offsetOf("tail")),
-                    constantOrdinalsOf(rest, "BindClosureFrameRest"),
+                    constantOrdinalsOf(rest, "BindInlineClosureFrameParameter"),
                     "PERF030-I: the rest index is an instruction constant");
 
             ProtosClosureValue multiple =
                     closure("(source) => { (b, c, d): source\n[b, c, d] }", module);
             List<String> names = instructionNames(multiple);
             assertNone(names, "InstallFrameLexicalAuthority");
-            assertNone(names, "MultipleCreateLocalSlots");
+            // I113: the generic multiple creation is CreateCurrentLocalSlot's String[] form;
+            // absence of the operation excludes scalar and multiple generic creation alike.
+            assertNone(names, "CreateCurrentLocalSlot");
             ProtosFrameLexicalLayout layout = layoutOf(multiple, "CreateCurrentFrameLocal");
             assertEquals(
                     List.of(layout.offsetOf("b"), layout.offsetOf("c"), layout.offsetOf("d")),
@@ -1849,6 +1853,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
         assertSame(closure, selected, "canonical direct Closure-call selection");
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
                 closure,
                 caller,
                 supplied,
@@ -1875,7 +1880,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 
@@ -1930,7 +1935,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .filter(instruction -> instruction.getName().contains(operation))
+                .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
                 .toList();
     }
 
@@ -1953,7 +1958,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         .getBytecodeNode()
                         .getInstructionsAsList()
                         .stream()
-                        .filter(instruction -> instruction.getName().contains(operation))
+                        .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
                         .toList();
         assertEquals(1, matching.size(), () -> "expected one " + operation);
         return matching.get(0).getArguments().stream()

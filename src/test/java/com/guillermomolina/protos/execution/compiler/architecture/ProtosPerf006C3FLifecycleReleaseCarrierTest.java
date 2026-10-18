@@ -75,7 +75,7 @@ final class ProtosPerf006C3FLifecycleReleaseCarrierTest {
          * PERF006-C3F regression:
          *
          * ProtosIoReleaseCPrimeExecution feeds the result of
-         * AwaitIoReleaseTargetFuture into the generic IsContinuation loop.
+         * IoAwaitTargetFuture into the generic IsContinuation loop.
          * A pending PLAT030 wait is a ProtosIoReleaseSuspension. Omitting that
          * carrier made the loop fall through directly to
          * ApplyIoReleaseTargetOutcome, which then rejected the suspension as

@@ -176,10 +176,10 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareBufferedByteReaderTargetCall();
+                            builder.beginIoPrepareTargetCall(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareBufferedByteReaderTargetCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -197,9 +197,9 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -217,44 +217,44 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapBufferedByteReaderTargetInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(targetResult);
-                            builder.endWrapBufferedByteReaderTargetInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(invocation);
-                            builder.beginBufferedByteReaderTargetInvocationFailed();
+                            builder.beginIoInvocationFailed();
                             builder.emitLoadArgument(1);
-                            builder.endBufferedByteReaderTargetInvocationFailed();
+                            builder.endIoInvocationFailed();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitBufferedByteReaderTargetFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitBufferedByteReaderTargetFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -265,11 +265,11 @@ public final class ProtosBufferedByteReaderCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeBufferedByteReaderTargetFutureWait();
+                            builder.beginIoResumeOperationFutureWait("BufferedReader");
                             builder.emitLoadArgument(0);
                             builder.emitLoadLocal(yielded);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeBufferedByteReaderTargetFutureWait();
+                            builder.endIoResumeOperationFutureWait();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();

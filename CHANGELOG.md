@@ -7,6 +7,49 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.381-SNAPSHOT
+
+- `I113` (#927): consolidate the unified Bytecode DSL operation surface of
+  `ProtosBytecodeRootNode` from 347 to 144 `@Operation` declarations (plus 9
+  unchanged `@OperationProxy`), and reduce the root from 13,050 to 10,200
+  lines, without changing observable semantics.
+  - Unemitted registrations removed; `MaterializeReturnCarrier`,
+    `AdmitsStraightLineSourceCall`, `IsContinuation` and the per-family each
+    preparations remain plain Java helpers.
+  - Operations that differ only in a builder-fixed phase share one operation
+    with typed specializations and a `@ConstantOperand` discriminator: the Map
+    comparison phases and structured-protocol steps
+    (`ProtosStructuredPhase`), `IsStructuredCall`/`PrepareStructuredCall`
+    (`ProtosStructuredCallKind`), `IsResultKind` (`ProtosResultKind`,
+    including the class-profiled continuation PIC), `AccessNamedLexical`
+    (`ProtosNamedLexicalAccess`), `MutateLocalSlot` (`ProtosSlotMutation`),
+    the C-prime I/O phases, captured and inline lexical access, parameter
+    binding, `FinishClosureCall`, `CompleteClosureCall` and the vector and
+    variadic Closure/super-send preparations. Each enum constant carries its
+    own body, so the builder-fixed receiver devirtualizes.
+  - PIC-guarded send selection and invocation preparation move to
+    `ProtosGuardedSendSelection` and `ProtosGuardedSendExecution`; frame-local
+    binding slow paths, the retaining lexical read and the generic write
+    target to `ProtosFrameLocalBindings`; captured frame/materialized access
+    to `ProtosCapturedLexicalAccess`.
+  - Send0/Send1/Arguments/Tail paths, all PICs, guards, assumptions and
+    caches, lazy and compact activations, ReturnHome, D179, destination
+    resolution before the RHS, continuations and C-prime semantics are
+    preserved; root/inline twins remain separate because Bytecode DSL
+    constant operands cannot be null.
+  - Builders, lowerers, C-prime executions and oracles are updated; the test
+    helper `ProtosInstructionNames` maps discriminated instructions back to
+    their protocol-level names so presence, absence and order oracles stay
+    exact.
+  - The local-range PE reachability baseline records the renamed call-chain
+    frame of the frame-backed rest binding
+    (`BindInlineClosureFrameParameter.rest`) and the local-accessor baseline
+    the relocated `ProtosFrameLocalBindings.readRetainingCarrier`; their
+    classifications are unchanged. The generated-bytecode BCI baseline is
+    regenerated for the consolidated instruction set (557 proven transitions,
+    no risk or unknown).
+  - Maintainer validation: make test PASS.
+
 ## 0.3.380-SNAPSHOT
 
 - `I114` (#928): make terminal Closure direct-call dispatch admit before the

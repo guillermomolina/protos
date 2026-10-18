@@ -866,7 +866,7 @@ final class ProtosI095BooleanProtocolInlineTest {
     private static List<String> instructionNames(ProtosBytecodeRootNode root) {
         root.getRootNodes().ensureComplete();
         return root.getBytecodeNode().getInstructionsAsList().stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 

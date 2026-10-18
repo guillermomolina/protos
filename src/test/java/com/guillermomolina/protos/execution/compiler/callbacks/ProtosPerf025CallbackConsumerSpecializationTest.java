@@ -87,7 +87,11 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         Stop stop = run.single();
         stop.assertLazy();
         assertInteger(4, stop.binding("result"));
-        stop.assertInstruction("ReadInlineCaptured");
+        // I113: the inline captured-binding fallback is LoadInlineClosureArgument's
+        // String specialization (former ReadInlineCapturedFallback); laziness is
+        // asserted above, and the materializing name-keyed read must be absent.
+        stop.assertInstruction("LoadInlineClosureArgument");
+        stop.assertNoInstruction("AccessNamedLexical");
         stop.assertInstruction("PrepareInlineSendOne");
         System.out.println("PERF025_S3_CAPTURED_READ_WITHOUT_ACTIVATION=YES");
         System.out.println("PERF025_S3_CANONICAL_INTEGER_SEND_WITHOUT_ACTIVATION=YES");
@@ -429,6 +433,12 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
                     instructions.stream().anyMatch(name -> name.contains(operation)),
                     () -> "missing operation " + operation);
         }
+
+        void assertNoInstruction(String operation) {
+            assertTrue(
+                    instructions.stream().noneMatch(name -> name.contains(operation)),
+                    () -> "unexpected operation " + operation + " in " + instructions);
+        }
     }
 
     private record Run(ProtosExecutionOutcome outcome, List<Stop> stops) {
@@ -562,7 +572,7 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
             bindings.replaceAll((name, value) -> durable.readBinding(name).orElse(null));
         }
         List<String> instructions =
-                bytecode.getInstructionsAsList().stream().map(Instruction::getName).toList();
+                bytecode.getInstructionsAsList().stream().map(ProtosInstructionNames::of).toList();
         return new Stop(
                 call,
                 call.isActivationMaterialized(),

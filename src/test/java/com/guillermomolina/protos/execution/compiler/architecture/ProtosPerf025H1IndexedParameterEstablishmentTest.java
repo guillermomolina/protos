@@ -389,7 +389,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 
@@ -404,7 +404,7 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .filter(instruction -> instruction.getName().contains(operation))
+                .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
                 .map(instruction -> {
                     Instruction.Argument constant =
                             instruction.getArguments().stream()

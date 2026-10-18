@@ -1039,6 +1039,7 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                         closure, entered);
         ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                        false,
                         closure,
                         caller,
                         supplied,

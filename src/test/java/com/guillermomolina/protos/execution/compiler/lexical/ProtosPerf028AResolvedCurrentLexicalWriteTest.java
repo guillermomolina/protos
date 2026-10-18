@@ -566,7 +566,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
     }
 
     private static List<String> instructionNames(BytecodeNode node) {
-        return node.getInstructionsAsList().stream().map(Instruction::getName).toList();
+        return node.getInstructionsAsList().stream().map(ProtosInstructionNames::of).toList();
     }
 
     private static BytecodeNode activationNode(ClosureUnderTest closure) {

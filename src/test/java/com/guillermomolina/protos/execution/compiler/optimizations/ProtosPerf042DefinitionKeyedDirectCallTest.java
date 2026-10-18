@@ -617,7 +617,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
 
                 List<String> names =
                         root.getBytecodeNode().getInstructionsAsList().stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 // I112: the final call is terminal; its operation owns the
@@ -854,7 +854,7 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
             }
             List<String> names =
                     functionRoot("run", module).getBytecodeNode().getInstructionsAsList().stream()
-                            .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                            .map(ProtosInstructionNames::of)
                             .toList();
             assertTrue(names.contains("c.InvokeClosureOneTail"), names::toString);
             List<Object> entries =

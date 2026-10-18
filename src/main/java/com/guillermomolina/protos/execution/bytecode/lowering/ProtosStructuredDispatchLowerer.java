@@ -139,9 +139,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredMapMatchCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_MATCH);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredMapMatchCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -153,9 +153,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapMatch);
-        builder.beginPrepareStructuredMapMatchCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_MATCH);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredMapMatchCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         /*
@@ -163,29 +163,29 @@ final class ProtosStructuredDispatchLowerer {
          * No nested value matcher is executed before this loop completes.
          */
         builder.beginWhile();
-        builder.beginStructuredMapMatchHasRequirement();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endStructuredMapMatchHasRequirement();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         /* Hash callback under the subject comparison scope. */
-        builder.beginEnterStructuredMapMatchComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endEnterStructuredMapMatchComparison();
+        builder.endStructuredAdvance();
 
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapMatchComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapMatch);
-                    builder.endLeaveStructuredMapMatchComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapMatchChild);
-        builder.beginPrepareStructuredMapMatchHashCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endPrepareStructuredMapMatchHashCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -198,35 +198,35 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapMatchHashResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapMatch);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapMatchHashResult();
+        builder.endStructuredAcceptChildOutcome();
 
         /* Same-hash candidates are tested in subject insertion order. */
         builder.beginWhile();
-        builder.beginStructuredMapMatchNeedsEquality();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endStructuredMapMatchNeedsEquality();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
-        builder.beginEnterStructuredMapMatchComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endEnterStructuredMapMatchComparison();
+        builder.endStructuredAdvance();
 
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapMatchComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapMatch);
-                    builder.endLeaveStructuredMapMatchComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapMatchChild);
-        builder.beginPrepareStructuredMapMatchEqualityCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endPrepareStructuredMapMatchEqualityCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -239,17 +239,17 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapMatchEqualityResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapMatch);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapMatchEqualityResult();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.endBlock();
         builder.endWhile();
 
-        builder.beginFinishStructuredMapMatchRequirement();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endFinishStructuredMapMatchRequirement();
+        builder.endStructuredAdvance();
 
         builder.endBlock();
         builder.endWhile();
@@ -258,16 +258,16 @@ final class ProtosStructuredDispatchLowerer {
          * Phase 2: only after all associations are fixed do value matchers run.
          */
         builder.beginWhile();
-        builder.beginStructuredMapMatchHasChildMatcher();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endStructuredMapMatchHasChildMatcher();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapMatchChild);
-        builder.beginPrepareStructuredMapMatchChildCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endPrepareStructuredMapMatchChildCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -277,18 +277,18 @@ final class ProtosStructuredDispatchLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginAcceptStructuredMapMatchChildOutcome();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapMatch);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapMatchChildOutcome();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.endBlock();
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredMapMatch();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredMapMatch);
-        builder.endFinishStructuredMapMatch();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -299,9 +299,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredCaseOfCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.CASE_OF);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredCaseOfCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -313,22 +313,22 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredCaseOf);
-        builder.beginPrepareStructuredCaseOfCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.CASE_OF);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredCaseOfCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginStructuredCaseOfNeedsMatcher();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredCaseOf);
-        builder.endStructuredCaseOfNeedsMatcher();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredCaseOfMatcher);
-        builder.beginPrepareStructuredCaseOfMatcherCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredCaseOf);
-        builder.endPrepareStructuredCaseOfMatcherCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -338,18 +338,18 @@ final class ProtosStructuredDispatchLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginAcceptStructuredCaseOfMatcherOutcome();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredCaseOf);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredCaseOfMatcherOutcome();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.endBlock();
         builder.endWhile();
 
         builder.beginStoreLocal(structuredCaseOfAction);
-        builder.beginPrepareStructuredCaseOfActionCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.SECONDARY_CHILD);
         builder.emitLoadLocal(structuredCaseOf);
-        builder.endPrepareStructuredCaseOfActionCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -367,9 +367,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredArrayMatchCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.ARRAY_MATCH);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredArrayMatchCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -381,22 +381,22 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredArrayMatch);
-        builder.beginPrepareStructuredArrayMatchCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ARRAY_MATCH);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredArrayMatchCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginStructuredArrayMatchHasNext();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredArrayMatch);
-        builder.endStructuredArrayMatchHasNext();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredArrayMatchChild);
-        builder.beginPrepareStructuredArrayMatchElementCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredArrayMatch);
-        builder.endPrepareStructuredArrayMatchElementCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -406,18 +406,18 @@ final class ProtosStructuredDispatchLowerer {
                 childResult,
                 resumeValue);
 
-        builder.beginAcceptStructuredArrayMatchOutcome();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredArrayMatch);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredArrayMatchOutcome();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.endBlock();
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredArrayMatch();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredArrayMatch);
-        builder.endFinishStructuredArrayMatch();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -428,9 +428,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredObjectCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.OBJECT);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredObjectCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -442,15 +442,15 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredObjectCall);
-        builder.beginPrepareStructuredObjectCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.OBJECT);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredObjectCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginStoreLocal(structuredObjectCallChild);
-        builder.beginLoadStructuredObjectCallChild();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredObjectCall);
-        builder.endLoadStructuredObjectCallChild();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -461,10 +461,10 @@ final class ProtosStructuredDispatchLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredObjectCall();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredObjectCall);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredObjectCall();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -474,9 +474,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredImportCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.IMPORT);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredImportCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -488,15 +488,15 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredImportCall);
-        builder.beginPrepareStructuredImportCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.IMPORT);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredImportCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginStoreLocal(structuredImportCallChild);
-        builder.beginLoadStructuredImportCallChild();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredImportCall);
-        builder.endLoadStructuredImportCallChild();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -507,10 +507,10 @@ final class ProtosStructuredDispatchLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredImportCall();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredImportCall);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredImportCall();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -520,9 +520,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredEnsureCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.ENSURE);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredEnsureCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -535,9 +535,9 @@ final class ProtosStructuredDispatchLowerer {
 
         /* Validation precedes the protected semantic extent. */
         builder.beginStoreLocal(structuredEnsure);
-        builder.beginPrepareStructuredEnsureCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ENSURE);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredEnsureCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginTryFinally(
@@ -567,9 +567,9 @@ final class ProtosStructuredDispatchLowerer {
 
                     builder.beginBlock();
                     builder.beginStoreLocal(structuredChild);
-                    builder.beginLoadStructuredEnsureCleanupCall();
+                    builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.SECONDARY_CHILD);
                     builder.emitLoadLocal(structuredEnsure);
-                    builder.endLoadStructuredEnsureCleanupCall();
+                    builder.endStructuredPrepareChildCall();
                     builder.endStoreLocal();
                     emitScopedPreparedInvocation(
                             builder,
@@ -594,9 +594,9 @@ final class ProtosStructuredDispatchLowerer {
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredChild);
-        builder.beginLoadStructuredEnsureBodyCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredEnsure);
-        builder.endLoadStructuredEnsureBodyCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -614,9 +614,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredErrorHandlerCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.ERROR_HANDLER);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredErrorHandlerCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -633,16 +633,16 @@ final class ProtosStructuredDispatchLowerer {
          * dynamic handler token for the protected extent.
          */
         builder.beginStoreLocal(structuredHandler);
-        builder.beginPrepareStructuredErrorHandlerCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.ERROR_HANDLER);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredErrorHandlerCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredErrorHandlerFrame();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
                     builder.emitLoadLocal(structuredHandler);
-                    builder.endLeaveStructuredErrorHandlerFrame();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
 
@@ -655,9 +655,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredHandlerChild);
-        builder.beginLoadStructuredErrorHandlerBodyCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredHandler);
-        builder.endLoadStructuredErrorHandlerBodyCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -694,9 +694,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredWhileCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.WHILE);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredWhileCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -712,9 +712,9 @@ final class ProtosStructuredDispatchLowerer {
          * condition activation.
          */
         builder.beginStoreLocal(structuredWhile);
-        builder.beginPrepareStructuredWhileCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.WHILE);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredWhileCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         /*
@@ -740,9 +740,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareStructuredWhileConditionCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareStructuredWhileConditionCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -758,9 +758,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareStructuredWhileBodyCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.SECONDARY_CHILD);
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareStructuredWhileBodyCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -779,10 +779,10 @@ final class ProtosStructuredDispatchLowerer {
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginStructuredWhileResult();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredWhile);
         builder.emitLoadLocal(structuredWhileBodyResult);
-        builder.endStructuredWhileResult();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -792,9 +792,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredBooleanCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredBooleanCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -806,21 +806,21 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredBooleanCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredBooleanCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginStructuredBooleanHasCallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanHasCallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredBooleanChild);
-        builder.beginPrepareStructuredBooleanCallbackCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endPrepareStructuredBooleanCallbackCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -829,18 +829,18 @@ final class ProtosStructuredDispatchLowerer {
                 childResult,
                 resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredBooleanCallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredBoolean);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredBooleanCallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
         builder.endBlock();
 
         builder.beginBlock();
         builder.beginStoreLocal(result);
-        builder.beginStructuredBooleanImmediateResult();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanImmediateResult();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
         builder.endBlock();
 
@@ -852,9 +852,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredLocalEachCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredLocalEachCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -866,21 +866,21 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredLocalEach);
-        builder.beginPrepareStructuredLocalEachCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredLocalEachCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginStructuredLocalEachHasNext();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredLocalEach);
-        builder.endStructuredLocalEachHasNext();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredLocalEachChild);
-        builder.beginPrepareStructuredLocalEachChildCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredLocalEach);
-        builder.endPrepareStructuredLocalEachChildCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -888,17 +888,17 @@ final class ProtosStructuredDispatchLowerer {
                 structuredLocalEachChild,
                 childResult,
                 resumeValue);
-        builder.beginAdvanceStructuredLocalEach();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredLocalEach);
-        builder.endAdvanceStructuredLocalEach();
+        builder.endStructuredAdvance();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredLocalEach();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredLocalEach);
-        builder.endFinishStructuredLocalEach();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -918,9 +918,9 @@ final class ProtosStructuredDispatchLowerer {
          * element, and invokes the block as an ordinary scoped child, so suspension resumes the
          * same visit and an Error or non-local exit leaves no later pull.
          */
-        builder.beginIsStructuredForeignEachCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredForeignEachCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -932,21 +932,21 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredForeignEach);
-        builder.beginPrepareStructuredForeignEachCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredForeignEachCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginStructuredForeignEachHasNext();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredForeignEach);
-        builder.endStructuredForeignEachHasNext();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredForeignEachChild);
-        builder.beginPrepareStructuredForeignEachElementCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredForeignEach);
-        builder.endPrepareStructuredForeignEachElementCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -954,17 +954,17 @@ final class ProtosStructuredDispatchLowerer {
                 structuredForeignEachChild,
                 childResult,
                 resumeValue);
-        builder.beginAdvanceStructuredForeignEach();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);
         builder.emitLoadLocal(structuredForeignEach);
-        builder.endAdvanceStructuredForeignEach();
+        builder.endStructuredAdvance();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredForeignEach();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredForeignEach);
-        builder.endFinishStructuredForeignEach();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -974,9 +974,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredIdentityMapAtIfAbsentCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredIdentityMapAtIfAbsentCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -988,23 +988,23 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredIdentityMapAtIfAbsent);
-        builder.beginPrepareStructuredIdentityMapAtIfAbsentCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredIdentityMapAtIfAbsentCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
 
-        builder.beginStructuredIdentityMapAtIfAbsentNeedsFallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
-        builder.endStructuredIdentityMapAtIfAbsentNeedsFallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredIdentityMapAtIfAbsentChild);
-        builder.beginPrepareStructuredIdentityMapAtIfAbsentFallbackCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
-        builder.endPrepareStructuredIdentityMapAtIfAbsentFallbackCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -1015,10 +1015,10 @@ final class ProtosStructuredDispatchLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredIdentityMapAtIfAbsentFallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredIdentityMapAtIfAbsentFallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1026,9 +1026,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredIdentityMapAtIfAbsentPresent();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
-        builder.endFinishStructuredIdentityMapAtIfAbsentPresent();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1046,9 +1046,9 @@ final class ProtosStructuredDispatchLowerer {
 
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredMapReadLookupCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredMapReadLookupCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -1060,26 +1060,26 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapReadLookup);
-        builder.beginPrepareStructuredMapReadLookupCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredMapReadLookupCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         /* Hash callback: comparison scope spans suspension but not result validation. */
-        builder.beginEnterStructuredMapReadLookupComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endEnterStructuredMapReadLookupComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapReadLookupComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapReadLookup);
-                    builder.endLeaveStructuredMapReadLookupComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapReadLookupChild);
-        builder.beginPrepareStructuredMapReadLookupHashCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endPrepareStructuredMapReadLookupHashCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1090,32 +1090,32 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapReadLookupHashResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapReadLookup);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapReadLookupHashResult();
+        builder.endStructuredAcceptChildOutcome();
 
         /* Candidate equality callbacks repeat in insertion order over the hash-filtered snapshot. */
         builder.beginWhile();
-        builder.beginStructuredMapReadLookupNeedsEquality();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endStructuredMapReadLookupNeedsEquality();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
-        builder.beginEnterStructuredMapReadLookupComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endEnterStructuredMapReadLookupComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapReadLookupComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapReadLookup);
-                    builder.endLeaveStructuredMapReadLookupComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapReadLookupChild);
-        builder.beginPrepareStructuredMapReadLookupEqualityCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endPrepareStructuredMapReadLookupEqualityCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1126,26 +1126,26 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapReadLookupEqualityResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapReadLookup);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapReadLookupEqualityResult();
+        builder.endStructuredAcceptChildOutcome();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginIfThenElse();
 
-        builder.beginStructuredMapReadLookupNeedsFallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endStructuredMapReadLookupNeedsFallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapReadLookupChild);
-        builder.beginPrepareStructuredMapReadLookupFallbackCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endPrepareStructuredMapReadLookupFallbackCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
 
         emitScopedPreparedInvocation(
@@ -1156,10 +1156,10 @@ final class ProtosStructuredDispatchLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredMapReadLookupFallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredMapReadLookup);
         builder.emitLoadLocal(childResult);
-        builder.endFinishStructuredMapReadLookupFallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1167,9 +1167,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredMapReadLookup();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredMapReadLookup);
-        builder.endFinishStructuredMapReadLookup();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1183,9 +1183,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredMapAtPutCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_AT_PUT);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredMapAtPutCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -1197,25 +1197,25 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapAtPut);
-        builder.beginPrepareStructuredMapAtPutCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_AT_PUT);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredMapAtPutCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
-        builder.beginEnterStructuredMapAtPutComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endEnterStructuredMapAtPutComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapAtPutComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapAtPut);
-                    builder.endLeaveStructuredMapAtPutComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapAtPutChild);
-        builder.beginPrepareStructuredMapAtPutHashCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endPrepareStructuredMapAtPutHashCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1226,31 +1226,31 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapAtPutHashResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapAtPut);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapAtPutHashResult();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.beginWhile();
-        builder.beginStructuredMapAtPutNeedsEquality();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endStructuredMapAtPutNeedsEquality();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
-        builder.beginEnterStructuredMapAtPutComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endEnterStructuredMapAtPutComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapAtPutComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapAtPut);
-                    builder.endLeaveStructuredMapAtPutComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapAtPutChild);
-        builder.beginPrepareStructuredMapAtPutEqualityCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endPrepareStructuredMapAtPutEqualityCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1261,18 +1261,18 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapAtPutEqualityResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapAtPut);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapAtPutEqualityResult();
+        builder.endStructuredAcceptChildOutcome();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredMapAtPut();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredMapAtPut);
-        builder.endFinishStructuredMapAtPut();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1282,9 +1282,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredMapRemoveCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_REMOVE);
         builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredMapRemoveCall();
+        builder.endIsStructuredCall();
 
         builder.beginBlock();
         builder.beginTryFinally(
@@ -1296,25 +1296,25 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredMapRemove);
-        builder.beginPrepareStructuredMapRemoveCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.MAP_REMOVE);
         builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredMapRemoveCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
-        builder.beginEnterStructuredMapRemoveComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endEnterStructuredMapRemoveComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapRemoveComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapRemove);
-                    builder.endLeaveStructuredMapRemoveComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapRemoveChild);
-        builder.beginPrepareStructuredMapRemoveHashCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endPrepareStructuredMapRemoveHashCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1325,31 +1325,31 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapRemoveHashResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.HASH);
         builder.emitLoadLocal(structuredMapRemove);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapRemoveHashResult();
+        builder.endStructuredAcceptChildOutcome();
 
         builder.beginWhile();
-        builder.beginStructuredMapRemoveNeedsEquality();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endStructuredMapRemoveNeedsEquality();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
-        builder.beginEnterStructuredMapRemoveComparison();
+        builder.beginStructuredAdvance(ProtosStructuredPhase.ENTER_COMPARISON);
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endEnterStructuredMapRemoveComparison();
+        builder.endStructuredAdvance();
         builder.beginTryFinally(
                 () -> {
-                    builder.beginLeaveStructuredMapRemoveComparison();
+                    builder.beginStructuredAdvance(ProtosStructuredPhase.LEAVE_COMPARISON);
                     builder.emitLoadLocal(structuredMapRemove);
-                    builder.endLeaveStructuredMapRemoveComparison();
+                    builder.endStructuredAdvance();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredMapRemoveChild);
-        builder.beginPrepareStructuredMapRemoveEqualityCall();
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endPrepareStructuredMapRemoveEqualityCall();
+        builder.endStructuredPrepareChildCall();
         builder.endStoreLocal();
         emitScopedPreparedInvocation(
                 builder,
@@ -1360,18 +1360,18 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
         builder.endTryFinally();
 
-        builder.beginAcceptStructuredMapRemoveEqualityResult();
+        builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.EQUALITY);
         builder.emitLoadLocal(structuredMapRemove);
         builder.emitLoadLocal(childResult);
-        builder.endAcceptStructuredMapRemoveEqualityResult();
+        builder.endStructuredAcceptChildOutcome();
         builder.endBlock();
 
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredMapRemove();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredMapRemove);
-        builder.endFinishStructuredMapRemove();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
 
         builder.endBlock();
@@ -1456,9 +1456,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginIsContinuation();
+        builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
         builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         builder.beginStoreLocal(resumeValue);
@@ -1517,9 +1517,9 @@ final class ProtosStructuredDispatchLowerer {
         builder.endStoreLocal();
 
         builder.beginWhile();
-        builder.beginIsContinuation();
+        builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
         builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
+        builder.endIsResultKind();
         builder.beginBlock();
         builder.beginStoreLocal(resumeValue);
         builder.beginYield();
@@ -1537,10 +1537,10 @@ final class ProtosStructuredDispatchLowerer {
         builder.endWhile();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishCPrimeClosureCall();
+        builder.beginFinishClosureCall(true);
         builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
-        builder.endFinishCPrimeClosureCall();
+        builder.endFinishClosureCall();
         builder.endStoreLocal();
     }
 }

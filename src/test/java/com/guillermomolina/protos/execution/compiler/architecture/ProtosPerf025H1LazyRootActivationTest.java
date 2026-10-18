@@ -510,6 +510,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
                         closure, entered);
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
                 closure,
                 caller,
                 supplied,

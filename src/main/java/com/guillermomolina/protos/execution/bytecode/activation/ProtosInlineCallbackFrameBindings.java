@@ -170,7 +170,7 @@ final class ProtosInlineCallbackFrameBindings {
             return ProtosNumericValueSupport.guestValue(
                     accessor.getObject(bytecodeNode, frame));
         }
-        return ProtosBytecodeRootNode.Lookup.perform(
+        return ProtosNamedLexicalAccess.LOOKUP.access(
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name);
@@ -192,7 +192,7 @@ final class ProtosInlineCallbackFrameBindings {
         if (!child.isActivationMaterialized() && !accessor.isCleared(bytecodeNode, frame)) {
             return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
         }
-        return ProtosBytecodeRootNode.ResolveWritableLexicalTarget.perform(
+        return ProtosFrameLocalBindings.resolveWritableLexicalTarget(
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name);
@@ -229,7 +229,7 @@ final class ProtosInlineCallbackFrameBindings {
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
         if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
-            return ProtosBytecodeRootNode.AssignResolvedLexicalTarget.perform(
+            return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
                     activation, destination, name, value);
         }
         if (activation.currentContextIsFrozenForRuntime()
@@ -275,7 +275,7 @@ final class ProtosInlineCallbackFrameBindings {
                 return value;
             }
         }
-        return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
+        return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
                 frameOrdinal,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -312,7 +312,7 @@ final class ProtosInlineCallbackFrameBindings {
                 return ownerFrame;
             }
         }
-        return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
+        return ProtosCapturedLexicalAccess.selectCapturedMaterializedOwnerFrame(
                 accessor,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -363,7 +363,7 @@ final class ProtosInlineCallbackFrameBindings {
                 return selected;
             }
         }
-        return ProtosBytecodeRootNode.ResolveCapturedWritableLexicalTarget.perform(
+        return ProtosCapturedLexicalAccess.resolveCapturedFrameWriteTarget(
                 frameOrdinal,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -393,7 +393,7 @@ final class ProtosInlineCallbackFrameBindings {
                 return selected;
             }
         }
-        return ProtosBytecodeRootNode.ResolveCapturedMaterializedWritableLexicalTarget.perform(
+        return ProtosCapturedLexicalAccess.resolveCapturedMaterializedWriteTarget(
                 accessor,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),

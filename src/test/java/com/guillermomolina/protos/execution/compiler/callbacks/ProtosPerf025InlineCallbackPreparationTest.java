@@ -250,9 +250,9 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 }
                 run()
                 """,
-                "PrepareInlineStructuredBooleanCallbackCall",
+                "StructuredPrepareInlineChildCall",
                 "AdmitsInlineLiteralCallback",
-                "PrepareStructuredBooleanCallbackCall");
+                "StructuredPrepareChildCall");
 
         System.out.println(
                 "PERF025_PLAT044_BOOLEAN_RICH_PREPARATION_BEFORE_ADMISSION=NO");
@@ -274,9 +274,9 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 }
                 run()
                 """,
-                "PrepareInlineStructuredWhileConditionCall",
+                "StructuredPrepareInlineChildCall",
                 "AdmitsInlineLiteralWhileCondition",
-                "PrepareStructuredWhileConditionCall");
+                "StructuredPrepareChildCall");
 
         System.out.println(
                 "PERF025_PLAT044_WHILE_RICH_PREPARATION_BEFORE_ADMISSION=NO");
@@ -294,9 +294,9 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 }
                 run()
                 """,
-                "PrepareInlineStructuredLocalEachChildCall",
+                "StructuredPrepareInlineChildCall",
                 "AdmitsInlineLiteralLocalEachChild",
-                "PrepareStructuredLocalEachChildCall");
+                "StructuredPrepareChildCall");
 
         System.out.println(
                 "PERF025_PLAT044_EACH_RICH_PREPARATION_BEFORE_ADMISSION=NO");
@@ -406,7 +406,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 

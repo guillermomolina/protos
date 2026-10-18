@@ -408,6 +408,7 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
                         closure, entered);
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
                 closure,
                 caller,
                 supplied,

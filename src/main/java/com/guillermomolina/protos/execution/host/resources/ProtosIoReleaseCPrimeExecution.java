@@ -312,9 +312,9 @@ public final class ProtosIoReleaseCPrimeExecution {
                                     builder.createLocal("ioReleaseYielded", null);
 
                             builder.beginWhile();
-                            builder.beginIoReleaseHasNextStep();
+                            builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);
                             builder.emitLoadArgument(1);
-                            builder.endIoReleaseHasNextStep();
+                            builder.endStructuredHasNext();
 
                             builder.beginBlock();
 
@@ -322,10 +322,10 @@ public final class ProtosIoReleaseCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareIoReleaseTargetCall();
+                            builder.beginIoPrepareTargetCall(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareIoReleaseTargetCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -343,9 +343,9 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -363,44 +363,44 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapIoReleaseTargetInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(targetResult);
-                            builder.endWrapIoReleaseTargetInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(invocation);
-                            builder.beginIoReleaseTargetInvocationFailed();
+                            builder.beginIoInvocationFailed();
                             builder.emitLoadArgument(1);
-                            builder.endIoReleaseTargetInvocationFailed();
+                            builder.endIoInvocationFailed();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitIoReleaseTargetFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitIoReleaseTargetFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -420,18 +420,18 @@ public final class ProtosIoReleaseCPrimeExecution {
                             builder.endBlock();
                             builder.endWhile();
 
-                            builder.beginApplyIoReleaseTargetOutcome();
+                            builder.beginStructuredAcceptChildOutcome(ProtosStructuredPhase.CHILD);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endApplyIoReleaseTargetOutcome();
+                            builder.endStructuredAcceptChildOutcome();
 
                             builder.endBlock();
                             builder.endWhile();
 
                             builder.beginReturn();
-                            builder.beginFinishIoReleaseSequence();
+                            builder.beginStructuredFinish();
                             builder.emitLoadArgument(1);
-                            builder.endFinishIoReleaseSequence();
+                            builder.endStructuredFinish();
                             builder.endReturn();
 
                             builder.endRoot();

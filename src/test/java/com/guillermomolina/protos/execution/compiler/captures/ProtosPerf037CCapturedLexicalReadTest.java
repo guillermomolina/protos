@@ -590,6 +590,7 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(closure, entered);
         ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                        false,
                         closure,
                         caller,
                         new Object[0],

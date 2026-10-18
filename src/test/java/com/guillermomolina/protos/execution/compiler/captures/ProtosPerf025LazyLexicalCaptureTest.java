@@ -562,6 +562,7 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                         closure, entered);
         ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                        false,
                         closure,
                         caller,
                         supplied,

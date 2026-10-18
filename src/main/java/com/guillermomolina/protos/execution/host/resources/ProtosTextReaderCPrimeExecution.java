@@ -215,9 +215,9 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsTextReaderNeedInput();
+                            builder.beginIsResultKind(ProtosResultKind.TEXT_READER_NEED_INPUT);
                             builder.emitLoadLocal(advance);
-                            builder.endIsTextReaderNeedInput();
+                            builder.endIsResultKind();
 
                             builder.beginBlock();
 
@@ -230,10 +230,10 @@ public final class ProtosTextReaderCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareTextReaderSourceCall();
+                            builder.beginIoPrepareTargetCall(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareTextReaderSourceCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -251,9 +251,9 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -271,20 +271,20 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(sourceResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapTextReaderSourceInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(sourceResult);
-                            builder.endWrapTextReaderSourceInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
@@ -300,16 +300,16 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitTextReaderSourceFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitTextReaderSourceFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -320,11 +320,11 @@ public final class ProtosTextReaderCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeTextReaderSourceFutureWait();
+                            builder.beginIoResumeOperationFutureWait("TextReader");
                             builder.emitLoadArgument(0);
                             builder.emitLoadLocal(yielded);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeTextReaderSourceFutureWait();
+                            builder.endIoResumeOperationFutureWait();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();

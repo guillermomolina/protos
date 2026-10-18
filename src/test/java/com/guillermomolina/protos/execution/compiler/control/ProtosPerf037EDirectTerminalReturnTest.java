@@ -669,6 +669,7 @@ final class ProtosPerf037EDirectTerminalReturnTest {
         ProtosPreparedCalls.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode.PrepareClosureCallArguments
                         .fastDirect(
+                                false,
                                 closure,
                                 caller,
                                 new Object[0],

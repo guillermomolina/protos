@@ -22,19 +22,12 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedErrorHandlerCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardImportCall;
 import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.PreparedStandardObjectCall;
-import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedArrayMatchCall;
-import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedBytesEachCall;
-import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedEnvironmentEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapAtIfAbsentCall;
-import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedIdentityMapEachCall;
-import com.guillermomolina.protos.execution.ProtosStructuredEachCalls.PreparedMapEachCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapMatchCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapQueryCalls.PreparedMapReadLookupCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapAtPutCall;
 import com.guillermomolina.protos.execution.ProtosStructuredMapUpdateCalls.PreparedMapRemoveCall;
-import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
-import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.control.ProtosNonLocalReturnException;
@@ -65,7 +58,6 @@ import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLex
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -519,51 +511,29 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    @ConstantOperand(type = boolean.class, name = "callerReference")
     public static final class CurrentActivation {
         /*
-         * PERF038-C: the already-published activation and the first
-         * materialization are separate specializations, so a site that has
-         * only ever seen one state compiles no path for the other. The guard
-         * is re-evaluated on every execution; both specializations return
-         * exactly what ProtosFrameArguments.activation returns.
+         * PERF038-C: the already-published activation and the unpublished
+         * state are separate specializations, so a site that has only ever
+         * seen one state compiles no path for the other. The guard is
+         * re-evaluated on every execution.
+         *
+         * I113: with {@code callerReference} (PERF038-D, the former
+         * CurrentCallerReference) an unpublished frame answers its compact
+         * arguments instead of materializing; otherwise both specializations
+         * return exactly what ProtosFrameArguments.activation returns.
          */
         @Specialization(guards = "hasPublishedActivation(frame)")
-        public static ProtosActivation published(@Bind VirtualFrame frame) {
+        public static Object published(boolean callerReference, @Bind VirtualFrame frame) {
             return ProtosFrameArguments.publishedActivation(frame.getArguments());
         }
 
         @Specialization(guards = "!hasPublishedActivation(frame)")
-        public static ProtosActivation materialize(@Bind VirtualFrame frame) {
-            return ProtosFrameArguments.activation(frame);
-        }
-
-        @NonIdempotent
-        static boolean hasPublishedActivation(VirtualFrame frame) {
-            return ProtosFrameArguments.hasPublishedActivation(frame.getArguments());
-        }
-    }
-
-    /**
-     * PERF038-D root-level caller operand of a send preparation (see {@code
-     * CanonicalToBytecodeLowerer#emitSendCallerOperand}): the published
-     * activation, or, while the root is still in compact source-call form,
-     * its frame-argument array itself. It never materializes; {@link
-     * PrepareSendArguments} resolves it through {@link
-     * PrepareSendArguments#exactCaller} wherever the exact activation is
-     * needed, and through its full-header caller slot ({@link
-     * ProtosFrameArguments#unmaterializedFullHeaderCaller}) where a
-     * provenance-equivalent caller suffices.
-     */
-    @Operation
-    public static final class CurrentCallerReference {
-        @Specialization(guards = "hasPublishedActivation(frame)")
-        public static Object published(@Bind VirtualFrame frame) {
-            return ProtosFrameArguments.publishedActivation(frame.getArguments());
-        }
-
-        @Specialization(guards = "!hasPublishedActivation(frame)")
-        public static Object compact(@Bind VirtualFrame frame) {
-            return frame.getArguments();
+        public static Object unpublished(boolean callerReference, @Bind VirtualFrame frame) {
+            return callerReference
+                    ? frame.getArguments()
+                    : ProtosFrameArguments.activation(frame);
         }
 
         @NonIdempotent
@@ -657,43 +627,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Binds a named Closure parameter to {@code value}; with {@code rest}
+     * (builder-fixed) {@code value} is the Integer count of positional
+     * parameters before the rest parameter, which binds the frozen rest Array.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "rest")
     public static final class BindClosureParameter {
         @Specialization
-        public static void perform(ProtosActivation activation, String name, Object value) {
+        public static void perform(boolean rest, ProtosActivation activation, String name, Object value) {
             ProtosFrameLocalBindings.createClosureParameterSlot(
                     activation,
                     name,
-                    value);
-        }
-    }
-
-    @Operation
-    public static final class BindClosureRest {
-        @Specialization
-        public static void perform(
-                ProtosActivation activation,
-                String name,
-                int positionalParametersBeforeRest) {
-            ProtosFrameLocalBindings.createClosureParameterSlot(
-                    activation,
-                    name,
-                    ProtosFrameLocalBindings.closureRestArray(activation, positionalParametersBeforeRest));
+                    rest
+                            ? ProtosFrameLocalBindings.closureRestArray(activation, (int) value)
+                            : value);
         }
     }
 
     /**
-     * PERF025-H1: binds a statically proven parameter of a root that installs
-     * its persistent frame authority, at the ordinal the lowerer took from
-     * {@code frameBackedLayout} instead of re-resolving {@code name}, which
-     * only the unchanged named fallback uses.
-     *
-     * <p>PERF030-I: {@code ordinal} is a constant operand because the
-     * frame-local accesses of {@link
-     * ProtosFrameLexicalBindingAuthority#createFrameBackedBindingAt} require a
-     * partial-evaluation constant index.
+     * The indexed form of {@link BindClosureParameter}: a statically proven
+     * parameter at {@code ordinal}; with {@code rest} the rest parameter.
      */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "rest")
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
@@ -701,63 +659,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class BindClosureIndexedParameter {
         @Specialization
         public static void perform(
+                boolean rest,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 int ordinal,
                 ProtosActivation activation,
                 String name,
                 Object value) {
             ProtosFrameLocalBindings.bindIndexedClosureParameter(
-                    frameBackedLayout, activation, ordinal, name, value);
-        }
-    }
-
-    /** PERF025-H1 rest counterpart of {@link BindClosureIndexedParameter}. */
-    @Operation
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindClosureIndexedRest {
-        @Specialization
-        public static void perform(
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                ProtosActivation activation,
-                String name,
-                int positionalParametersBeforeRest) {
-            ProtosBytecodeRootNode.BindClosureIndexedRest.bindIndexedClosureRest(
-                    frameBackedLayout, activation, ordinal, name, positionalParametersBeforeRest);
-        }
-
-
-        /** PERF025-H1 rest counterpart of {@link #bindIndexedClosureParameter}. */
-        static void bindIndexedClosureRest(
-                ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
-                int ordinal,
-                String name,
-                int positionalParametersBeforeRest) {
-            ProtosFrameLocalBindings.bindIndexedClosureParameter(
                     frameBackedLayout,
                     activation,
                     ordinal,
                     name,
-                    ProtosFrameLocalBindings.closureRestArray(activation, positionalParametersBeforeRest));
+                    rest
+                            ? ProtosFrameLocalBindings.closureRestArray(activation, (int) value)
+                            : value);
         }
-}
+    }
 
     // ---- Lexical lookup and frame-backed bindings ----------------------------------
 
+    /**
+     * I113: the residual name-keyed lexical accesses, selected by the
+     * builder-fixed {@link ProtosNamedLexicalAccess}: the unqualified lookup,
+     * the captured-binding fallback, or the generic write-target resolution
+     * (which stays separate from its assignment).
+     */
     @Operation
-    public static final class Lookup {
+    @ConstantOperand(type = ProtosNamedLexicalAccess.class, name = "access")
+    public static final class AccessNamedLexical {
         @Specialization
-        public static Object perform(ProtosActivation activation, String name) {
-            return ProtosLexicalFallback.readByName(activation, name)
-                    .orElseThrow(
-                            () ->
-                                    new ProtosSignalException(
-                                            ProtosCoreErrors.newUnqualifiedLookupError(
-                                                    activation)));
+        public static Object perform(
+                ProtosNamedLexicalAccess access, ProtosActivation activation, String name) {
+            return access.access(activation, name);
         }
     }
 
@@ -822,7 +755,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
-            slowBind(
+            ProtosFrameLocalBindings.bindRequiredFrameParameterSlow(
                     frameBackedLocals, frameBackedLayout, ordinal, name,
                     bytecodeNode, bytecodeIndex, frame.materialize());
         }
@@ -836,36 +769,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
-        }
-
-        /**
-         * Retain the established rich-activation and duplicate-binding
-         * semantics.
-         */
-        @TruffleBoundary
-        private static void slowBind(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                MaterializedFrame frame) {
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(frame.getArguments());
-            Object value =
-                    LoadClosureArgument.perform(
-                            activation, ordinal);
-            BindClosureFrameParameter.perform(
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    ordinal,
-                    activation,
-                    name,
-                    value,
-                    bytecodeNode,
-                    bytecodeIndex,
-                    frame);
         }
     }
 
@@ -923,7 +826,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
-            slowBind(
+            ProtosFrameLocalBindings.bindClosureFrameParameterSlow(
                     frameBackedLocals, frameBackedLayout, ordinal,
                     frame.getArguments(), name, value, bytecodeNode, bytecodeIndex,
                     frame.materialize());
@@ -937,28 +840,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 VirtualFrame frame) {
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
                     && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
-        }
-
-        /**
-         * The unchanged authoritative binding, including duplicate-creation
-         * Errors and activation materialization. The frame is materialized
-         * before entering the boundary so no VirtualFrame escapes.
-         */
-        @TruffleBoundary
-        private static void slowBind(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                Object[] arguments,
-                String name,
-                Object value,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                MaterializedFrame frame) {
-            BindClosureFrameParameter.perform(
-                    frameBackedLocals, frameBackedLayout, ordinal,
-                    ProtosFrameArguments.activation(arguments), name, value,
-                    bytecodeNode, bytecodeIndex, frame);
         }
 
         public static void perform(
@@ -1028,7 +909,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind VirtualFrame frame) {
-            bindAuthoritatively(
+            ProtosFrameLocalBindings.bindUnaryFrameParameterAuthoritatively(
                     frameBackedLocals,
                     frameBackedLayout,
                     ordinal,
@@ -1049,33 +930,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
         }
-
-        @TruffleBoundary
-        private static void bindAuthoritatively(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                String name,
-                Object[] arguments,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                MaterializedFrame frame) {
-            ProtosActivation activation =
-                    ProtosFrameArguments.activation(arguments);
-            Object value =
-                    LoadClosureArgument.perform(
-                            activation, 0);
-            BindClosureFrameParameter.perform(
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    ordinal,
-                    activation,
-                    name,
-                    value,
-                    bytecodeNode,
-                    bytecodeIndex,
-                    frame);
-        }
     }
 
     /*
@@ -1089,21 +943,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * (ProtosInlineCallbackFrameBindings).
      */
 
+    /**
+     * The inline callback's durable activation (materialized through
+     * ProtosInlineCallbackFrameBindings only when needed), or with
+     * {@code receiver} its receiver.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "receiver")
     @ConstantOperand(
             type = LocalRangeAccessor.class,
             name = "frameBackedLocals")
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
-    public static final class MaterializeInlineCallbackActivation {
+    public static final class LoadInlineCallbackContext {
         @Specialization
-        public static ProtosActivation perform(
+        public static Object perform(
+                boolean receiver,
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
+            if (receiver) {
+                return ProtosInlineCallbackFrameBindings.receiver(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
+            }
             return ProtosInlineCallbackFrameBindings.durableActivation(
                     child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
         }
@@ -1128,6 +993,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosInlineCallbackFrameBindings.loadArgument(
                     child, frameBackedLocals, frameBackedLayout,
                     positionalIndex, bytecodeNode, frame);
+        }
+
+        /** I113 (former ReadInlineCapturedFallback): the inline captured-binding fallback. */
+        @Specialization
+        public static Object capturedFallback(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.readCapturedFallback(
+                    child, frameBackedLocals, frameBackedLayout,
+                    name, bytecodeNode, frame);
         }
     }
 
@@ -1160,19 +1039,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     bytecodeNode,
                     frame);
         }
-    }
 
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "ordinal")
-    public static final class BindClosureFrameRest {
+        /**
+         * I113 (former BindClosureFrameRest): the frame-backed rest parameter of
+         * an ordinary root, bound from its activation.
+         */
         @Specialization
-        public static void perform(
+        public static void rest(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 int ordinal,
@@ -1246,35 +1119,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
                 return value;
             }
-            return slowCreate(
+            return ProtosFrameLocalBindings.createCurrentFrameLocalSlow(
                     frameBackedLocals, frameBackedLayout, ordinal,
                     arguments, name, value, bytecodeNode, bytecodeIndex,
                     frame.materialize());
-        }
-
-        /**
-         * PERF034-B: keep rich-activation transitions and duplicate-creation
-         * errors outside the compiled ordinary compact-local path.
-         *
-         * The frame is materialized before entering the boundary. This
-         * preserves the existing authoritative creation implementation
-         * without allowing a VirtualFrame to escape compilation.
-         */
-        @TruffleBoundary
-        private static Object slowCreate(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int ordinal,
-                Object[] arguments,
-                String name,
-                Object value,
-                BytecodeNode bytecodeNode,
-                int bytecodeIndex,
-                MaterializedFrame frame) {
-            return CreateCurrentFrameLocal.performForActivation(
-                    frameBackedLocals, frameBackedLayout, ordinal,
-                    ProtosFrameArguments.activation(arguments), name, value,
-                    bytecodeNode, bytecodeIndex, frame);
         }
 
         public static Object performForActivation(
@@ -1401,42 +1249,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
             return ProtosNumericValueSupport.guestValue(
-                    readRetainingCarrier(
+                    ProtosFrameLocalBindings.readRetainingCarrier(
                             accessor, presenceContinuity, activation, name, bytecodeNode, frame));
-        }
-
-
-        /**
-         * I091: {@link #perform} without materializing a frame-retained
-         * primitive carrier, for a lowered read whose consumer materializes
-         * it (or is an operand of the guarded numeric chain).
-         */
-        static Object readRetainingCarrier(
-                LocalAccessor accessor,
-                Assumption presenceContinuity,
-                ProtosActivation activation,
-                String name,
-                BytecodeNode bytecodeNode,
-                VirtualFrame frame) {
-            if (activation.hasGenuineExecutionContextForRuntime()
-                    && (presenceContinuity.isValid()
-                            || !accessor.isCleared(bytecodeNode, frame))) {
-                return accessor.getObject(bytecodeNode, frame);
-            }
-
-            /*
-             * Once continuity has been invalidated, D179 C0 remains exactly
-             * presence-aware: a cleared genuine execution-context local is
-             * semantically ABSENT and resumes lexical/receiver fallback.
-             * Legacy/internal activations whose current lexical context is an
-             * ordinary ProtosObjectValue use the same fallback.
-             */
-            return ProtosLexicalFallback.readByName(activation, name)
-                    .orElseThrow(
-                            () ->
-                                    new ProtosSignalException(
-                                            ProtosCoreErrors.newUnqualifiedLookupError(
-                                                    activation)));
         }
 }
 
@@ -1485,7 +1299,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            return slowRead(
+            return ProtosFrameLocalBindings.readRootFrameLocalSlow(
                     accessor, presenceContinuity, frame.getArguments(),
                     name, bytecodeNode, frame.materialize());
         }
@@ -1493,29 +1307,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @NonIdempotent
         static boolean isCompact(VirtualFrame frame) {
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
-        }
-
-        /**
-         * PERF034-B: observed contexts retain the authoritative D179
-         * presence-aware fallback, but do not expand that machinery into
-         * the compiled unobserved compact-local read.
-         */
-        @TruffleBoundary
-        private static Object slowRead(
-                LocalAccessor accessor,
-                Assumption presenceContinuity,
-                Object[] arguments,
-                String name,
-                BytecodeNode bytecodeNode,
-                MaterializedFrame frame) {
-            // I091: the lowered consumer materializes a retained carrier.
-            return ReadFrameLocal.readRetainingCarrier(
-                    accessor,
-                    presenceContinuity,
-                    ProtosFrameArguments.activation(arguments),
-                    name,
-                    bytecodeNode,
-                    frame);
         }
     }
 
@@ -1619,7 +1410,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 int lexicalDepth,
                 @Bind VirtualFrame frame) {
-            return ReadCapturedFrameLocal.perform(
+            return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
                     frameOrdinal,
                     ProtosFrameArguments.activation(frame.getArguments()),
                     name,
@@ -1686,7 +1477,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            return SelectCapturedMaterializedOwnerFrame.perform(
+            return ProtosCapturedLexicalAccess.selectCapturedMaterializedOwnerFrame(
                     accessor,
                     ProtosFrameArguments.activation(frame.getArguments()),
                     name,
@@ -1741,112 +1532,59 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosFrameArguments.activation(arguments), name);
     }
 
+    /**
+     * I113: a captured frame binding: its read, or with {@code resolveWrite}
+     * its write target (resolution stays separate from the assignment).
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "resolveWrite")
     @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class ReadCapturedFrameLocal {
+    public static final class AccessCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                boolean resolveWrite,
                 int frameOrdinal,
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth) {
-            if (lexicalDepth > 0
-                    && !activation.currentContextHasLocalSlotForRuntime(name)) {
-                Object value =
-                        ProtosCapturedLexicalAccess.readCapturedFrameBindingOrNull(
-                                activation.capturedLexicalEnvironmentForRuntime(),
-                                name,
-                                lexicalDepth,
-                                frameOrdinal);
-                if (value != null) {
-                    return value;
-                }
+            if (resolveWrite) {
+                return ProtosCapturedLexicalAccess.resolveCapturedFrameWriteTarget(
+                        frameOrdinal, activation, name, lexicalDepth);
             }
-            return ProtosCapturedLexicalAccess.lookupCapturedFallback(activation, name);
+            return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
+                    frameOrdinal, activation, name, lexicalDepth);
         }
     }
 
     /*
      * BUG018-C: a proven captured-materialized read is lowered as owner-frame
-     * selection, IsCapturedOwnerFrameSelected, then either the builtin
+     * selection, IsResultKind(CAPTURED_OWNER_FRAME_SELECTED), then either the builtin
      * LoadLocalMaterialized of the owner local from the selected frame or the
      * generic captured lookup. Selection never inspects the value.
      */
 
+    /**
+     * I113: a captured materialized binding: its owner-frame selection, or
+     * with {@code resolveWrite} its write target.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "resolveWrite")
     @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class SelectCapturedMaterializedOwnerFrame {
+    public static final class AccessCapturedMaterializedLocal {
         @Specialization
-        public static MaterializedFrame perform(
+        public static Object perform(
+                boolean resolveWrite,
                 MaterializedLocalAccessor accessor,
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode) {
-            if (lexicalDepth > 0
-                    && !activation.currentContextHasLocalSlotForRuntime(name)) {
-                return ProtosCapturedLexicalAccess.capturedMaterializedOwnerFrameOrNull(
-                        accessor,
-                        activation.capturedLexicalEnvironmentForRuntime(),
-                        name,
-                        lexicalDepth,
-                        bytecodeNode);
+            if (resolveWrite) {
+                return ProtosCapturedLexicalAccess.resolveCapturedMaterializedWriteTarget(
+                        accessor, activation, name, lexicalDepth, bytecodeNode);
             }
-            return null;
-        }
-    }
-
-    /** True when owner-frame selection produced a frame (host {@code null} means none). */
-    @Operation
-    public static final class IsCapturedOwnerFrameSelected {
-        @Specialization
-        public static boolean perform(Object selectedOwnerFrame) {
-            return selectedOwnerFrame != null;
-        }
-    }
-
-    @Operation
-    public static final class ReadCapturedFallback {
-        @Specialization
-        public static Object perform(ProtosActivation activation, String name) {
-            return ProtosCapturedLexicalAccess.lookupCapturedFallback(activation, name);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class ResolveCapturedWritableLexicalTarget {
-        @Specialization
-        public static CapturedLexicalWriteTarget perform(
-                int frameOrdinal,
-                ProtosActivation activation,
-                String name,
-                int lexicalDepth) {
-            if (lexicalDepth > 0) {
-                if (activation.currentContextHasLocalSlotForRuntime(name)) {
-                    return CapturedLexicalWriteTarget.generic(
-                            activation.context());
-                }
-
-                CapturedLexicalWriteTarget selected =
-                        ProtosCapturedLexicalAccess.capturedFrameWriteTargetOrNull(
-                                activation.capturedLexicalEnvironmentForRuntime(),
-                                name,
-                                lexicalDepth,
-                                frameOrdinal);
-                if (selected != null) {
-                    return selected;
-                }
-            }
-
-            ProtosObjectValue fallback =
-                    ProtosLexicalFallback.writableContextByName(activation, name)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newSlotNotFound(
-                                                            activation)));
-            return CapturedLexicalWriteTarget.generic(fallback);
+            return ProtosCapturedLexicalAccess.selectCapturedMaterializedOwnerFrame(
+                    accessor, activation, name, lexicalDepth, bytecodeNode);
         }
     }
 
@@ -1867,45 +1605,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosCoreErrors.newError(activation));
             }
             return value;
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class ResolveCapturedMaterializedWritableLexicalTarget {
-        @Specialization
-        public static CapturedLexicalWriteTarget perform(
-                MaterializedLocalAccessor accessor,
-                ProtosActivation activation,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode) {
-            if (lexicalDepth > 0) {
-                if (activation.currentContextHasLocalSlotForRuntime(name)) {
-                    return CapturedLexicalWriteTarget.generic(
-                            activation.context());
-                }
-
-                CapturedLexicalWriteTarget selected =
-                        ProtosCapturedLexicalAccess.capturedMaterializedWriteTargetOrNull(
-                                accessor,
-                                activation.capturedLexicalEnvironmentForRuntime(),
-                                name,
-                                lexicalDepth,
-                                bytecodeNode);
-                if (selected != null) {
-                    return selected;
-                }
-            }
-
-            ProtosObjectValue fallback =
-                    ProtosLexicalFallback.writableContextByName(activation, name)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newSlotNotFound(
-                                                            activation)));
-            return CapturedLexicalWriteTarget.generic(fallback);
         }
     }
 
@@ -1940,7 +1639,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * activation operation.
      */
 
+    /** Inline-callback form of {@link AccessCapturedFrameLocal}. */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "resolveWrite")
     @ConstantOperand(
             type = LocalRangeAccessor.class,
             name = "frameBackedLocals")
@@ -1948,9 +1649,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
     @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class ReadInlineCapturedFrameLocal {
+    public static final class AccessInlineCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                boolean resolveWrite,
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 int frameOrdinal,
@@ -1959,13 +1661,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
+            if (resolveWrite) {
+                return ProtosInlineCallbackFrameBindings.resolveCapturedWriteTarget(
+                        child, frameBackedLocals, frameBackedLayout,
+                        name, lexicalDepth, frameOrdinal, bytecodeNode, frame);
+            }
             return ProtosInlineCallbackFrameBindings.readCaptured(
                     child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, frameOrdinal, bytecodeNode, frame);
         }
     }
 
+    /** Inline-callback form of {@link AccessCapturedMaterializedLocal}. */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "resolveWrite")
     @ConstantOperand(type = MaterializedLocalAccessor.class)
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -1973,9 +1682,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
-    public static final class SelectInlineCapturedMaterializedOwnerFrame {
+    public static final class AccessInlineCapturedMaterializedLocal {
         @Specialization
-        public static MaterializedFrame perform(
+        public static Object perform(
+                boolean resolveWrite,
                 MaterializedLocalAccessor accessor,
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -1984,56 +1694,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int lexicalDepth,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
+            if (resolveWrite) {
+                return ProtosInlineCallbackFrameBindings.resolveCapturedMaterializedWriteTarget(
+                        accessor, child, frameBackedLocals, frameBackedLayout,
+                        name, lexicalDepth, bytecodeNode, frame);
+            }
             return ProtosInlineCallbackFrameBindings.selectCapturedMaterializedOwnerFrame(
                     accessor, child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, bytecodeNode, frame);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    public static final class ReadInlineCapturedFallback {
-        @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
-                String name,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.readCapturedFallback(
-                    child, frameBackedLocals, frameBackedLayout,
-                    name, bytecodeNode, frame);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    public static final class ResolveInlineCapturedWritableLexicalTarget {
-        @Specialization
-        public static CapturedLexicalWriteTarget perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                int frameOrdinal,
-                PreparedInlineLiteralCall child,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.resolveCapturedWriteTarget(
-                    child, frameBackedLocals, frameBackedLayout,
-                    name, lexicalDepth, frameOrdinal, bytecodeNode, frame);
         }
     }
 
@@ -2071,31 +1739,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
-    public static final class ResolveInlineCapturedMaterializedWritableLexicalTarget {
-        @Specialization
-        public static CapturedLexicalWriteTarget perform(
-                MaterializedLocalAccessor accessor,
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
-                String name,
-                int lexicalDepth,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.resolveCapturedMaterializedWriteTarget(
-                    accessor, child, frameBackedLocals, frameBackedLayout,
-                    name, lexicalDepth, bytecodeNode, frame);
-        }
-    }
-
-    @Operation
-    @ConstantOperand(type = MaterializedLocalAccessor.class)
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
     public static final class AssignInlineCapturedMaterializedLocal {
         @Specialization
         public static Object perform(
@@ -2115,26 +1758,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /** Inline-callback {@code THIS}: the receiver a direct Closure call binds. */
-    @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    public static final class LoadInlineCallbackReceiver {
-        @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.receiver(
-                    child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
-        }
-    }
-
     /**
      * Inline-callback {@link ReadMember}: the same PIC tiers, selected through
      * the invocation's prelude. Selection and receiver-bound extraction never
@@ -2287,79 +1910,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class ResolveWritableLexicalTarget {
-        @Specialization
-        public static ResolvedLexicalWriteTarget perform(ProtosActivation activation, String name) {
-            ResolvedLexicalWriteTarget selected = selectByNameOrNull(activation, name);
-            if (selected == null) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newSlotNotFound(activation));
-            }
-            return selected;
-        }
-
-
-        /**
-         * TEST009-K: the residual String-keyed destination walk is a host boundary, like
-         * {@link ProtosLexicalFallback#readByName}. Statically proven bindings select their
-         * destination through the frame-backed operations and never reach it.
-         */
-        @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-        private static ResolvedLexicalWriteTarget selectByNameOrNull(
-                ProtosActivation activation,
-                String name) {
-            if (activation.currentContextHasLocalSlotForRuntime(name)) {
-                return ResolvedLexicalWriteTarget.currentContext();
-            }
-
-            for (ProtosLexicalEnvironment lexical =
-                            activation.capturedLexicalEnvironmentForRuntime();
-                    lexical != null;
-                    lexical = lexical.outer()) {
-                if (lexical.hasLocalSlotForRuntime(name)) {
-                    return ResolvedLexicalWriteTarget.object(
-                            lexical.context());
-                }
-            }
-
-            if (activation.receiver()
-                            instanceof ProtosObjectValue ordinaryReceiver
-                    && ordinaryReceiver.hasLocalSlot(name)) {
-                return ResolvedLexicalWriteTarget.object(
-                        ordinaryReceiver);
-            }
-
-            return null;
-        }
-}
-
-    @Operation
-    public static final class AssignResolvedLexicalTarget {
-        @Specialization
-        public static Object perform(
-                ProtosActivation activation,
-                ResolvedLexicalWriteTarget destination,
-                String name,
-                Object value) {
-            try {
-                if (destination.currentContext) {
-                    activation.assignCurrentLocalSlotForRuntime(
-                            name,
-                            value);
-                } else {
-                    destination.object.assignLocalSlot(
-                            name,
-                            value);
-                }
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-    }
-
-    @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
     public static final class ResolveCurrentFrameLocalWriteTarget {
         @Specialization
@@ -2373,7 +1923,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && !accessor.isCleared(bytecodeNode, frame)) {
                 return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
             }
-            return ResolveWritableLexicalTarget.perform(activation, name);
+            return ProtosFrameLocalBindings.resolveWritableLexicalTarget(activation, name);
         }
     }
 
@@ -2391,7 +1941,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame) {
             if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
                 // I091: only direct frame storage may retain a primitive carrier.
-                return AssignResolvedLexicalTarget.perform(
+                return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
                         activation, destination, name,
                         ProtosNumericValueSupport.guestValue(value));
             }
@@ -2542,6 +2092,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return value;
         }
+
+        /**
+         * I113 (former MultipleCreateLocalSlots): the generic multiple creation.
+         * The complete required prefix is observed first, then each binding is
+         * created in source order; the first invalid creation signals its Error.
+         */
+        @Specialization
+        public static Object multiple(ProtosActivation activation, String[] names, Object source) {
+            int required = names.length;
+            List<Object> observed =
+                    ProtosFrameLocalBindings.observeMultipleCreatePrefix(activation, required, source);
+
+            for (int index = 0; index < required; index++) {
+                try {
+                    activation.createCurrentLocalSlotForRuntime(
+                            names[index],
+                            observed.get(index));
+                } catch (IllegalStateException invalidMutation) {
+                    /*
+                     * Deliberately no rollback: D143 applies ordinary ':'
+                     * creation semantics left-to-right after extraction.
+                     */
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+            }
+
+            return source;
+        }
     }
 
     /**
@@ -2599,64 +2178,43 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 }
 
+    /**
+     * I113: a local slot mutation selected by the builder-fixed
+     * {@link ProtosSlotMutation}: creation or assignment on an explicit object
+     * target, or assignment through a resolved generic write target.
+     */
     @Operation
-    public static final class CreateLocalSlot {
+    @ConstantOperand(type = ProtosSlotMutation.class, name = "mutation")
+    public static final class MutateLocalSlot {
         @Specialization
-        public static Object perform(
+        public static Object objectTarget(
+                ProtosSlotMutation mutation,
                 ProtosActivation activation,
                 ProtosObjectValue target,
                 String name,
                 Object value) {
             try {
-                target.createLocalSlot(name, value);
-            } catch (IllegalStateException invalidMutation) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-            }
-            return value;
-        }
-    }
-
-    @Operation
-    public static final class MultipleCreateLocalSlots {
-        @Specialization
-        public static Object perform(ProtosActivation activation, String[] names, Object source) {
-            int required = names.length;
-            List<Object> observed =
-                    ProtosFrameLocalBindings.observeMultipleCreatePrefix(activation, required, source);
-
-            for (int index = 0; index < required; index++) {
-                try {
-                    activation.createCurrentLocalSlotForRuntime(
-                            names[index],
-                            observed.get(index));
-                } catch (IllegalStateException invalidMutation) {
-                    /*
-                     * Deliberately no rollback: D143 applies ordinary ':'
-                     * creation semantics left-to-right after extraction.
-                     */
-                    throw new ProtosSignalException(
-                            ProtosCoreErrors.newError(activation));
+                if (mutation == ProtosSlotMutation.CREATE) {
+                    target.createLocalSlot(name, value);
+                } else {
+                    target.assignLocalSlot(name, value);
                 }
-            }
-
-            return source;
-        }
-    }
-
-    @Operation
-    public static final class AssignLocalSlot {
-        @Specialization
-        public static Object perform(
-                ProtosActivation activation,
-                ProtosObjectValue target,
-                String name,
-                Object value) {
-            try {
-                target.assignLocalSlot(name, value);
             } catch (IllegalStateException invalidMutation) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
             return value;
+        }
+
+        /** {@link ProtosSlotMutation#ASSIGN_RESOLVED}. */
+        @Specialization
+        public static Object resolvedTarget(
+                ProtosSlotMutation mutation,
+                ProtosActivation activation,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value) {
+            return ProtosFrameLocalBindings.assignResolvedLexicalTarget(
+                    activation, destination, name, value);
         }
     }
 
@@ -3055,23 +2613,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 }
 
+    /** Guest identity ({@code ===}), or its negation when {@code negated}. */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "negated")
     public static final class Identity {
         @Specialization
-        public static Object perform(Object left, Object right) {
-            return ProtosIdentity.identical(left, right)
+        public static Object perform(boolean negated, Object left, Object right) {
+            return ProtosIdentity.identical(left, right) != negated
                     ? ProtosBooleanValue.TRUE
                     : ProtosBooleanValue.FALSE;
-        }
-    }
-
-    @Operation
-    public static final class NotIdentity {
-        @Specialization
-        public static Object perform(Object left, Object right) {
-            return ProtosIdentity.identical(left, right)
-                    ? ProtosBooleanValue.FALSE
-                    : ProtosBooleanValue.TRUE;
         }
     }
 
@@ -3257,33 +2807,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     // ---- Map construction ----------------------------------------------------------
 
+    /**
+     * Prepares the Map construction factory call on {@code value} (the
+     * factory), or with {@code finish} validates its result {@code value}.
+     * The guest factory call runs between the two instructions.
+     */
     @Operation
-    public static final class PrepareMapConstructionFactoryCall {
+    @ConstantOperand(type = boolean.class, name = "finish")
+    public static final class MapConstructionFactoryCall {
         @Specialization
-        public static PreparedClosureCall perform(ProtosActivation activation, Object factory) {
+        public static Object perform(boolean finish, ProtosActivation activation, Object value) {
+            if (finish) {
+                return ProtosStandardMapProtocol
+                        .requireMapConstructionResult(
+                                value,
+                                activation);
+            }
             ProtosSlotLookupResult selected =
                     ProtosStandardMapProtocol
                             .selectFactoryCallForMapConstruction(
-                                    factory,
+                                    value,
                                     activation);
 
             return ProtosSendPreparation.prepareImmediateMethodCall(
                     (ProtosClosureValue) selected.value(),
-                    factory,
+                    value,
                     selected.home(),
                     List.of(),
                     activation);
-        }
-    }
-
-    @Operation
-    public static final class FinishMapConstructionFactoryCall {
-        @Specialization
-        public static ProtosMapValue perform(ProtosActivation activation, Object result) {
-            return ProtosStandardMapProtocol
-                    .requireMapConstructionResult(
-                            result,
-                            activation);
         }
     }
 
@@ -3303,69 +2854,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    @Operation
-    public static final class EnterMapInitialDefinitionComparison {
-        @Specialization
-        public static void perform(PreparedMapInitialDefinition prepared) {
-            prepared.enterComparison();
-        }
-    }
-
-    @Operation
-    public static final class LeaveMapInitialDefinitionComparison {
-        @Specialization
-        public static void perform(PreparedMapInitialDefinition prepared) {
-            prepared.leaveComparison();
-        }
-    }
-
-    @Operation
-    public static final class PrepareMapInitialDefinitionHashCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapInitialDefinition prepared) {
-            return prepared.prepareHash();
-        }
-    }
-
-    @Operation
-    public static final class AcceptMapInitialDefinitionHashResult {
-        @Specialization
-        public static void perform(PreparedMapInitialDefinition prepared, Object result) {
-            prepared.acceptHash(result);
-        }
-    }
-
-    @Operation
-    public static final class MapInitialDefinitionNeedsEquality {
-        @Specialization
-        public static boolean perform(PreparedMapInitialDefinition prepared) {
-            return prepared.needsEquality();
-        }
-    }
-
-    @Operation
-    public static final class PrepareMapInitialDefinitionEqualityCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapInitialDefinition prepared) {
-            return prepared.prepareEquality();
-        }
-    }
-
-    @Operation
-    public static final class AcceptMapInitialDefinitionEqualityResult {
-        @Specialization
-        public static void perform(PreparedMapInitialDefinition prepared, Object result) {
-            prepared.acceptEquality(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishMapInitialDefinition {
-        @Specialization
-        public static void perform(PreparedMapInitialDefinition prepared) {
-            prepared.finish();
-        }
-    }
+    /*
+     * I113: the comparison phases shared by every prepared Map protocol. Each
+     * specialization delegates to its concrete state type; the builder fixes
+     * the phase constant, so every site stays monomorphic.
+     */
 
     // ---- Supplied argument vectors -------------------------------------------------
 
@@ -3515,15 +3008,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
 
     @Operation
+    @ConstantOperand(type = boolean.class, name = "superSend")
     public static final class PrepareClosureCallArguments {
         @Specialization(
                 guards = {
+                    "!superSend",
                     "receiver == cachedReceiver",
                     "enteredContext != null",
                     "enteredContext == cachedContext",
@@ -3532,6 +3027,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 assumptions = "cachedGuarded.stability()",
                 limit = "3")
         public static PreparedClosureCall guardedDirect(
+                boolean superSend,
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
@@ -3547,6 +3043,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(
                 guards = {
+                    "!superSend",
                     "closure != null",
                     "enteredContext != null",
                     "closureDefinition != null",
@@ -3556,6 +3053,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 },
                 limit = "3")
         public static PreparedClosureCall fastDirect(
+                boolean superSend,
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
@@ -3572,8 +3070,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosClosureCallPreparation.finishDirectClosureCall(closure, cachedTarget, supplied, caller);
         }
 
-        @Specialization(replaces = {"guardedDirect", "fastDirect"})
+        @Specialization(guards = "!superSend", replaces = {"guardedDirect", "fastDirect"})
         public static PreparedClosureCall perform(
+                boolean superSend,
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied) {
@@ -3581,6 +3080,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     receiver,
                     List.of(supplied),
                     caller);
+        }
+
+        /**
+         * I113 (former PrepareSuperSendArguments): with the builder-fixed
+         * {@code superSend} the first operand is the super send's selector.
+         */
+        @Specialization(guards = "superSend")
+        public static PreparedClosureCall superSend(
+                boolean superSend,
+                Object receiverOrSelector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied) {
+            return ProtosSendPreparation.prepareSuperSend(
+                    (String) receiverOrSelector,
+                    caller,
+                    List.of(supplied));
         }
 
         @NonIdempotent
@@ -3605,7 +3120,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -3705,97 +3220,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
-                    closure, enteredContext);
-        }
-    }
-
-    @Operation
-    public static final class PrepareDefaultClosureCallArguments {
-        @Specialization(
-                guards = {
-                    "receiver == cachedReceiver",
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedGuarded != null"
-                },
-                assumptions = "cachedGuarded.stability()",
-                limit = "3")
-        public static PreparedClosureCall guardedDirect(
-                Object receiver,
-                ProtosActivation caller,
-                @Variadic Object[] supplied,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("receiver") Object cachedReceiver,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
-                        GuardedDirectClosureCallTarget cachedGuarded) {
-            return ProtosClosureCallPreparation.finishDirectClosureCall(
-                    cachedGuarded.closure(), cachedGuarded.target(), supplied, caller);
-        }
-
-        @Specialization(
-                guards = {
-                    "closure != null",
-                    "enteredContext != null",
-                    "closureDefinition != null",
-                    "closureDefinition == cachedClosureDefinition",
-                    "enteredContext == cachedContext",
-                    "cachedTarget != null"
-                },
-                limit = "3")
-        public static PreparedClosureCall fastDirect(
-                Object receiver,
-                ProtosActivation caller,
-                @Variadic Object[] supplied,
-                @Bind("directClosureCallSelectionOrNull(receiver, caller)")
-                        ProtosClosureValue closure,
-                @Bind("directClosureCallDefinitionOrNull(closure)")
-                        CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext($node)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
-                @Cached("enteredContext") ProtosLanguageContext cachedContext,
-                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
-                        RootCallTarget cachedTarget) {
-            return ProtosClosureCallPreparation.finishDirectClosureCall(closure, cachedTarget, supplied, caller);
-        }
-
-        @Specialization(replaces = {"guardedDirect", "fastDirect"})
-        public static PreparedClosureCall perform(
-                Object receiver,
-                ProtosActivation caller,
-                @Variadic Object[] supplied) {
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    receiver,
-                    List.of(supplied),
-                    caller);
-        }
-
-        @NonIdempotent
-        static ProtosLanguageContext currentEnteredContext(Node node) {
-            return ProtosLanguageContext.current(node);
-        }
-
-        static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
-                Object receiver, ProtosActivation caller, ProtosLanguageContext enteredContext) {
-            return ProtosClosureCallPreparation.createGuardedDirectClosureCall(
-                    receiver, caller, enteredContext);
-        }
-
-        static ProtosClosureValue directClosureCallSelectionOrNull(
-                Object receiver, ProtosActivation caller) {
-            return ProtosClosureCallPreparation.directClosureCallSelectionOrNull(receiver, caller);
-        }
-
-        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
-            return ProtosClosureCallPreparation.directClosureCallDefinitionOrNull(closure);
-        }
-
-        static RootCallTarget fastOrdinarySendTarget(
-                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -3846,12 +3271,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
             PreparedClosureCall canonical =
-                    PrepareSendArguments.canonicalIntegerResultOrNull(
+                    ProtosGuardedSendExecution.canonicalIntegerResultOrNull(
                             cachedInteger, receiver, supplied, prelude);
             if (canonical != null) {
                 return canonical;
             }
-            return PrepareSendArguments.guardedIntegerSendForActivation(
+            return ProtosGuardedSendExecution.guardedIntegerSendForActivation(
                     receiver, selector,
                     ProtosInlineCallbackFrameBindings.invocationCaller(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -3933,7 +3358,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments.fastOrdinarySendForActivation(
+            return ProtosGuardedSendExecution.fastOrdinarySendForActivation(
                     receiver, selector,
                     ProtosInlineCallbackFrameBindings.invocationCaller(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -3975,7 +3400,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, lookupCaller)")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments.guardedStructuredSendForActivation(
+            return ProtosGuardedSendExecution.guardedStructuredSendForActivation(
                     receiver, selector,
                     ProtosInlineCallbackFrameBindings.durableActivation(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -3999,7 +3424,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Variadic Object[] supplied,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
-            return PrepareSendArguments.performForActivation(
+            return ProtosGuardedSendExecution.performForActivation(
                     receiver, selector,
                     ProtosInlineCallbackFrameBindings.durableActivation(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -4011,7 +3436,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude, enteredContext);
         }
 
@@ -4024,13 +3449,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedSendForPrelude(
+            return ProtosGuardedSendSelection.createGuardedSendForPrelude(
                     receiver, selector, prelude, enteredContext);
         }
 
         static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            return PrepareSendArguments.createGuardedStructuredSend(
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
                     receiver, selector, caller);
         }
 
@@ -4051,12 +3476,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
             return selected == null
                     ? null
-                    : PrepareSendArguments.ordinarySendClosureOrNull(
+                    : ProtosGuardedSendSelection.ordinarySendClosureOrNull(
                             selected);
         }
 
         static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(
                     closure);
         }
 
@@ -4067,7 +3492,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -4117,7 +3542,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedIntegerSendZero(
                             receiver,
                             ProtosInlineCallbackFrameBindings.invocationCaller(
@@ -4153,7 +3578,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedOrdinarySendZero(
                             receiver,
                             ProtosInlineCallbackFrameBindings.invocationCaller(
@@ -4201,7 +3626,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .fastOrdinarySendZero(
                             closure,
                             receiver,
@@ -4245,7 +3670,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, lookupCaller)")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedStructuredSendZero(
                             receiver,
                             ProtosInlineCallbackFrameBindings.durableActivation(
@@ -4284,7 +3709,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude, enteredContext);
         }
 
@@ -4297,13 +3722,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedSendForPrelude(
+            return ProtosGuardedSendSelection.createGuardedSendForPrelude(
                     receiver, selector, prelude, enteredContext);
         }
 
         static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            return PrepareSendArguments.createGuardedStructuredSend(
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
                     receiver, selector, caller);
         }
 
@@ -4324,12 +3749,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
             return selected == null
                     ? null
-                    : PrepareSendArguments.ordinarySendClosureOrNull(
+                    : ProtosGuardedSendSelection.ordinarySendClosureOrNull(
                             selected);
         }
 
         static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(
                     closure);
         }
 
@@ -4340,7 +3765,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -4398,7 +3823,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 }
             }
 
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedIntegerSendOne(
                             receiver,
                             ProtosInlineCallbackFrameBindings.invocationCaller(
@@ -4434,7 +3859,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedOrdinarySendOne(
                             receiver,
                             ProtosInlineCallbackFrameBindings.invocationCaller(
@@ -4482,7 +3907,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .fastOrdinarySendOne(
                             closure,
                             receiver,
@@ -4526,7 +3951,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, lookupCaller)")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments
+            return ProtosGuardedSendExecution
                     .guardedStructuredSendOne(
                             receiver,
                             ProtosInlineCallbackFrameBindings.durableActivation(
@@ -4566,7 +3991,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude, enteredContext);
         }
 
@@ -4579,13 +4004,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedSendForPrelude(
+            return ProtosGuardedSendSelection.createGuardedSendForPrelude(
                     receiver, selector, prelude, enteredContext);
         }
 
         static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            return PrepareSendArguments.createGuardedStructuredSend(
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
                     receiver, selector, caller);
         }
 
@@ -4606,12 +4031,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
             return selected == null
                     ? null
-                    : PrepareSendArguments.ordinarySendClosureOrNull(
+                    : ProtosGuardedSendSelection.ordinarySendClosureOrNull(
                             selected);
         }
 
         static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(
                     closure);
         }
 
@@ -4622,7 +4047,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -4850,7 +4275,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return null;
             }
 
-            return PrepareSendArguments
+            return ProtosGuardedSendSelection
                     .fastOrdinarySendTarget(selected, entered);
         }
 
@@ -4999,7 +4424,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -5037,6 +4462,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("createGuardedDirectClosureCall(receiver, prelude, enteredContext)")
                         GuardedDirectClosureCallTarget cachedGuarded) {
             return PrepareClosureCallArguments.guardedDirect(
+                    false,
                     receiver,
                     ProtosInlineCallbackFrameBindings.invocationCaller(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -5072,6 +4498,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
             return PrepareClosureCallArguments.fastDirect(
+                    false,
                     receiver,
                     ProtosInlineCallbackFrameBindings.invocationCaller(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -5089,6 +4516,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind VirtualFrame frame) {
             return PrepareClosureCallArguments.perform(
+                    false,
                     receiver,
                     ProtosInlineCallbackFrameBindings.durableActivation(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
@@ -5118,7 +4546,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -5642,7 +5070,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -5755,7 +5183,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation caller,
                 Object[] supplied) {
             return PrepareClosureCallArguments
-                    .perform(receiver, caller, supplied);
+                    .perform(false, receiver, caller, supplied);
         }
 
         static CanonicalClosure sourceDefinitionOrNull(Object receiver) {
@@ -5804,7 +5232,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             ProtosClosureValue closure = admitted(receiver, caller);
             return closure == null ? null
-                    : PrepareSendArguments
+                    : ProtosGuardedSendSelection
                             .fastOrdinarySendTarget(closure, entered);
         }
 
@@ -5828,17 +5256,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Prepares an ordinary Closure call from a supplied-argument vector, or
+     * with {@code superSend} (builder-fixed) a super send whose first operand
+     * is its selector.
+     */
     @Operation
+    @ConstantOperand(type = boolean.class, name = "superSend")
     public static final class PrepareClosureCallVector {
         @Specialization
         public static PreparedClosureCall perform(
-                Object receiver,
+                boolean superSend,
+                Object receiverOrSelector,
                 ProtosActivation caller,
                 PreparedArgumentVector supplied) {
+            if (superSend) {
+                return ProtosSendPreparation.prepareSuperSend(
+                        (String) receiverOrSelector, caller, supplied.snapshot());
+            }
             return ProtosClosureCallPreparation.prepareClosureCall(
-                    receiver,
-                    supplied.snapshot(),
-                    caller);
+                    receiverOrSelector, supplied.snapshot(), caller);
         }
     }
 
@@ -5868,7 +5305,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
-            return PrepareSendArguments.guardedIntegerSendForActivation(
+            return ProtosGuardedSendExecution.guardedIntegerSendForActivation(
                     receiver, selector, exactCaller(caller), supplied, enteredContext, prelude,
                     cachedSelector, cachedContext, cachedPrelude, cachedInteger);
         }
@@ -6074,7 +5511,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments.fastOrdinarySendForActivation(
+            return ProtosGuardedSendExecution.fastOrdinarySendForActivation(
                     receiver, selector, exactCaller(caller), supplied, selected, closure, methodHome,
                     closureDefinition, enteredContext, cachedSelector, cachedClosureDefinition,
                     cachedContext, cachedTarget);
@@ -6102,7 +5539,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments.guardedStructuredSendForActivation(
+            return ProtosGuardedSendExecution.guardedStructuredSendForActivation(
                     receiver, selector, exactCaller(caller), supplied, enteredContext,
                     cachedReceiver, cachedSelector, cachedContext, cachedStructured);
         }
@@ -6122,60 +5559,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 Object caller,
                 @Variadic Object[] supplied) {
-            return PrepareSendArguments.performForActivation(
+            return ProtosGuardedSendExecution.performForActivation(
                     receiver, selector, exactCaller(caller), supplied);
         }
 
-        /**
-         * Resolves only while establishing a specialization. Admits a selected
-         * native Closure only; a source-backed selection (for example a user
-         * override) stays on the existing ordinary/generic paths.
-         */
-                static GuardedIntegerSend createGuardedIntegerSend(
+        /** See {@link ProtosGuardedSendSelection#createGuardedIntegerSend}. */
+        static GuardedIntegerSend createGuardedIntegerSend(
                 Object receiver, String selector, ProtosPrelude prelude) {
-            return createGuardedIntegerSend(
-                    receiver,
-                    selector,
-                    prelude,
-                    ProtosLanguageContext.currentIfEnteredForRuntime());
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(receiver, selector, prelude);
         }
 
+        /** See {@link ProtosGuardedSendSelection#createGuardedIntegerSend}. */
         static GuardedIntegerSend createGuardedIntegerSend(
                 Object receiver,
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            if (enteredContext == null) {
-                return null;
-            }
-            ProtosValueLookup.GuardedLookup lookup;
-            try {
-                lookup = ProtosValueLookup.lookupGuardedInteger(
-                        receiver, selector, prelude);
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                return null;
-            }
-            if (lookup == null) {
-                return null;
-            }
-            ProtosSlotLookupResult selected = lookup.selected();
-            if (!(selected.value() instanceof ProtosClosureValue closure)
-                    || closure.nativeBody().isEmpty()
-                    || !lookup.stability().isValid()) {
-                lookup.stability().invalidate();
-                return null;
-            }
-            ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation =
-                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
-                            closure,
-                            selected.home(),
-                            selector,
-                            prelude);
-            return new GuardedIntegerSend(
-                    closure,
-                    selected.home(),
-                    operation,
-                    lookup.stability());
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
+                    receiver, selector, prelude, enteredContext);
         }
 
         static boolean isIntegerReceiver(Object receiver) {
@@ -6183,7 +5584,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * PERF038-D: the prelude of the caller a {@link CurrentActivation}
          * denotes, without materializing it ({@link
          * ProtosFrameArguments#preludeOrNull} answers exactly what the
          * materialized activation would).
@@ -6236,134 +5637,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosFrameArguments.unmaterializedFullHeaderCaller(caller);
         }
 
-        /**
-         * Resolves and classifies only while establishing a specialization.
-         * The entered Context owns the target; neither Closure definition
-         * identity alone nor an unguarded method home authorizes this hit.
-         */
-                static GuardedSendTarget createGuardedSend(
+        /** See {@link ProtosGuardedSendSelection#createGuardedSend}. */
+        static GuardedSendTarget createGuardedSend(
                 Object receiver,
                 String selector,
                 ProtosActivation caller,
                 ProtosLanguageContext enteredContext) {
-            return createGuardedSendForPrelude(
-                    receiver, selector, caller.preludeOrNullForRuntime(), enteredContext);
+            return ProtosGuardedSendSelection.createGuardedSend(
+                    receiver, selector, caller, enteredContext);
         }
 
 
-        /**
-         * Resolves and classifies only while establishing a specialization.
-         * Reuses {@link ProtosValueLookup#lookupGuarded} exactly as
-         * {@link #createGuardedSend} does, then admits only a selected native
-         * Closure whose behavior/home satisfies one canonical-selection helper.
-         * A copied/aliased/overridden selection (same native body at a
-         * noncanonical home, or a different selected behavior entirely) misses
-         * here and invalidates the assumption immediately, leaving the exact
-         * generic classification as the sole authority for that selector.
-         */
-                static GuardedStructuredSend createGuardedStructuredSend(
+        /** See {@link ProtosGuardedSendSelection#createGuardedStructuredSend}. */
+        static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            boolean canonicalBoolean = ProtosValueLookup.isCanonicalBoolean(receiver);
-            ProtosValueLookup.GuardedLookup lookup;
-            try {
-                lookup = canonicalBoolean
-                        ? ProtosValueLookup.lookupGuardedCanonicalBoolean(
-                                receiver, selector, caller.preludeOrNullForRuntime())
-                        : ProtosValueLookup.lookupGuarded(
-                                receiver, selector, caller.preludeOrNullForRuntime());
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                return null;
-            }
-            if (lookup == null) {
-                return null;
-            }
-            ProtosSlotLookupResult selected = lookup.selected();
-            if (!(selected.value() instanceof ProtosClosureValue closure)
-                    || closure.nativeBody().isEmpty()) {
-                lookup.stability().invalidate();
-                return null;
-            }
-            ProtosObjectValue home = selected.home();
-            if (canonicalBoolean) {
-                // PERF015: a represented Boolean is admitted only for the
-                // canonical Boolean callbacks; every other selection stays generic.
-                ProtosStandardBooleanProtocol.StructuredCallbackKind canonicalKind =
-                        ProtosStandardBooleanProtocol
-                                .structuredCallbackKindForCanonicalSelection(closure, home);
-                if (canonicalKind == null || !lookup.stability().isValid()) {
-                    lookup.stability().invalidate();
-                    return null;
-                }
-                return new GuardedStructuredSend(
-                        closure, home, GuardedStructuredKind.BOOLEAN, canonicalKind,
-                        null, lookup.stability());
-            }
-            GuardedStructuredKind kind;
-            ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind = null;
-            ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookupKind = null;
-            if (ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
-                    closure, home)) {
-                kind = GuardedStructuredKind.ENSURE;
-            } else if (ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.ERROR_HANDLE;
-            } else if (ProtosStandardObjectProtocol.isCanonicalStandardPreTestLoopSelection(
-                    closure, home)) {
-                kind = GuardedStructuredKind.WHILE;
-            } else if ((booleanKind =
-                    ProtosStandardBooleanProtocol
-                            .structuredCallbackKindForCanonicalSelection(
-                                    closure, home))
-                    != null) {
-                kind = GuardedStructuredKind.BOOLEAN;
-            } else if (ProtosStandardArrayProtocol.isCanonicalStandardEachSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.ARRAY_EACH;
-            } else if (ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.BYTES_EACH;
-            } else if (ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
-                    closure, receiver, home)) {
-                kind = GuardedStructuredKind.ENVIRONMENT_EACH;
-            } else if (ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.IDENTITY_MAP_EACH;
-            } else if (ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.MAP_EACH;
-            } else if ((mapReadLookupKind =
-                    ProtosStandardMapProtocol
-                            .structuredReadLookupKindForCanonicalSelection(
-                                    closure, home, caller))
-                    != null) {
-                kind = GuardedStructuredKind.MAP_READ_LOOKUP;
-            } else if (ProtosStandardMapProtocol.isCanonicalStandardAtPutSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.MAP_AT_PUT;
-            } else if (ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.MAP_REMOVE;
-            } else if (ProtosStandardObjectProtocol.isCanonicalStandardCaseOfSelection(
-                    closure, home)) {
-                kind = GuardedStructuredKind.CASE_OF;
-            } else if (ProtosStandardArrayProtocol.isCanonicalStandardMatchSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.ARRAY_MATCH;
-            } else if (ProtosStandardMapProtocol.isCanonicalStandardMatchSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.MAP_MATCH;
-            } else if (ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection(
-                    closure, home, caller)) {
-                kind = GuardedStructuredKind.IDENTITY_MAP_AT_IF_ABSENT;
-            } else {
-                lookup.stability().invalidate();
-                return null;
-            }
-            if (!lookup.stability().isValid()) {
-                return null;
-            }
-            return new GuardedStructuredSend(
-                    closure, home, kind, booleanKind, mapReadLookupKind, lookup.stability());
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
+                    receiver, selector, caller);
         }
 
         /*
@@ -6393,31 +5682,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     instanceof com.guillermomolina.protos.runtime.ProtosForeignProjectedReceiver;
         }
 
-        /**
-         * Returns the non-native ordinary Closure selected by {@code selected},
-         * or {@code null} when the selection is not an ordinary source-backed
-         * Closure. Native Closures (including the canonical standard-import
-         * intrinsic) always miss here and remain on the exact generic
-         * {@code perform} path.
-         */
-                static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
-            if (selected.value() instanceof ProtosClosureValue closure
-                    && closure.nativeBody().isEmpty()) {
-                return closure;
-            }
-            return null;
+        /** See {@link ProtosGuardedSendSelection#ordinarySendClosureOrNull}. */
+        static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
+            return ProtosGuardedSendSelection.ordinarySendClosureOrNull(selected);
         }
 
-        /**
-         * Returns the stable executable-identity key for {@code closure}, or
-         * {@code null} when there is no selected Closure. Same-definition
-         * Closures always rematerialize this exact {@link CanonicalClosure}
-         * instance (see the class-level PERF010-A note), so this key stays
-         * stable across fresh {@code ProtosClosureValue}/{@code methodHome}
-         * materializations of the same executable behavior.
-         */
-                static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return closure == null ? null : closure.definition();
+        /** See {@link ProtosGuardedSendSelection#ordinarySendClosureDefinitionOrNull}. */
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(closure);
         }
 
         @NonIdempotent
@@ -6425,78 +5697,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosLanguageContext.current(node);
         }
 
-        /**
-         * Materializes the effective Context-owned Bytecode activation target
-         * for one cached fast-hit specialization instance.
-         *
-         * <p>This runs once, at cache-population time, and may use the
-         * existing Context-owned-plan machinery
-         * ({@link ProtosClosureCallPreparation#taskOwnedBytecodePlan}); it is not
-         * called again on the resulting hot hit. Returns {@code null} when no
-         * safe target can be produced for the current entered Context, which
-         * keeps the fast specialization from being instantiated for this call
-         * and leaves the exact generic path as the fallback.
-         */
-                static RootCallTarget fastOrdinarySendTarget(
+        /** See {@link ProtosGuardedSendSelection#fastOrdinarySendTarget}. */
+        static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            if (enteredContext == null) {
-                return null;
-            }
-            ProtosClosureExecutionPlan plan =
-                    ProtosClosureCallPreparation.taskOwnedBytecodePlan(
-                            closure,
-                            enteredContext);
-            if (plan == null) {
-                return null;
-            }
-            return plan.bytecodeActivationTargetForComposition();
-        }
-
-        /**
-         * PERF038-H: guarded source Send0.
-         * PIC guards and selection stability were checked by the DSL.
-         */
-        static PreparedClosureCall guardedOrdinarySendZero(
-                Object receiver,
-                ProtosActivation caller,
-                GuardedSendTarget cachedSend) {
-            ProtosReturnHome returnHome = cachedSend.invocationHome();
-            Object[] arguments =
-                    ProtosFrameArguments.compactImmediateMethodCallZero(
-                            cachedSend.closure(),
-                            receiver,
-                            cachedSend.methodHome(),
-                            caller,
-                            returnHome);
-            return PreparedClosureCall.ordinaryCompactSelected(
-                    cachedSend.target(),
-                    arguments,
-                    returnHome,
-                    cachedSend.ownsReturnHome());
-        }
-
-        /**
-         * PERF038-H: guarded source Send1.
-         */
-        static PreparedClosureCall guardedOrdinarySendOne(
-                Object receiver,
-                ProtosActivation caller,
-                Object supplied0,
-                GuardedSendTarget cachedSend) {
-            ProtosReturnHome returnHome = cachedSend.invocationHome();
-            Object[] arguments =
-                    ProtosFrameArguments.compactImmediateMethodCallOne(
-                            cachedSend.closure(),
-                            receiver,
-                            cachedSend.methodHome(),
-                            caller,
-                            returnHome,
-                            supplied0);
-            return PreparedClosureCall.ordinaryCompactSelected(
-                    cachedSend.target(),
-                    arguments,
-                    returnHome,
-                    cachedSend.ownsReturnHome());
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(closure, enteredContext);
         }
 
         /**
@@ -6590,357 +5794,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation,
                 Assumption stability) {}
 
-        public static PreparedClosureCall guardedIntegerSendForActivation(
-                Object receiver,
-                String selector,
-                ProtosActivation caller,
-                Object[] supplied,
-                ProtosLanguageContext enteredContext,
-                ProtosPrelude prelude,
-                String cachedSelector,
-                ProtosLanguageContext cachedContext,
-                ProtosPrelude cachedPrelude,
-                GuardedIntegerSend cachedInteger) {
-            PreparedClosureCall canonical =
-                    canonicalIntegerResultOrNull(cachedInteger, receiver, supplied, prelude);
-            if (canonical != null) {
-                return canonical;
-            }
-
-            /*
-             * Non-canonical guarded Integer selections, inherited Number
-             * operations, wrong-domain operands and Error-producing cases keep
-             * the exact PERF027-A path. That preserves the selected Closure,
-             * methodHome and rich semantic invocation whenever it is actually
-             * observable.
-             */
-            return ProtosSendPreparation.prepareDeferredImmediateNativeMethodCall(
-                    cachedInteger.closure(),
-                    receiver,
-                    cachedInteger.methodHome(),
-                    List.of(supplied),
-                    caller);
-        }
-
-        /**
-         * The immediate result of a canonical guarded Integer operation, or
-         * {@code null} for every case that must take the exact selected native
-         * invocation (non-canonical selection, wrong-domain operand, Error).
-         * Observes neither the caller activation nor its Context.
-         */
-        /**
-         * PERF038-H: Send0 has no successful binary canonical Integer
-         * operation. Preserve its native fallback and Error semantics.
-         */
-        static PreparedClosureCall guardedIntegerSendZero(
-                Object receiver,
-                Object caller,
-                GuardedIntegerSend cachedInteger) {
-            ProtosActivation exactCaller =
-                    caller instanceof ProtosActivation activation
-                            ? activation
-                            : ProtosFrameArguments.activation((Object[]) caller);
-
-            return ProtosSendPreparation.prepareDeferredImmediateNativeMethodCall(
-                    cachedInteger.closure(),
-                    receiver,
-                    cachedInteger.methodHome(),
-                    List.of(),
-                    exactCaller);
-        }
-
-        /**
-         * PERF038-H: canonical Send1 needs neither an argument vector
-         * nor the caller's activation. Materialize the caller only
-         * when the native/Error fallback is actually required.
-         */
-        static PreparedClosureCall guardedIntegerSendOne(
-                Object receiver,
-                Object caller,
-                Object supplied0,
-                GuardedIntegerSend cachedInteger) {
-            if (cachedInteger.operation() != null) {
-                Object directResult =
-                        ProtosStandardIntegerProtocol
-                                .tryExecuteCanonicalOperationOne(
-                                        cachedInteger.operation(),
-                                        receiver,
-                                        supplied0,
-                                        // I091: owner of a result beyond the signed-64 range.
-                                        caller instanceof ProtosActivation entered
-                                                ? entered.preludeOrNullForRuntime()
-                                                : ProtosFrameArguments.preludeOrNull(
-                                                        (Object[]) caller));
-                if (directResult != null) {
-                    return PreparedClosureCall.immediateResult(directResult);
-                }
-            }
-
-            ProtosActivation exactCaller =
-                    caller instanceof ProtosActivation activation
-                            ? activation
-                            : ProtosFrameArguments.activation((Object[]) caller);
-
-            return ProtosSendPreparation.prepareDeferredImmediateNativeMethodCall(
-                    cachedInteger.closure(),
-                    receiver,
-                    cachedInteger.methodHome(),
-                    List.of(supplied0),
-                    exactCaller);
-        }
-
-        static PreparedClosureCall canonicalIntegerResultOrNull(
-                GuardedIntegerSend cachedInteger,
-                Object receiver,
-                Object[] supplied,
-                ProtosPrelude prelude) {
-            if (cachedInteger.operation() == null) {
-                return null;
-            }
-            Object directResult =
-                    ProtosStandardIntegerProtocol.tryExecuteCanonicalOperation(
-                            cachedInteger.operation(),
-                            receiver,
-                            supplied,
-                            // I091: owner of a result beyond the signed-64 range.
-                            prelude);
-            return directResult == null
-                    ? null
-                    : PreparedClosureCall.immediateResult(directResult);
-        }
-
         static ProtosPrelude callerPreludeForActivation(ProtosActivation caller) {
             return caller.preludeOrNullForRuntime();
         }
 
-        /** PERF038-D: see {@link GuardedSendTarget#sharedInvocationHome}. */
-        private static ProtosReturnHome sharedInvocationHomeOrNull(ProtosClosureValue closure) {
-            if (closure.returnHome().isPresent()) {
-                return closure.returnHome().orElseThrow();
-            }
-            ProtosReturnHome home = closure.invocationReturnHomeForRuntime();
-            return home == ProtosReturnHome.unobservable() ? home : null;
-        }
-
-        static GuardedSendTarget createGuardedSendForPrelude(
-                Object receiver,
-                String selector,
-                ProtosPrelude prelude,
-                ProtosLanguageContext enteredContext) {
-            if (enteredContext == null) {
-                return null;
-            }
-            ProtosValueLookup.GuardedLookup lookup;
-            try {
-                lookup = ProtosValueLookup.lookupGuarded(
-                        receiver, selector, prelude);
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                return null;
-            }
-            if (lookup == null) {
-                return null;
-            }
-            ProtosClosureValue closure =
-                    ordinarySendClosureOrNull(lookup.selected());
-            if (closure == null) {
-                lookup.stability().invalidate();
-                return null;
-            }
-            RootCallTarget target =
-                    fastOrdinarySendTarget(closure, enteredContext);
-            if (target == null || !lookup.stability().isValid()) {
-                lookup.stability().invalidate();
-                return null;
-            }
-            ProtosReturnHome sharedHome = sharedInvocationHomeOrNull(closure);
-            return new GuardedSendTarget(
-                    closure,
-                    lookup.selected().home(),
-                    target,
-                    lookup.stability(),
-                    sharedHome,
-                    sharedHome == null && closure.executionPlan().isPresent(),
-                    closure.returnHome().isEmpty());
-        }
-
-        /**
-         * PERF038-H: Send0 with dynamically selected source Closure.
-         * Preserve the current selected Closure/home, but avoid the
-         * supplied-argument vector and compact-header validation.
-         */
-        static PreparedClosureCall fastOrdinarySendZero(
-                ProtosClosureValue closure,
-                Object receiver,
-                ProtosObjectValue methodHome,
-                ProtosActivation caller,
-                RootCallTarget target) {
-            ProtosReturnHome returnHome =
-                    closure.invocationReturnHomeForRuntime();
-
-            return PreparedClosureCall.ordinaryCompactSelected(
-                    target,
-                    ProtosFrameArguments.compactImmediateMethodCallZero(
-                            closure, receiver, methodHome, caller, returnHome),
-                    returnHome,
-                    closure.returnHome().isEmpty());
-        }
-
-        /**
-         * PERF038-H: Send1 with dynamically selected source Closure.
-         * The exact supplied value enters the final frame directly.
-         */
-        static PreparedClosureCall fastOrdinarySendOne(
-                ProtosClosureValue closure,
-                Object receiver,
-                ProtosObjectValue methodHome,
-                ProtosActivation caller,
-                RootCallTarget target,
-                Object supplied0) {
-            ProtosReturnHome returnHome =
-                    closure.invocationReturnHomeForRuntime();
-
-            return PreparedClosureCall.ordinaryCompactSelected(
-                    target,
-                    ProtosFrameArguments.compactImmediateMethodCallOne(
-                            closure, receiver, methodHome, caller,
-                            returnHome, supplied0),
-                    returnHome,
-                    closure.returnHome().isEmpty());
-        }
-
-        public static PreparedClosureCall fastOrdinarySendForActivation(
-                Object receiver,
-                String selector,
-                ProtosActivation caller,
-                Object[] supplied,
-                ProtosSlotLookupResult selected,
-                ProtosClosureValue closure,
-                ProtosObjectValue methodHome,
-                CanonicalClosure closureDefinition,
-                ProtosLanguageContext enteredContext,
-                String cachedSelector,
-                CanonicalClosure cachedClosureDefinition,
-                ProtosLanguageContext cachedContext,
-                RootCallTarget cachedTarget) {
-            Object[] frameArguments =
-                    ProtosFrameArguments.compactImmediateMethodCall(
-                            closure,
-                            receiver,
-                            methodHome,
-                            caller,
-                            supplied);
-            return PreparedClosureCall.ordinaryCompact(
-                    cachedTarget,
-                    frameArguments);
-        }
-
-        /*
-         * I072 Phase E: a stable canonical structured native send (Object.ensure,
-         * Error.handle, Object.whileTrue, Boolean callbacks) reuses the exact Phase A
-         * lookupGuarded/Assumption contract that guardedOrdinarySend already
-         * establishes for source-backed Closures. createGuardedStructuredSend
-         * runs the authoritative D013 lookup and classifies the selected value
-         * against the canonical-selection helpers (identity + home/provenance,
-         * not native-body identity alone) exactly once, at specialization
-         * establishment. The valid hit below never repeats that lookup or the
-         * generic finishPreparingComposedCallByImplementation classifier scan;
-         * it feeds the single cached kind directly into the unchanged
-         * finishPreparingComposedCall/PreparedClosureCall.nativeCall path, so
-         * ensure/handle/while/Boolean execution, suspension, cleanup and error
-         * semantics remain byte-identical to the generic path. A selector whose
-         * selection is not exactly one canonical standard implementation misses
-         * here and falls through to the exact generic {@code perform} path,
-         * which preserves override/alias/noncanonical-home behavior unchanged.
-         */
-        public static PreparedClosureCall guardedStructuredSendForActivation(
-                Object receiver,
-                String selector,
-                ProtosActivation caller,
-                Object[] supplied,
-                ProtosLanguageContext enteredContext,
-                Object cachedReceiver,
-                String cachedSelector,
-                ProtosLanguageContext cachedContext,
-                GuardedStructuredSend cachedStructured) {
-            return guardedStructuredSendPrepared(
-                    receiver, caller, List.of(supplied), cachedStructured);
-        }
-
-        /**
-         * PERF038-H: Send0, preserving the selected structured kind.
-         */
-        static PreparedClosureCall guardedStructuredSendZero(
-                Object receiver,
-                ProtosActivation caller,
-                GuardedStructuredSend cachedStructured) {
-            return guardedStructuredSendPrepared(
-                    receiver, caller, List.of(), cachedStructured);
-        }
-
-        /**
-         * PERF038-H: Send1 without an intermediate Object[].
-         */
-        static PreparedClosureCall guardedStructuredSendOne(
-                Object receiver,
-                ProtosActivation caller,
-                Object supplied0,
-                GuardedStructuredSend cachedStructured) {
-            return guardedStructuredSendPrepared(
-                    receiver, caller, List.of(supplied0), cachedStructured);
-        }
-
-        /**
-         * Exact existing structured invocation body, shared by the
-         * variadic and fixed-arity entry points.
-         */
-        private static PreparedClosureCall guardedStructuredSendPrepared(
-                Object receiver,
-                ProtosActivation caller,
-                List<?> suppliedList,
-                GuardedStructuredSend cachedStructured) {
-            ProtosSendPreparation.rejectComposedInvocationProjection(cachedStructured.closure());
-            ProtosActivation activation =
-                    ProtosActivation.forImmediateMethodInvocation(
-                            cachedStructured.closure(),
-                            suppliedList,
-                            receiver,
-                            cachedStructured.methodHome(),
-                            caller.prelude().orElse(null),
-                            caller.actorModuleState(),
-                            caller.currentModuleKey().orElse(null),
-                            caller.executionDomain());
-            ProtosSendPreparation.attachTaskOrInheritDynamicControlState(activation, caller);
-            return ProtosSendPreparation.finishPreparingComposedCall(
-                    cachedStructured.closure(),
-                    suppliedList,
-                    activation,
-                    cachedStructured.kind() == GuardedStructuredKind.ENSURE,
-                    cachedStructured.kind() == GuardedStructuredKind.ERROR_HANDLE,
-                    cachedStructured.kind() == GuardedStructuredKind.WHILE,
-                    cachedStructured.booleanKind(),
-                    cachedStructured.kind() == GuardedStructuredKind.ARRAY_EACH,
-                    cachedStructured.kind() == GuardedStructuredKind.BYTES_EACH,
-                    cachedStructured.kind() == GuardedStructuredKind.ENVIRONMENT_EACH,
-                    cachedStructured.kind() == GuardedStructuredKind.IDENTITY_MAP_EACH,
-                    cachedStructured.kind() == GuardedStructuredKind.MAP_EACH,
-                    cachedStructured.mapReadLookupKind(),
-                    cachedStructured.kind() == GuardedStructuredKind.MAP_AT_PUT,
-                    cachedStructured.kind() == GuardedStructuredKind.MAP_REMOVE,
-                    false,
-                    false,
-                    null);
-        }
-
+        /** See {@link ProtosGuardedSendExecution#performForActivation}. */
         public static PreparedClosureCall performForActivation(
                 Object receiver,
                 String selector,
                 ProtosActivation caller,
                 Object[] supplied) {
-            return ProtosSendPreparation.prepareSend(
-                    receiver,
-                    selector,
-                    caller,
-                    List.of(supplied));
+            return ProtosGuardedSendExecution.performForActivation(
+                    receiver, selector, caller, supplied);
         }
 }
 
@@ -6972,7 +5837,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
-            return PrepareSendArguments.guardedIntegerSendZero(
+            return ProtosGuardedSendExecution.guardedIntegerSendZero(
                     receiver, caller, cachedInteger);
         }
 
@@ -7020,7 +5885,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendZero(
+            return ProtosGuardedSendExecution.guardedOrdinarySendZero(
                     receiver, caller, cachedSend);
         }
 
@@ -7065,7 +5930,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendZero(
+            return ProtosGuardedSendExecution.guardedOrdinarySendZero(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), cachedSend);
         }
 
@@ -7093,7 +5958,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendZero(
+            return ProtosGuardedSendExecution.guardedOrdinarySendZero(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), cachedSend);
         }
 
@@ -7119,7 +5984,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendZero(
+            return ProtosGuardedSendExecution.guardedOrdinarySendZero(
                     receiver, exactCaller(caller), cachedSend);
         }
 
@@ -7154,7 +6019,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments.fastOrdinarySendZero(
+            return ProtosGuardedSendExecution.fastOrdinarySendZero(
                     closure,
                     receiver,
                     methodHome,
@@ -7184,7 +6049,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments.guardedStructuredSendZero(
+            return ProtosGuardedSendExecution.guardedStructuredSendZero(
                     receiver, exactCaller(caller), cachedStructured);
         }
 
@@ -7209,7 +6074,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static GuardedIntegerSend createGuardedIntegerSend(
                 Object receiver, String selector, ProtosPrelude prelude) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude);
         }
 
@@ -7218,7 +6083,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude, enteredContext);
         }
 
@@ -7227,7 +6092,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * PERF038-D: the prelude of the caller a {@link CurrentActivation}
          * denotes, without materializing it ({@link
          * ProtosFrameArguments#preludeOrNull} answers exactly what the
          * materialized activation would).
@@ -7285,13 +6150,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedSend(
+            return ProtosGuardedSendSelection.createGuardedSend(
                     receiver, selector, caller, enteredContext);
         }
 
         static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            return PrepareSendArguments.createGuardedStructuredSend(
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
                     receiver, selector, caller);
         }
 
@@ -7306,11 +6171,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
-            return PrepareSendArguments.ordinarySendClosureOrNull(selected);
+            return ProtosGuardedSendSelection.ordinarySendClosureOrNull(selected);
         }
 
         static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(
                     closure);
         }
 
@@ -7321,7 +6186,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -7353,7 +6218,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
-            return PrepareSendArguments.guardedIntegerSendOne(
+            return ProtosGuardedSendExecution.guardedIntegerSendOne(
                     receiver, caller, supplied0, cachedInteger);
         }
 
@@ -7401,7 +6266,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendOne(
+            return ProtosGuardedSendExecution.guardedOrdinarySendOne(
                     receiver, caller, supplied0, cachedSend);
         }
 
@@ -7446,7 +6311,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendOne(
+            return ProtosGuardedSendExecution.guardedOrdinarySendOne(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), supplied0, cachedSend);
         }
 
@@ -7474,7 +6339,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, fullHeaderCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendOne(
+            return ProtosGuardedSendExecution.guardedOrdinarySendOne(
                     receiver, ProtosFrameArguments.unmaterializedFullHeaderCaller(caller), supplied0, cachedSend);
         }
 
@@ -7500,7 +6365,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, exactCaller(caller), enteredContext)")
                         GuardedSendTarget cachedSend) {
-            return PrepareSendArguments.guardedOrdinarySendOne(
+            return ProtosGuardedSendExecution.guardedOrdinarySendOne(
                     receiver, exactCaller(caller), supplied0, cachedSend);
         }
 
@@ -7535,7 +6400,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            return PrepareSendArguments.fastOrdinarySendOne(
+            return ProtosGuardedSendExecution.fastOrdinarySendOne(
                     closure,
                     receiver,
                     methodHome,
@@ -7566,7 +6431,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedStructuredSend(receiver, selector, exactCaller(caller))")
                         GuardedStructuredSend cachedStructured) {
-            return PrepareSendArguments.guardedStructuredSendOne(
+            return ProtosGuardedSendExecution.guardedStructuredSendOne(
                     receiver, exactCaller(caller), supplied0, cachedStructured);
         }
 
@@ -7592,7 +6457,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static GuardedIntegerSend createGuardedIntegerSend(
                 Object receiver, String selector, ProtosPrelude prelude) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude);
         }
 
@@ -7601,7 +6466,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedIntegerSend(
+            return ProtosGuardedSendSelection.createGuardedIntegerSend(
                     receiver, selector, prelude, enteredContext);
         }
 
@@ -7610,7 +6475,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PERF038-D: the prelude of the caller a {@link CurrentCallerReference}
+         * PERF038-D: the prelude of the caller a {@link CurrentActivation}
          * denotes, without materializing it ({@link
          * ProtosFrameArguments#preludeOrNull} answers exactly what the
          * materialized activation would).
@@ -7671,13 +6536,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.createGuardedSend(
+            return ProtosGuardedSendSelection.createGuardedSend(
                     receiver, selector, caller, enteredContext);
         }
 
         static GuardedStructuredSend createGuardedStructuredSend(
                 Object receiver, String selector, ProtosActivation caller) {
-            return PrepareSendArguments.createGuardedStructuredSend(
+            return ProtosGuardedSendSelection.createGuardedStructuredSend(
                     receiver, selector, caller);
         }
 
@@ -7692,11 +6557,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         static ProtosClosureValue ordinarySendClosureOrNull(ProtosSlotLookupResult selected) {
-            return PrepareSendArguments.ordinarySendClosureOrNull(selected);
+            return ProtosGuardedSendSelection.ordinarySendClosureOrNull(selected);
         }
 
         static CanonicalClosure ordinarySendClosureDefinitionOrNull(ProtosClosureValue closure) {
-            return PrepareSendArguments.ordinarySendClosureDefinitionOrNull(
+            return ProtosGuardedSendSelection.ordinarySendClosureDefinitionOrNull(
                     closure);
         }
 
@@ -7707,7 +6572,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments.fastOrdinarySendTarget(
+            return ProtosGuardedSendSelection.fastOrdinarySendTarget(
                     closure, enteredContext);
         }
     }
@@ -7725,28 +6590,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     selector,
                     caller,
                     supplied.snapshot());
-        }
-    }
-
-    @Operation
-    public static final class PrepareSuperSendArguments {
-        @Specialization
-        public static PreparedClosureCall perform(
-                String selector,
-                ProtosActivation caller,
-                @Variadic Object[] supplied) {
-            return ProtosSendPreparation.prepareSuperSend(selector, caller, List.of(supplied));
-        }
-    }
-
-    @Operation
-    public static final class PrepareSuperSendVector {
-        @Specialization
-        public static PreparedClosureCall perform(
-                String selector,
-                ProtosActivation caller,
-                PreparedArgumentVector supplied) {
-            return ProtosSendPreparation.prepareSuperSend(selector, caller, supplied.snapshot());
         }
     }
 
@@ -7831,25 +6674,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
 
     /**
-     * PERF041-D1: the primitive classification decides only whether
-     * canonical Boolean.ifTrue selects its callback.
+     * Whether a canonical Boolean classification is the builder-fixed
+     * {@code expected} class ({@code ProtosCanonicalBooleanOneNode.CLASS_*}).
      */
     @Operation
-    public static final class IsCanonicalIfTrueTrue {
+    @ConstantOperand(type = int.class, name = "expected")
+    public static final class IsCanonicalBooleanClass {
         @Specialization
-        public static boolean perform(int classification) {
-            return classification
-                    == ProtosCanonicalBooleanOneNode.CLASS_TRUE;
-        }
-    }
-
-    /** I095-C: the canonical FALSE classification of a dynamic control receiver. */
-    @Operation
-    public static final class IsCanonicalBooleanFalseClass {
-        @Specialization
-        public static boolean perform(int classification) {
-            return classification
-                    == ProtosCanonicalBooleanOneNode.CLASS_FALSE;
+        public static boolean perform(int expected, int classification) {
+            return classification == expected;
         }
     }
 
@@ -8012,50 +6845,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /** Frame-native Vector: caller observation is deferred. */
 
-    @Operation
-    public static final class TryCompactCanonicalBooleanInlineVector {
-
-        static CanonicalBooleanMissProfile createMissProfile() {
-            return CanonicalBooleanMissProfile.create();
-        }
-
-        static CanonicalBooleanMissProfile uncachedMissProfile() {
-            return CanonicalBooleanMissProfile.uncached();
-        }
-
-        static boolean canonicalFalse(Object receiver, PreparedArgumentVector vector) {
-            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.FALSE;
-        }
-
-        static boolean canonicalTrue(Object receiver, PreparedArgumentVector vector) {
-            return vector.soleValueOrNull() != null && receiver == ProtosBooleanValue.TRUE;
-        }
-
-        @Specialization(guards = "canonicalFalse(receiver, vector)")
-        public static int falseBranch(Object receiver, PreparedArgumentVector vector) {
-            return ProtosCanonicalBooleanOneNode.CLASS_FALSE;
-        }
-
-        @Specialization(guards = "canonicalTrue(receiver, vector)")
-        public static int trueBranch(Object receiver, PreparedArgumentVector vector) {
-            return ProtosCanonicalBooleanOneNode.CLASS_TRUE;
-        }
-
-        @Specialization(guards = {
-                "!canonicalFalse(receiver, vector)",
-                "!canonicalTrue(receiver, vector)"
-        })
-        public static int genericMiss(
-                Object receiver, PreparedArgumentVector vector,
-                @Cached(
-                    value = "createMissProfile()",
-                    uncached = "uncachedMissProfile()")
-                    CanonicalBooleanMissProfile missProfile) {
-            missProfile.observeMiss();
-            return ProtosCanonicalBooleanOneNode.CLASS_MISS;
-        }
-    }
-
     /**
      * Selected spread callback. The vector has already passed the
      * one-argument classification guard.
@@ -8144,167 +6933,669 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * I113: classifies one result value as the builder-fixed
+     * {@link ProtosResultKind} (a miss sentinel, a carrier type or a C-prime
+     * gate); see that type for each predicate.
+     */
     @Operation
-    public static final class IsCompactCanonicalBooleanMiss {
-        @Specialization
-        public static boolean perform(Object value) {
-            return value == null;
+    @ConstantOperand(type = ProtosResultKind.class, name = "kind")
+    public static final class IsResultKind {
+        /*
+         * PERF038-F: an ordinary call site observes a small, stable set of
+         * result classes, none of them a continuation. Profiling the exact
+         * result class replaces the four suspension type tests of every
+         * ordinary result with one class comparison; the answer is decided
+         * once per class from the same type tests, so continuation results
+         * keep their resumption path unchanged. A site seeing more classes
+         * than the limit (and the uncached interpreter) takes the generic
+         * form.
+         */
+        @Specialization(
+                guards = {
+                    "kind == CONTINUATION_KIND",
+                    "value != null",
+                    "value.getClass() == cachedClass"
+                },
+                limit = "3")
+        public static boolean continuationClassProfiled(
+                ProtosResultKind kind,
+                Object value,
+                @Cached("value.getClass()") Class<?> cachedClass,
+                @Cached("isContinuationClass(cachedClass)") boolean continuation) {
+            return continuation;
         }
-    }
 
-    @Operation
-    public static final class IsCompactCanonicalBooleanNoCallback {
-        @Specialization
-        public static boolean perform(Object value) {
-            return value == ProtosNullValue.INSTANCE;
+        @Specialization(replaces = "continuationClassProfiled")
+        public static boolean perform(ProtosResultKind kind, Object value) {
+            return kind.matches(value);
         }
-    }
 
-    @Operation
-    public static final class IsNativeIfTrueInlineCallback {
-        @Specialization
-        public static boolean perform(Object value) {
-            return value instanceof PreparedInlineLiteralCall;
+        static final ProtosResultKind CONTINUATION_KIND = ProtosResultKind.CONTINUATION;
+
+        static boolean isContinuationClass(Class<?> type) {
+            return IsContinuation.isContinuationClass(type);
         }
     }
 
     /**
-     * I092: completes the outer call of an ifTrue literal site exactly once,
-     * after its callback, on every exit. ProtosNullValue means no outer call:
-     * the native path (which owns no ifTrue activation or ReturnHome), a
-     * non-Boolean generic selection (completed by its own dispatch) or an exit
-     * before any outer call was recorded.
+     * I113: whether a prepared call is the structured protocol named by the
+     * builder-fixed {@code kind}. The predicates are owned by
+     * {@link ProtosStructuredCallKind}; {@code kind} is a constant operand,
+     * so partial evaluation folds the selection at every site.
      */
     @Operation
-    public static final class CompleteIfTrueSiteOuter {
+    @ConstantOperand(type = ProtosStructuredCallKind.class, name = "kind")
+    public static final class IsStructuredCall {
         @Specialization
-        public static void none(ProtosNullValue outer) {
-            // No outer call owned by this site.
-        }
-
-        @Specialization(guards = "!prepared.hasReturnHomeLifecycle()")
-        public static void ordinaryWithoutHomeLifecycle(
-                OrdinarySourceCall prepared) {
-            // No owned materialized ReturnHome to complete.
-        }
-
-        @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
-        public static void ordinary(OrdinarySourceCall prepared) {
-            CompleteClosureCall.ordinary(prepared);
+        public static boolean ordinary(ProtosStructuredCallKind kind, OrdinarySourceCall prepared) {
+            return kind.admits(prepared);
         }
 
         @Specialization
-        public static void nativeCall(NativeCall prepared) {
-            CompleteClosureCall.nativeCall(prepared);
+        public static boolean nativeCall(ProtosStructuredCallKind kind, NativeCall prepared) {
+            return kind.admits(prepared);
         }
 
         @Specialization
-        public static void immediate(ImmediateResultCall prepared) {
-            CompleteClosureCall.immediate(prepared);
+        public static boolean immediate(ProtosStructuredCallKind kind, ImmediateResultCall prepared) {
+            return kind.admits(prepared);
         }
 
         @Specialization
-        public static void moduleInitialization(ModuleInitializationCall prepared) {
-            CompleteClosureCall.moduleInitialization(prepared);
+        public static boolean moduleInitialization(
+                ProtosStructuredCallKind kind, ModuleInitializationCall prepared) {
+            return kind.admits(prepared);
         }
     }
 
-    /** I092: B-prime admission of the native path's prepared callback. */
+    /*
+     * I113: structured-protocol phases shared across protocols. Every
+     * specialization is typed on one protocol's final state carrier (or the
+     * PreparedLocalEachCall interface of the five local each families), so a
+     * builder-emitted site stays monomorphic and delegates exactly to that
+     * protocol's method. No phase spans a guest call: each lowered guest
+     * child invocation still sits between two of these instructions.
+     */
+
+    /**
+     * Prepares the structured state of the protocol named by the
+     * builder-fixed {@code kind}; see {@link ProtosStructuredCallKind#prepare}.
+     */
     @Operation
-    public static final class AdmitsNativeIfTrueInline {
+    @ConstantOperand(type = ProtosStructuredCallKind.class, name = "kind")
+    public static final class PrepareStructuredCall {
         @Specialization
-        public static boolean perform(
-                PreparedInlineLiteralCall child,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return child.admits(literalPlan);
+        public static Object ordinary(ProtosStructuredCallKind kind, OrdinarySourceCall prepared) {
+            return kind.prepare(prepared);
+        }
+
+        @Specialization
+        public static Object nativeCall(ProtosStructuredCallKind kind, NativeCall prepared) {
+            return kind.prepare(prepared);
+        }
+
+        @Specialization
+        public static Object immediate(ProtosStructuredCallKind kind, ImmediateResultCall prepared) {
+            return kind.prepare(prepared);
+        }
+
+        @Specialization
+        public static Object moduleInitialization(
+                ProtosStructuredCallKind kind, ModuleInitializationCall prepared) {
+            return kind.prepare(prepared);
         }
     }
 
+    /**
+     * A structured protocol state query, by the builder-fixed phase:
+     * {@code STEP} whether it has a further position, requirement or
+     * lifecycle release step; {@code CHILD} whether its optional guest child
+     * (callback, matcher or fallback) must run; {@code EQUALITY} whether a Map
+     * protocol needs its guest equality call. A protocol takes only the
+     * phases it has.
+     */
     @Operation
-    public static final class IsStructuredBooleanCall {
+    @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
+    public static final class StructuredHasNext {
         @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredBoolean();
+        public static boolean localEach(
+                ProtosStructuredPhase phase,
+                PreparedLocalEachCall prepared) {
+            return prepared.hasNext();
         }
 
         @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredBoolean();
+        public static boolean arrayMatch(
+                ProtosStructuredPhase phase,
+                PreparedArrayMatchCall prepared) {
+            return prepared.hasNext();
         }
 
         @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredBoolean();
+        public static boolean foreignEach(
+                ProtosStructuredPhase phase,
+                ProtosForeignEachCall prepared) {
+            return prepared.hasNext();
         }
 
         @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredBoolean();
-        }
-
-    }
-
-    @Operation
-    public static final class PrepareStructuredBooleanCall {
-        @Specialization
-        public static PreparedBooleanCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredBoolean();
+        public static boolean mapMatch(ProtosStructuredPhase phase, PreparedMapMatchCall prepared) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                return prepared.needsEquality();
+            }
+            return phase == ProtosStructuredPhase.CHILD
+                    ? prepared.hasChildMatcher()
+                    : prepared.hasRequirement();
         }
 
         @Specialization
-        public static PreparedBooleanCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredBoolean();
+        public static boolean ioRelease(
+                ProtosStructuredPhase phase,
+                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.hasNextStep();
         }
 
         @Specialization
-        public static PreparedBooleanCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredBoolean();
-        }
-
-        @Specialization
-        public static PreparedBooleanCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredBoolean();
-        }
-
-    }
-
-    @Operation
-    public static final class StructuredBooleanHasCallback {
-        @Specialization
-        public static boolean perform(PreparedBooleanCall prepared) {
+        public static boolean booleanCall(
+                ProtosStructuredPhase phase,
+                PreparedBooleanCall prepared) {
             return prepared.hasCallback();
         }
+
+        @Specialization
+        public static boolean caseOf(ProtosStructuredPhase phase, PreparedCaseOfCall prepared) {
+            return prepared.needsMatcher();
+        }
+
+        @Specialization
+        public static boolean identityMapAtIfAbsent(
+                ProtosStructuredPhase phase,
+                PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.needsFallback();
+        }
+
+        @Specialization
+        public static boolean mapReadLookup(
+                ProtosStructuredPhase phase,
+                PreparedMapReadLookupCall prepared) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                return prepared.needsEquality();
+            }
+            return prepared.needsFallback();
+        }
+
+        @Specialization
+        public static boolean mapInitialDefinition(
+                ProtosStructuredPhase phase,
+                PreparedMapInitialDefinition prepared) {
+            return prepared.needsEquality();
+        }
+
+        @Specialization
+        public static boolean mapAtPut(ProtosStructuredPhase phase, PreparedMapAtPutCall prepared) {
+            return prepared.needsEquality();
+        }
+
+        @Specialization
+        public static boolean mapRemove(
+                ProtosStructuredPhase phase,
+                PreparedMapRemoveCall prepared) {
+            return prepared.needsEquality();
+        }
     }
 
+    /**
+     * Prepares a structured protocol's guest child call, by the builder-fixed
+     * phase: {@code CHILD} the primary child (Boolean callback, caseOf
+     * matcher, current each/match element, fallback, child matcher,
+     * Object/import child, handler or ensure body, while condition);
+     * {@code SECONDARY_CHILD} the selected caseOf action, ensure cleanup or
+     * while body; {@code HASH}/{@code EQUALITY} a Map protocol's guest hash or
+     * equality call. A protocol takes only the phases it has.
+     */
     @Operation
-    public static final class PrepareStructuredBooleanCallbackCall {
+    @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
+    public static final class StructuredPrepareChildCall {
         @Specialization
-        public static PreparedClosureCall perform(PreparedBooleanCall prepared) {
+        public static PreparedClosureCall booleanCall(
+                ProtosStructuredPhase phase,
+                PreparedBooleanCall prepared) {
             return prepared.prepareCallback();
         }
+
+        @Specialization
+        public static PreparedClosureCall caseOf(
+                ProtosStructuredPhase phase,
+                PreparedCaseOfCall prepared) {
+            return phase == ProtosStructuredPhase.SECONDARY_CHILD
+                    ? prepared.prepareSelectedAction()
+                    : prepared.prepareMatcher();
+        }
+
+        @Specialization
+        public static PreparedClosureCall arrayMatch(
+                ProtosStructuredPhase phase,
+                PreparedArrayMatchCall prepared) {
+            return prepared.prepareCurrent();
+        }
+
+        @Specialization
+        public static PreparedClosureCall localEach(
+                ProtosStructuredPhase phase,
+                PreparedLocalEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+
+        @Specialization
+        public static PreparedClosureCall foreignEach(
+                ProtosStructuredPhase phase,
+                ProtosForeignEachCall prepared) {
+            return ProtosClosureCallPreparation.prepareClosureCall(
+                    prepared.callback(), List.of(prepared.current()), prepared.activation());
+        }
+
+        @Specialization
+        public static PreparedClosureCall identityMapAtIfAbsent(
+                ProtosStructuredPhase phase,
+                PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.prepareFallback();
+        }
+
+        @Specialization
+        public static PreparedClosureCall mapReadLookup(
+                ProtosStructuredPhase phase,
+                PreparedMapReadLookupCall prepared) {
+            if (phase == ProtosStructuredPhase.HASH) {
+                return prepared.prepareHash();
+            }
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                return prepared.prepareEquality();
+            }
+            return prepared.prepareFallback();
+        }
+
+        @Specialization
+        public static PreparedClosureCall mapMatch(
+                ProtosStructuredPhase phase,
+                PreparedMapMatchCall prepared) {
+            if (phase == ProtosStructuredPhase.HASH) {
+                return prepared.prepareHash();
+            }
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                return prepared.prepareEquality();
+            }
+            return prepared.prepareChildMatcher();
+        }
+
+        @Specialization
+        public static PreparedClosureCall standardObject(
+                ProtosStructuredPhase phase,
+                PreparedStandardObjectCall prepared) {
+            return prepared.child();
+        }
+
+        @Specialization
+        public static PreparedClosureCall standardImport(
+                ProtosStructuredPhase phase,
+                PreparedStandardImportCall prepared) {
+            return prepared.child();
+        }
+
+        @Specialization
+        public static PreparedClosureCall errorHandler(
+                ProtosStructuredPhase phase,
+                PreparedErrorHandlerCall prepared) {
+            return prepared.body();
+        }
+
+        @Specialization
+        public static PreparedClosureCall ensure(
+                ProtosStructuredPhase phase,
+                PreparedEnsureCall prepared) {
+            return phase == ProtosStructuredPhase.SECONDARY_CHILD
+                    ? prepared.cleanup()
+                    : prepared.body();
+        }
+
+        @Specialization
+        public static PreparedClosureCall whileLoop(
+                ProtosStructuredPhase phase,
+                PreparedWhileCall prepared) {
+            return phase == ProtosStructuredPhase.SECONDARY_CHILD
+                    ? prepared.prepareBody()
+                    : prepared.prepareCondition();
+        }
+
+        @Specialization
+        public static PreparedClosureCall mapInitialDefinition(
+                ProtosStructuredPhase phase,
+                PreparedMapInitialDefinition prepared) {
+            return phase == ProtosStructuredPhase.EQUALITY
+                    ? prepared.prepareEquality()
+                    : prepared.prepareHash();
+        }
+
+        @Specialization
+        public static PreparedClosureCall mapAtPut(
+                ProtosStructuredPhase phase,
+                PreparedMapAtPutCall prepared) {
+            return phase == ProtosStructuredPhase.EQUALITY
+                    ? prepared.prepareEquality()
+                    : prepared.prepareHash();
+        }
+
+        @Specialization
+        public static PreparedClosureCall mapRemove(
+                ProtosStructuredPhase phase,
+                PreparedMapRemoveCall prepared) {
+            return phase == ProtosStructuredPhase.EQUALITY
+                    ? prepared.prepareEquality()
+                    : prepared.prepareHash();
+        }
     }
 
+    /**
+     * The PLAT044 B-prime inline form of {@link StructuredPrepareChildCall};
+     * with {@code secondary} the inline while body.
+     */
     @Operation
-    public static final class PrepareInlineStructuredBooleanCallbackCall {
+    @ConstantOperand(type = boolean.class, name = "secondary")
+    public static final class StructuredPrepareInlineChildCall {
         @Specialization
-        public static PreparedInlineLiteralCall perform(PreparedBooleanCall prepared) {
+        public static PreparedInlineLiteralCall booleanCall(boolean secondary, PreparedBooleanCall prepared) {
             return prepared.prepareInlineCallback();
         }
-    }
 
-    @Operation
-    public static final class StructuredBooleanImmediateResult {
         @Specialization
-        public static Object perform(PreparedBooleanCall prepared) {
-            return prepared.immediateResult();
+        public static PreparedInlineLiteralCall localEach(boolean secondary, PreparedLocalEachCall prepared) {
+            return prepared.prepareInlineCurrent();
+        }
+
+        @Specialization
+        public static PreparedInlineLiteralCall whileLoop(boolean secondary, PreparedWhileCall prepared) {
+            return secondary
+                    ? prepared.prepareInlineBody()
+                    : prepared.prepareInlineCondition();
         }
     }
 
+    /**
+     * Accepts the result of a structured protocol's guest child, by the
+     * builder-fixed phase: {@code CHILD} the matcher or lower outcome;
+     * {@code HASH}/{@code EQUALITY} a Map protocol's guest hash or equality
+     * result.
+     */
     @Operation
-    public static final class FinishStructuredBooleanCallback {
+    @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
+    public static final class StructuredAcceptChildOutcome {
         @Specialization
-        public static Object perform(PreparedBooleanCall prepared, Object result) {
+        public static void caseOf(
+                ProtosStructuredPhase phase,
+                PreparedCaseOfCall prepared,
+                Object outcome) {
+            prepared.acceptMatcher(outcome);
+        }
+
+        @Specialization
+        public static void arrayMatch(
+                ProtosStructuredPhase phase,
+                PreparedArrayMatchCall prepared,
+                Object outcome) {
+            prepared.acceptCurrent(outcome);
+        }
+
+        @Specialization
+        public static void mapMatch(
+                ProtosStructuredPhase phase,
+                PreparedMapMatchCall prepared,
+                Object outcome) {
+            if (phase == ProtosStructuredPhase.HASH) {
+                prepared.acceptHash(outcome);
+                return;
+            }
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                prepared.acceptEquality(outcome);
+                return;
+            }
+            prepared.acceptChildOutcome(outcome);
+        }
+
+        @Specialization
+        public static void ioRelease(
+                ProtosStructuredPhase phase,
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                Object outcome) {
+            if (!(outcome
+                    instanceof ProtosIoReleaseCPrimeExecution.LowerOutcome
+                            lowerOutcome)) {
+                throw new IllegalStateException(
+                        "lifecycle release C-prime lower wait produced an invalid carrier");
+            }
+            sequence.applyOutcome(lowerOutcome);
+        }
+
+        @Specialization
+        public static void mapReadLookup(
+                ProtosStructuredPhase phase,
+                PreparedMapReadLookupCall prepared,
+                Object outcome) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                prepared.acceptEquality(outcome);
+            } else {
+                prepared.acceptHash(outcome);
+            }
+        }
+
+        @Specialization
+        public static void mapInitialDefinition(
+                ProtosStructuredPhase phase,
+                PreparedMapInitialDefinition prepared,
+                Object outcome) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                prepared.acceptEquality(outcome);
+            } else {
+                prepared.acceptHash(outcome);
+            }
+        }
+
+        @Specialization
+        public static void mapAtPut(
+                ProtosStructuredPhase phase,
+                PreparedMapAtPutCall prepared,
+                Object outcome) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                prepared.acceptEquality(outcome);
+            } else {
+                prepared.acceptHash(outcome);
+            }
+        }
+
+        @Specialization
+        public static void mapRemove(
+                ProtosStructuredPhase phase,
+                PreparedMapRemoveCall prepared,
+                Object outcome) {
+            if (phase == ProtosStructuredPhase.EQUALITY) {
+                prepared.acceptEquality(outcome);
+            } else {
+                prepared.acceptHash(outcome);
+            }
+        }
+    }
+
+    /** Produces the protocol's result from its last guest child result. */
+    @Operation
+    public static final class StructuredFinishWithChildResult {
+        @Specialization
+        public static Object booleanCall(PreparedBooleanCall prepared, Object result) {
             return prepared.finishCallback(result);
+        }
+
+        @Specialization
+        public static Object identityMapAtIfAbsent(PreparedIdentityMapAtIfAbsentCall prepared, Object result) {
+            return prepared.finishFallback(result);
+        }
+
+        @Specialization
+        public static Object mapReadLookup(PreparedMapReadLookupCall prepared, Object result) {
+            return prepared.finishFallback(result);
+        }
+
+        @Specialization
+        public static Object standardObject(PreparedStandardObjectCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object standardImport(PreparedStandardImportCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object whileLoop(PreparedWhileCall prepared, Object result) {
+            return prepared.result(result);
+        }
+    }
+
+    /** Produces the protocol's result without a further guest child result. */
+    @Operation
+    public static final class StructuredFinish {
+        @Specialization
+        public static Object localEach(PreparedLocalEachCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object arrayMatch(PreparedArrayMatchCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object foreignEach(ProtosForeignEachCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object identityMapAtIfAbsent(PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.finishPresent();
+        }
+
+        @Specialization
+        public static Object mapMatch(PreparedMapMatchCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object mapReadLookup(PreparedMapReadLookupCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object mapAtPut(PreparedMapAtPutCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object mapRemove(PreparedMapRemoveCall prepared) {
+            return prepared.finish();
+        }
+
+        @Specialization
+        public static Object booleanCall(PreparedBooleanCall prepared) {
+            return prepared.immediateResult();
+        }
+
+        @Specialization
+        public static Object ioRelease(ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.finish();
+        }
+    }
+
+    /**
+     * A structured protocol state transition without a result, by the
+     * builder-fixed phase: {@code STEP} the next each position or Map match
+     * requirement, the end of a Map initial definition, or leaving an error
+     * handler frame; {@code ENTER_COMPARISON}/{@code LEAVE_COMPARISON} a Map
+     * protocol's guest comparison scope.
+     */
+    @Operation
+    @ConstantOperand(type = ProtosStructuredPhase.class, name = "phase")
+    public static final class StructuredAdvance {
+        @Specialization
+        public static void localEach(ProtosStructuredPhase phase, PreparedLocalEachCall prepared) {
+            prepared.advance();
+        }
+
+        @Specialization
+        public static void foreignEach(
+                ProtosStructuredPhase phase,
+                ProtosForeignEachCall prepared) {
+            prepared.advance();
+        }
+
+        @Specialization
+        public static void mapMatch(ProtosStructuredPhase phase, PreparedMapMatchCall prepared) {
+            if (phase == ProtosStructuredPhase.ENTER_COMPARISON) {
+                prepared.enterComparison();
+                return;
+            }
+            if (phase == ProtosStructuredPhase.LEAVE_COMPARISON) {
+                prepared.leaveComparison();
+                return;
+            }
+            prepared.finishRequirement();
+        }
+
+        @Specialization
+        public static void mapInitialDefinition(
+                ProtosStructuredPhase phase,
+                PreparedMapInitialDefinition prepared) {
+            if (phase == ProtosStructuredPhase.ENTER_COMPARISON) {
+                prepared.enterComparison();
+                return;
+            }
+            if (phase == ProtosStructuredPhase.LEAVE_COMPARISON) {
+                prepared.leaveComparison();
+                return;
+            }
+            prepared.finish();
+        }
+
+        @Specialization
+        public static void errorHandler(
+                ProtosStructuredPhase phase,
+                PreparedErrorHandlerCall prepared) {
+            prepared.leave();
+        }
+
+        @Specialization
+        public static void mapReadLookup(
+                ProtosStructuredPhase phase,
+                PreparedMapReadLookupCall prepared) {
+            if (phase == ProtosStructuredPhase.LEAVE_COMPARISON) {
+                prepared.leaveComparison();
+            } else {
+                prepared.enterComparison();
+            }
+        }
+
+        @Specialization
+        public static void mapAtPut(ProtosStructuredPhase phase, PreparedMapAtPutCall prepared) {
+            if (phase == ProtosStructuredPhase.LEAVE_COMPARISON) {
+                prepared.leaveComparison();
+            } else {
+                prepared.enterComparison();
+            }
+        }
+
+        @Specialization
+        public static void mapRemove(ProtosStructuredPhase phase, PreparedMapRemoveCall prepared) {
+            if (phase == ProtosStructuredPhase.LEAVE_COMPARISON) {
+                prepared.leaveComparison();
+            } else {
+                prepared.enterComparison();
+            }
         }
     }
 
@@ -8405,61 +7696,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class PrepareStructuredWhileCall {
-        @Specialization
-        public static PreparedWhileCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredWhile();
-        }
-
-        @Specialization
-        public static PreparedWhileCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredWhile();
-        }
-
-        @Specialization
-        public static PreparedWhileCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredWhile();
-        }
-
-        @Specialization
-        public static PreparedWhileCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredWhile();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredWhileConditionCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
-            return prepared.prepareCondition();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredWhileBodyCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
-            return prepared.prepareBody();
-        }
-    }
-
-    @Operation
-    public static final class PrepareInlineStructuredWhileConditionCall {
-        @Specialization
-        public static PreparedInlineLiteralCall perform(PreparedWhileCall prepared) {
-            return prepared.prepareInlineCondition();
-        }
-    }
-
-    @Operation
-    public static final class PrepareInlineStructuredWhileBodyCall {
-        @Specialization
-        public static PreparedInlineLiteralCall perform(PreparedWhileCall prepared) {
-            return prepared.prepareInlineBody();
-        }
-    }
-
-    @Operation
     public static final class StructuredWhileCondition {
         @Specialization
         public static boolean perform(PreparedWhileCall prepared, Object result) {
@@ -8475,35 +7711,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** Admits the inline literal while condition, or with {@code body} its body. */
     @Operation
-    public static final class StructuredWhileResult {
-        @Specialization
-        public static Object perform(PreparedWhileCall prepared, Object lastBodyResult) {
-            return prepared.result(lastBodyResult);
-        }
-    }
-
-    @Operation
-    public static final class AdmitsInlineLiteralWhileCondition {
+    @ConstantOperand(type = boolean.class, name = "body")
+    public static final class AdmitsInlineLiteralWhileChild {
         @Specialization
         public static boolean perform(
+                boolean body,
                 PreparedWhileCall prepared,
                 PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
-            return prepared.admitsInlineLiteralCondition(child, literal, literalPlan);
-        }
-    }
-
-    @Operation
-    public static final class AdmitsInlineLiteralWhileBody {
-        @Specialization
-        public static boolean perform(
-                PreparedWhileCall prepared,
-                PreparedInlineLiteralCall child,
-                Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return prepared.admitsInlineLiteralBody(child, literal, literalPlan);
+            return body
+                    ? prepared.admitsInlineLiteralBody(child, literal, literalPlan)
+                    : prepared.admitsInlineLiteralCondition(child, literal, literalPlan);
         }
     }
 
@@ -8518,197 +7739,47 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     // activation stay owned by the prepared each calls of
     // ProtosStructuredEachCalls.
 
-    @Operation
-    public static final class AdmitsInlineLiteralIndexedEach {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralIndexedEach(callback);
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralIndexedEach(callback);
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralIndexedEach(callback);
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(
-                ModuleInitializationCall prepared,
-                Object callback) {
-            return prepared.admitsInlineLiteralIndexedEach(callback);
-        }
-    }
-
     /**
-     * Reached only after {@link AdmitsInlineLiteralIndexedEach}, so exactly
-     * one of the two standard capabilities was selected; the ordinary
-     * structured preparation of that capability runs unchanged.
+     * Admits a one-parameter (indexed) inline literal each, or with
+     * {@code twoParameter} a two-parameter (association/environment) one.
      */
     @Operation
-    public static final class PrepareStructuredIndexedEachCall {
+    @ConstantOperand(type = boolean.class, name = "twoParameter")
+    public static final class AdmitsInlineLiteralEach {
         @Specialization
-        public static PreparedIndexedEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredArrayEach()
-                    ? PrepareStructuredArrayEachCall.ordinary(prepared)
-                    : PrepareStructuredBytesEachCall.ordinary(prepared);
-        }
-
-        @Specialization
-        public static PreparedIndexedEachCall nativeCall(NativeCall prepared) {
-            return prepared.isStructuredArrayEach()
-                    ? PrepareStructuredArrayEachCall.nativeCall(prepared)
-                    : PrepareStructuredBytesEachCall.nativeCall(prepared);
-        }
-
-        @Specialization
-        public static PreparedIndexedEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredArrayEach()
-                    ? PrepareStructuredArrayEachCall.immediate(prepared)
-                    : PrepareStructuredBytesEachCall.immediate(prepared);
-        }
-
-        @Specialization
-        public static PreparedIndexedEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.isStructuredArrayEach()
-                    ? PrepareStructuredArrayEachCall
-                            .moduleInitialization(prepared)
-                    : PrepareStructuredBytesEachCall
-                            .moduleInitialization(prepared);
-        }
-    }
-
-    @Operation
-    public static final class AdmitsInlineLiteralTwoParameterEach {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralAssociationEach(callback)
-                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralAssociationEach(callback)
-                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralAssociationEach(callback)
-                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(
-                ModuleInitializationCall prepared,
-                Object callback) {
-            return prepared.admitsInlineLiteralAssociationEach(callback)
-                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
-        }
-    }
-
-    /**
-     * Reached only after {@link AdmitsInlineLiteralTwoParameterEach}, so
-     * exactly one of the three standard capabilities was selected; the
-     * ordinary structured preparation of that capability runs unchanged. For
-     * Environment.each that preparation still validates callability, then
-     * converts, validates and canonically orders the complete portable
-     * snapshot before any callback child exists.
-     */
-    @Operation
-    public static final class PrepareStructuredTwoParameterEachCall {
-        @Specialization
-        public static PreparedLocalEachCall ordinary(OrdinarySourceCall prepared) {
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall
-                        .ordinary(prepared);
+        public static boolean ordinary(boolean twoParameter, OrdinarySourceCall prepared, Object callback) {
+            if (twoParameter) {
+                return prepared.admitsInlineLiteralAssociationEach(callback)
+                        || prepared.admitsInlineLiteralEnvironmentEach(callback);
             }
-            return prepared.isStructuredMapEach()
-                    ? PrepareStructuredMapEachCall.ordinary(prepared)
-                    : PrepareStructuredIdentityMapEachCall
-                            .ordinary(prepared);
+            return prepared.admitsInlineLiteralIndexedEach(callback);
         }
 
         @Specialization
-        public static PreparedLocalEachCall nativeCall(NativeCall prepared) {
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall
-                        .nativeCall(prepared);
+        public static boolean nativeCall(boolean twoParameter, NativeCall prepared, Object callback) {
+            if (twoParameter) {
+                return prepared.admitsInlineLiteralAssociationEach(callback)
+                        || prepared.admitsInlineLiteralEnvironmentEach(callback);
             }
-            return prepared.isStructuredMapEach()
-                    ? PrepareStructuredMapEachCall.nativeCall(prepared)
-                    : PrepareStructuredIdentityMapEachCall
-                            .nativeCall(prepared);
+            return prepared.admitsInlineLiteralIndexedEach(callback);
         }
 
         @Specialization
-        public static PreparedLocalEachCall immediate(ImmediateResultCall prepared) {
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall
-                        .immediate(prepared);
+        public static boolean immediate(boolean twoParameter, ImmediateResultCall prepared, Object callback) {
+            if (twoParameter) {
+                return prepared.admitsInlineLiteralAssociationEach(callback)
+                        || prepared.admitsInlineLiteralEnvironmentEach(callback);
             }
-            return prepared.isStructuredMapEach()
-                    ? PrepareStructuredMapEachCall.immediate(prepared)
-                    : PrepareStructuredIdentityMapEachCall
-                            .immediate(prepared);
+            return prepared.admitsInlineLiteralIndexedEach(callback);
         }
 
         @Specialization
-        public static PreparedLocalEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall
-                        .moduleInitialization(prepared);
+        public static boolean moduleInitialization(boolean twoParameter, ModuleInitializationCall prepared, Object callback) {
+            if (twoParameter) {
+                return prepared.admitsInlineLiteralAssociationEach(callback)
+                        || prepared.admitsInlineLiteralEnvironmentEach(callback);
             }
-            return prepared.isStructuredMapEach()
-                    ? PrepareStructuredMapEachCall
-                            .moduleInitialization(prepared)
-                    : PrepareStructuredIdentityMapEachCall
-                            .moduleInitialization(prepared);
-        }
-    }
-
-    @Operation
-    public static final class StructuredLocalEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedLocalEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredLocalEachChildCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedLocalEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class PrepareInlineStructuredLocalEachChildCall {
-        @Specialization
-        public static PreparedInlineLiteralCall perform(PreparedLocalEachCall prepared) {
-            return prepared.prepareInlineCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredLocalEach {
-        @Specialization
-        public static void perform(PreparedLocalEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredLocalEach {
-        @Specialization
-        public static Object perform(PreparedLocalEachCall prepared) {
-            return prepared.finish();
+            return prepared.admitsInlineLiteralIndexedEach(callback);
         }
     }
 
@@ -8724,24 +7795,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    /**
-     * The callback's fresh semantic activation, materialized from the region's
-     * carrier by the first operation that needs it and shared, by identity,
-     * with every later operation and tooling query of the same invocation.
-     */
+    /** The inline literal call's entry activation, or with {@code fallbackCall} its fallback call. */
     @Operation
-    public static final class LoadInlineCallbackActivation {
+    @ConstantOperand(type = boolean.class, name = "fallbackCall")
+    public static final class LoadInlineLiteralCallPart {
         @Specialization
-        public static ProtosActivation perform(PreparedInlineLiteralCall child) {
-            return child.activation();
-        }
-    }
-
-    @Operation
-    public static final class LoadInlineLiteralFallbackCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedInlineLiteralCall child) {
-            return child.fallbackCall();
+        public static Object perform(boolean fallbackCall, PreparedInlineLiteralCall child) {
+            return fallbackCall ? child.fallbackCall() : child.activation();
         }
     }
 
@@ -8763,6 +7823,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             prepared.complete();
         }
 
+        /** I113 (former CompleteIfTrueSiteOuter): an ifTrue site that owns no outer call. */
+        @Specialization
+        public static void none(ProtosNullValue outer) {
+            // No outer call owned by this site.
+        }
 
         @Specialization
         public static void nativeCall(NativeCall prepared) {
@@ -8851,25 +7916,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * The proof excludes suspension and an owned materialized
      * ReturnHome. Unknown and native calls preserve the full path.
      */
-    @Operation
     public static final class AdmitsStraightLineSourceCall {
-        @Specialization
         public static boolean perform(OrdinarySourceCall prepared) {
             return prepared.provablyNonSuspending()
                     && !prepared.hasReturnHomeLifecycle();
         }
-
-        @Specialization
         public static boolean nativeCall(NativeCall prepared) {
             return false;
         }
-
-        @Specialization
         public static boolean immediate(ImmediateResultCall prepared) {
             return false;
         }
-
-        @Specialization
         public static boolean moduleInitialization(
                 ModuleInitializationCall prepared) {
             return false;
@@ -9079,10 +8136,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * carrier is returned as is only to a fused direct source send that
      * accepts it; every other caller receives the guest value.
      */
-    @Operation
     public static final class MaterializeReturnCarrier {
-        @Specialization
-        public static Object perform(Object value, @Bind VirtualFrame frame) {
+        public static Object perform(Object value, VirtualFrame frame) {
             if (ProtosNumericValueSupport.isPrimitiveCarrier(value)
                     && ProtosFrameArguments.acceptsPrimitiveResult(frame.getArguments())) {
                 return value;
@@ -9092,16 +8147,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class IsPrimitiveNumericSendMiss {
-        @Specialization
-        public static boolean perform(Object value) {
-            return value == ProtosPrimitiveNumericSendFastPathsBase.MISS;
-        }
-    }
-
-    @Operation
     public static final class TryDirectSendOne {
-        private static final Object MISS = new Object();
+        static final Object MISS = new Object();
 
         @Specialization(
                 guards = {
@@ -9198,7 +8245,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosPrelude prelude,
                 ProtosLanguageContext enteredContext) {
-            return PrepareSendArguments
+            return ProtosGuardedSendSelection
                     .createGuardedSendForPrelude(
                             receiver, selector, prelude, enteredContext);
         }
@@ -9424,7 +8471,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || admittedInstanceOrNull(receiver, caller) != closure) {
                 return null;
             }
-            return PrepareSendArguments
+            return ProtosGuardedSendSelection
                     .fastOrdinarySendTarget(closure, enteredContext);
         }
 
@@ -9912,7 +8959,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * This root's own caller reference (see {@link CurrentCallerReference}):
+         * This root's own caller reference (see {@link CurrentActivation}):
          * the published activation, or the still-compact frame arguments.
          */
         @NonIdempotent
@@ -10305,6 +9352,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int bytecodeIndex) {
             return ProtosTailCallContinuation.executeTerminalPreparedCall(
                     PrepareClosureCallArguments.perform(
+                            false,
                             ProtosNumericValueSupport.guestValue(receiver),
                             caller,
                             supplied),
@@ -10352,29 +9400,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
-        }
-    }
-
-    /*
-     * I108-A: only a prepared invocation requires caller-side
-     * Bytecode DSL control composition. Direct invocation results
-     * remain ordinary guest values, without a wrapper allocation.
-     * PreparedClosureCall is an internal runtime interface and
-     * cannot be produced as a guest-language result.
-     */
-    @Operation
-    public static final class IsPreparedClosureInvocation {
-        @Specialization
-        public static boolean perform(Object result) {
-            return result instanceof PreparedClosureCall;
-        }
-    }
-
-    @Operation
-    public static final class IsDirectSendMiss {
-        @Specialization
-        public static boolean perform(Object result) {
-            return result == TryDirectSendOne.MISS;
         }
     }
 
@@ -10505,29 +9530,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    @Operation
+    /**
+     * I113: the continuation classification shared by
+     * {@code IsResultKind[CONTINUATION]} and {@link IsContinuationForCall}.
+     * Plain Java helpers; no longer a registered operation.
+     */
     public static final class IsContinuation {
-        /*
-         * PERF038-F: an ordinary call site observes a small, stable set of
-         * result classes, none of them a continuation. Profiling the exact
-         * result class replaces the four suspension type tests of every
-         * ordinary result with one class comparison; the answer is decided
-         * once per class from the same type tests, so continuation results
-         * keep their resumption path unchanged. A site seeing more classes
-         * than the limit (and the uncached interpreter) takes the generic
-         * form.
-         */
-        @Specialization(
-                guards = {"value != null", "value.getClass() == cachedClass"},
-                limit = "3")
-        public static boolean classProfiled(
-                Object value,
-                @Cached("value.getClass()") Class<?> cachedClass,
-                @Cached("isContinuationClass(cachedClass)") boolean continuation) {
-            return continuation;
-        }
-
-        @Specialization(replaces = "classProfiled")
         public static boolean perform(Object value) {
             /*
              * A native suspension is the leaf request. Yielding it from this
@@ -10756,6 +9764,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    @ConstantOperand(type = boolean.class, name = "projectGuestBoundary")
     public static final class FinishClosureCall {
         /*
          * PERF038-E: an ordinary source call that owns no materialized return
@@ -10764,69 +9773,49 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * finished such calls compiles neither the lifecycle test nor the
          * completion. The guard reads a final carrier field on every
          * execution; the lifecycle form keeps the unchanged completion.
+         *
+         * I113: {@code projectGuestBoundary} (builder-fixed, the former
+         * FinishCPrimeClosureCall) always takes the completion, whose I101-B
+         * guest-boundary projection a structured/C-prime result requires.
          */
-        @Specialization(guards = "!prepared.hasReturnHomeLifecycle()")
+        @Specialization(guards = {"!projectGuestBoundary", "!prepared.hasReturnHomeLifecycle()"})
         public static Object ordinaryWithoutHomeLifecycle(
-                OrdinarySourceCall prepared, Object result) {
+                boolean projectGuestBoundary, OrdinarySourceCall prepared, Object result) {
             return result;
         }
 
-        @Specialization(guards = "prepared.hasReturnHomeLifecycle()")
-        public static Object ordinary(OrdinarySourceCall prepared, Object result) {
+        @Specialization(guards = "completes(projectGuestBoundary, prepared)")
+        public static Object ordinary(
+                boolean projectGuestBoundary, OrdinarySourceCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        /**
+         * The disjunction of the two guards above (the DSL guard language has no
+         * {@code ||}): a guest-boundary projection or an owned lifecycle.
+         */
+        static boolean completes(boolean projectGuestBoundary, OrdinarySourceCall prepared) {
+            return projectGuestBoundary || prepared.hasReturnHomeLifecycle();
+        }
+
+        @Specialization
+        public static Object nativeCall(
+                boolean projectGuestBoundary, NativeCall prepared, Object result) {
             return prepared.finish(result);
         }
 
         @Specialization
-        public static Object nativeCall(NativeCall prepared, Object result) {
-            return prepared.finish(result);
-        }
-
-        @Specialization
-        public static Object immediate(ImmediateResultCall prepared, Object result) {
+        public static Object immediate(
+                boolean projectGuestBoundary, ImmediateResultCall prepared, Object result) {
             return prepared.finish(result);
         }
 
         @Specialization
         public static Object moduleInitialization(
+                boolean projectGuestBoundary,
                 ModuleInitializationCall prepared,
                 Object result) {
             return prepared.finish(result);
-        }
-    }
-
-    /**
-     * I111-B: the result completion of a prepared invocation in an auxiliary
-     * structured-dispatch or I/O C-prime root. Unlike {@link
-     * FinishClosureCall}, whose no-lifecycle ordinary form leaves a primitive
-     * carrier to the consumers and return epilogue of a semantic root, every
-     * form here applies the prepared call's complete finish, including the
-     * I101-B guest-boundary projection, because these roots hand the result
-     * to protocol code. It is exactly the former structured/C-prime
-     * interpreter's {@code FinishClosureCall}.
-     */
-    @Operation
-    public static final class FinishCPrimeClosureCall {
-        @Specialization
-        public static Object ordinary(OrdinarySourceCall prepared, Object result) {
-            return FinishClosureCall.ordinary(prepared, result);
-        }
-
-        @Specialization
-        public static Object nativeCall(NativeCall prepared, Object result) {
-            return FinishClosureCall.nativeCall(prepared, result);
-        }
-
-        @Specialization
-        public static Object immediate(ImmediateResultCall prepared, Object result) {
-            return FinishClosureCall.immediate(prepared, result);
-        }
-
-        @Specialization
-        public static Object moduleInitialization(
-                ModuleInitializationCall prepared,
-                Object result) {
-            return FinishClosureCall.moduleInitialization(
-                    prepared, result);
         }
     }
 
@@ -10836,1593 +9825,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * auxiliary roots (ProtosStructuredDispatchLowerer, the Task C-prime
      * entry plan and the I/O C-prime executions).
      */
-
-    @Operation
-    public static final class IsStructuredCaseOfCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredCaseOf();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredCaseOf();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredCaseOf();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredCaseOf();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredCaseOfCall {
-        @Specialization
-        public static PreparedCaseOfCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredCaseOf();
-        }
-
-        @Specialization
-        public static PreparedCaseOfCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredCaseOf();
-        }
-
-        @Specialization
-        public static PreparedCaseOfCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredCaseOf();
-        }
-
-        @Specialization
-        public static PreparedCaseOfCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredCaseOf();
-        }
-    }
-
-    @Operation
-    public static final class StructuredCaseOfNeedsMatcher {
-        @Specialization
-        public static boolean perform(PreparedCaseOfCall prepared) {
-            return prepared.needsMatcher();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredCaseOfMatcherCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedCaseOfCall prepared) {
-            return prepared.prepareMatcher();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredCaseOfMatcherOutcome {
-        @Specialization
-        public static void perform(
-                PreparedCaseOfCall prepared,
-                Object outcome) {
-            prepared.acceptMatcher(outcome);
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredCaseOfActionCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedCaseOfCall prepared) {
-            return prepared.prepareSelectedAction();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredObjectCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredObjectCall();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredObjectCall();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredObjectCall();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredObjectCall();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredObjectCall {
-        @Specialization
-        public static PreparedStandardObjectCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredObjectCall();
-        }
-
-        @Specialization
-        public static PreparedStandardObjectCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredObjectCall();
-        }
-
-        @Specialization
-        public static PreparedStandardObjectCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredObjectCall();
-        }
-
-        @Specialization
-        public static PreparedStandardObjectCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredObjectCall();
-        }
-    }
-
-    @Operation
-    public static final class LoadStructuredObjectCallChild {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedStandardObjectCall prepared) {
-            return prepared.child();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredObjectCall {
-        @Specialization
-        public static Object perform(
-                PreparedStandardObjectCall prepared,
-                Object childResult) {
-            return prepared.finish(childResult);
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredImportCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredImportCall();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredImportCall();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredImportCall();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredImportCall();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredImportCall {
-        @Specialization
-        public static PreparedStandardImportCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredImportCall();
-        }
-
-        @Specialization
-        public static PreparedStandardImportCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredImportCall();
-        }
-
-        @Specialization
-        public static PreparedStandardImportCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredImportCall();
-        }
-
-        @Specialization
-        public static PreparedStandardImportCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredImportCall();
-        }
-    }
-
-    @Operation
-    public static final class LoadStructuredImportCallChild {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedStandardImportCall prepared) {
-            return prepared.child();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredImportCall {
-        @Specialization
-        public static Object perform(
-                PreparedStandardImportCall prepared,
-                Object childResult) {
-            return prepared.finish(childResult);
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredEnsureCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredEnsure();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredEnsure();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredEnsure();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredEnsure();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredEnsureCall {
-        @Specialization
-        public static PreparedEnsureCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredEnsure();
-        }
-
-        @Specialization
-        public static PreparedEnsureCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredEnsure();
-        }
-
-        @Specialization
-        public static PreparedEnsureCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredEnsure();
-        }
-
-        @Specialization
-        public static PreparedEnsureCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredEnsure();
-        }
-    }
-
-    @Operation
-    public static final class LoadStructuredEnsureBodyCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedEnsureCall prepared) {
-            return prepared.body();
-        }
-    }
-
-    @Operation
-    public static final class LoadStructuredEnsureCleanupCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedEnsureCall prepared) {
-            return prepared.cleanup();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredWhileCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredWhile();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredWhile();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredWhile();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredWhile();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredLocalEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return isStandardLocalEach(prepared);
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return isStandardLocalEach(prepared);
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return isStandardLocalEach(prepared);
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return isStandardLocalEach(prepared);
-        }
-
-        private static boolean isStandardLocalEach(
-                PreparedClosureCall prepared) {
-            return prepared.isStructuredArrayEach()
-                    || prepared.isStructuredBytesEach()
-                    || prepared.isStructuredEnvironmentEach()
-                    || prepared.isStructuredIdentityMapEach()
-                    || prepared.isStructuredMapEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredLocalEachCall {
-        @Specialization
-        public static PreparedLocalEachCall ordinary(
-                OrdinarySourceCall prepared) {
-            if (prepared.isStructuredArrayEach()) {
-                return PrepareStructuredArrayEachCall.ordinary(prepared);
-            }
-            if (prepared.isStructuredBytesEach()) {
-                return PrepareStructuredBytesEachCall.ordinary(prepared);
-            }
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall.ordinary(prepared);
-            }
-            if (prepared.isStructuredIdentityMapEach()) {
-                return PrepareStructuredIdentityMapEachCall.ordinary(prepared);
-            }
-            if (prepared.isStructuredMapEach()) {
-                return PrepareStructuredMapEachCall.ordinary(prepared);
-            }
-            throw new IllegalStateException(
-                    "Not a structured local each call");
-        }
-
-        @Specialization
-        public static PreparedLocalEachCall nativeCall(
-                NativeCall prepared) {
-            if (prepared.isStructuredArrayEach()) {
-                return PrepareStructuredArrayEachCall.nativeCall(prepared);
-            }
-            if (prepared.isStructuredBytesEach()) {
-                return PrepareStructuredBytesEachCall.nativeCall(prepared);
-            }
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall.nativeCall(prepared);
-            }
-            if (prepared.isStructuredIdentityMapEach()) {
-                return PrepareStructuredIdentityMapEachCall.nativeCall(prepared);
-            }
-            if (prepared.isStructuredMapEach()) {
-                return PrepareStructuredMapEachCall.nativeCall(prepared);
-            }
-            throw new IllegalStateException(
-                    "Not a structured local each call");
-        }
-
-        @Specialization
-        public static PreparedLocalEachCall immediate(
-                ImmediateResultCall prepared) {
-            if (prepared.isStructuredArrayEach()) {
-                return PrepareStructuredArrayEachCall.immediate(prepared);
-            }
-            if (prepared.isStructuredBytesEach()) {
-                return PrepareStructuredBytesEachCall.immediate(prepared);
-            }
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall.immediate(prepared);
-            }
-            if (prepared.isStructuredIdentityMapEach()) {
-                return PrepareStructuredIdentityMapEachCall.immediate(prepared);
-            }
-            if (prepared.isStructuredMapEach()) {
-                return PrepareStructuredMapEachCall.immediate(prepared);
-            }
-            throw new IllegalStateException(
-                    "Not a structured local each call");
-        }
-
-        @Specialization
-        public static PreparedLocalEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            if (prepared.isStructuredArrayEach()) {
-                return PrepareStructuredArrayEachCall.moduleInitialization(prepared);
-            }
-            if (prepared.isStructuredBytesEach()) {
-                return PrepareStructuredBytesEachCall.moduleInitialization(prepared);
-            }
-            if (prepared.isStructuredEnvironmentEach()) {
-                return PrepareStructuredEnvironmentEachCall.moduleInitialization(prepared);
-            }
-            if (prepared.isStructuredIdentityMapEach()) {
-                return PrepareStructuredIdentityMapEachCall.moduleInitialization(prepared);
-            }
-            if (prepared.isStructuredMapEach()) {
-                return PrepareStructuredMapEachCall.moduleInitialization(prepared);
-            }
-            throw new IllegalStateException(
-                    "Not a structured local each call");
-        }
-
-    }
-
-    @Operation
-    public static final class IsStructuredArrayEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredArrayEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredArrayEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredArrayEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredArrayEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredArrayEachCall {
-        @Specialization
-        public static PreparedArrayEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredArrayEach();
-        }
-
-        @Specialization
-        public static PreparedArrayEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredArrayEach();
-        }
-
-        @Specialization
-        public static PreparedArrayEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredArrayEach();
-        }
-
-        @Specialization
-        public static PreparedArrayEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredArrayEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredArrayEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedArrayEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredArrayEachElementCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedArrayEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredArrayEach {
-        @Specialization
-        public static void perform(PreparedArrayEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredArrayEach {
-        @Specialization
-        public static Object perform(PreparedArrayEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredArrayMatchCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredArrayMatch();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredArrayMatchCall {
-        @Specialization
-        public static PreparedArrayMatchCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static PreparedArrayMatchCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static PreparedArrayMatchCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredArrayMatch();
-        }
-
-        @Specialization
-        public static PreparedArrayMatchCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredArrayMatch();
-        }
-    }
-
-    @Operation
-    public static final class StructuredArrayMatchHasNext {
-        @Specialization
-        public static boolean perform(PreparedArrayMatchCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredArrayMatchElementCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedArrayMatchCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredArrayMatchOutcome {
-        @Specialization
-        public static void perform(
-                PreparedArrayMatchCall prepared,
-                Object outcome) {
-            prepared.acceptCurrent(outcome);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredArrayMatch {
-        @Specialization
-        public static Object perform(PreparedArrayMatchCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredBytesEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredBytesEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredBytesEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredBytesEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredBytesEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredBytesEachCall {
-        @Specialization
-        public static PreparedBytesEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredBytesEach();
-        }
-
-        @Specialization
-        public static PreparedBytesEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredBytesEach();
-        }
-
-        @Specialization
-        public static PreparedBytesEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredBytesEach();
-        }
-
-        @Specialization
-        public static PreparedBytesEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredBytesEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredBytesEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedBytesEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredBytesEachElementCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedBytesEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredBytesEach {
-        @Specialization
-        public static void perform(PreparedBytesEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredBytesEach {
-        @Specialization
-        public static Object perform(PreparedBytesEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredEnvironmentEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredEnvironmentEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredEnvironmentEachCall {
-        @Specialization
-        public static PreparedEnvironmentEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static PreparedEnvironmentEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static PreparedEnvironmentEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredEnvironmentEach();
-        }
-
-        @Specialization
-        public static PreparedEnvironmentEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredEnvironmentEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredEnvironmentEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedEnvironmentEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredEnvironmentEachEntryCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedEnvironmentEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredEnvironmentEach {
-        @Specialization
-        public static void perform(PreparedEnvironmentEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredEnvironmentEach {
-        @Specialization
-        public static Object perform(PreparedEnvironmentEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredForeignEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredForeignEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredForeignEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredForeignEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredForeignEach();
-        }
-    }
-
-    /**
-     * D188 projected foreign {@code each}: the cursor validates the receiver, arity and block
-     * callability before any foreign operation; the provider iterator is acquired lazily by the
-     * first {@link StructuredForeignEachHasNext}.
-     */
-    @Operation
-    public static final class PrepareStructuredForeignEachCall {
-        @Specialization
-        public static ProtosForeignEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredForeignEach();
-        }
-
-        @Specialization
-        public static ProtosForeignEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredForeignEach();
-        }
-
-        @Specialization
-        public static ProtosForeignEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredForeignEach();
-        }
-
-        @Specialization
-        public static ProtosForeignEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredForeignEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredForeignEachHasNext {
-        @Specialization
-        public static boolean perform(ProtosForeignEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    /** Pulls and admits one element, then prepares the ordinary invocation of the block. */
-    @Operation
-    public static final class PrepareStructuredForeignEachElementCall {
-        @Specialization
-        public static PreparedClosureCall perform(ProtosForeignEachCall prepared) {
-            return ProtosClosureCallPreparation.prepareClosureCall(
-                    prepared.callback(), List.of(prepared.current()), prepared.activation());
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredForeignEach {
-        @Specialization
-        public static void perform(ProtosForeignEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredForeignEach {
-        @Specialization
-        public static Object perform(ProtosForeignEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredIdentityMapAtIfAbsentCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredIdentityMapAtIfAbsent();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredIdentityMapAtIfAbsentCall {
-        @Specialization
-        public static PreparedIdentityMapAtIfAbsentCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapAtIfAbsentCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapAtIfAbsentCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredIdentityMapAtIfAbsent();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapAtIfAbsentCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredIdentityMapAtIfAbsent();
-        }
-    }
-
-    @Operation
-    public static final class StructuredIdentityMapAtIfAbsentNeedsFallback {
-        @Specialization
-        public static boolean perform(
-                PreparedIdentityMapAtIfAbsentCall prepared) {
-            return prepared.needsFallback();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredIdentityMapAtIfAbsentFallbackCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedIdentityMapAtIfAbsentCall prepared) {
-            return prepared.prepareFallback();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredIdentityMapAtIfAbsentFallback {
-        @Specialization
-        public static Object perform(
-                PreparedIdentityMapAtIfAbsentCall prepared,
-                Object result) {
-            return prepared.finishFallback(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredIdentityMapAtIfAbsentPresent {
-        @Specialization
-        public static Object perform(
-                PreparedIdentityMapAtIfAbsentCall prepared) {
-            return prepared.finishPresent();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredIdentityMapEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredIdentityMapEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredIdentityMapEachCall {
-        @Specialization
-        public static PreparedIdentityMapEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredIdentityMapEach();
-        }
-
-        @Specialization
-        public static PreparedIdentityMapEachCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredIdentityMapEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredIdentityMapEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedIdentityMapEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredIdentityMapEachEntryCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedIdentityMapEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredIdentityMapEach {
-        @Specialization
-        public static void perform(PreparedIdentityMapEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredIdentityMapEach {
-        @Specialization
-        public static Object perform(PreparedIdentityMapEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredMapMatchCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredMapMatch();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredMapMatch();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredMapMatch();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredMapMatch();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapMatchCall {
-        @Specialization
-        public static PreparedMapMatchCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredMapMatch();
-        }
-
-        @Specialization
-        public static PreparedMapMatchCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredMapMatch();
-        }
-
-        @Specialization
-        public static PreparedMapMatchCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredMapMatch();
-        }
-
-        @Specialization
-        public static PreparedMapMatchCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredMapMatch();
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapMatchHasRequirement {
-        @Specialization
-        public static boolean perform(PreparedMapMatchCall prepared) {
-            return prepared.hasRequirement();
-        }
-    }
-
-    @Operation
-    public static final class EnterStructuredMapMatchComparison {
-        @Specialization
-        public static void perform(PreparedMapMatchCall prepared) {
-            prepared.enterComparison();
-        }
-    }
-
-    @Operation
-    public static final class LeaveStructuredMapMatchComparison {
-        @Specialization
-        public static void perform(PreparedMapMatchCall prepared) {
-            prepared.leaveComparison();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapMatchHashCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedMapMatchCall prepared) {
-            return prepared.prepareHash();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapMatchHashResult {
-        @Specialization
-        public static void perform(
-                PreparedMapMatchCall prepared,
-                Object result) {
-            prepared.acceptHash(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapMatchNeedsEquality {
-        @Specialization
-        public static boolean perform(PreparedMapMatchCall prepared) {
-            return prepared.needsEquality();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapMatchEqualityCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedMapMatchCall prepared) {
-            return prepared.prepareEquality();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapMatchEqualityResult {
-        @Specialization
-        public static void perform(
-                PreparedMapMatchCall prepared,
-                Object result) {
-            prepared.acceptEquality(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapMatchRequirement {
-        @Specialization
-        public static void perform(PreparedMapMatchCall prepared) {
-            prepared.finishRequirement();
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapMatchHasChildMatcher {
-        @Specialization
-        public static boolean perform(PreparedMapMatchCall prepared) {
-            return prepared.hasChildMatcher();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapMatchChildCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedMapMatchCall prepared) {
-            return prepared.prepareChildMatcher();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapMatchChildOutcome {
-        @Specialization
-        public static void perform(
-                PreparedMapMatchCall prepared,
-                Object outcome) {
-            prepared.acceptChildOutcome(outcome);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapMatch {
-        @Specialization
-        public static Object perform(PreparedMapMatchCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredMapReadLookupCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredMapReadLookup();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapReadLookupCall {
-        @Specialization
-        public static PreparedMapReadLookupCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static PreparedMapReadLookupCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static PreparedMapReadLookupCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredMapReadLookup();
-        }
-
-        @Specialization
-        public static PreparedMapReadLookupCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredMapReadLookup();
-        }
-    }
-
-    @Operation
-    public static final class EnterStructuredMapReadLookupComparison {
-        @Specialization
-        public static void perform(PreparedMapReadLookupCall prepared) {
-            prepared.enterComparison();
-        }
-    }
-
-    @Operation
-    public static final class LeaveStructuredMapReadLookupComparison {
-        @Specialization
-        public static void perform(PreparedMapReadLookupCall prepared) {
-            prepared.leaveComparison();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapReadLookupHashCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapReadLookupCall prepared) {
-            return prepared.prepareHash();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapReadLookupHashResult {
-        @Specialization
-        public static void perform(PreparedMapReadLookupCall prepared, Object result) {
-            prepared.acceptHash(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapReadLookupNeedsEquality {
-        @Specialization
-        public static boolean perform(PreparedMapReadLookupCall prepared) {
-            return prepared.needsEquality();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapReadLookupEqualityCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapReadLookupCall prepared) {
-            return prepared.prepareEquality();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapReadLookupEqualityResult {
-        @Specialization
-        public static void perform(PreparedMapReadLookupCall prepared, Object result) {
-            prepared.acceptEquality(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapReadLookupNeedsFallback {
-        @Specialization
-        public static boolean perform(PreparedMapReadLookupCall prepared) {
-            return prepared.needsFallback();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapReadLookupFallbackCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                PreparedMapReadLookupCall prepared) {
-            return prepared.prepareFallback();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapReadLookupFallback {
-        @Specialization
-        public static Object perform(
-                PreparedMapReadLookupCall prepared,
-                Object result) {
-            return prepared.finishFallback(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapReadLookup {
-        @Specialization
-        public static Object perform(PreparedMapReadLookupCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredMapAtPutCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredMapAtPut();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapAtPutCall {
-        @Specialization
-        public static PreparedMapAtPutCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static PreparedMapAtPutCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static PreparedMapAtPutCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredMapAtPut();
-        }
-
-        @Specialization
-        public static PreparedMapAtPutCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredMapAtPut();
-        }
-    }
-
-    @Operation
-    public static final class EnterStructuredMapAtPutComparison {
-        @Specialization
-        public static void perform(PreparedMapAtPutCall prepared) {
-            prepared.enterComparison();
-        }
-    }
-
-    @Operation
-    public static final class LeaveStructuredMapAtPutComparison {
-        @Specialization
-        public static void perform(PreparedMapAtPutCall prepared) {
-            prepared.leaveComparison();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapAtPutHashCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapAtPutCall prepared) {
-            return prepared.prepareHash();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapAtPutHashResult {
-        @Specialization
-        public static void perform(PreparedMapAtPutCall prepared, Object result) {
-            prepared.acceptHash(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapAtPutNeedsEquality {
-        @Specialization
-        public static boolean perform(PreparedMapAtPutCall prepared) {
-            return prepared.needsEquality();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapAtPutEqualityCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapAtPutCall prepared) {
-            return prepared.prepareEquality();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapAtPutEqualityResult {
-        @Specialization
-        public static void perform(PreparedMapAtPutCall prepared, Object result) {
-            prepared.acceptEquality(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapAtPut {
-        @Specialization
-        public static Object perform(PreparedMapAtPutCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredMapRemoveCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredMapRemove();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredMapRemove();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredMapRemove();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredMapRemove();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapRemoveCall {
-        @Specialization
-        public static PreparedMapRemoveCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredMapRemove();
-        }
-
-        @Specialization
-        public static PreparedMapRemoveCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredMapRemove();
-        }
-
-        @Specialization
-        public static PreparedMapRemoveCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredMapRemove();
-        }
-
-        @Specialization
-        public static PreparedMapRemoveCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredMapRemove();
-        }
-    }
-
-    @Operation
-    public static final class EnterStructuredMapRemoveComparison {
-        @Specialization
-        public static void perform(PreparedMapRemoveCall prepared) {
-            prepared.enterComparison();
-        }
-    }
-
-    @Operation
-    public static final class LeaveStructuredMapRemoveComparison {
-        @Specialization
-        public static void perform(PreparedMapRemoveCall prepared) {
-            prepared.leaveComparison();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapRemoveHashCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapRemoveCall prepared) {
-            return prepared.prepareHash();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapRemoveHashResult {
-        @Specialization
-        public static void perform(PreparedMapRemoveCall prepared, Object result) {
-            prepared.acceptHash(result);
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapRemoveNeedsEquality {
-        @Specialization
-        public static boolean perform(PreparedMapRemoveCall prepared) {
-            return prepared.needsEquality();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapRemoveEqualityCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapRemoveCall prepared) {
-            return prepared.prepareEquality();
-        }
-    }
-
-    @Operation
-    public static final class AcceptStructuredMapRemoveEqualityResult {
-        @Specialization
-        public static void perform(PreparedMapRemoveCall prepared, Object result) {
-            prepared.acceptEquality(result);
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapRemove {
-        @Specialization
-        public static Object perform(PreparedMapRemoveCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredMapEachCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredMapEach();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredMapEach();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredMapEach();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredMapEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapEachCall {
-        @Specialization
-        public static PreparedMapEachCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredMapEach();
-        }
-
-        @Specialization
-        public static PreparedMapEachCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredMapEach();
-        }
-
-        @Specialization
-        public static PreparedMapEachCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredMapEach();
-        }
-
-        @Specialization
-        public static PreparedMapEachCall moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredMapEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredMapEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedMapEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredMapEachEntryCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedMapEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredMapEach {
-        @Specialization
-        public static void perform(PreparedMapEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredMapEach {
-        @Specialization
-        public static Object perform(PreparedMapEachCall prepared) {
-            return prepared.finish();
-        }
-    }
 
     @Operation
     public static final class RethrowTruffleException {
@@ -12466,61 +9868,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class IsStructuredErrorHandlerCall {
-        @Specialization
-        public static boolean ordinary(OrdinarySourceCall prepared) {
-            return prepared.isStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static boolean nativeCall(NativeCall prepared) {
-            return prepared.isStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static boolean immediate(ImmediateResultCall prepared) {
-            return prepared.isStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
-            return prepared.isStructuredErrorHandler();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredErrorHandlerCall {
-        @Specialization
-        public static PreparedErrorHandlerCall ordinary(OrdinarySourceCall prepared) {
-            return prepared.prepareStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static PreparedErrorHandlerCall nativeCall(NativeCall prepared) {
-            return prepared.prepareStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static PreparedErrorHandlerCall immediate(ImmediateResultCall prepared) {
-            return prepared.prepareStructuredErrorHandler();
-        }
-
-        @Specialization
-        public static PreparedErrorHandlerCall moduleInitialization(
-                ModuleInitializationCall prepared) {
-            return prepared.prepareStructuredErrorHandler();
-        }
-    }
-
-    @Operation
-    public static final class LoadStructuredErrorHandlerBodyCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedErrorHandlerCall prepared) {
-            return prepared.body();
-        }
-    }
-
-    @Operation
     public static final class PrepareSelectedStructuredErrorHandlerCall {
         @Specialization
         public static PreparedClosureCall perform(
@@ -12530,18 +9877,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    @Operation
-    public static final class LeaveStructuredErrorHandlerFrame {
-        @Specialization
-        public static void perform(PreparedErrorHandlerCall prepared) {
-            prepared.leave();
-        }
-    }
+    /*
+     * I113: the shared C-prime I/O phases. Each specialization is typed on
+     * the protocol's own state carrier, so a builder-emitted site stays
+     * monomorphic and delegates exactly to that protocol's method.
+     */
 
+    /**
+     * Prepares the protocol's single (or first) lower target call; with
+     * {@code flush} (builder-fixed) the BufferedWriter flush call.
+     */
     @Operation
-    public static final class PrepareBufferedByteReaderTargetCall {
+    @ConstantOperand(type = boolean.class, name = "flush")
+    public static final class IoPrepareTargetCall {
         @Specialization
-        public static PreparedClosureCall perform(
+        public static PreparedClosureCall bufferedReader(
+                boolean flush,
                 ProtosBufferedByteReaderCPrimeExecution.CallState state,
                 ProtosActivation activation) {
             return ProtosSendPreparation.prepareSend(
@@ -12550,34 +9901,79 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     state.arguments());
         }
-    }
 
-    @Operation
-    public static final class WrapBufferedByteReaderTargetInvocation {
         @Specialization
-        public static Object perform(
-                ProtosBufferedByteReaderCPrimeExecution.CallState state,
-                Object result) {
-            return state.invocationSucceeded(result);
+        public static PreparedClosureCall bufferedWriterFirst(
+                boolean flush,
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            if (flush) {
+                return ProtosSendPreparation.prepareSend(
+                        state.target(),
+                        "flush",
+                        activation,
+                        List.of());
+            }
+            return ProtosSendPreparation.prepareSend(
+                    state.target(),
+                    state.firstSelector(),
+                    activation,
+                    state.firstArguments());
+        }
+
+        @Specialization
+        public static PreparedClosureCall ioRelease(
+                boolean flush,
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ProtosActivation activation) {
+            return ProtosSendPreparation.prepareSend(
+                    sequence.target(),
+                    sequence.selector(),
+                    activation,
+                    sequence.arguments());
+        }
+
+        @Specialization
+        public static PreparedClosureCall textWriter(
+                boolean flush,
+                ProtosTextWriterCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return ProtosSendPreparation.prepareSend(
+                    state.target(),
+                    state.selector(),
+                    activation,
+                    state.arguments());
+        }
+
+        @Specialization
+        public static PreparedClosureCall textReader(
+                boolean flush,
+                ProtosTextReaderCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return ProtosSendPreparation.prepareSend(
+                    state.source(),
+                    "read",
+                    activation,
+                    state.arguments());
         }
     }
 
+    /**
+     * The successful lower invocation result, or with {@code await}
+     * (builder-fixed) the await of the invocation carrier's lower Future.
+     */
     @Operation
-    public static final class BufferedByteReaderTargetInvocationFailed {
+    @ConstantOperand(type = boolean.class, name = "await")
+    public static final class IoInvocationSucceeded {
         @Specialization
-        public static Object perform(
-                ProtosBufferedByteReaderCPrimeExecution.CallState state) {
-            return state.invocationFailed();
-        }
-    }
-
-    @Operation
-    public static final class AwaitBufferedByteReaderTargetFuture {
-        @Specialization
-        public static Object perform(
+        public static Object bufferedReader(
+                boolean await,
                 ProtosBufferedByteReaderCPrimeExecution.CallState state,
-                Object invocation) {
-            if (!(invocation
+                Object value) {
+            if (!await) {
+                return state.invocationSucceeded(value);
+            }
+            if (!(value
                     instanceof ProtosBufferedByteReaderCPrimeExecution.TargetInvocation
                             targetInvocation)) {
                 throw new IllegalStateException(
@@ -12585,32 +9981,140 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return state.awaitTargetFuture(targetInvocation);
         }
+
+        @Specialization
+        public static Object bufferedWriter(
+                boolean await,
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                Object value) {
+            if (!await) {
+                return state.invocationSucceeded(value);
+            }
+            if (!(value
+                    instanceof ProtosBufferedByteWriterCPrimeExecution.TargetInvocation
+                            targetInvocation)) {
+                throw new IllegalStateException(
+                        "BufferedWriter C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitTargetFuture(targetInvocation);
+        }
+
+        @Specialization
+        public static Object ioRelease(
+                boolean await,
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                Object value) {
+            if (!await) {
+                return sequence.invocationSucceeded(value);
+            }
+            if (!(value
+                    instanceof ProtosIoReleaseCPrimeExecution.TargetInvocation
+                            targetInvocation)) {
+                throw new IllegalStateException(
+                        "lifecycle release C-prime invocation produced an invalid carrier");
+            }
+            return sequence.awaitTargetFuture(targetInvocation);
+        }
+
+        @Specialization
+        public static Object textWriter(
+                boolean await,
+                ProtosTextWriterCPrimeExecution.CallState state,
+                Object value) {
+            if (!await) {
+                return state.invocationSucceeded(value);
+            }
+            if (!(value
+                    instanceof ProtosTextWriterCPrimeExecution.TargetInvocation targetInvocation)) {
+                throw new IllegalStateException(
+                        "TextWriter C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitTargetFuture(targetInvocation);
+        }
+
+        @Specialization
+        public static Object textReader(
+                boolean await,
+                ProtosTextReaderCPrimeExecution.CallState state,
+                Object value) {
+            if (!await) {
+                return state.invocationSucceeded(value);
+            }
+            if (!(value
+                    instanceof ProtosTextReaderCPrimeExecution.SourceInvocation sourceInvocation)) {
+                throw new IllegalStateException(
+                        "TextReader C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitSourceFuture(sourceInvocation);
+        }
     }
 
+    /**
+     * The failure phase of the protocols whose failure takes no argument;
+     * TextReader keeps {@link TextReaderSourceInvocationFailed}.
+     */
     @Operation
-    public static final class ResumeBufferedByteReaderTargetFutureWait {
+    public static final class IoInvocationFailed {
+        @Specialization
+        public static Object bufferedReader(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+
+        @Specialization
+        public static Object bufferedWriter(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+
+        @Specialization
+        public static Object ioRelease(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.invocationFailed();
+        }
+
+        @Specialization
+        public static Object textWriter(
+                ProtosTextWriterCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+    }
+
+    /**
+     * Resumes an ordinary {@link ProtosIoOperationSuspension} lower-Future
+     * wait. The four protocols share this exact contract; {@code family} is
+     * the builder-fixed protocol name used only by the invariant
+     * diagnostics. The lifecycle release wait keeps
+     * {@link ResumeIoReleaseTargetFutureWait}, whose suspension type and
+     * authority differ.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "family")
+    public static final class IoResumeOperationFutureWait {
         @Specialization
         public static Object perform(
+                String family,
                 ProtosActivation activation,
                 Object yielded,
                 Object resumeValue) {
             if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
                 throw new IllegalStateException(
-                        "BufferedReader lower-Future wait yielded an invalid carrier");
+                        family + " lower-Future wait yielded an invalid carrier");
             }
             ProtosIoOperation operation =
                     activation.deferredCPrimeOperationForRuntime()
                             .orElseThrow(
                                     () ->
                                             new IllegalStateException(
-                                                    "BufferedReader lower-Future wait requires an operation-owned activation"));
+                                                    family
+                                                            + " lower-Future wait requires an operation-owned activation"));
             if (suspension.operation() != operation) {
                 throw new IllegalStateException(
-                        "BufferedReader lower-Future wait belongs to another operation");
+                        family + " lower-Future wait belongs to another operation");
             }
             if (resumeValue != ProtosNullValue.INSTANCE) {
                 throw new IllegalStateException(
-                        "BufferedReader lower-Future wait received unsupported resume transport");
+                        family + " lower-Future wait received unsupported resume transport");
             }
             return suspension.resume();
         }
@@ -12625,198 +10129,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** Applies the BufferedWriter first, or with {@code followup} follow-up flush, outcome. */
     @Operation
-    public static final class IsBufferedByteWriterStepRequired {
-        @Specialization
-        public static boolean perform(Object value) {
-            if (!(value instanceof Boolean required)) {
-                throw new IllegalStateException(
-                        "BufferedWriter C-prime step gate produced a non-Boolean value");
-            }
-            return required;
-        }
-    }
-
-    @Operation
-    public static final class PrepareBufferedByteWriterFirstCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state,
-                ProtosActivation activation) {
-            return ProtosSendPreparation.prepareSend(
-                    state.target(),
-                    state.firstSelector(),
-                    activation,
-                    state.firstArguments());
-        }
-    }
-
-    @Operation
-    public static final class PrepareBufferedByteWriterFlushCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state,
-                ProtosActivation activation) {
-            return ProtosSendPreparation.prepareSend(
-                    state.target(),
-                    "flush",
-                    activation,
-                    List.of());
-        }
-    }
-
-    @Operation
-    public static final class WrapBufferedByteWriterTargetInvocation {
-        @Specialization
-        public static Object perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state,
-                Object result) {
-            return state.invocationSucceeded(result);
-        }
-    }
-
-    @Operation
-    public static final class BufferedByteWriterTargetInvocationFailed {
-        @Specialization
-        public static Object perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state) {
-            return state.invocationFailed();
-        }
-    }
-
-    @Operation
-    public static final class AwaitBufferedByteWriterTargetFuture {
-        @Specialization
-        public static Object perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state,
-                Object invocation) {
-            if (!(invocation
-                    instanceof ProtosBufferedByteWriterCPrimeExecution.TargetInvocation
-                            targetInvocation)) {
-                throw new IllegalStateException(
-                        "BufferedWriter C-prime invocation produced an invalid carrier");
-            }
-            return state.awaitTargetFuture(targetInvocation);
-        }
-    }
-
-    @Operation
-    public static final class ResumeBufferedByteWriterTargetFutureWait {
-        @Specialization
-        public static Object perform(
-                ProtosActivation activation,
-                Object yielded,
-                Object resumeValue) {
-            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
-                throw new IllegalStateException(
-                        "BufferedWriter lower-Future wait yielded an invalid carrier");
-            }
-            ProtosIoOperation operation =
-                    activation.deferredCPrimeOperationForRuntime()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "BufferedWriter lower-Future wait requires an operation-owned activation"));
-            if (suspension.operation() != operation) {
-                throw new IllegalStateException(
-                        "BufferedWriter lower-Future wait belongs to another operation");
-            }
-            if (resumeValue != ProtosNullValue.INSTANCE) {
-                throw new IllegalStateException(
-                        "BufferedWriter lower-Future wait received unsupported resume transport");
-            }
-            return suspension.resume();
-        }
-    }
-
-    @Operation
-    public static final class ApplyBufferedByteWriterFirstOutcome {
+    @ConstantOperand(type = boolean.class, name = "followup")
+    public static final class ApplyBufferedByteWriterOutcome {
         @Specialization
         public static boolean perform(
+                boolean followup,
                 ProtosBufferedByteWriterCPrimeExecution.CallState state,
                 Object outcome) {
             if (!(outcome
                     instanceof ProtosBufferedByteWriterCPrimeExecution.LowerOutcome
                             lowerOutcome)) {
                 throw new IllegalStateException(
-                        "BufferedWriter first lower wait produced an invalid carrier");
+                        followup
+                                ? "BufferedWriter followup lower wait produced an invalid carrier"
+                                : "BufferedWriter first lower wait produced an invalid carrier");
             }
-            return state.applyFirstOutcome(lowerOutcome);
-        }
-    }
-
-    @Operation
-    public static final class ApplyBufferedByteWriterFollowupOutcome {
-        @Specialization
-        public static boolean perform(
-                ProtosBufferedByteWriterCPrimeExecution.CallState state,
-                Object outcome) {
-            if (!(outcome
-                    instanceof ProtosBufferedByteWriterCPrimeExecution.LowerOutcome
-                            lowerOutcome)) {
-                throw new IllegalStateException(
-                        "BufferedWriter followup lower wait produced an invalid carrier");
-            }
-            return state.applyFollowupFlushOutcome(lowerOutcome);
-        }
-    }
-
-
-    @Operation
-    public static final class IoReleaseHasNextStep {
-        @Specialization
-        public static boolean perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
-            return sequence.hasNextStep();
-        }
-    }
-
-    @Operation
-    public static final class PrepareIoReleaseTargetCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                ProtosActivation activation) {
-            return ProtosSendPreparation.prepareSend(
-                    sequence.target(),
-                    sequence.selector(),
-                    activation,
-                    sequence.arguments());
-        }
-    }
-
-    @Operation
-    public static final class WrapIoReleaseTargetInvocation {
-        @Specialization
-        public static Object perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                Object result) {
-            return sequence.invocationSucceeded(result);
-        }
-    }
-
-    @Operation
-    public static final class IoReleaseTargetInvocationFailed {
-        @Specialization
-        public static Object perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
-            return sequence.invocationFailed();
-        }
-    }
-
-    @Operation
-    public static final class AwaitIoReleaseTargetFuture {
-        @Specialization
-        public static Object perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                Object invocation) {
-            if (!(invocation
-                    instanceof ProtosIoReleaseCPrimeExecution.TargetInvocation
-                            targetInvocation)) {
-                throw new IllegalStateException(
-                        "lifecycle release C-prime invocation produced an invalid carrier");
-            }
-            return sequence.awaitTargetFuture(targetInvocation);
+            return followup
+                    ? state.applyFollowupFlushOutcome(lowerOutcome)
+                    : state.applyFirstOutcome(lowerOutcome);
         }
     }
 
@@ -12835,132 +10167,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class ApplyIoReleaseTargetOutcome {
-        @Specialization
-        public static void perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence,
-                Object outcome) {
-            if (!(outcome
-                    instanceof ProtosIoReleaseCPrimeExecution.LowerOutcome
-                            lowerOutcome)) {
-                throw new IllegalStateException(
-                        "lifecycle release C-prime lower wait produced an invalid carrier");
-            }
-            sequence.applyOutcome(lowerOutcome);
-        }
-    }
-
-    @Operation
-    public static final class FinishIoReleaseSequence {
-        @Specialization
-        public static Object perform(
-                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
-            return sequence.finish();
-        }
-    }
-
-    @Operation
-    public static final class PrepareTextWriterTargetCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                ProtosTextWriterCPrimeExecution.CallState state,
-                ProtosActivation activation) {
-            return ProtosSendPreparation.prepareSend(
-                    state.target(),
-                    state.selector(),
-                    activation,
-                    state.arguments());
-        }
-    }
-
-    @Operation
-    public static final class WrapTextWriterTargetInvocation {
-        @Specialization
-        public static Object perform(
-                ProtosTextWriterCPrimeExecution.CallState state,
-                Object result) {
-            return state.invocationSucceeded(result);
-        }
-    }
-
-    @Operation
-    public static final class TextWriterTargetInvocationFailed {
-        @Specialization
-        public static Object perform(
-                ProtosTextWriterCPrimeExecution.CallState state) {
-            return state.invocationFailed();
-        }
-    }
-
-    @Operation
-    public static final class AwaitTextWriterTargetFuture {
-        @Specialization
-        public static Object perform(
-                ProtosTextWriterCPrimeExecution.CallState state,
-                Object invocation) {
-            if (!(invocation
-                    instanceof ProtosTextWriterCPrimeExecution.TargetInvocation targetInvocation)) {
-                throw new IllegalStateException(
-                        "TextWriter C-prime invocation produced an invalid carrier");
-            }
-            return state.awaitTargetFuture(targetInvocation);
-        }
-    }
-
-    @Operation
-    public static final class ResumeTextWriterTargetFutureWait {
-        @Specialization
-        public static Object perform(
-                ProtosActivation activation,
-                Object yielded,
-                Object resumeValue) {
-            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
-                throw new IllegalStateException(
-                        "TextWriter lower-Future wait yielded an invalid carrier");
-            }
-            ProtosIoOperation operation =
-                    activation.deferredCPrimeOperationForRuntime()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "TextWriter lower-Future wait requires an operation-owned activation"));
-            if (suspension.operation() != operation) {
-                throw new IllegalStateException(
-                        "TextWriter lower-Future wait belongs to another operation");
-            }
-            if (resumeValue != ProtosNullValue.INSTANCE) {
-                throw new IllegalStateException(
-                        "TextWriter lower-Future wait received unsupported resume transport");
-            }
-            return suspension.resume();
-        }
-    }
-
-    @Operation
-    public static final class PrepareTextReaderSourceCall {
-        @Specialization
-        public static PreparedClosureCall perform(
-                ProtosTextReaderCPrimeExecution.CallState state,
-                ProtosActivation activation) {
-            return ProtosSendPreparation.prepareSend(
-                    state.source(),
-                    "read",
-                    activation,
-                    state.arguments());
-        }
-    }
-
-    @Operation
-    public static final class WrapTextReaderSourceInvocation {
-        @Specialization
-        public static Object perform(
-                ProtosTextReaderCPrimeExecution.CallState state,
-                Object result) {
-            return state.invocationSucceeded(result);
-        }
-    }
-
-    @Operation
     public static final class TextReaderSourceInvocationFailed {
         @Specialization
         public static Object perform(
@@ -12971,66 +10177,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class AwaitTextReaderSourceFuture {
-        @Specialization
-        public static Object perform(
-                ProtosTextReaderCPrimeExecution.CallState state,
-                Object invocation) {
-            if (!(invocation
-                    instanceof ProtosTextReaderCPrimeExecution.SourceInvocation sourceInvocation)) {
-                throw new IllegalStateException(
-                        "TextReader C-prime invocation produced an invalid carrier");
-            }
-            return state.awaitSourceFuture(sourceInvocation);
-        }
-    }
-
-    @Operation
-    public static final class ResumeTextReaderSourceFutureWait {
-        @Specialization
-        public static Object perform(
-                ProtosActivation activation,
-                Object yielded,
-                Object resumeValue) {
-            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
-                throw new IllegalStateException(
-                        "TextReader lower-Future wait yielded an invalid carrier");
-            }
-            ProtosIoOperation operation =
-                    activation.deferredCPrimeOperationForRuntime()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "TextReader lower-Future wait requires an operation-owned activation"));
-            if (suspension.operation() != operation) {
-                throw new IllegalStateException(
-                        "TextReader lower-Future wait belongs to another operation");
-            }
-            if (resumeValue != ProtosNullValue.INSTANCE) {
-                throw new IllegalStateException(
-                        "TextReader lower-Future wait received unsupported resume transport");
-            }
-            return suspension.resume();
-        }
-    }
-
-    @Operation
     public static final class TextReaderInitialNeedInput {
         @Specialization
         public static Object perform() {
             return ProtosTextReaderCPrimeExecution.Advance.needInput();
-        }
-    }
-
-    @Operation
-    public static final class IsTextReaderNeedInput {
-        @Specialization
-        public static boolean perform(Object advance) {
-            if (!(advance instanceof ProtosTextReaderCPrimeExecution.Advance state)) {
-                throw new IllegalStateException(
-                        "TextReader C-prime advance produced an invalid carrier");
-            }
-            return state.needsInput();
         }
     }
 

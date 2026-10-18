@@ -21,13 +21,28 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         "Array", "Bytes", "Environment", "IdentityMap", "Map"
     };
 
+    private static final String LOCAL_EACH_ADMISSION =
+            "builder.beginIsStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);";
+
+    private static final String FOREIGN_EACH_ADMISSION =
+            "builder.beginIsStructuredCall(ProtosStructuredCallKind.FOREIGN_EACH);";
+
+    private static final String IDENTITY_MAP_AT_IF_ABSENT_ADMISSION =
+            "builder.beginIsStructuredCall("
+                    + "ProtosStructuredCallKind.IDENTITY_MAP_AT_IF_ABSENT);";
+
+    private static final String MAP_READ_LOOKUP_ADMISSION =
+            "builder.beginIsStructuredCall(ProtosStructuredCallKind.MAP_READ_LOOKUP);";
+
+    private static final String LOCAL_EACH_PREPARATION =
+            "builder.beginPrepareStructuredCall(ProtosStructuredCallKind.LOCAL_EACH);";
+
+    /** I113: the shared structured phases the local each loop emits once. */
     private static final String[] OPERATIONS = {
-        "IsStructuredLocalEachCall",
-        "PrepareStructuredLocalEachCall",
-        "StructuredLocalEachHasNext",
-        "PrepareStructuredLocalEachChildCall",
-        "AdvanceStructuredLocalEach",
-        "FinishStructuredLocalEach"
+        "StructuredHasNext",
+        "StructuredPrepareChildCall",
+        "StructuredAdvance",
+        "StructuredFinish"
     };
 
     private static Path repositoryFile(String relative) {
@@ -56,6 +71,13 @@ final class ProtosI109ASharedLocalEachLoweringTest {
                 + "ProtosStructuredDispatchLowerer.java");
     }
 
+    private static String structuredCallKinds() throws IOException {
+        return read(
+                "src/main/java/com/guillermomolina/protos/"
+                + "execution/bytecode/activation/"
+                + "ProtosStructuredCallKind.java");
+    }
+
     private static String activation() throws IOException {
         return read(
                 "src/main/java/com/guillermomolina/protos/"
@@ -76,8 +98,8 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     }
 
     private static String sharedRegion(String source) {
-        String first = "builder.beginIsStructuredLocalEachCall();";
-        String foreign = "builder.beginIsStructuredForeignEachCall();";
+        String first = LOCAL_EACH_ADMISSION;
+        String foreign = FOREIGN_EACH_ADMISSION;
 
         int start = source.indexOf(first);
         int end = source.indexOf(foreign);
@@ -120,13 +142,21 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         String region = sharedRegion(source);
 
         for (String operation : OPERATIONS) {
+            // I113: some shared phases carry a builder-fixed constant.
             assertEquals(1, occurrences(
-                    region, "builder.begin" + operation + "();"),
+                    region, "builder.begin" + operation + "("),
                     operation);
             assertEquals(1, occurrences(
                     region, "builder.end" + operation + "();"),
                     operation);
         }
+
+        assertEquals(1, occurrences(region, LOCAL_EACH_ADMISSION));
+        assertEquals(1, occurrences(region, LOCAL_EACH_PREPARATION));
+        assertEquals(1, occurrences(
+                region, "builder.endPrepareStructuredCall();"));
+        assertEquals(1, occurrences(
+                region, "builder.endIsStructuredCall();"));
 
         assertEquals(1, occurrences(
                 region, "builder.beginWhile();"));
@@ -158,14 +188,14 @@ final class ProtosI109ASharedLocalEachLoweringTest {
         String region = sharedRegion(lowering());
 
         String[] sequence = {
-            "builder.beginPrepareStructuredLocalEachCall();",
+            LOCAL_EACH_PREPARATION,
             "builder.beginWhile();",
-            "builder.beginStructuredLocalEachHasNext();",
-            "builder.beginPrepareStructuredLocalEachChildCall();",
+            "builder.beginStructuredHasNext(ProtosStructuredPhase.STEP);",
+            "builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);",
             "emitScopedPreparedInvocation(",
-            "builder.beginAdvanceStructuredLocalEach();",
+            "builder.beginStructuredAdvance(ProtosStructuredPhase.STEP);",
             "builder.endWhile();",
-            "builder.beginFinishStructuredLocalEach();"
+            "builder.beginStructuredFinish();"
         };
 
         int previous = -1;
@@ -182,18 +212,23 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     @Test
     void admissionUsesCapabilitiesNotSelectorText()
             throws IOException {
-        String source = activation();
-        String admission = operationClass(
-                source, "IsStructuredLocalEachCall");
+        String kinds = structuredCallKinds();
+        int localEach = kinds.indexOf("    LOCAL_EACH {");
+        assertTrue(localEach >= 0, "Missing LOCAL_EACH admission");
+        String localEachPredicate =
+                kinds.substring(localEach, kinds.indexOf("    },", localEach));
 
         for (String family : FAMILIES) {
-            assertTrue(admission.contains(
+            assertTrue(localEachPredicate.contains(
                     "prepared.isStructured" + family + "Each()"),
                     "Missing capability: " + family);
         }
 
-        assertFalse(admission.contains("\"each\""));
+        assertFalse(localEachPredicate.contains("\"each\""));
 
+        String admission = operationClass(activation(), "IsStructuredCall");
+
+        assertTrue(admission.contains("kind.admits(prepared)"));
         assertTrue(admission.contains(
                 "OrdinarySourceCall prepared"));
         assertTrue(admission.contains(
@@ -207,15 +242,17 @@ final class ProtosI109ASharedLocalEachLoweringTest {
     @Test
     void preparationDelegatesToTheFiveExistingAuthorities()
             throws IOException {
-        String source = activation();
-        String preparation = operationClass(
-                source, "PrepareStructuredLocalEachCall");
+        String kinds = structuredCallKinds();
+        int localEach = kinds.indexOf("    LOCAL_EACH {");
+        assertTrue(localEach >= 0, "Missing LOCAL_EACH preparation");
+        String preparation =
+                kinds.substring(localEach, kinds.indexOf("    },", localEach));
 
         for (String family : FAMILIES) {
-            assertEquals(4, occurrences(
+            assertEquals(1, occurrences(
                     preparation,
-                    "return PrepareStructured" + family
-                    + "EachCall."),
+                    "return prepared.prepareStructured" + family
+                    + "Each();"),
                     "Incorrect number of delegates: " + family);
         }
 
@@ -229,23 +266,22 @@ final class ProtosI109ASharedLocalEachLoweringTest {
 
         assertEquals(1, occurrences(
                 source,
-                "builder.beginIsStructuredForeignEachCall();"));
+                FOREIGN_EACH_ADMISSION));
 
         assertEquals(1, occurrences(
                 source,
-                "builder.beginIsStructuredIdentityMapAtIfAbsentCall();"));
+                IDENTITY_MAP_AT_IF_ABSENT_ADMISSION));
 
         assertEquals(1, occurrences(
                 source,
-                "builder.beginIsStructuredMapReadLookupCall();"));
+                MAP_READ_LOOKUP_ADMISSION));
 
         assertTrue(
-                source.indexOf("builder.beginIsStructuredLocalEachCall();")
-                < source.indexOf("builder.beginIsStructuredForeignEachCall();"));
+                source.indexOf(LOCAL_EACH_ADMISSION)
+                < source.indexOf(FOREIGN_EACH_ADMISSION));
 
         assertTrue(
-                source.indexOf("builder.beginIsStructuredForeignEachCall();")
-                < source.indexOf(
-                        "builder.beginIsStructuredIdentityMapAtIfAbsentCall();"));
+                source.indexOf(FOREIGN_EACH_ADMISSION)
+                < source.indexOf(IDENTITY_MAP_AT_IF_ABSENT_ADMISSION));
     }
 }

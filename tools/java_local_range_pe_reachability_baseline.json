@@ -15,7 +15,7 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameRest.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,int,BytecodeNode,int,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindInlineClosureFrameParameter.rest(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,int,BytecodeNode,int,VirtualFrame)",
         "ProtosFrameLocalBindings.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
@@ -33,7 +33,7 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameRest.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,int,BytecodeNode,int,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindInlineClosureFrameParameter.rest(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,int,BytecodeNode,int,VirtualFrame)",
         "ProtosFrameLocalBindings.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"

@@ -476,7 +476,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 /*
@@ -521,7 +521,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         .getBytecodeNode()
                         .getInstructionsAsList()
                         .stream()
-                        .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                        .map(ProtosInstructionNames::of)
                         .toList();
 
         /*

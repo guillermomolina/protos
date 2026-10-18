@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
+import com.oracle.truffle.api.bytecode.Instruction;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -21,13 +22,18 @@ import org.junit.jupiter.api.Test;
  */
 final class ProtosI109ABytecodeMaterializationTest {
 
+    /**
+     * I113: the local each sequence. The phase operations are shared by
+     * every structured protocol, so they are counted within the local each
+     * branch, which the dispatcher emits before the foreign each branch.
+     */
     private static final String[] LOCAL_EACH_OPERATIONS = {
-        "IsStructuredLocalEachCall",
-        "PrepareStructuredLocalEachCall",
-        "StructuredLocalEachHasNext",
-        "PrepareStructuredLocalEachChildCall",
-        "AdvanceStructuredLocalEach",
-        "FinishStructuredLocalEach"
+        "IsStructuredCall[LOCAL_EACH]",
+        "PrepareStructuredCall[LOCAL_EACH]",
+        "StructuredHasNext",
+        "StructuredPrepareChildCall",
+        "StructuredAdvance",
+        "StructuredFinish"
     };
 
     private static final String[] OLD_FAMILIES = {
@@ -81,15 +87,44 @@ final class ProtosI109ABytecodeMaterializationTest {
                 .getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(instruction -> instruction.getName())
+                .map(ProtosI109ABytecodeMaterializationTest::instructionName)
                 .toList();
     }
 
+    /**
+     * I113: the shared {@code IsStructuredCall} is identified by its
+     * builder-fixed {@link ProtosStructuredCallKind} constant operand.
+     */
+    private static String instructionName(Instruction instruction) {
+        for (Instruction.Argument argument : instruction.getArguments()) {
+            if (argument.getKind() == Instruction.Argument.Kind.CONSTANT
+                    && argument.asConstant() instanceof ProtosStructuredCallKind kind) {
+                return instruction.getName() + "[" + kind + "]";
+            }
+        }
+        return instruction.getName();
+    }
+
+    /**
+     * Exact operation match: shared I113 names are prefixes of one another
+     * (for example {@code StructuredFinish} and
+     * {@code StructuredFinishWithChildResult}).
+     */
     private static boolean matchesOperation(
             String instructionName,
             String operation) {
-        return instructionName.toLowerCase(java.util.Locale.ROOT)
-                .contains(operation.toLowerCase(java.util.Locale.ROOT));
+        return java.util.regex.Pattern.compile(
+                        "(^|\\.)" + java.util.regex.Pattern.quote(operation) + "($|[$#_\\[])",
+                        java.util.regex.Pattern.CASE_INSENSITIVE)
+                .matcher(instructionName)
+                .find();
+    }
+
+    private static List<String> localEachBranch(List<String> instructions) {
+        int start = position(instructions, "IsStructuredCall[LOCAL_EACH]");
+        int end = position(instructions, "IsStructuredCall[FOREIGN_EACH]");
+        assertTrue(start >= 0 && end > start, instructions::toString);
+        return instructions.subList(start, end);
     }
 
     private static long countOperation(
@@ -129,11 +164,12 @@ final class ProtosI109ABytecodeMaterializationTest {
         List<String> instructions = materializedInstructions();
 
         assertFalse(instructions.isEmpty());
+        List<String> branch = localEachBranch(instructions);
 
         for (String operation : LOCAL_EACH_OPERATIONS) {
             assertEquals(
                     1,
-                    countOperation(instructions, operation),
+                    countOperation(branch, operation),
                     "Unexpected materialized count: " + operation
                             + " in " + relevantInstructions(instructions));
         }
@@ -169,35 +205,35 @@ final class ProtosI109ABytecodeMaterializationTest {
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredForeignEachCall"));
+                        "IsStructuredCall[FOREIGN_EACH]"));
 
         assertEquals(
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredIdentityMapAtIfAbsentCall"));
+                        "IsStructuredCall[IDENTITY_MAP_AT_IF_ABSENT]"));
 
         assertEquals(
                 1,
                 countOperation(
                         instructions,
-                        "IsStructuredMapReadLookupCall"));
+                        "IsStructuredCall[MAP_READ_LOOKUP]"));
     }
 
     @Test
     void sharedIterationOperationsRetainExecutionOrder() {
-        List<String> instructions = materializedInstructions();
+        List<String> instructions = localEachBranch(materializedInstructions());
 
         int preparation = position(instructions,
-                "PrepareStructuredLocalEachCall");
+                "PrepareStructuredCall[LOCAL_EACH]");
         int condition = position(instructions,
-                "StructuredLocalEachHasNext");
+                "StructuredHasNext");
         int callback = position(instructions,
-                "PrepareStructuredLocalEachChildCall");
+                "StructuredPrepareChildCall");
         int advance = position(instructions,
-                "AdvanceStructuredLocalEach");
+                "StructuredAdvance");
         int finish = position(instructions,
-                "FinishStructuredLocalEach");
+                "StructuredFinish");
 
         assertTrue(
                 preparation >= 0,

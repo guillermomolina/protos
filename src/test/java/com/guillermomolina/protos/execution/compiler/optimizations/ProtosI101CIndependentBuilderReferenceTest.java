@@ -340,18 +340,18 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.endStoreLocal();
 
                             builder.beginIfThenElse();
-                            builder.beginIsCanonicalIfTrueTrue();
+                            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_TRUE);
                             builder.emitLoadLocal(classification);
-                            builder.endIsCanonicalIfTrueTrue();
+                            builder.endIsCanonicalBooleanClass();
                             builder.beginBlock();
                             emitReferenceStoreConstant(builder, result, ProtosBooleanValue.FALSE);
                             builder.endBlock();
                             builder.beginBlock();
 
                             builder.beginIfThenElse();
-                            builder.beginIsCanonicalBooleanFalseClass();
+                            builder.beginIsCanonicalBooleanClass(ProtosCanonicalBooleanOneNode.CLASS_FALSE);
                             builder.emitLoadLocal(classification);
-                            builder.endIsCanonicalBooleanFalseClass();
+                            builder.endIsCanonicalBooleanClass();
                             builder.beginBlock();
                             emitReferenceStoreConstant(builder, result, ProtosBooleanValue.TRUE);
                             builder.endBlock();
@@ -362,7 +362,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                             builder.beginPrepareSendZero();
                             builder.emitLoadLocal(receiverValue);
                             builder.emitLoadConstant("not");
-                            builder.emitCurrentCallerReference();
+                            builder.emitCurrentActivation(true);
                             builder.endPrepareSendZero();
                             builder.endStoreLocal();
                             emitReferencePreparedInvocation(builder, result, prepared, child, resumed);
@@ -473,7 +473,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.beginStoreLocal(inlineCall);
                     builder.beginPrepareInlineClosureLiteralCall();
                     builder.emitLoadLocal(callReceiver);
-                    builder.emitCurrentActivation();
+                    builder.emitCurrentActivation(false);
                     builder.endPrepareInlineClosureLiteralCall();
                     builder.endStoreLocal();
 
@@ -1021,9 +1021,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginIsPreparedClosureInvocation();
+        builder.beginIsResultKind(ProtosResultKind.PREPARED_CLOSURE_INVOCATION);
         builder.emitLoadLocal(result);
-        builder.endIsPreparedClosureInvocation();
+        builder.endIsResultKind();
 
         builder.beginBlock();
         builder.beginStoreLocal(child);
@@ -1033,7 +1033,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         builder.endStoreLocal();
         emitReferenceContinuationComposition(builder, prepared, child, resumed);
         builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
+        builder.beginFinishClosureCall(false);
         builder.emitLoadLocal(prepared);
         builder.emitLoadLocal(child);
         builder.endFinishClosureCall();
@@ -1099,9 +1099,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         BytecodeLocal fallback = builder.createLocal("inlineCallbackFallback", null);
 
         builder.beginStoreLocal(fallback);
-        builder.beginLoadInlineLiteralFallbackCall();
+        builder.beginLoadInlineLiteralCallPart(true);
         builder.emitLoadLocal(inlineChild);
-        builder.endLoadInlineLiteralFallbackCall();
+        builder.endLoadInlineLiteralCallPart();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
@@ -1149,36 +1149,36 @@ final class ProtosI101CIndependentBuilderReferenceTest {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredBoolean);
-        builder.beginPrepareStructuredBooleanCall();
+        builder.beginPrepareStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(prepared);
-        builder.endPrepareStructuredBooleanCall();
+        builder.endPrepareStructuredCall();
         builder.endStoreLocal();
 
         builder.beginIfThenElse();
-        builder.beginStructuredBooleanHasCallback();
+        builder.beginStructuredHasNext(ProtosStructuredPhase.CHILD);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanHasCallback();
+        builder.endStructuredHasNext();
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredBooleanChild);
-        builder.beginPrepareInlineStructuredBooleanCallbackCall();
+        builder.beginStructuredPrepareInlineChildCall(false);
         builder.emitLoadLocal(structuredBoolean);
-        builder.endPrepareInlineStructuredBooleanCallbackCall();
+        builder.endStructuredPrepareInlineChildCall();
         builder.endStoreLocal();
         emitReferenceInlineLiteralFallback(builder, child, structuredBooleanChild, child, resumed);
         builder.beginStoreLocal(result);
-        builder.beginFinishStructuredBooleanCallback();
+        builder.beginStructuredFinishWithChildResult();
         builder.emitLoadLocal(structuredBoolean);
         builder.emitLoadLocal(child);
-        builder.endFinishStructuredBooleanCallback();
+        builder.endStructuredFinishWithChildResult();
         builder.endStoreLocal();
         builder.endBlock();
 
         builder.beginBlock();
         builder.beginStoreLocal(result);
-        builder.beginStructuredBooleanImmediateResult();
+        builder.beginStructuredFinish();
         builder.emitLoadLocal(structuredBoolean);
-        builder.endStructuredBooleanImmediateResult();
+        builder.endStructuredFinish();
         builder.endStoreLocal();
         builder.endBlock();
 
@@ -1195,9 +1195,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
             BytecodeLocal child,
             BytecodeLocal resumed) {
         builder.beginIfThenElse();
-        builder.beginIsStructuredBooleanCall();
+        builder.beginIsStructuredCall(ProtosStructuredCallKind.BOOLEAN);
         builder.emitLoadLocal(prepared);
-        builder.endIsStructuredBooleanCall();
+        builder.endIsStructuredCall();
 
         emitReferenceLocalBooleanPreparedInvocation(builder, result, prepared, child, resumed);
 
@@ -1252,7 +1252,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
-            StringBuilder entry = new StringBuilder(instruction.getName());
+            StringBuilder entry = new StringBuilder(ProtosInstructionNames.of(instruction));
             for (Instruction.Argument argument : instruction.getArguments()) {
                 entry.append(' ')
                         .append(argument.getName())

@@ -81,7 +81,7 @@ final class ProtosI092CompactBooleanTest {
             List<String> names = root.getBytecodeNode()
                     .getInstructionsAsList()
                     .stream()
-                    .map(Instruction::getName)
+                    .map(ProtosInstructionNames::of)
                     .toList();
 
             assertTrue(position(names, "PrepareSendOne") < 0, names.toString());
@@ -131,7 +131,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -175,7 +175,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -220,7 +220,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -270,7 +270,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -315,7 +315,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -364,7 +364,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -408,7 +408,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -460,7 +460,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -505,7 +505,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -562,7 +562,7 @@ final class ProtosI092CompactBooleanTest {
         var names = root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
 
         assertTrue(
@@ -601,7 +601,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(51, ProtosTestExecutionSupport.evaluate(
@@ -638,7 +638,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
         for (int i = 0; i < 3; i++) {
             assertInteger(43, ProtosTestExecutionSupport.evaluate(
@@ -664,7 +664,7 @@ final class ProtosI092CompactBooleanTest {
                     .bytecodeActivationRootForTesting();
             root.getRootNodes().ensureComplete();
             var names = root.getBytecodeNode().getInstructionsAsList()
-                    .stream().map(Instruction::getName).toList();
+                    .stream().map(ProtosInstructionNames::of).toList();
             assertTrue(!normalControlAdmitted(names), names.toString());
         }
         System.out.println("I095_B6A_UNPROVEN_PRESENCE=B_PRIME");
@@ -696,7 +696,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
         assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
         assertTrue(position(names, "ResolveRootFrameLocalWriteTarget") >= 0, names.toString());
@@ -730,7 +730,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(normalControlAdmitted(names), names.toString());
         assertTrue(position(names, "ReadRootFrameLocal") >= 0, names.toString());
         for (int i = 0; i < 3; i++) {
@@ -762,7 +762,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(!normalControlAdmitted(names), names.toString());
         System.out.println("I095_B6B_DYNAMIC_FALLBACK=B_PRIME");
     }
@@ -842,7 +842,7 @@ final class ProtosI092CompactBooleanTest {
         int selection = position(names, "TryCompactCanonicalBooleanOne");
         int miss = position(names, "IsCompactCanonicalBooleanMiss");
         int fallback = position(names, "PrepareSendOne");
-        int generic = position(names, "PrepareStructuredBooleanCall");
+        int generic = position(names, "PrepareStructuredCall");
         int nativeBranch = position(names, "IsCompactCanonicalBooleanNoCallback");
 
         assertTrue(selection < 0 && miss >= 0, names.toString());
@@ -894,7 +894,7 @@ final class ProtosI092CompactBooleanTest {
                         ProtosBytecodeRootNode.class,
                         module.getRootNodes().getNode(1));
                 return run.getBytecodeNode().getInstructionsAsList().stream()
-                        .map(Instruction::getName)
+                        .map(ProtosInstructionNames::of)
                         .toList();
             } finally {
                 context.leave();
@@ -957,7 +957,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
 
         assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
         assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
@@ -1032,7 +1032,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
         assertTrue(position(names, "TryCompactCanonicalBooleanOne") < 0);
         assertTrue(position(names, "PrepareCanonicalIfTrueCallback") >= 0);
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
@@ -1086,7 +1086,7 @@ final class ProtosI092CompactBooleanTest {
                 .bytecodeActivationRootForTesting();
         root.getRootNodes().ensureComplete();
         var names = root.getBytecodeNode().getInstructionsAsList()
-                .stream().map(Instruction::getName).toList();
+                .stream().map(ProtosInstructionNames::of).toList();
 
         assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
         assertTrue(
@@ -1142,13 +1142,13 @@ final class ProtosI092CompactBooleanTest {
                 """);
 
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineOne") >= 0);
-        assertTrue(position(names, "TryCompactCanonicalBooleanInlineVector") >= 0);
+        assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
         assertTrue(
                 position(names, "PrepareCanonicalIfTrueInlineCallback")
                         > position(names, "TryCompactCanonicalBooleanInlineOne"));
         assertTrue(
                 position(names, "PrepareCanonicalIfTrueInlineVectorCallback")
-                        > position(names, "TryCompactCanonicalBooleanInlineVector"));
+                        > position(names, "TryCompactCanonicalBooleanVector"));
         assertTrue(position(names, "IsCompactCanonicalBooleanNoCallback") >= 0);
     }
 
@@ -1196,7 +1196,7 @@ final class ProtosI092CompactBooleanTest {
                 module));
 
         var instructions = root.getBytecodeNode().getInstructionsAsList();
-        var names = instructions.stream().map(Instruction::getName).toList();
+        var names = instructions.stream().map(ProtosInstructionNames::of).toList();
         assertEquals(
                 1L,
                 names.stream()

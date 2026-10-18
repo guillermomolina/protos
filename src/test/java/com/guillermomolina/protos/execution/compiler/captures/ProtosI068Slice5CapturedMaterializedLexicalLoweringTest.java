@@ -121,7 +121,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 /*
@@ -231,7 +231,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 /*
@@ -368,9 +368,8 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                  * nearer current context after destination resolution.
                  */
                 ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
-                        ProtosBytecodeRootNode
-                                .ResolveCapturedWritableLexicalTarget
-                                .perform(
+                        ProtosCapturedLexicalAccess
+                                .resolveCapturedFrameWriteTarget(
                                         ordinal,
                                         invocation,
                                         "x",
@@ -664,7 +663,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 /*
@@ -830,7 +829,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 assertTrue(
@@ -919,7 +918,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 assertTrue(
@@ -1137,7 +1136,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .getBytecodeNode()
                                 .getInstructionsAsList()
                                 .stream()
-                                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
 
                 assertTrue(
@@ -1256,9 +1255,8 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.executionDomain());
 
                 ProtosCapturedLexicalAccess.CapturedLexicalWriteTarget destination =
-                        ProtosBytecodeRootNode
-                                .ResolveCapturedWritableLexicalTarget
-                                .perform(
+                        ProtosCapturedLexicalAccess
+                                .resolveCapturedFrameWriteTarget(
                                         ordinal,
                                         invocation,
                                         "x",

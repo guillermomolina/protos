@@ -29,8 +29,9 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 new ProtosObjectValue(prelude.mapPrototype());
 
         ProtosPreparedCalls.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.PrepareMapConstructionFactoryCall
-                        .perform(activation, inherited);
+                (ProtosPreparedCalls.PreparedClosureCall)
+                        ProtosBytecodeRootNode.MapConstructionFactoryCall
+                                .perform(false, activation, inherited);
 
         assertSame(inherited, prepared.activation().receiver());
 
@@ -38,14 +39,15 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
 
         assertSame(
                 produced,
-                ProtosBytecodeRootNode.FinishMapConstructionFactoryCall
-                        .perform(activation, produced));
+                ProtosBytecodeRootNode.MapConstructionFactoryCall
+                        .perform(true, activation, produced));
 
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode.FinishMapConstructionFactoryCall
+                        ProtosBytecodeRootNode.MapConstructionFactoryCall
                                 .perform(
+                                        true,
                                         activation,
                                         ProtosBooleanValue.TRUE));
 
@@ -61,8 +63,8 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosBytecodeRootNode.PrepareMapConstructionFactoryCall
-                                .perform(activation, copied));
+                        ProtosBytecodeRootNode.MapConstructionFactoryCall
+                                .perform(false, activation, copied));
     }
 
     @Test

@@ -1626,7 +1626,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : root.getBytecodeNode().getInstructionsAsList()) {
-            StringBuilder entry = new StringBuilder(instruction.getName());
+            StringBuilder entry = new StringBuilder(ProtosInstructionNames.of(instruction));
             for (Instruction.Argument argument : instruction.getArguments()) {
                 entry.append(' ')
                         .append(argument.getName())
@@ -1651,7 +1651,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     || instruction.getName().startsWith("trace.")) {
                 continue;
             }
-            StringBuilder entry = new StringBuilder(instruction.getName());
+            StringBuilder entry = new StringBuilder(ProtosInstructionNames.of(instruction));
             for (Instruction.Argument argument : instruction.getArguments()) {
                 entry.append(' ').append(argument.getKind()).append('=').append(
                         argument.getKind() == Instruction.Argument.Kind.BYTECODE_INDEX

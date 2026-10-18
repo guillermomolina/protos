@@ -175,7 +175,7 @@ final class ProtosPerf026B2BooleanInlineCallbackTest {
 
     /**
      * A non-Boolean result of an inline AND/OR callback still reaches
-     * FinishStructuredBooleanCallback: it signals an Error with the same
+     * StructuredFinishWithChildResult: it signals an Error with the same
      * prototype as the physical (dynamic-callback) path in the same module.
      */
     @Test

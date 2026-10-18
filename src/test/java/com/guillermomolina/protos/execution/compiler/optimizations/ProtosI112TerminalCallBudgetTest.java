@@ -340,7 +340,7 @@ final class ProtosI112TerminalCallBudgetTest {
                 root.getBytecodeNode().getInstructionsAsList()) {
 
             StringBuilder entry =
-                    new StringBuilder(instruction.getName());
+                    new StringBuilder(ProtosInstructionNames.of(instruction));
 
             for (Instruction.Argument argument :
                     instruction.getArguments()) {

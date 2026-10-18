@@ -40,7 +40,7 @@ final class ProtosCapturedLexicalAccess {
 
     /**
      * The statically proven direct-read primitive shared by {@link
-     * ReadCapturedFrameLocal} and its PERF025 inline-callback counterpart,
+     * #readCapturedFrameLocal} and its PERF025 inline-callback counterpart,
      * once the current scope is known not to hold {@code name}: the owner
      * binding, or {@code null} when any nearer captured scope holds the name
      * PRESENT or the owner/layout does not match (the caller then takes the
@@ -76,7 +76,7 @@ final class ProtosCapturedLexicalAccess {
     }
 
     /**
-     * The {@link SelectCapturedMaterializedOwnerFrame} counterpart of {@link
+     * The {@link #selectCapturedMaterializedOwnerFrame} counterpart of {@link
      * #readCapturedFrameBindingOrNull}: the retained frame of the selected
      * owner when {@code accessor}'s local is PRESENT in it, otherwise {@code
      * null}.
@@ -530,7 +530,7 @@ final class ProtosCapturedLexicalAccess {
 
     /**
      * The generic captured lookup, also taken when {@link
-     * SelectCapturedMaterializedOwnerFrame} selected no owner frame.
+     * #selectCapturedMaterializedOwnerFrame} selected no owner frame.
      */
     static Object lookupCapturedFallback(
             ProtosActivation activation,
@@ -609,7 +609,7 @@ final class ProtosCapturedLexicalAccess {
 
     /**
      * The statically proven destination-selection primitive shared by {@link
-     * ResolveCapturedWritableLexicalTarget} and its PERF025 inline-callback
+     * #resolveCapturedFrameWriteTarget} and its PERF025 inline-callback
      * counterpart, once the current scope is known not to hold {@code name}:
      * the frame-backed owner destination, or {@code null} for the exact
      * generic selection.
@@ -661,7 +661,7 @@ final class ProtosCapturedLexicalAccess {
     }
 
     /**
-     * The {@link ResolveCapturedMaterializedWritableLexicalTarget} counterpart
+     * The {@link #resolveCapturedMaterializedWriteTarget} counterpart
      * of {@link #capturedFrameWriteTargetOrNull}.
      */
     static CapturedLexicalWriteTarget capturedMaterializedWriteTargetOrNull(
@@ -714,5 +714,113 @@ final class ProtosCapturedLexicalAccess {
             destination.target.assignLocalSlot(
                     name, ProtosNumericValueSupport.guestValue(value));
         }
+    }
+
+    /** The captured frame-binding read of a statically resolved binding. */
+    static Object readCapturedFrameLocal(
+            int frameOrdinal,
+            ProtosActivation activation,
+            String name,
+            int lexicalDepth) {
+        if (lexicalDepth > 0
+                && !activation.currentContextHasLocalSlotForRuntime(name)) {
+            Object value =
+                    ProtosCapturedLexicalAccess.readCapturedFrameBindingOrNull(
+                            activation.capturedLexicalEnvironmentForRuntime(),
+                            name,
+                            lexicalDepth,
+                            frameOrdinal);
+            if (value != null) {
+                return value;
+            }
+        }
+        return ProtosCapturedLexicalAccess.lookupCapturedFallback(activation, name);
+    }
+
+    /** The captured frame-binding write target of a statically resolved binding. */
+    static CapturedLexicalWriteTarget resolveCapturedFrameWriteTarget(
+            int frameOrdinal,
+            ProtosActivation activation,
+            String name,
+            int lexicalDepth) {
+        if (lexicalDepth > 0) {
+            if (activation.currentContextHasLocalSlotForRuntime(name)) {
+                return CapturedLexicalWriteTarget.generic(
+                        activation.context());
+            }
+
+            CapturedLexicalWriteTarget selected =
+                    ProtosCapturedLexicalAccess.capturedFrameWriteTargetOrNull(
+                            activation.capturedLexicalEnvironmentForRuntime(),
+                            name,
+                            lexicalDepth,
+                            frameOrdinal);
+            if (selected != null) {
+                return selected;
+            }
+        }
+
+        ProtosObjectValue fallback =
+                ProtosLexicalFallback.writableContextByName(activation, name)
+                        .orElseThrow(
+                                () ->
+                                        new ProtosSignalException(
+                                                ProtosCoreErrors.newSlotNotFound(
+                                                        activation)));
+        return CapturedLexicalWriteTarget.generic(fallback);
+    }
+
+    /** The materialized owner frame of a captured binding, or {@code null}. */
+    static MaterializedFrame selectCapturedMaterializedOwnerFrame(
+            MaterializedLocalAccessor accessor,
+            ProtosActivation activation,
+            String name,
+            int lexicalDepth,
+            BytecodeNode bytecodeNode) {
+        if (lexicalDepth > 0
+                && !activation.currentContextHasLocalSlotForRuntime(name)) {
+            return ProtosCapturedLexicalAccess.capturedMaterializedOwnerFrameOrNull(
+                    accessor,
+                    activation.capturedLexicalEnvironmentForRuntime(),
+                    name,
+                    lexicalDepth,
+                    bytecodeNode);
+        }
+        return null;
+    }
+
+    /** The materialized write target of a captured binding. */
+    static CapturedLexicalWriteTarget resolveCapturedMaterializedWriteTarget(
+            MaterializedLocalAccessor accessor,
+            ProtosActivation activation,
+            String name,
+            int lexicalDepth,
+            BytecodeNode bytecodeNode) {
+        if (lexicalDepth > 0) {
+            if (activation.currentContextHasLocalSlotForRuntime(name)) {
+                return CapturedLexicalWriteTarget.generic(
+                        activation.context());
+            }
+
+            CapturedLexicalWriteTarget selected =
+                    ProtosCapturedLexicalAccess.capturedMaterializedWriteTargetOrNull(
+                            accessor,
+                            activation.capturedLexicalEnvironmentForRuntime(),
+                            name,
+                            lexicalDepth,
+                            bytecodeNode);
+            if (selected != null) {
+                return selected;
+            }
+        }
+
+        ProtosObjectValue fallback =
+                ProtosLexicalFallback.writableContextByName(activation, name)
+                        .orElseThrow(
+                                () ->
+                                        new ProtosSignalException(
+                                                ProtosCoreErrors.newSlotNotFound(
+                                                        activation)));
+        return CapturedLexicalWriteTarget.generic(fallback);
     }
 }

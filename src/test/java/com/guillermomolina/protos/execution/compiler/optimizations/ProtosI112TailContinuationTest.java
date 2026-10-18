@@ -1253,7 +1253,7 @@ final class ProtosI112TailContinuationTest {
     private static List<String> signature(ProtosBytecodeRootNode root) {
         List<String> entries = new ArrayList<>();
         for (Instruction instruction : instructions(root)) {
-            StringBuilder entry = new StringBuilder(instruction.getName());
+            StringBuilder entry = new StringBuilder(ProtosInstructionNames.of(instruction));
             for (Instruction.Argument argument : instruction.getArguments()) {
                 entry.append(' ').append(argument.getName()).append(':').append(argument.getKind());
             }

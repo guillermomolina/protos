@@ -581,7 +581,7 @@ final class ProtosI108BCallNDispatchTest {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 

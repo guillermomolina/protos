@@ -188,7 +188,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                         }
                         run()
                         """);
-        List<String> names = instructions.stream().map(Instruction::getName).toList();
+        List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
         List<Integer> parameter = constantOrdinals(instructions, "BindInlineClosureFrameParameter");
         List<Integer> creations = constantOrdinals(instructions, "CreateInlineCurrentFrameLocal");
         assertEquals(1, parameter.size(), () -> "one formal: " + names);
@@ -240,7 +240,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 host.getRootNodes().ensureComplete();
                 List<String> names =
                         host.getBytecodeNode().getInstructionsAsList().stream()
-                                .map(Instruction::getName)
+                                .map(ProtosInstructionNames::of)
                                 .toList();
                 assertContains(names, MATERIALIZE);
                 assertFalse(
@@ -643,7 +643,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     private static List<String> assertRegionWithoutActivation(boolean debug, String characters)
             throws Exception {
         return assertRegionInstructionsWithoutActivation(debug, characters).stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 
@@ -668,7 +668,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 assertNotNull(host, "probe must observe the run root");
                 host.getRootNodes().ensureComplete();
                 List<Instruction> instructions = host.getBytecodeNode().getInstructionsAsList();
-                List<String> names = instructions.stream().map(Instruction::getName).toList();
+                List<String> names = instructions.stream().map(ProtosInstructionNames::of).toList();
                 assertFalse(
                         names.stream().anyMatch(name -> name.contains(PLAIN_LOAD)),
                         () -> "frame-native region must not use the plain entry load: " + names);
@@ -685,7 +685,7 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     /** The immediate constant {@code ordinal} of every {@code operation} instruction, in order. */
     private static List<Integer> constantOrdinals(List<Instruction> instructions, String operation) {
         return instructions.stream()
-                .filter(instruction -> instruction.getName().contains(operation))
+                .filter(instruction -> ProtosInstructionNames.of(instruction).contains(operation))
                 .map(instruction -> {
                     Instruction.Argument ordinal =
                             instruction.getArguments().stream()

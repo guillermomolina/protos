@@ -189,10 +189,10 @@ public final class ProtosTextWriterCPrimeExecution {
 
                             builder.beginBlock();
                             builder.beginStoreLocal(prepared);
-                            builder.beginPrepareTextWriterTargetCall();
+                            builder.beginIoPrepareTargetCall(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadArgument(0);
-                            builder.endPrepareTextWriterTargetCall();
+                            builder.endIoPrepareTargetCall();
                             builder.endStoreLocal();
 
                             builder.beginTryFinally(
@@ -210,9 +210,9 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endStoreLocal();
 
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(child);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(resume);
                             builder.beginYield();
@@ -230,38 +230,38 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endWhile();
 
                             builder.beginStoreLocal(targetResult);
-                            builder.beginFinishCPrimeClosureCall();
+                            builder.beginFinishClosureCall(true);
                             builder.emitLoadLocal(prepared);
                             builder.emitLoadLocal(child);
-                            builder.endFinishCPrimeClosureCall();
+                            builder.endFinishClosureCall();
                             builder.endStoreLocal();
 
                             builder.endBlock();
                             builder.endTryFinally();
 
                             builder.beginStoreLocal(invocation);
-                            builder.beginWrapTextWriterTargetInvocation();
+                            builder.beginIoInvocationSucceeded(false);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(targetResult);
-                            builder.endWrapTextWriterTargetInvocation();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.beginBlock();
                             builder.beginStoreLocal(invocation);
-                            builder.beginTextWriterTargetInvocationFailed();
+                            builder.beginIoInvocationFailed();
                             builder.emitLoadArgument(1);
-                            builder.endTextWriterTargetInvocationFailed();
+                            builder.endIoInvocationFailed();
                             builder.endStoreLocal();
                             builder.endBlock();
 
                             builder.endTryCatch();
 
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginAwaitTextWriterTargetFuture();
+                            builder.beginIoInvocationSucceeded(true);
                             builder.emitLoadArgument(1);
                             builder.emitLoadLocal(invocation);
-                            builder.endAwaitTextWriterTargetFuture();
+                            builder.endIoInvocationSucceeded();
                             builder.endStoreLocal();
 
                             /*
@@ -270,9 +270,9 @@ public final class ProtosTextWriterCPrimeExecution {
                              * be redirected by Future instance mutation/override.
                              */
                             builder.beginWhile();
-                            builder.beginIsContinuation();
+                            builder.beginIsResultKind(ProtosResultKind.CONTINUATION);
                             builder.emitLoadLocal(lowerOutcome);
-                            builder.endIsContinuation();
+                            builder.endIsResultKind();
                             builder.beginBlock();
                             builder.beginStoreLocal(yielded);
                             builder.emitLoadLocal(lowerOutcome);
@@ -283,11 +283,11 @@ public final class ProtosTextWriterCPrimeExecution {
                             builder.endYield();
                             builder.endStoreLocal();
                             builder.beginStoreLocal(lowerOutcome);
-                            builder.beginResumeTextWriterTargetFutureWait();
+                            builder.beginIoResumeOperationFutureWait("TextWriter");
                             builder.emitLoadArgument(0);
                             builder.emitLoadLocal(yielded);
                             builder.emitLoadLocal(resume);
-                            builder.endResumeTextWriterTargetFutureWait();
+                            builder.endIoResumeOperationFutureWait();
                             builder.endStoreLocal();
                             builder.endBlock();
                             builder.endWhile();

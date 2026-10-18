@@ -2467,7 +2467,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
 
     private static List<String> instructionNames(BytecodeNode bytecodeNode) {
         return bytecodeNode.getInstructionsAsList().stream()
-                .map(Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 

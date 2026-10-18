@@ -818,12 +818,12 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                     ProtosLanguageContext.currentIfEnteredForRuntime();
 
             var zero =
-                    ProtosBytecodeRootNode.PrepareSendArguments
+                    ProtosGuardedSendSelection
                             .createGuardedSendForPrelude(
                                     receiver, "zero", prelude, entered);
 
             var one =
-                    ProtosBytecodeRootNode.PrepareSendArguments
+                    ProtosGuardedSendSelection
                             .createGuardedSendForPrelude(
                                     receiver, "one", prelude, entered);
 
@@ -874,6 +874,7 @@ final class ProtosPerf032G7MinimalDirectHeaderTest {
                 ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
                         closure, entered);
         return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
                 closure,
                 caller,
                 supplied,

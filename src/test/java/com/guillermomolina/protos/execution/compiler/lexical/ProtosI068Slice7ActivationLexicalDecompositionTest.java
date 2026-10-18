@@ -205,7 +205,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
         return root.getBytecodeNode()
                 .getInstructionsAsList()
                 .stream()
-                .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                .map(ProtosInstructionNames::of)
                 .toList();
     }
 

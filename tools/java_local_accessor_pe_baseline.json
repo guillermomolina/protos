@@ -3,8 +3,8 @@
   "description": "Exact topology of every determinate PE-safe LocalAccessor/MaterializedLocalAccessor sink. Risks are never baselined.",
   "entries": [
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.ReadFrameLocal",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
+      "class": "ProtosFrameLocalBindings",
       "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
       "operation": "isCleared",
@@ -16,8 +16,8 @@
       "pe_reachability": "PE_REACHABLE_PROVEN"
     },
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode.ReadFrameLocal",
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
+      "class": "ProtosFrameLocalBindings",
       "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
       "family": "LocalAccessor",
       "operation": "getObject",
