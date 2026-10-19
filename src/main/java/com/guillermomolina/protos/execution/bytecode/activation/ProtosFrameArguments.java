@@ -294,6 +294,25 @@ final class ProtosFrameArguments {
             throw new IllegalArgumentException(
                     "Invalid direct Closure-call caller reference");
         }
+        return compactAdmittedTerminalClosureCallOneNoHome(
+                closure, callerReference, supplied0);
+    }
+
+    /**
+     * I115-D: trusted B5+ construction for the already admitted
+     * InvokeClosureOneTail direct specialization.
+     *
+     * The receiver and executable have passed the direct-call
+     * guards. callerReference(frame) supplies either the exact
+     * published activation or the caller's own B5 argument array.
+     * No validation, caller publication or array copy occurs here.
+     *
+     * The general Object-caller constructor retains its validation.
+     */
+    static Object[] compactAdmittedTerminalClosureCallOneNoHome(
+            ProtosClosureValue closure,
+            Object callerReference,
+            Object supplied0) {
         return new Object[] {
             closure,
             DIRECT_CLOSURE_CALL,

@@ -33,6 +33,8 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
@@ -115,6 +117,272 @@ final class ProtosI115ARuntimeAdmissionTest {
                     ProtosObjectValue.class.isAssignableFrom(component.getType()),
                     component.toString());
         }
+    }
+
+
+    @Test
+    void localCallAbsenceCertificateInvalidatesAndRestores()
+            throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "make: () => { (value) => { value } }\n",
+                    "i115c-certificate-definition.protos",
+                    module);
+
+            ProtosClosureValue first = closure("make()\n", module);
+            ProtosClosureValue second = closure("make()\n", module);
+
+            assertSame(first.definition(), second.definition());
+
+            Assumption firstCertificate =
+                    first.localCallAbsentSelectionAssumptionOrNullForRuntime();
+            Assumption secondCertificate =
+                    second.localCallAbsentSelectionAssumptionOrNullForRuntime();
+
+            assertNotNull(firstCertificate);
+            assertNotNull(secondCertificate);
+            assertTrue(firstCertificate.isValid());
+            assertTrue(secondCertificate.isValid());
+
+            first.createLocalSlot("call", ProtosNullValue.INSTANCE);
+
+            assertFalse(firstCertificate.isValid());
+            assertTrue(secondCertificate.isValid());
+            assertNull(
+                    first.localCallAbsentSelectionAssumptionOrNullForRuntime());
+
+            first.assignLocalSlot(
+                    "call",
+                    closure("make()\n", module));
+
+            assertNull(
+                    first.localCallAbsentSelectionAssumptionOrNullForRuntime());
+
+            first.removeLocalSlot("call");
+
+            Assumption restored =
+                    first.localCallAbsentSelectionAssumptionOrNullForRuntime();
+
+            assertNotNull(restored);
+            assertTrue(restored.isValid());
+            assertNotSame(firstCertificate, restored);
+
+            second.createLocalSlot("call", ProtosNullValue.INSTANCE);
+
+            assertFalse(secondCertificate.isValid());
+            assertTrue(restored.isValid());
+
+            first.createLocalSlot("call", ProtosNullValue.INSTANCE);
+            assertFalse(restored.isValid());
+        });
+    }
+
+
+    @Test
+    void projectionCertificateInvalidatesOnTransition()
+            throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "make: () => { (value) => { value } }\n",
+                    "i115c-projection-definition.protos",
+                    module);
+
+            ProtosClosureValue first = closure("make()\n", module);
+            ProtosClosureValue second = closure("make()\n", module);
+
+            assertFalse(
+                    first.requiresContextLocalExecutionProjectionForRuntime());
+
+            Assumption firstCertificate =
+                    first.contextProjectionStabilityForRuntime();
+            Assumption secondCertificate =
+                    second.contextProjectionStabilityForRuntime();
+
+            assertTrue(firstCertificate.isValid());
+            assertTrue(secondCertificate.isValid());
+
+            first.requireContextLocalExecutionProjectionForRuntime();
+
+            assertFalse(firstCertificate.isValid());
+            assertTrue(secondCertificate.isValid());
+            assertTrue(
+                    first.requiresContextLocalExecutionProjectionForRuntime());
+
+            Assumption restored =
+                    first.contextProjectionStabilityForRuntime();
+
+            assertNotSame(firstCertificate, restored);
+            assertTrue(restored.isValid());
+
+            first.requireContextLocalExecutionProjectionForRuntime();
+
+            assertTrue(restored.isValid());
+            assertTrue(secondCertificate.isValid());
+        });
+    }
+
+    @Test
+    void homeCertificateRejectsObservableCapturedHome()
+            throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "make: () => { (value) => { value } }\n",
+                    "i115c-home-definition.protos",
+                    module);
+
+            ProtosClosureValue ordinary = closure("make()\n", module);
+            ProtosClosureExecutionPlan template =
+                    ordinary.preparedExecutionPlanOrNullForRuntime();
+
+            ProtosLanguageContext context =
+                    ProtosLanguageContext.current();
+
+            DirectClosureExecutableFacts facts =
+                    ProtosClosureCallPreparation
+                            .establishDirectClosureExecutableFactsOrNull(
+                                    ordinary, context);
+
+            assertNotNull(facts);
+            assertTrue(
+                    InvokeClosureOneTail.stableUnobservableReturnHome(
+                            ordinary, facts));
+
+            ProtosReturnHome home = new ProtosReturnHome();
+
+            ProtosClosureValue captured =
+                    new ProtosClosureValue(
+                            ordinary.definition(),
+                            ordinary.capturedLexicalContexts(),
+                            ordinary.capturedReceiver(),
+                            null,
+                            home,
+                            module.prelude().orElseThrow(),
+                            template);
+
+            assertSame(
+                    home,
+                    captured.invocationReturnHomeForRuntime());
+
+            assertFalse(
+                    InvokeClosureOneTail.stableUnobservableReturnHome(
+                            captured, facts));
+        });
+    }
+
+
+    @Test
+    void definitionTierHomeEligibilityIsPerInstance()
+            throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "make: () => { (value) => { value } }\n",
+                    "i115c-definition-home.protos",
+                    module);
+
+            ProtosClosureValue ordinary =
+                    closure("make()\n", module);
+
+            ProtosClosureExecutionPlan template =
+                    ordinary.preparedExecutionPlanOrNullForRuntime();
+
+            assertNotNull(template);
+            assertTrue(
+                    template.returnHomeProvenUnobservableForRuntime());
+
+            // A Closure without a captured ReturnHome relies
+            // on the immutable template proof.
+            ProtosClosureValue owning =
+                    new ProtosClosureValue(
+                            ordinary.definition(),
+                            ordinary.capturedLexicalContexts(),
+                            ordinary.capturedReceiver(),
+                            null,
+                            null,
+                            module.prelude().orElseThrow(),
+                            template);
+
+            assertTrue(
+                    owning.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            true));
+
+            assertFalse(
+                    owning.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            false));
+
+            // A real captured ReturnHome cannot be replaced by
+            // the unobservable marker, regardless of the plan.
+            ProtosReturnHome realHome = new ProtosReturnHome();
+
+            ProtosClosureValue observable =
+                    new ProtosClosureValue(
+                            ordinary.definition(),
+                            ordinary.capturedLexicalContexts(),
+                            ordinary.capturedReceiver(),
+                            null,
+                            realHome,
+                            module.prelude().orElseThrow(),
+                            template);
+
+            assertSame(
+                    realHome,
+                    observable.invocationReturnHomeForRuntime());
+
+            assertFalse(
+                    observable.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            true));
+
+            assertFalse(
+                    observable.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            false));
+
+            // A Closure capturing the explicit unobservable
+            // marker does not need the template proof.
+            ProtosClosureValue marker =
+                    new ProtosClosureValue(
+                            ordinary.definition(),
+                            ordinary.capturedLexicalContexts(),
+                            ordinary.capturedReceiver(),
+                            null,
+                            ProtosReturnHome.unobservable(),
+                            module.prelude().orElseThrow(),
+                            template);
+
+            assertTrue(
+                    marker.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            true));
+
+            assertTrue(
+                    marker.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            false));
+
+            // All three Closures share the executable template.
+            assertSame(
+                    template,
+                    owning.preparedExecutionPlanOrNullForRuntime());
+
+            assertSame(
+                    template,
+                    observable.preparedExecutionPlanOrNullForRuntime());
+
+            assertSame(
+                    template,
+                    marker.preparedExecutionPlanOrNullForRuntime());
+            // Definition-tier admission must be established
+            // before caching the executable target.
+            assertTrue(
+                    InvokeClosureOneTail.definitionHomeAdmitted(
+                            owning, template));
+            assertFalse(
+                    InvokeClosureOneTail.definitionHomeAdmitted(
+                            observable, template));
+            assertTrue(
+                    InvokeClosureOneTail.definitionHomeAdmitted(
+                            marker, template));
+            assertFalse(
+                    InvokeClosureOneTail.definitionHomeAdmitted(
+                            owning, null));
+
+        });
     }
 
     @Test

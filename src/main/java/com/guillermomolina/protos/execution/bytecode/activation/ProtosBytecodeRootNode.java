@@ -8824,10 +8824,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class InvokeClosureOneTail {
         /**
-         * Receiver-identity tier. Neither the caller's prelude nor a
-         * per-receiver lookup participates: the root selection is covered by
-         * the declared assumption and the receiver's own {@code call} slot
-         * and ReturnHome are re-checked on every hit.
+         * Identity-keyed direct call.
+         *
+         * Local call selection and the Context projection
+         * requirement are protected by invalidatable Assumptions.
+         * Executable target and ReturnHome eligibility are
+         * certified at PIC installation.
          */
         @Specialization(
                 excludeForUncached = true,
@@ -8836,11 +8838,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "enteredContext != null",
                     "enteredContext == cachedContext",
                     "cachedClosure != null",
+                    "cachedLocalCallAbsence != null",
+                    "cachedProjectionStability != null",
                     "cachedFacts != null",
-                    "admittedTailTarget(cachedFacts.target())",
-                    "admittedCachedInstance(cachedClosure, cachedFacts, cachedInstanceProjection)"
+                    "cachedHomeProven",
+                    "admittedTailTarget(cachedFacts.target())"
                 },
-                assumptions = "cachedFacts.rootCallStability()",
+                assumptions = {
+                    "cachedFacts.rootCallStability()",
+                    "cachedLocalCallAbsence",
+                    "cachedProjectionStability"
+                },
                 limit = "3")
         public static Object guardedSource(
                 Object receiver,
@@ -8856,10 +8864,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosLanguageContext cachedContext,
                 @Cached("admittedInstanceUnderGuardedRootCallOrNull(receiver)")
                         ProtosClosureValue cachedClosure,
-                @Cached("instanceProjection(cachedClosure)")
-                        boolean cachedInstanceProjection,
+                @Cached("localCallAbsenceOrNull(cachedClosure)")
+                        Assumption cachedLocalCallAbsence,
+                @Cached("projectionStabilityOrNull(cachedClosure)")
+                        Assumption cachedProjectionStability,
                 @Cached("establishFacts(cachedClosure, enteredContext)")
                         DirectClosureExecutableFacts cachedFacts,
+                @Cached("stableUnobservableReturnHome(cachedClosure, cachedFacts)")
+                        boolean cachedHomeProven,
                 @Cached("provenNonSuspending(cachedFacts.target())")
                         boolean cachedProven,
                 @Cached("create(cachedFacts.target())")
@@ -8890,6 +8902,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * Closures of one definition share the target while each hit enters
          * its own captures, receiver and ReturnHome. A plan that is not yet
          * prepared misses here and is never rematerialized for installation.
+         * ReturnHome admission precedes executable-facts installation.
+         * It uses the prepared template's immutable proof and the current
+         * Closure's immutable captured-home state.
          */
         @Specialization(
                 excludeForUncached = true,
@@ -8899,6 +8914,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "closureDefinition == cachedClosureDefinition",
                     "sourcePlan != null",
                     "sourcePlan == cachedSourcePlan",
+                    "definitionHomeAdmitted(admittedClosure, sourcePlan)",
                     "enteredContext != null",
                     "enteredContext == cachedContext",
                     "projectionRequired == cachedProjectionRequired",
@@ -8915,7 +8931,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
-                @Bind("admittedInstanceUnderGuardedRootCallOrNull(receiver)")
+                @Bind("definitionCandidateUnderGuardedRootCallOrNull(receiver)")
                         ProtosClosureValue admittedClosure,
                 @Bind("admittedDefinitionOrNull(admittedClosure)")
                         CanonicalClosure closureDefinition,
@@ -9058,7 +9074,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 BytecodeNode bytecodeNode,
                 int bytecodeIndex) {
             Object[] frameArguments =
-                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                    ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
                             closure, callerReference, supplied0);
             if (proven) {
                 return enterDirectProven(node, frameArguments);
@@ -9070,7 +9086,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * I115-B: the synchronous direct entry of a target whose consumed
          * EFFECTIVE_ROOT non-suspension proof holds. Non-suspension is not
          * non-failure: the control-transfer bridge stays, and the result is
-         * still projected to its guest value.
+         * projected by the owning root's return epilogue only when
+         * its caller does not accept an internal numeric carrier.
          */
         private static Object enterDirectProven(
                 DirectCallNode node,
@@ -9082,7 +9099,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw bridged.transfer();
             }
             java.util.Objects.requireNonNull(outcome, "terminal Closure invocation returned null");
-            return ProtosNumericValueSupport.guestValue(outcome);
+            return outcome;
         }
 
         /**
@@ -9106,22 +9123,77 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return closure;
         }
 
+                /**
+         * Installs a receiver-specific selector certificate.
+         * Never executed on a successful PIC hit.
+         */
+        static Assumption localCallAbsenceOrNull(
+                ProtosClosureValue closure) {
+            return closure == null
+                    ? null
+                    : closure.localCallAbsentSelectionAssumptionOrNullForRuntime();
+        }
+
         /**
-         * I115-B: the receiver-identity tier's per-hit re-proof for its
-         * cached Closure: still no local {@code call}, still the unobservable
-         * ReturnHome, still the template plan and projection requirement the
-         * entry's facts were established from.
+         * I115-C: specialization-installation certificates.
+         *
+         * The local call selector and the Context projection
+         * requirement are protected by independent Assumptions.
+         * ReturnHome eligibility is cached per receiver identity,
+         * using the already prepared immutable plan.
+         */
+        static Assumption projectionStabilityOrNull(
+                ProtosClosureValue closure) {
+            return closure == null
+                    ? null
+                    : closure.contextProjectionStabilityForRuntime();
+        }
+
+        /**
+         * PIC installation only. The Closure identity, prepared
+         * template and captured ReturnHome are stable for the
+         * lifetime of this identity-keyed entry.
+         *
+         * The Context projection transition is protected by a
+         * separately declared Assumption.
+         */
+        static boolean stableUnobservableReturnHome(
+                ProtosClosureValue closure,
+                DirectClosureExecutableFacts facts) {
+            return closure != null
+                    && facts != null
+                    && closure.preparedExecutionPlanOrNullForRuntime()
+                            == facts.template()
+                    && closure.hasUnobservableInvocationReturnHomeForRuntime();
+        }
+
+        /**
+         * Definition-tier candidate without redundant ReturnHome
+         * examination. Local call selection remains instance-local
+         * and is checked after both operands have been evaluated.
          */
         @NonIdempotent
-        static boolean admittedCachedInstance(
+        static ProtosClosureValue definitionCandidateUnderGuardedRootCallOrNull(
+                Object receiver) {
+            return ProtosClosureCallPreparation
+                    .directClosureInstanceUnderGuardedRootCallOrNull(receiver);
+        }
+
+        /**
+         * Before executable-facts installation, checks the current
+         * Closure's captured ReturnHome against its prepared
+         * template's immutable non-observability proof.
+         *
+         * No foreign Closure's captured home is reused.
+         */
+        @NonIdempotent
+        static boolean definitionHomeAdmitted(
                 ProtosClosureValue closure,
-                DirectClosureExecutableFacts facts,
-                boolean projectionAtInstallation) {
-            return !closure.hasLocalCallSlotForRuntime()
-                    && closure.hasUnobservableInvocationReturnHomeForRuntime()
-                    && closure.preparedExecutionPlanOrNullForRuntime() == facts.template()
-                    && closure.requiresContextLocalExecutionProjectionForRuntime()
-                            == projectionAtInstallation;
+                ProtosClosureExecutionPlan preparedTemplate) {
+            return closure != null
+                    && preparedTemplate != null
+                    && closure.hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+                            preparedTemplate.returnHomeProvenUnobservableForRuntime());
         }
 
         static CanonicalClosure admittedDefinitionOrNull(ProtosClosureValue closure) {

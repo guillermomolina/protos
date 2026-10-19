@@ -1358,6 +1358,11 @@ final class CanonicalToBytecodeLowerer {
                         builder.endReturn();
                     }
                 } else if (admitsTerminalClosureCall(last)) {
+                    // I115-D2: terminal Call1 may retain a numeric
+                    // carrier until the existing root return epilogue.
+                    // The epilogue projects it for non-accepting callers.
+                    epilogProjectsReturnCarrier =
+                            ((CanonicalCall) last).arguments().size() == 1;
                     /*
                      * I112 / PLAT062-T: the final Closure call is the root's
                      * terminal invocation. No result or scratch local, no

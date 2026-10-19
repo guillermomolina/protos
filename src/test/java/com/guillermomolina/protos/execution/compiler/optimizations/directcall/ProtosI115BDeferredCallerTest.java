@@ -146,6 +146,76 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
+    @Test
+    void admittedTerminalB5HeaderMatchesValidatedConstructor()
+            throws Exception {
+        withCore(module -> {
+            evaluate(
+                    "make: () => { (value) => { value } }\n",
+                    "i115d-b5-define.protos",
+                    module);
+
+            ProtosClosureValue closure =
+                    closure("make()\n", module);
+
+            // Published caller: every B5 slot is identical.
+            Object[] validated =
+                    ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                            closure, (Object) module, SUPPLIED);
+
+            Object[] admitted =
+                    ProtosFrameArguments
+                            .compactAdmittedTerminalClosureCallOneNoHome(
+                                    closure, module, SUPPLIED);
+
+            assertEquals(validated.length, admitted.length);
+            for (int i = 0; i < validated.length; i++) {
+                assertSame(validated[i], admitted[i]);
+            }
+
+            assertSame(
+                    module,
+                    ProtosFrameArguments.compactCaller(admitted));
+
+            // Deferred caller: preserve the original B5 array
+            // by reference, without publishing its activation.
+            Object[] callerArguments =
+                    ProtosFrameArguments.compactDirectClosureCallOne(
+                            closure, module, null, SUPPLIED);
+
+            Object[] deferred =
+                    ProtosFrameArguments
+                            .compactAdmittedTerminalClosureCallOneNoHome(
+                                    closure, callerArguments, SUPPLIED);
+
+            assertEquals(
+                    ProtosFrameArguments.HEADER_LENGTH + 1,
+                    deferred.length);
+            assertSame(closure, deferred[0]);
+            assertSame(callerArguments, deferred[3]);
+            assertSame(SUPPLIED, deferred[5]);
+            assertTrue(
+                    ProtosFrameArguments.acceptsPrimitiveResult(deferred));
+
+            assertSame(
+                    module.prelude().orElse(null),
+                    ProtosFrameArguments.preludeOrNull(deferred));
+            assertSame(
+                    module.task().orElse(null),
+                    ProtosFrameArguments.compactTask(deferred));
+
+            assertUnpublished(callerArguments);
+            assertUnpublished(deferred);
+
+            // General construction still rejects invalid callers.
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> ProtosFrameArguments
+                            .compactDirectClosureCallOneNoHome(
+                                    closure, (Object) "invalid", SUPPLIED));
+        });
+    }
+
     // ---- C, K. Published callers and the other B5 producers ---------------------------
 
     @Test
@@ -750,6 +820,85 @@ final class ProtosI115BDeferredCallerTest {
                     context.languageForRuntime(),
                     facts.effectivePlan().language().orElseThrow());
             return null;
+        });
+    }
+
+    @Test
+    void provenTerminalCallPropagatesOnlyToAcceptingNumericCaller()
+            throws Exception {
+        withCore(module -> {
+            evaluate("""
+                    make: () => { (value) => { value } }
+                    forwardInteger: (f) => { f(7) }
+                    forwardFloat: (f) => { f(7.5) }
+                    """, "i115d2-numeric-define.protos", module);
+
+            enterCachedTier("forwardInteger", module);
+            enterCachedTier("forwardFloat", module);
+
+            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                assertInteger(
+                        7,
+                        evaluate(
+                                "forwardInteger(make())\n",
+                                "i115d2-integer-warm.protos",
+                                module));
+                assertTrue(
+                        ProtosNumericValueSupport.isCurrentFloat(
+                                evaluate(
+                                        "forwardFloat(make())\n",
+                                        "i115d2-float-warm.protos",
+                                        module)));
+            }
+
+            ProtosClosureValue inner = closure("make()\n", module);
+
+            for (String name : List.of("forwardInteger", "forwardFloat")) {
+                ProtosClosureValue forward = assertInstanceOf(
+                        ProtosClosureValue.class,
+                        module.context().readLocalSlot(name).orElseThrow());
+
+                assertTrue(
+                        functionRoot(name, module)
+                                .epilogProjectsReturnCarrier());
+
+                RootCallTarget target = directTarget(forward);
+
+                // The inner terminal call is PROVEN.
+                // An accepting B5+ caller receives the raw carrier.
+                Object[] accepting =
+                        ProtosFrameArguments
+                                .compactAdmittedTerminalClosureCallOneNoHome(
+                                        forward, module, inner);
+
+                Object carrier = target.call(accepting);
+
+                if (name.equals("forwardInteger")) {
+                    assertEquals(7L, assertInstanceOf(Long.class, carrier));
+                } else {
+                    assertEquals(
+                            7.5d,
+                            assertInstanceOf(Double.class, carrier));
+                }
+
+                // An ordinary B5 caller never observes an
+                // internal Long or Double as a guest value.
+                Object[] ordinary =
+                        ProtosFrameArguments.compactDirectClosureCallOne(
+                                forward, module, null,
+                                inner);
+
+                Object guest = target.call(ordinary);
+                assertFalse(
+                        ProtosNumericValueSupport.isPrimitiveCarrier(guest));
+
+                if (name.equals("forwardInteger")) {
+                    assertInteger(7, guest);
+                } else {
+                    assertTrue(
+                            ProtosNumericValueSupport.isCurrentFloat(guest));
+                }
+            }
         });
     }
 

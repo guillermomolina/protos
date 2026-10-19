@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Truffle;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -250,7 +251,8 @@ public class ProtosObjectValue implements TruffleObject {
     final boolean trackSlotSelectionDependency(String name, Assumption dependency) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(dependency, "dependency");
-        if (getClass() != ProtosObjectValue.class) {
+        if (getClass() != ProtosObjectValue.class
+                && !(getClass() == ProtosClosureValue.class && "call".equals(name))) {
             return false;
         }
         if (isFrozen()) {
@@ -326,6 +328,35 @@ public class ProtosObjectValue implements TruffleObject {
     public Optional<Object> readLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
         return authorityRead(lexicalBindingAuthority, name);
+    }
+
+
+    /**
+     * Lazily certifies the absence of a local call slot on this
+     * exact Closure instance.
+     *
+     * The selector dependency is registered only when requested
+     * by a PIC. Mutations invalidate it before publication.
+     * Different Closure instances never share this certificate.
+     */
+    @TruffleBoundary
+    public final Assumption localCallAbsentSelectionAssumptionOrNullForRuntime() {
+        if (getClass() != ProtosClosureValue.class
+                || hasLocalCallSlotForRuntime()) {
+            return null;
+        }
+
+        Assumption stability = Truffle.getRuntime()
+                .createAssumption("Protos Closure local call absent");
+
+        if (!trackSlotSelectionDependency("call", stability)
+                || hasLocalCallSlotForRuntime()
+                || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+
+        return stability;
     }
 
     public Map<String, Object> localSlotsSnapshot() {
@@ -513,11 +544,11 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         for (int index = 0; index < contributionNames.size(); index++) {
+            invalidateLookupDependencies(contributionNames.get(index));
             ProtosLexicalBindingAuthorityCalls.put(
                     writableLexicalBindingAuthority(),
                     contributionNames.get(index),
                     contributionValues.get(index));
-            invalidateLookupDependencies(contributionNames.get(index));
         }
     }
 
@@ -574,9 +605,9 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot already exists: " + name);
         }
 
+        invalidateLookupDependencies(name);
         ProtosLexicalBindingAuthorityCalls.put(
                 writableLexicalBindingAuthority(), name, value);
-        invalidateLookupDependencies(name);
     }
 
     public void assignLocalSlot(String name, Object value) {
@@ -590,8 +621,8 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        ProtosLexicalBindingAuthorityCalls.put(lexicalBindingAuthority, name, value);
         invalidateValueLookupDependencies(name);
+        ProtosLexicalBindingAuthorityCalls.put(lexicalBindingAuthority, name, value);
     }
 
     public Object removeLocalSlot(String name) {
@@ -607,9 +638,9 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
+        invalidateLookupDependencies(name);
         Object removed =
                 ProtosLexicalBindingAuthorityCalls.remove(lexicalBindingAuthority, name);
-        invalidateLookupDependencies(name);
         return removed;
     }
 

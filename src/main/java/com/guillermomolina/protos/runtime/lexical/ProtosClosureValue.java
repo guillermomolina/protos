@@ -22,6 +22,9 @@ import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.callables.ProtosSuspensionCapableNativeClosureBody;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.List;
 import java.util.Objects;
 
@@ -36,6 +39,12 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private final java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer;
     private final ProtosNativeClosureBody nativeBody;
     private volatile boolean contextLocalExecutionProjectionRequired;
+
+    /*
+     * Demand-driven stability of this instance's Context projection
+     * requirement. Allocated only if a direct-call PIC requests it.
+     */
+    private Assumption contextProjectionStability;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
@@ -288,6 +297,30 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return plan != null && plan.returnHomeProvenUnobservableForRuntime();
     }
 
+
+    /**
+     * I115-C: per-instance ReturnHome eligibility under an
+     * already validated source executable template.
+     *
+     * The caller must have established that this Closure is
+     * source-backed and uses the exact cached template.
+     *
+     * The template's non-observability proof is immutable.
+     * The captured ReturnHome is final. Consequently the
+     * caller needs no per-instance volatile execution-plan
+     * lookup to classify this home.
+     *
+     * A real captured home always rejects the direct
+     * unobservable-home route, even when the template itself
+     * cannot observe a newly owned home.
+     */
+    public boolean hasUnobservableReturnHomeUnderTemplateProofForRuntime(
+            boolean templateProvenUnobservable) {
+        ProtosReturnHome capturedHome = returnHome;
+        return capturedHome == ProtosReturnHome.unobservable()
+                || (capturedHome == null && templateProvenUnobservable);
+    }
+
     public java.util.Optional<ProtosPrelude> prelude() {
         return java.util.Optional.ofNullable(prelude);
     }
@@ -325,7 +358,22 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return contextLocalExecutionProjectionRequired;
     }
 
-    /**
+        /**
+     * Lazily certifies this Closure's current projection requirement.
+     * Registration and transition use the same monitor.
+     */
+    @TruffleBoundary
+    public synchronized Assumption contextProjectionStabilityForRuntime() {
+        Assumption stability = contextProjectionStability;
+        if (stability == null || !stability.isValid()) {
+            stability = Truffle.getRuntime().createAssumption(
+                    "Protos Closure Context projection stable");
+            contextProjectionStability = stability;
+        }
+        return stability;
+    }
+
+/**
      * Requires entered Polyglot execution to use a Context-owned executable projection.
      * The semantic Closure and its template plan remain unchanged.
      */
@@ -334,7 +382,18 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             throw new IllegalStateException(
                     "context-local execution projection requires a prepared source-backed Closure");
         }
-        contextLocalExecutionProjectionRequired = true;
+
+        if (!contextLocalExecutionProjectionRequired) {
+            synchronized (this) {
+                if (!contextLocalExecutionProjectionRequired) {
+                    Assumption stability = contextProjectionStability;
+                    if (stability != null) {
+                        stability.invalidate();
+                    }
+                    contextLocalExecutionProjectionRequired = true;
+                }
+            }
+        }
     }
 
     public ProtosClosureExecutionPlan executionPlanForRuntimeInvocation() {
