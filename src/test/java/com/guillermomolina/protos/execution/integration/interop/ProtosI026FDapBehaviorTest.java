@@ -315,14 +315,15 @@ final class ProtosI026FDapBehaviorTest {
         }
     }
 
-    private static Set<Thread> dapClientConnectionThreads() {
+
+    static Set<Thread> dapClientConnectionThreads() {
         return Thread.getAllStackTraces().keySet().stream()
                 .filter(Thread::isAlive)
                 .filter(thread -> DAP_CLIENT_CONNECTION_THREAD_NAME.equals(thread.getName()))
                 .collect(Collectors.toSet());
     }
 
-    private static Thread newDapClientConnectionThread(Set<Thread> threadsBefore) {
+    static Thread newDapClientConnectionThread(Set<Thread> threadsBefore) {
         List<Thread> candidates =
                 dapClientConnectionThreads().stream()
                         .filter(thread -> !threadsBefore.contains(thread))
@@ -334,7 +335,7 @@ final class ProtosI026FDapBehaviorTest {
         return candidates.get(0);
     }
 
-    private static void awaitDapClientConnectionThreadTermination(Thread thread)
+    static void awaitDapClientConnectionThreadTermination(Thread thread)
             throws InterruptedException {
         thread.join(TIMEOUT.toMillis());
         assertFalse(
@@ -342,7 +343,7 @@ final class ProtosI026FDapBehaviorTest {
                 "GraalVM DAP client connection thread must terminate before Context.close()");
     }
 
-    private static void initializeAndAttach(DapClient client) throws IOException {
+    static void initializeAndAttach(DapClient client) throws IOException {
         int initialize =
                 client.request(
                         "initialize",
@@ -367,7 +368,7 @@ final class ProtosI026FDapBehaviorTest {
         assertSuccessfulResponse(client.awaitResponse(attach, TIMEOUT), attach, "attach");
     }
 
-    private static String loadedSource(DapClient client, String fileName) throws IOException {
+    static String loadedSource(DapClient client, String fileName) throws IOException {
         int request = client.request("loadedSources", "{}");
         String response = client.awaitResponse(request, TIMEOUT);
         assertSuccessfulResponse(response, request, "loadedSources");
@@ -423,7 +424,7 @@ final class ProtosI026FDapBehaviorTest {
         return new ProtosActivation(context, List.of(), context);
     }
 
-    private static void assertVariableValue(
+    static void assertVariableValue(
             List<String> variables, String name, String expectedValue) {
         assertEquals(expectedValue, stringField(variableNamed(variables, name), "value"));
     }
@@ -435,7 +436,7 @@ final class ProtosI026FDapBehaviorTest {
                 .orElseThrow(() -> new AssertionError("DAP variable missing: " + name));
     }
 
-    private static void assertSuccessfulResponse(
+    static void assertSuccessfulResponse(
             String message, int requestSequence, String command) {
         assertEquals("response", stringField(message, "type"));
         assertEquals(
@@ -448,11 +449,11 @@ final class ProtosI026FDapBehaviorTest {
                 () -> "DAP " + command + " failed: " + message);
     }
 
-    private static String arrayField(String json, String fieldName) {
+    static String arrayField(String json, String fieldName) {
         return compositeField(json, fieldName, '[', ']');
     }
 
-    private static String objectField(String json, String fieldName) {
+    static String objectField(String json, String fieldName) {
         return compositeField(json, fieldName, '{', '}');
     }
 
@@ -477,7 +478,7 @@ final class ProtosI026FDapBehaviorTest {
         return json.substring(start, end + 1);
     }
 
-    private static List<String> objectsInArray(String arrayJson) {
+    static List<String> objectsInArray(String arrayJson) {
         List<String> objects = new ArrayList<>();
         int index = 1;
         while (index < arrayJson.length() - 1) {
@@ -530,13 +531,13 @@ final class ProtosI026FDapBehaviorTest {
         throw new AssertionError("Unterminated JSON composite: " + json.substring(start));
     }
 
-    private static String stringField(String json, String name) {
+    static String stringField(String json, String name) {
         String value = optionalStringField(json, name);
         assertNotNull(value, () -> "Missing JSON string field " + name + ": " + json);
         return value;
     }
 
-    private static String optionalStringField(String json, String name) {
+    static String optionalStringField(String json, String name) {
         Matcher matcher =
                 Pattern.compile(
                                 "\\\"" + Pattern.quote(name)
@@ -545,7 +546,7 @@ final class ProtosI026FDapBehaviorTest {
         return matcher.find() ? decodeJsonString(matcher.group(1)) : null;
     }
 
-    private static int integerField(String json, String name) {
+    static int integerField(String json, String name) {
         int value = optionalIntegerField(json, name);
         assertTrue(
                 value != Integer.MIN_VALUE,
@@ -561,7 +562,7 @@ final class ProtosI026FDapBehaviorTest {
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : Integer.MIN_VALUE;
     }
 
-    private static boolean booleanField(String json, String name) {
+    static boolean booleanField(String json, String name) {
         Matcher matcher =
                 Pattern.compile(
                                 "\\\"" + Pattern.quote(name) + "\\\"\\s*:\\s*(true|false)")
@@ -572,7 +573,7 @@ final class ProtosI026FDapBehaviorTest {
         return Boolean.parseBoolean(matcher.group(1));
     }
 
-    private static String jsonString(String value) {
+    static String jsonString(String value) {
         StringBuilder result = new StringBuilder(value.length() + 8);
         result.append('"');
         for (int index = 0; index < value.length(); index++) {
