@@ -19,7 +19,10 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -35,8 +38,9 @@ import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
 
 /**
- * D205 (LIB022-A): {@code std:runtime.info()} observes the Engine and execution mode of the
- * currently entered Context, through the public Polyglot embedding and the hosted Process path.
+ * D205 (LIB022-A), D208-A: {@code std:runtime.info()} observes the Engine of the currently entered
+ * Context, through the public Polyglot embedding and the hosted Process path. A snapshot has
+ * exactly four String slots; no execution mode exists or is reported.
  */
 final class ProtosRuntimeMetadataEmbeddingTest {
     private static final String CORE = Path.of("protos", "lib", "core").toAbsolutePath().toString();
@@ -55,35 +59,56 @@ final class ProtosRuntimeMetadataEmbeddingTest {
         return TruffleOptions.AOT ? "NATIVE_IMAGE" : "JVM";
     }
 
-    private static void assertContract(Context context, String executionMode) {
+    private static void assertContract(Context context) {
         assertEquals("Protos", field(context, "implementation"));
         assertEquals(ProtosVersionIdentity.current(), field(context, "implementationVersion"));
         String engineVersion = context.getEngine().getVersion();
         assertFalse(engineVersion.isBlank());
         assertEquals(engineVersion, field(context, "engineVersion"));
         assertEquals(expectedPlatform(), field(context, "platform"));
-        assertEquals(executionMode, field(context, "executionMode"));
+        assertEquals(
+                4,
+                context.eval(ProtosLanguage.ID, "import(\"std:runtime\").info().slotNames().size()")
+                        .asInt());
+        assertFalse(
+                context.eval(
+                                ProtosLanguage.ID,
+                                "import(\"std:runtime\").info().hasSlot(\"executionMode\")")
+                        .asBoolean(),
+                "D208-A removes executionMode without a replacement");
     }
 
     @Test
-    void standardEmbeddingReportsNormalModeAndItsEngine() {
+    void standardEmbeddingReportsExactlyFourFieldsAndItsEngine() {
         try (Context context = builder().build()) {
-            assertContract(context, "NORMAL");
+            assertContract(context);
         }
     }
 
+    /** PLAT067-B / D208-A: an attached debugger changes nothing the snapshot reports. */
     @Test
-    void explicitDebugContextReportsDebugWithoutAffectingANormalContext() {
-        try (Context normal = builder().build();
-                Context debug =
-                        builder()
-                                .allowExperimentalOptions(true)
-                                .option("protos.Debug", "true")
-                                .build()) {
-            assertContract(debug, "DEBUG");
-            assertContract(normal, "NORMAL");
-            assertEquals("DEBUG", field(debug, "executionMode"));
+    void attachedDebuggerReportsTheSameContract() {
+        try (Context context = builder().build();
+                DebuggerSession attached =
+                        Debugger.find(context.getEngine()).startSession(event -> {})) {
+            assertContract(context);
         }
+    }
+
+    /** D208-A: {@code protos.Debug} is retired; the Polyglot option validation rejects it. */
+    @Test
+    void retiredDebugOptionIsRejected() {
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    try (Context context =
+                            builder()
+                                    .allowExperimentalOptions(true)
+                                    .option("protos.Debug", "true")
+                                    .build()) {
+                        context.initialize(ProtosLanguage.ID);
+                    }
+                });
     }
 
     @Test
@@ -153,14 +178,12 @@ final class ProtosRuntimeMetadataEmbeddingTest {
                                 "implementation",
                                 "implementationVersion",
                                 "engineVersion",
-                                "platform",
-                                "executionMode"),
+                                "platform"),
                         snapshot.localSlotsSnapshot().keySet());
                 assertEquals("Protos", text(snapshot, "implementation"));
                 assertEquals(
                         context.engineForTesting().getVersion(), text(snapshot, "engineVersion"));
                 assertEquals(expectedPlatform(), text(snapshot, "platform"));
-                assertEquals("NORMAL", text(snapshot, "executionMode"));
             } finally {
                 bootstrap.process().requestTerminationForRuntime();
                 bootstrap.process().awaitTerminationForRuntime();

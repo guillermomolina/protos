@@ -36,11 +36,11 @@ import java.util.List;
  * and its bootstrap slot is removed, so it is never module surface or a Prelude binding.
  *
  * <ul>
- *   <li>{@code info()} answers a fresh frozen ordinary Object with exactly the String slots
- *       {@code implementation}, {@code implementationVersion}, {@code engineVersion},
- *       {@code platform} and {@code executionMode}, observed from the currently entered Context
- *       at the time of the call; any other receiver, any argument, or unavailable metadata
- *       signals a fresh ordinary Error.
+ *   <li>{@code info()} answers a fresh frozen ordinary Object with exactly the four String slots
+ *       {@code implementation}, {@code implementationVersion}, {@code engineVersion} and
+ *       {@code platform} (D208-A), observed from the currently entered Context at the time of the
+ *       call; any other receiver, any argument, or unavailable metadata signals a fresh ordinary
+ *       Error.
  * </ul>
  *
  * <p>The facility retains no Context, Engine, language Context, Actor or executable: every
@@ -71,13 +71,10 @@ public final class ProtosRuntimeMetadataFacility {
         }
         String implementationVersion;
         String engineVersion;
-        String executionMode;
         try {
             implementationVersion = ProtosVersionIdentity.current();
             engineVersion =
                     org.graalvm.polyglot.Context.getCurrent().getEngine().getVersion();
-            ProtosLanguageContext context = ProtosLanguageContext.currentIfEnteredForRuntime();
-            executionMode = context == null ? null : context.executionMode().name();
         } catch (ProtosSignalException signal) {
             throw signal;
         } catch (RuntimeException unavailable) {
@@ -86,7 +83,7 @@ public final class ProtosRuntimeMetadataFacility {
             throw invalid(activation);
         }
         String platform = TruffleOptions.AOT ? "NATIVE_IMAGE" : "JVM";
-        if (isBlank(implementationVersion) || isBlank(engineVersion) || isBlank(executionMode)) {
+        if (isBlank(implementationVersion) || isBlank(engineVersion)) {
             throw invalid(activation);
         }
         ProtosObjectValue snapshot = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -95,7 +92,6 @@ public final class ProtosRuntimeMetadataFacility {
                 "implementationVersion", new ProtosStringValue(implementationVersion));
         snapshot.createLocalSlot("engineVersion", new ProtosStringValue(engineVersion));
         snapshot.createLocalSlot("platform", new ProtosStringValue(platform));
-        snapshot.createLocalSlot("executionMode", new ProtosStringValue(executionMode));
         snapshot.freeze();
         return snapshot;
     }

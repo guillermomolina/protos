@@ -130,7 +130,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                 CanonicalClosure methodDefinition = closureDefinition(methodCharacters);
                 ProtosClosureExecutionPlan sharedTemplate =
                         ProtosClosureExecutionPlan.bytecode(
-                                methodDefinition, language, methodSource, ProtosExecutionMode.NORMAL);
+                                methodDefinition, language, methodSource);
 
                 RootCallTarget callTarget =
                         lower(
@@ -205,7 +205,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                                         methodDefinition,
                                         language,
                                         methodSource,
-                                        methodRoot, ProtosExecutionMode.NORMAL),
+                                        methodRoot),
                                 module);
                 receiver.createLocalSlot("pick", method);
                 module.context().createLocalSlot("receiver", receiver);
@@ -417,7 +417,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName)
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget();
     }
@@ -434,7 +434,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
         CanonicalClosure definition = closureDefinition(characters);
         return semanticClosure(
                 definition,
-                ProtosClosureExecutionPlan.bytecode(definition, language, source, ProtosExecutionMode.NORMAL),
+                ProtosClosureExecutionPlan.bytecode(definition, language, source),
                 creator);
     }
 

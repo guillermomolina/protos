@@ -23,6 +23,22 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.463] - 2026-10-19
+
+### D208-A — Runtime metadata without execution mode
+- `spec/semantics/MODULES.md` §73: `std:runtime.info/0` still answers a
+  fresh frozen ordinary Object delegating to `Object`, now with exactly four
+  String slots: `implementation`, `implementationVersion`, `engineVersion`
+  and `platform`. The `executionMode` slot is removed; no replacement
+  property is defined and no execution, compilation, debugging or
+  instrumentation mode is observable. This is an intentional breaking
+  change to the D205 contract.
+- §73A: `protos.Inspect` remains the only, independent authority of
+  `std:inspect`; its wording no longer refers to the retired DEBUG mode.
+  The four `std:inspect` operations and their authority, result and failure
+  contracts are unchanged.
+- All other D205 semantics are unchanged.
+
 ## [0.1.462] - 2026-10-18
 
 ### D205 / LIB022-B — Standard runtime inspection

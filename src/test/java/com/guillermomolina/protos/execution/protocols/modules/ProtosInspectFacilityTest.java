@@ -247,13 +247,10 @@ final class ProtosInspectFacilityTest {
         ProtosClosureValue closure =
                 assertInstanceOf(ProtosClosureValue.class, evaluate("(x) => x"));
         int before = projections(authorized);
-        ProtosExecutionMode modeBefore = mode(authorized);
         success("bytecode", closure);
         assertEquals(before + 1, projections(authorized));
         success("truffleTree", closure);
         assertEquals(before + 1, projections(authorized));
-        assertEquals(modeBefore, mode(authorized));
-        assertEquals(ProtosExecutionMode.NORMAL, mode(authorized));
 
         // Another authorized Context never reuses this Context's root: it builds its own.
         int otherBefore = projections(otherAuthorized);
@@ -490,10 +487,6 @@ final class ProtosInspectFacilityTest {
     private static int projections(ProtosPolyglotExecutionContext context) {
         return context.callEntered(
                 () -> ProtosLanguageContext.current().projectedBytecodeExecutionPlanCountForTesting());
-    }
-
-    private static ProtosExecutionMode mode(ProtosPolyglotExecutionContext context) {
-        return context.callEntered(() -> ProtosLanguageContext.current().executionMode());
     }
 
     private static ProtosObjectValue ordinaryObject() {

@@ -413,7 +413,7 @@ final class ProtosPerf006Plat031BufferedWriterCPrimeTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
+                        source(characters, sourceName));
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -444,7 +444,7 @@ final class ProtosPerf006Plat031BufferedWriterCPrimeTest {
             throws Exception {
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source(characters, sourceName), ProtosExecutionMode.NORMAL)
+                        source(characters, sourceName))
                 .lowerRoot(canonicalize(characters));
     }
 

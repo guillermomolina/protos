@@ -333,10 +333,8 @@ final class ProtosI109ADynamicLocalEachTest {
                         + "}\n"
                         + "run()\n";
 
-                for (ProtosExecutionMode mode :
-                        List.of(
-                                ProtosExecutionMode.NORMAL,
-                                ProtosExecutionMode.DEBUG)) {
+                // PLAT067-B: one lowering; two independent lowerings must agree.
+                for (String mode : List.of("first", "second")) {
 
                     for (int iteration = 0; iteration < 2; iteration++) {
                         ProtosActorExecutionDomain domain =
@@ -361,8 +359,7 @@ final class ProtosI109ADynamicLocalEachTest {
                                         "i109-a-profile-"
                                                 + each.name()
                                                 + "-" + mode
-                                                + "-" + iteration,
-                                        mode);
+                                                + "-" + iteration);
 
                         root.getRootNodes().ensureComplete();
 
@@ -562,10 +559,8 @@ final class ProtosI109ADynamicLocalEachTest {
                         + "}\n"
                         + "run()\n";
 
-                for (ProtosExecutionMode mode :
-                        List.of(
-                                ProtosExecutionMode.NORMAL,
-                                ProtosExecutionMode.DEBUG)) {
+                // PLAT067-B: one lowering; two independent lowerings must agree.
+                for (String mode : List.of("first", "second")) {
 
                     ProtosActorExecutionDomain domain =
                             new ProtosActorExecutionDomain();
@@ -586,8 +581,7 @@ final class ProtosI109ADynamicLocalEachTest {
                                     scope.language(),
                                     program,
                                     "i109-a-reparse-"
-                                            + each.name() + "-" + mode,
-                                    mode);
+                                            + each.name() + "-" + mode);
 
                     var group = root.getRootNodes();
 
@@ -928,19 +922,6 @@ final class ProtosI109ADynamicLocalEachTest {
             String characters,
             String name)
             throws Exception {
-        return lowerRoot(
-                language,
-                characters,
-                name,
-                ProtosExecutionMode.NORMAL);
-    }
-
-    private static ProtosBytecodeRootNode lowerRoot(
-            ProtosLanguage language,
-            String characters,
-            String name,
-            ProtosExecutionMode mode)
-            throws Exception {
         Source source =
                 Source.newBuilder(
                         ProtosLanguage.ID,
@@ -954,8 +935,7 @@ final class ProtosI109ADynamicLocalEachTest {
 
         return new CanonicalToBytecodeLowerer(
                 language,
-                source,
-                mode)
+                source)
                 .lowerRoot(canonical);
     }
 

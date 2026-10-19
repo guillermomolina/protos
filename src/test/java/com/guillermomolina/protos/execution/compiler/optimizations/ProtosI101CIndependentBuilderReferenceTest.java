@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -51,8 +53,9 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I101-C focal evidence: independent Builder references for NORMAL roots whose specialization is a
- * dynamic guard with a semantically necessary physical fallback.
+ * I101-C focal evidence: independent Builder references for roots whose specialization is a
+ * dynamic guard with a semantically necessary physical fallback. PLAT067-B: the same references
+ * hold with a Truffle debugger attached before lowering.
  *
  * <p>Every expected root is a handwritten {@link ProtosBytecodeRootNodeGen.Builder}
  * program. The references never consult the parser, the canonicalizer, the lowerer or any lowered
@@ -76,7 +79,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     /** The I095 dynamic receiver: canonical HIT paths and the ordinary-send MISS. */
     @Test
     void i101CGuardedNotMatchesIndependentBuilderIncludingMiss() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(NOT_WITNESS, "not-normal");
                 BytecodeRootNodes<?> group = module.getRootNodes();
@@ -119,16 +122,15 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         ProtosClosureValue.class,
                         module.getCallTarget().call(normal.moduleActivation()));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
-                assertEquals(ProtosExecutionMode.NORMAL, plan.bytecodeProfileForTesting());
                 assertSame(actualRoot, plan.bytecodeActivationRootForTesting());
                 assertSame(targets.get(1), plan.bytecodeActivationTargetForComposition());
-                assertNotSemantics(normal, closure, "NORMAL");
+                assertNotSemantics(normal, closure, "no debugger");
                 assertEquals(actual, signature(actualRoot));
                 System.out.println("I101_C_NOT_BUILDER_REFERENCE=PASS");
             });
         }
 
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
+        try (Harness debug = new Harness(true)) {
             debug.run(() -> {
                 ProtosBytecodeRootNode module = compile(NOT_WITNESS, "not-debug");
                 BytecodeRootNodes<?> group = module.getRootNodes();
@@ -137,10 +139,12 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 ProtosBytecodeRootNode root = roots.get(1);
                 RootCallTarget target = root.getCallTarget();
 
+                // PLAT067-B: an attached debugger observes the same independent reference.
                 List<String> signature = completeSignature(root);
-                assertNoOperation(signature, "TryCompactCanonicalBooleanOne");
-                assertTrue(indexOfOperation(signature, "PrepareSendZero") >= 0,
-                        signature::toString);
+                assertEquals(
+                        completeSignature(handwrittenGuardedNotRoot()),
+                        signature,
+                        "guarded not root with a debugger vs independent Builder");
 
                 group.ensureComplete();
                 assertSame(group, module.getRootNodes());
@@ -154,11 +158,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 ProtosClosureValue closure = assertInstanceOf(
                         ProtosClosureValue.class,
                         module.getCallTarget().call(debug.moduleActivation()));
-                assertEquals(
-                        ProtosExecutionMode.DEBUG,
-                        closure.executionPlan().orElseThrow().bytecodeProfileForTesting());
-                assertNotSemantics(debug, closure, "DEBUG");
-                System.out.println("I101_C_NOT_DEBUG_CONTROL=PASS");
+                assertSame(root, closure.executionPlan().orElseThrow().bytecodeActivationRootForTesting());
+                assertNotSemantics(debug, closure, "debugger attached");
+                System.out.println("I101_C_NOT_DEBUGGER_BUILDER_REFERENCE=PASS");
             });
         }
     }
@@ -166,7 +168,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     /** The I096 literal Closure call: admitted inline body and the B-prime physical fallback. */
     @Test
     void i101CGuardedInlineClosureMatchesIndependentBuilder() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(INLINE_WITNESS, "inline-normal");
                 BytecodeRootNodes<?> group = module.getRootNodes();
@@ -230,21 +232,23 @@ final class ProtosI101CIndependentBuilderReferenceTest {
             });
         }
 
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
+        try (Harness debug = new Harness(true)) {
             debug.run(() -> {
                 ProtosBytecodeRootNode module = compile(INLINE_WITNESS, "inline-debug");
                 List<ProtosBytecodeRootNode> roots = groupRoots(module);
-                assertEquals(3, roots.size(), "DEBUG keeps the inner physical root");
-                List<String> outer = completeSignature(roots.get(1));
-                assertNoOperation(outer, "PrepareInlineClosureLiteralCall");
-                assertNoOperation(outer, "AdmitsInlineClosureLiteralCall");
-                // I108-A: DEBUG retains a physical Closure root,
-                // but ordinary Call0 selection now belongs to InvokeClosureZero.
-                assertNoOperation(outer, "PrepareClosureCall");
-                assertTrue(indexOfOperation(outer, "InvokeClosureZero") >= 0,
-                        outer::toString);
-                assertTrue(indexOfOperation(outer, "IsPreparedClosureInvocation") >= 0,
-                        outer::toString);
+                // Module, outer Closure and the inner Closure's physical fallback root.
+                assertEquals(3, roots.size());
+                // PLAT067-B: an attached debugger observes the same independent references.
+                List<ProtosBytecodeRootNode> referenceRoots =
+                        groupRoots(handwrittenGuardedInlineRoots().getNode(0));
+                assertEquals(
+                        completeSignature(referenceRoots.get(0)),
+                        completeSignature(roots.get(1)),
+                        "outer root with a debugger vs independent Builder");
+                assertEquals(
+                        completeSignature(referenceRoots.get(1)),
+                        completeSignature(roots.get(2)),
+                        "inner root with a debugger vs independent Builder");
 
                 ProtosClosureValue closure = assertInstanceOf(
                         ProtosClosureValue.class,
@@ -252,7 +256,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                 for (int repetition = 0; repetition < 2; repetition++) {
                     assertInteger(1, callClosure(debug, closure, ""));
                 }
-                System.out.println("I101_C_INLINE_DEBUG_CONTROL=PASS");
+                System.out.println("I101_C_INLINE_DEBUGGER_BUILDER_REFERENCE=PASS");
             });
         }
     }
@@ -270,7 +274,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     /**
-     * Handwritten NORMAL root of {@code (receiver) => { receiver.not() }}: frame-native parameter
+     * Handwritten root of {@code (receiver) => { receiver.not() }}: frame-native parameter
      * binding, the staged receiver, the canonical classification with its two immediate results
      * and the complete ordinary-send MISS fallback; zero-argument sends return through the I091
      * carrier boundary.
@@ -393,7 +397,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     }
 
     /**
-     * Handwritten NORMAL roots of {@code () => { (() => { 1 })() }}: the outer root with the I096
+     * Handwritten roots of {@code () => { (() => { 1 })() }}: the outer root with the I096
      * admission, the inline body under its own RootTag and the B-prime physical fallback, and the
      * inner Closure root, which keeps its physical identity in the group.
      */
@@ -453,9 +457,18 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                     builder.beginRoot();
                     builder.beginTag(StandardTags.RootTag.class);
                     builder.beginBlock();
+                    // PLAT067-B: the surviving constant return keeps its statement's tags.
+                    builder.beginSourceSection(literalStart, 1);
+                    builder.beginTag(
+                            StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                    builder.beginBlock();
                     builder.beginReturn();
                     builder.emitLoadConstant(1L);
                     builder.endReturn();
+                    builder.endBlock();
+                    builder.endTag(
+                            StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                    builder.endSourceSection();
                     builder.endBlock();
                     builder.endTag(StandardTags.RootTag.class);
                     builder.endRoot();
@@ -562,7 +575,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
                         "InvokeClosureArgumentsTail"));
 
         try (Harness normal =
-                new Harness(ProtosExecutionMode.NORMAL)) {
+                new Harness(false)) {
             normal.run(() -> {
                 for (Witness witness : witnesses) {
                     ProtosBytecodeRootNode module =
@@ -745,7 +758,7 @@ final class ProtosI101CIndependentBuilderReferenceTest {
     @Test
     void i108IdentityCallOneMatchesIndependentBuilder()
             throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 String source =
                         "(identity) => { identity(1) }";
@@ -1357,24 +1370,26 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
     /** One raw Polyglot Context with a published Core, entered only while an action runs. */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode) {
-            this.mode = mode;
-            Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
-            this.context = builder.build();
+        /**
+         * With {@code debugger}, a Truffle debugger session is attached to the Engine before any
+         * lowering (PLAT067-B: it observes, it never selects another lowering).
+         */
+        Harness(boolean debugger) {
+            this.context = Context.newBuilder(ProtosLanguage.ID).build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
         void run(Action action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     // Publishes the standard root before any witness is lowered.
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
@@ -1391,6 +1406,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
     }

@@ -115,7 +115,7 @@ final class ProtosBug018CapturedMaterializedReadAfterOwnerTierTransitionTest {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, PROGRAM, "bug018-captured-materialized.protos")
                         .build();
-        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(PROGRAM))
                 .getCallTarget()
                 .call(module);

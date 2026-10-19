@@ -210,7 +210,7 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                                 .build();
 
                 CanonicalToBytecodeLowerer lowerer =
-                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL);
+                        new CanonicalToBytecodeLowerer(language, source);
                 ProtosBytecodeRootNode root =
                         lowerer.lowerRoot(canonicalize(characters));
 

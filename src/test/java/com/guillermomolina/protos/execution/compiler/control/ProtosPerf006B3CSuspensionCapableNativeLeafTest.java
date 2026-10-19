@@ -453,7 +453,7 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source, ProtosExecutionMode.NORMAL)
+                        source)
                 .lowerRoot(
                         canonicalize(characters));
     }
@@ -476,7 +476,7 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source, ProtosExecutionMode.NORMAL);
+                        source);
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),

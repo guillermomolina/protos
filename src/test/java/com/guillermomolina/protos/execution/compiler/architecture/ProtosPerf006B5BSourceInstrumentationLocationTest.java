@@ -24,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -69,7 +71,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             .build();
             CanonicalSequence sequence = canonicalize(characters);
             ProtosBytecodeRootNode root =
-                    new CanonicalToBytecodeLowerer(scope.language(), source, ProtosExecutionMode.NORMAL)
+                    new CanonicalToBytecodeLowerer(scope.language(), source)
                             .lowerRoot(sequence);
 
             root.getRootNodes().ensureComplete();
@@ -133,11 +135,20 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         System.out.println("PERF006_B5B_PLAT034_ALWAYS_HALT_LOCATIONS=ZERO");
     }
 
+    /**
+     * PLAT067-B: with and without an attached (inactive) debugger session the one lowering
+     * requests no tags until an explicit update, then materializes the explicit semantic RootTag
+     * in place, keeping the root group and CallTarget identities.
+     */
     @Test
-    void explicitSemanticRootTagReparsesLazilyInNormalAndDebug() throws Exception {
-        for (ProtosExecutionMode mode :
-                List.of(ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG)) {
-            try (LanguageScope scope = languageScope()) {
+    void explicitSemanticRootTagReparsesLazilyWithAndWithoutDebugger() throws Exception {
+        for (String mode : List.of("no debugger", "debugger attached")) {
+            try (LanguageScope scope = languageScope();
+                    DebuggerSession attached =
+                            mode.equals("debugger attached")
+                                    ? Debugger.find(scope.context().getEngine())
+                                            .startSession(event -> {})
+                                    : null) {
                 String characters = "target()\nnull";
                 Source source =
                         Source.newBuilder(
@@ -147,7 +158,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
                 ProtosBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(scope.language(), source, mode)
+                        new CanonicalToBytecodeLowerer(scope.language(), source)
                                 .lowerRoot(sequence);
 
                 // BytecodeConfig.DEFAULT requests no tag materialization.
@@ -178,7 +189,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
     }
 
     private static void assertExplicitSemanticRootTag(
-            ProtosExecutionMode mode,
+            String mode,
             ProtosBytecodeRootNode root,
             CanonicalSequence sequence,
             Source source) {
@@ -235,7 +246,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             childDefinition,
                             scope.language(),
                             childSource,
-                            childRoot, ProtosExecutionMode.NORMAL);
+                            childRoot);
             ProtosBytecodeRootNode childSemanticRoot =
                     assertInstanceOf(
                             ProtosBytecodeRootNode.class,
@@ -257,7 +268,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-parent.protos")
                             .build();
             ProtosBytecodeRootNode parentRoot =
-                    new CanonicalToBytecodeLowerer(scope.language(), parentSource, ProtosExecutionMode.NORMAL)
+                    new CanonicalToBytecodeLowerer(scope.language(), parentSource)
                             .lowerRoot(canonicalize(parentCharacters));
             parentRoot.getRootNodes().ensureComplete();
 

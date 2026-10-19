@@ -68,9 +68,6 @@ final class ProtosI101BLiteralOneTest {
                 ProtosPrelude prelude =
                         new ProtosCoreBootstrap().bootstrap(CORE);
 
-                assertEquals(
-                        ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
 
                 ProtosBytecodeRootNode oracle =
                         handwrittenLiteralOne();
@@ -207,6 +204,8 @@ final class ProtosI101BLiteralOneTest {
 
         int bodyStart = PROGRAM.indexOf('{');
         int bodyLength = PROGRAM.lastIndexOf('}') + 1 - bodyStart;
+        String statement = "1";
+        int statementStart = PROGRAM.indexOf(statement);
 
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
@@ -220,10 +219,15 @@ final class ProtosI101BLiteralOneTest {
                             builder.beginRoot();
                             builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
-
+                            builder.beginSourceSection(statementStart, statement.length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadConstant(1L);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
 
                             builder.endBlock();
                             builder.endTag(StandardTags.RootTag.class);

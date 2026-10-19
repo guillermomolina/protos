@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureOneTail;
 import com.guillermomolina.protos.execution.ProtosClosureCallPreparation.DirectClosureExecutableFacts;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -679,23 +681,27 @@ final class ProtosI115BDeferredCallerTest {
         });
     }
 
-    // ---- I, L. NORMAL and DEBUG Contexts of one Engine ------------------------------
+    // ---- I, L. Two Contexts of one Engine; an attached debugger ----------------------
 
+    /**
+     * Each Context of one Engine owns its language instance, so a terminal site projects the
+     * other Context's Closure in both directions. PLAT067-B: no compilation profile is involved.
+     */
     @Test
-    void terminalSiteProjectsAnotherProfilesClosureInBothDirections() throws Exception {
+    void terminalSiteProjectsAnotherContextsClosureInBothDirections() throws Exception {
         try (Engine engine = Engine.create();
-                Harness normal = new Harness(ProtosExecutionMode.NORMAL, engine);
-                Harness debug = new Harness(ProtosExecutionMode.DEBUG, engine)) {
-            ProtosClosureValue fromNormal = normal.call(Harness::identityClosure);
-            ProtosClosureValue fromDebug = debug.call(Harness::identityClosure);
-            assertProjectedTerminalCall(debug, fromNormal);
-            assertProjectedTerminalCall(normal, fromDebug);
+                Harness first = new Harness(false, engine);
+                Harness second = new Harness(false, engine)) {
+            ProtosClosureValue fromFirst = first.call(Harness::identityClosure);
+            ProtosClosureValue fromSecond = second.call(Harness::identityClosure);
+            assertProjectedTerminalCall(second, fromFirst);
+            assertProjectedTerminalCall(first, fromSecond);
         }
     }
 
     @Test
-    void debugProfileTerminalCallObservesOneCallerIdentity() throws Exception {
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+    void attachedDebuggerTerminalCallObservesOneCallerIdentity() throws Exception {
+        try (Harness debug = new Harness(true, null)) {
             debug.call(module -> {
                 evaluate("""
                         make: () => { (value) => { value } }
@@ -728,10 +734,6 @@ final class ProtosI115BDeferredCallerTest {
                 assertInteger(7, evaluate("callOne(foreign, 7)\n", "i115b-i-run.protos", module));
             }
             ProtosLanguageContext context = ProtosLanguageContext.current();
-            if (context.executionMode() != ProtosExecutionMode.NORMAL) {
-                // The DEBUG profile lowers this final call to the non-terminal Call1.
-                return null;
-            }
             List<Object> entries = tierEntries("callOne", "guardedSource_cache", module);
             assertEquals(1, entries.size());
             DirectClosureExecutableFacts facts =
@@ -744,7 +746,9 @@ final class ProtosI115BDeferredCallerTest {
                     context.bytecodeExecutionPlanForDefinition(foreign.definition(), template)
                             .bytecodeActivationTargetForComposition(),
                     facts.target());
-            assertEquals(context.executionMode(), facts.effectivePlan().bytecodeProfileForRuntime());
+            assertSame(
+                    context.languageForRuntime(),
+                    facts.effectivePlan().language().orElseThrow());
             return null;
         });
     }
@@ -860,29 +864,31 @@ final class ProtosI115BDeferredCallerTest {
         T run(ProtosActivation module) throws Exception;
     }
 
-    /** One Context of a possibly shared Engine, in an explicit profile. */
+    /**
+     * One Context of a possibly shared Engine. With {@code debugger}, a Truffle debugger session
+     * is attached to the Engine before any lowering (PLAT067-B).
+     */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode, Engine engine) {
-            this.mode = mode;
+        Harness(boolean debugger, Engine engine) {
             Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
             if (engine != null) {
                 builder.engine(engine);
             }
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
             this.context = builder.build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
         <T> T call(ModuleAction<T> action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 }
@@ -898,6 +904,9 @@ final class ProtosI115BDeferredCallerTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
     }

@@ -422,7 +422,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
+                        source(characters, sourceName));
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -514,7 +514,7 @@ final class ProtosPerf006Plat028MapRemoveCallbackTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 

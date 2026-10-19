@@ -174,7 +174,6 @@ class ProtosI107NonSuspensionFactsTest {
         Result proven = facts.newAnalysis(analysis, scope, closure, literalSelection)
                 .proveBody(closure.body(), closure);
         assertTrue(proven.proven(), proven::toString);
-        assertTrue(proven.preconditions().contains(Precondition.NORMAL_PROFILE));
         assertTrue(proven.preconditions().contains(Precondition.STANDARD_OBJECT_PUBLISHED));
 
         // The other path of the same table is unsafe once selected.
@@ -239,7 +238,7 @@ class ProtosI107NonSuspensionFactsTest {
                 Result.unknown(Subject.EFFECTIVE_ROOT, root, analysis, scope, "planner")));
         // Lowerer transformation refines it with its own provenance.
         Result refined = new Result(Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT, root,
-                analysis, scope, EnumSet.of(Precondition.NORMAL_PROFILE), "lowerer fold");
+                analysis, scope, EnumSet.noneOf(Precondition.class), "lowerer fold");
         assertEquals(CanonicalCompilationFacts.Publication.REFINED,
                 facts.publishNonSuspension(refined));
         // A later UNKNOWN never downgrades it.
@@ -260,7 +259,7 @@ class ProtosI107NonSuspensionFactsTest {
         Object identity = facts.effectiveRoot(closure, analysis, scope, null);
 
         Result first = new Result(Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT, identity,
-                analysis, scope, EnumSet.of(Precondition.NORMAL_PROFILE), "a");
+                analysis, scope, EnumSet.of(Precondition.UNOBSERVABLE_RETURN_HOME), "a");
         Result other = new Result(Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT, identity,
                 analysis, scope, EnumSet.of(Precondition.DIRECT_FRAME_LOCALS), "b");
         assertEquals(CanonicalCompilationFacts.Publication.RECORDED, facts.publishNonSuspension(first));
@@ -378,7 +377,7 @@ class ProtosI107NonSuspensionFactsTest {
         Result first = new Result(
                 Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT,
                 identity, analysis, scope,
-                EnumSet.of(Precondition.NORMAL_PROFILE), "accepted");
+                EnumSet.of(Precondition.UNOBSERVABLE_RETURN_HOME), "accepted");
         Result rejected = new Result(
                 Proof.PROVEN_NO_SUSPENSION, Subject.EFFECTIVE_ROOT,
                 identity, analysis, scope,
@@ -519,7 +518,7 @@ class ProtosI107NonSuspensionFactsTest {
                     selected < 0
                             ? List.of()
                             : List.of((CanonicalClosure) send.arguments().get(selected)),
-                    EnumSet.of(Precondition.NORMAL_PROFILE, Precondition.STANDARD_OBJECT_PUBLISHED));
+                    EnumSet.of(Precondition.STANDARD_OBJECT_PUBLISHED));
         };
     }
 

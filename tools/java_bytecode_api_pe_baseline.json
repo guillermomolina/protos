@@ -121,6 +121,18 @@
       "occurrence": 0,
       "provenance": "BYTECODE_INDEX=HELPER_PARAMETER",
       "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "unprojectedFrameNativeBindingsForTooling(BytecodeNode,int,MaterializedFrame,ProtosActivation)",
+      "family": "BytecodeNode",
+      "operation": "getLocalValue",
+      "arity": 3,
+      "arguments": "BYTECODE_INDEX=bytecodeIndex, LOCAL_OFFSET=frameNativeBindingLayout.localOffsetAt(ordinal)",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=HELPER_PARAMETER;LOCAL_OFFSET=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
     }
   ]
 }

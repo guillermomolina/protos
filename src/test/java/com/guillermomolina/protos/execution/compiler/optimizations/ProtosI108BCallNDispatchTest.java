@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.InvokeClosureArguments;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -311,26 +313,13 @@ final class ProtosI108BCallNDispatchTest {
 
 
     @Test
-    void normalDebugCallNSpreadParity() throws Exception {
-        for (ProtosExecutionMode mode : new ProtosExecutionMode[] {
-                ProtosExecutionMode.NORMAL,
-                ProtosExecutionMode.DEBUG}) {
-            Context.Builder builder =
-                    Context.newBuilder(ProtosLanguage.ID);
-
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true)
-                        .option("protos.Debug", "true");
-            }
-
-            try (Context context = builder.build()) {
+    void callNSpreadParityWithAndWithoutDebugger() throws Exception {
+        for (boolean debugger : new boolean[] {false, true}) {
+            try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                    DebuggerSession attached = attach(context, debugger)) {
                 context.initialize(ProtosLanguage.ID);
                 context.enter();
                 try {
-                    assertSame(
-                            mode,
-                            ProtosLanguageContext.current().executionMode());
-
                     ProtosActivation module =
                             new ProtosCoreBootstrap()
                                     .bootstrap(CORE)
@@ -479,7 +468,7 @@ final class ProtosI108BCallNDispatchTest {
      * This inspects physical operations, not execution timings.
      */
     @Test
-    void structuralInvocationBoundariesNormalDebug() throws Exception {
+    void structuralInvocationBoundariesWithAndWithoutDebugger() throws Exception {
         record Site(String function, String operation) {}
 
         java.util.List<Site> sites = java.util.List.of(
@@ -488,25 +477,13 @@ final class ProtosI108BCallNDispatchTest {
                 new Site("callN", "InvokeClosureArguments"),
                 new Site("callSpread", "InvokeClosureArguments"));
 
-        for (ProtosExecutionMode mode :
-                ProtosExecutionMode.values()) {
-            Context.Builder builder =
-                    Context.newBuilder(ProtosLanguage.ID);
-
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true)
-                        .option("protos.Debug", "true");
-            }
-
-            try (Context context = builder.build()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = debugger ? "debugger attached" : "no debugger";
+            try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                    DebuggerSession attached = attach(context, debugger)) {
                 context.initialize(ProtosLanguage.ID);
                 context.enter();
                 try {
-                    assertSame(
-                            mode,
-                            ProtosLanguageContext.current()
-                                    .executionMode());
-
                     ProtosActivation module =
                             new ProtosCoreBootstrap()
                                     .bootstrap(CORE)
@@ -531,11 +508,9 @@ final class ProtosI108BCallNDispatchTest {
                         java.util.List<String> before =
                                 instructionNames(root);
 
-                        // I112: a NORMAL final positional call is terminal;
-                        // spread and DEBUG keep the composed protocol.
-                        boolean terminal =
-                                mode == ProtosExecutionMode.NORMAL
-                                        && !site.function().equals("callSpread");
+                        // I112: a final positional call is terminal and spread keeps the
+                        // composed protocol; PLAT067-B: an attached debugger changes neither.
+                        boolean terminal = !site.function().equals("callSpread");
                         String operation =
                                 terminal ? site.operation() + "Tail" : site.operation();
 
@@ -574,6 +549,11 @@ final class ProtosI108BCallNDispatchTest {
                 }
             }
         }
+    }
+
+    /** PLAT067-B: a Truffle debugger session on the Context's Engine, or none. */
+    private static DebuggerSession attach(Context context, boolean debugger) {
+        return debugger ? Debugger.find(context.getEngine()).startSession(event -> {}) : null;
     }
 
     private static java.util.List<String> instructionNames(

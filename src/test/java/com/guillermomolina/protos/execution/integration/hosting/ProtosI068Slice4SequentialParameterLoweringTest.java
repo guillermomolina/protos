@@ -244,7 +244,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                             new ProtosBytecodeClosureExecutionPlan(
                                     definition,
                                     language,
-                                    source, ProtosExecutionMode.NORMAL);
+                                    source);
 
                     SourceSection section =
                             plan.activationRootForTesting().ensureSourceSection();
@@ -309,7 +309,7 @@ final class ProtosI068Slice4SequentialParameterLoweringTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source, ProtosExecutionMode.NORMAL)
+                                source)
                         .executeActivation(activation);
         return new Invocation(activation, result);
     }

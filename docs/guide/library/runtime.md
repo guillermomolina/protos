@@ -1,8 +1,8 @@
 # Runtime metadata: `std:runtime`
 
 `std:runtime` answers read-only facts about the Protos runtime your program is
-running on: which implementation and version, which host Engine, which
-distribution platform, and the execution mode of the current Context.
+running on: which implementation and version, which host Engine, and which
+distribution platform.
 
 ```protos
 Runtime: import("std:runtime")
@@ -12,7 +12,6 @@ metadata.implementation
 metadata.implementationVersion
 metadata.engineVersion
 metadata.platform
-metadata.executionMode
 ```
 
 The module is a single source,
@@ -31,7 +30,6 @@ answers a snapshot object with exactly these String fields:
 | `implementationVersion` | The distribution's version, the same text `protos --version` prints; `"development"` for an unpackaged build |
 | `engineVersion` | The version of the host Engine running the current Context; treat its format as opaque |
 | `platform` | `"NATIVE_IMAGE"` in the Native distribution, `"JVM"` on the portable JVM distribution |
-| `executionMode` | `"NORMAL"` or `"DEBUG"`: the mode of the Context the call runs in |
 
 Things to know:
 
@@ -42,8 +40,9 @@ Things to know:
 - **Values are read when you call `info()`**, not when you import the module.
 - **`platform` is not a performance flag.** It tells the JVM distribution from
   the Native one; it says nothing about JIT compilation or optimization.
-- **`executionMode` describes, it does not change.** Calling `info()` never
-  switches the mode or starts a debugger.
+- **There is no execution mode.** Protos runs the same code with or without a
+  debugger attached, so the snapshot has no mode field. Calling `info()` never
+  starts a debugger.
 - **Wrong arity signals an Error.** `Runtime.info(1)` signals a fresh ordinary
   Error, as does a call made when the runtime cannot supply its metadata.
 

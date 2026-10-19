@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,8 +29,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * D205 (LIB022-B): {@code protos.Inspect} is the only authority of {@code std:inspect} through the
- * public Polyglot embedding; it defaults to false, is independent of {@code protos.Debug}, and
- * inspecting never executes the Closure or changes the Context's execution mode.
+ * public Polyglot embedding; it defaults to false, is independent of an attached debugger
+ * (D208-A), and inspecting never executes the Closure or changes what {@code std:runtime}
+ * reports.
  */
 final class ProtosInspectEmbeddingTest {
     private static final String CORE = Path.of("protos", "lib", "core").toAbsolutePath().toString();
@@ -57,8 +60,9 @@ final class ProtosInspectEmbeddingTest {
         return builder().option("protos.Inspect", "true");
     }
 
-    private static Context.Builder debug(Context.Builder builder) {
-        return builder.allowExperimentalOptions(true).option("protos.Debug", "true");
+    /** PLAT067-B: a Truffle debugger session attached to the Context's Engine. */
+    private static DebuggerSession attachDebugger(Context context) {
+        return Debugger.find(context.getEngine()).startSession(event -> {});
     }
 
     private static boolean importDenied(Context context) {
@@ -78,9 +82,11 @@ final class ProtosInspectEmbeddingTest {
                 .asString();
     }
 
-    private static String executionMode(Context context) {
-        return context.eval(ProtosLanguage.ID, "import(\"std:runtime\").info().executionMode")
-                .asString();
+    /** D208-A: the runtime snapshot keeps exactly its four fields. */
+    private static int runtimeFieldCount(Context context) {
+        return context.eval(
+                        ProtosLanguage.ID, "import(\"std:runtime\").info().slotNames().size()")
+                .asInt();
     }
 
     private static void assertOperationsAdmitted(Context context) {
@@ -108,30 +114,31 @@ final class ProtosInspectEmbeddingTest {
     }
 
     @Test
-    void debugAloneDoesNotAuthorizeInspection() {
-        try (Context context = debug(builder()).build()) {
+    void attachedDebuggerAloneDoesNotAuthorizeInspection() {
+        try (Context context = builder().build();
+                DebuggerSession attached = attachDebugger(context)) {
             assertTrue(importDenied(context));
-            assertEquals("DEBUG", executionMode(context));
+            assertEquals(4, runtimeFieldCount(context));
         }
     }
 
     @Test
-    void inspectInANormalContextAdmitsEveryOperationAndKeepsNormal() {
+    void inspectAdmitsEveryOperationAndChangesNothingReported() {
         try (Context context = authorizedBuilder().build()) {
             assertFalse(importDenied(context));
-            assertEquals("NORMAL", executionMode(context));
+            assertEquals(4, runtimeFieldCount(context));
             assertOperationsAdmitted(context);
-            assertEquals("NORMAL", executionMode(context));
+            assertEquals(4, runtimeFieldCount(context));
         }
     }
 
     @Test
-    void inspectInADebugContextAdmitsEveryOperationAndKeepsDebug() {
-        try (Context context = debug(authorizedBuilder()).build()) {
+    void inspectWithAnAttachedDebuggerAdmitsEveryOperation() {
+        try (Context context = authorizedBuilder().build();
+                DebuggerSession attached = attachDebugger(context)) {
             assertFalse(importDenied(context));
-            assertEquals("DEBUG", executionMode(context));
             assertOperationsAdmitted(context);
-            assertEquals("DEBUG", executionMode(context));
+            assertEquals(4, runtimeFieldCount(context));
         }
     }
 

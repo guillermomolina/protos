@@ -94,23 +94,23 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
     @Test
     void frameNativeZeroParameterCallbackEntersWithoutActivation() throws Exception {
         /*
-         * I101-A: in NORMAL this literal ifTrue site is the admitted I095
-         * inline lowering; the B-prime frame-native callback region of its
-         * ordinary send is the lowering of the DEBUG profile.
+         * PLAT067-B: a literal receiver is always the open-coded I095 site, so
+         * the B-prime frame-native callback region is reached through a
+         * dynamic receiver, whose MISS path keeps the ordinary send with its
+         * literal callback.
          */
         List<String> names =
                 assertRegionWithoutActivation(
-                        true,
                         """
-                        run: () => {
+                        run: (flag) => {
                             probe()
-                            true.ifTrue(() => {
+                            flag.ifTrue(() => {
                                 local: 1
                                 local = local
                                 local
                             })
                         }
-                        run()
+                        run(true)
                         """);
         assertContains(names, "CreateInlineCurrentFrameLocal");
         assertContains(names, "ReadInlineFrameLocal");
@@ -637,28 +637,14 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
      */
     private static List<String> assertRegionWithoutActivation(String characters)
             throws Exception {
-        return assertRegionWithoutActivation(false, characters);
-    }
-
-    private static List<String> assertRegionWithoutActivation(boolean debug, String characters)
-            throws Exception {
-        return assertRegionInstructionsWithoutActivation(debug, characters).stream()
+        return assertRegionInstructionsWithoutActivation(characters).stream()
                 .map(ProtosInstructionNames::of)
                 .toList();
     }
 
     private static List<Instruction> assertRegionInstructionsWithoutActivation(String characters)
             throws Exception {
-        return assertRegionInstructionsWithoutActivation(false, characters);
-    }
-
-    private static List<Instruction> assertRegionInstructionsWithoutActivation(
-            boolean debug, String characters) throws Exception {
-        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-        if (debug) {
-            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-        }
-        try (Context context = builder.build()) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -725,11 +711,9 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        // I101-A: lowered under the immutable profile of the entered Context.
         return new CanonicalToBytecodeLowerer(
                         LANGUAGE_REF.get(null),
-                        source,
-                        ProtosLanguageContext.current().executionMode())
+                        source)
                 .lowerRoot(sequence);
     }
 

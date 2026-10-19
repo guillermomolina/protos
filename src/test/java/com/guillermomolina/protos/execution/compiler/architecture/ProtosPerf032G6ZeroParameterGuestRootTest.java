@@ -24,6 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -49,7 +51,7 @@ import org.junit.jupiter.api.Test;
  * ({@code CALLABLES.md}, Normative parameter-binding algorithm), so a zero-parameter Closure
  * always enters its single ordinary root, excess arguments are ignored, and an absent
  * parameter binds canonical null. These tests pin that contract on the compact, rich,
- * Task-owned, guest, DEBUG and host-embedding entry paths with the unchanged B5 header.
+ * Task-owned, guest, debugger-attached and host-embedding entry paths with the unchanged B5 header.
  */
 final class ProtosPerf032G6ZeroParameterGuestRootTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -179,7 +181,7 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
     }
 
     @Test
-    void debugAndNormalProfilesAgree() {
+    void attachedDebuggerKeepsTheResult() {
         String program =
                 """
                 effects: 0
@@ -205,20 +207,22 @@ final class ProtosPerf032G6ZeroParameterGuestRootTest {
                     (explicitNull === null) && (rest.size() == 2) && restFrozen &&
                     (tail().size() == 0) && (one(1, 2) == 1)
                 """;
+        // PLAT067-B: one lowering; an attached debugger observes, it never changes the result.
         for (boolean debug : new boolean[] {false, true}) {
-            Context.Builder builder =
-                    Context.newBuilder(ProtosLanguage.ID)
-                            .option("protos.CoreRoot", CORE.toAbsolutePath().toString());
-            if (debug) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
-            try (Context context = builder.build()) {
+            try (Context context =
+                            Context.newBuilder(ProtosLanguage.ID)
+                                    .option("protos.CoreRoot", CORE.toAbsolutePath().toString())
+                                    .build();
+                    DebuggerSession attached =
+                            debug
+                                    ? Debugger.find(context.getEngine()).startSession(event -> {})
+                                    : null) {
                 assertTrue(
                         context.eval(ProtosLanguage.ID, program).asBoolean(),
-                        debug ? "DEBUG" : "NORMAL");
+                        debug ? "debugger attached" : "no debugger");
             }
         }
-        System.out.println("I105_DEBUG_NORMAL_PARITY=PASS");
+        System.out.println("I105_DEBUGGER_PARITY=PASS");
     }
 
     @Test

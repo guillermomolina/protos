@@ -238,7 +238,7 @@ final class ProtosPerf006Plat028MapEachCallbackTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 

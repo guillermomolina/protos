@@ -41,11 +41,11 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 String closureChars = "(item) => { item }";
                 Source closureSource = Source.newBuilder(ProtosLanguage.ID, closureChars, "perf006-b2c1-closure.protos").build();
                 CanonicalClosure def = closureDefinition(closureChars);
-                ProtosClosureValue closure = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource, ProtosExecutionMode.NORMAL), module);
+                ProtosClosureValue closure = semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource), module);
                 module.context().createLocalSlot("entry", closure);
                 String topChars = "entry(token)";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-top.protos").build();
-                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
+                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
                 assertSame(token, top.getCallTarget().call(module));
             } finally { context.leave(); }
         }
@@ -62,10 +62,10 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 String closureChars = "(item) => { item }";
                 Source closureSource = Source.newBuilder(ProtosLanguage.ID, closureChars, "perf006-b2c1-arity-closure.protos").build();
                 CanonicalClosure def = closureDefinition(closureChars);
-                module.context().createLocalSlot("entry", semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource, ProtosExecutionMode.NORMAL), module));
+                module.context().createLocalSlot("entry", semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource), module));
                 String topChars = "entry()";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-arity-top.protos").build();
-                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource, ProtosExecutionMode.NORMAL).lowerRoot(canonicalize(topChars));
+                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
                 // D203/I105: an absent argument binds canonical null.
                 assertSame(ProtosNullValue.INSTANCE, top.getCallTarget().call(module));
             } finally { context.leave(); }

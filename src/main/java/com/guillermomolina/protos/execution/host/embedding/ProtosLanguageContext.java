@@ -39,7 +39,6 @@ final class ProtosLanguageContext {
 
     private final ProtosLanguage language;
     private final TruffleLanguage.Env env;
-    private final ProtosExecutionMode executionMode;
     /*
      * PLAT035 leaves one Context-local executable projection cache: Bytecode.
      * Semantic Closure identity remains independent from the executable projection.
@@ -79,15 +78,6 @@ final class ProtosLanguageContext {
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
         this.env = Objects.requireNonNull(env, "env");
-        this.executionMode =
-                env.getOptions().get(ProtosLanguage.DEBUG)
-                        ? ProtosExecutionMode.DEBUG
-                        : ProtosExecutionMode.NORMAL;
-    }
-
-    /** PERF032: the immutable execution mode selected when this Context was created. */
-    ProtosExecutionMode executionMode() {
-        return executionMode;
     }
 
     /**
@@ -402,11 +392,11 @@ final class ProtosLanguageContext {
         }
 
         /*
-         * I101-A (PLAT058-D): the projection is lowered under this destination Context's profile,
-         * never under the profile of the Context that created the template.
+         * The projection is lowered for this destination Context's language instance. PLAT067-B:
+         * there is one lowering for every Context, so no compilation profile is part of the key.
          */
         ProtosClosureExecutionPlan rebuilt =
-                template.rebuildBytecodeForLanguage(definition, language, executionMode);
+                template.rebuildBytecodeForLanguage(definition, language);
         sharedBytecodeExecutionPlans.put(template, rebuilt);
         return rebuilt;
     }

@@ -588,9 +588,6 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                 """;
 
         withCore(module -> {
-            assertEquals(ProtosExecutionMode.NORMAL,
-                    ProtosLanguageContext.current().executionMode(),
-                    "PERF042 must run in NORMAL mode");
             ProtosBytecodeRootNode root =
                     parse(sourceText, "bare-identity-program");
 
@@ -773,9 +770,6 @@ final class ProtosPerf042IdentityBuilderOracleTest {
 
         // Independent Context: COMPLETE must not alter the compiled root.
         withCore(module -> {
-            assertEquals(ProtosExecutionMode.NORMAL,
-                    ProtosLanguageContext.current().executionMode(),
-                    "COMPLETE inspection must also use NORMAL");
 
             ProtosBytecodeRootNode root =
                     parse(sourceText, "bare-identity-inspection");

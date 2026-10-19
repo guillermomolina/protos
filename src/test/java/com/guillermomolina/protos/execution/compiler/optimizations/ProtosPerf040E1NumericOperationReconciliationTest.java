@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -249,9 +250,12 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
                 + "first && " + numeric;
     }
 
-    /** Matrix 1-9, 13, 14, 16: NORMAL and DEBUG, in two independent Contexts each. */
+    /**
+     * Matrix 1-9, 13, 14, 16: without and with an attached debugger, in two
+     * independent Contexts each.
+     */
     @Test
-    void sameSiteSequencesHoldInNormalAndDebugAcrossContexts() {
+    void sameSiteSequencesHoldWithAndWithoutDebuggerAcrossContexts() {
         for (boolean debug : new boolean[] {false, true}) {
             try (Context first = context(debug);
                     Context second = context(debug)) {
@@ -891,11 +895,11 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
 
     /**
      * Matrix 14, 15: the lowerer emits exactly the operation of the site's
-     * selector, in NORMAL and DEBUG, and it survives a complete reparse with
-     * source and instrumentation.
+     * selector, without and with an attached debugger, and it survives a
+     * complete reparse with source and instrumentation.
      */
     @Test
-    void selectorOwnsItsOperationAcrossProfilesAndReparse() throws Exception {
+    void selectorOwnsItsOperationWithAndWithoutDebuggerAndReparse() throws Exception {
         for (boolean debug : new boolean[] {false, true}) {
             withCore(debug, module -> {
                 for (Map.Entry<String, String> entry : OPERATIONS.entrySet()) {
@@ -990,9 +994,6 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(
-                        debug ? ProtosExecutionMode.DEBUG : ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 test.run(prelude.newModuleActivation());
             } finally {
@@ -1001,18 +1002,24 @@ final class ProtosPerf040E1NumericOperationReconciliationTest {
         }
     }
 
+    /**
+     * A fresh Context; with {@code debug}, a Truffle debugger session is
+     * attached to its Engine before any evaluation and lives until the
+     * Engine closes (PLAT067-B: it observes, it never selects a lowering).
+     */
     private static Context context(boolean debug) {
-        Context.Builder builder =
+        Context context =
                 Context.newBuilder(ProtosLanguage.ID)
-                        .option("protos.CoreRoot", CORE.toAbsolutePath().toString());
+                        .option("protos.CoreRoot", CORE.toAbsolutePath().toString())
+                        .build();
         if (debug) {
-            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
+            Debugger.find(context.getEngine()).startSession(event -> {});
         }
-        return builder.build();
+        return context;
     }
 
     private static String mode(boolean debug) {
-        return debug ? "DEBUG" : "NORMAL";
+        return debug ? "debugger attached" : "no debugger";
     }
 
     private static boolean eval(Context context, String source) {

@@ -139,7 +139,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                         assertSame(adapter.target, call.bodyTarget());
                                         return call.targetArguments();
                                     });
-            // I102: NORMAL enters through the same B5 header as DEBUG, never materialized.
+            // I102: entry uses the single B5 header, never materialized.
             assertEquals(
                     ProtosFrameArguments.HEADER_LENGTH,
                     arguments.length,
@@ -166,13 +166,17 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         }
     }
 
+    /**
+     * PLAT067-B: the one proof-optimized root of {@code () => { 1 }} materializes source and tags
+     * on demand (the Bytecode DSL tooling reparse) and exposes an exact scope for its surviving
+     * executable location, with the unchanged B5 header before and after.
+     */
     @Test
-    void debugModeTaggedLiteralUsesObservableCompactFrameAndExactScope() throws Exception {
+    void taggedLiteralRootMaterializesToolingOnDemandWithExactScope() throws Exception {
         Path file = directory.resolve("perf033-debug.protos");
         Files.writeString(file, SOURCE, StandardCharsets.UTF_8);
         try (ProtosStandaloneHostedSession session =
-                ProtosStandaloneHostedSession.openForTesting(
-                        CORE, file, ProtosExecutionMode.DEBUG)) {
+                ProtosStandaloneHostedSession.open(CORE, file)) {
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
             ProtosHostExecutableClosure adapter =
@@ -188,11 +192,11 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                         (ProtosBytecodeRootNode)
                                                 adapter.target.getRootNode();
 
-                                // DEBUG mode carries provenance before any tag tree exists.
+                                // The B5 header carries provenance before any tag tree exists.
                                 assertEquals(
                                         ProtosFrameArguments.HEADER_LENGTH,
                                         prepareNoArguments(adapter).targetArguments().length,
-                                        "DEBUG literal call carries the B5 header");
+                                        "the literal call carries the B5 header");
 
                                 // Simulates the Bytecode DSL tooling reparse.
                                 root.getRootNodes().ensureComplete();
@@ -214,7 +218,7 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                                 assertEquals(
                                         ProtosFrameArguments.HEADER_LENGTH,
                                         arguments.length,
-                                        "DEBUG root must retain the B5 header");
+                                        "the reparsed root must retain the B5 header");
                                 assertSame(adapter.closure, arguments[0]);
                                 assertSame(adapter.caller, arguments[3]);
 

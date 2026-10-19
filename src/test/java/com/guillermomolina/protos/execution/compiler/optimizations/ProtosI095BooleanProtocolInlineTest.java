@@ -21,6 +21,8 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -44,7 +46,7 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I095-D focal evidence: the shared NORMAL Boolean-control lowering covers all
+ * I095-D focal evidence: the shared Boolean-control lowering covers all
  * eight standard selectors. {@code ifTrueIfFalse} proves and inlines each
  * literal callback independently, {@code and}/{@code or} inline the selected
  * body and then require a canonical Boolean result, {@code not} needs no
@@ -53,8 +55,8 @@ import org.junit.jupiter.api.Test;
  * invoked.
  *
  * <p>Topology is read from the bytecode of the root that called the native
- * {@code probe} first, lowered under the entered Context's immutable profile
- * (I101-A): after the canonical classification, the
+ * {@code probe} first, lowered by the single proof-optimized lowering
+ * (PLAT067-B): after the canonical classification, the
  * {@code IsCanonicalIfTrueTrue} and {@code IsCanonicalBooleanFalseClass}
  * branches hold the TRUE and FALSE paths and the next prepared send is MISS.
  * An aggressive inline path contains no prepared send, no prepared Boolean
@@ -327,7 +329,7 @@ final class ProtosI095BooleanProtocolInlineTest {
         Execution normal = execute(false, structure);
         assertInteger(1, normal.value());
         // I101-A: the literal receiver selects nothing statically, so the
-        // admitted NORMAL site keeps neither a classification nor a send.
+        // admitted site keeps neither a classification nor a send.
         List<String> structureNames = instructionNames(normal.rootOfFirstProbe());
         assertTrue(position(structureNames, "PrepareSend", 0) < 0
                         && position(structureNames, "TryCompactCanonicalBooleanOne", 0) < 0,
@@ -666,9 +668,9 @@ final class ProtosI095BooleanProtocolInlineTest {
         System.out.println("I095_D_ABRUPT_AND_SUSPENSION=PASS");
     }
 
-    /** NORMAL and DEBUG agree and each selected callback runs exactly once. */
+    /** With and without an attached debugger each selected callback runs exactly once. */
     @Test
-    void normalAndDebugAgreeOnSingleCallbackExecution() throws Exception {
+    void attachedDebuggerAgreesOnSingleCallbackExecution() throws Exception {
         String source = """
                 run: (b) => {
                     p: probe
@@ -694,7 +696,8 @@ final class ProtosI095BooleanProtocolInlineTest {
         assertInteger(9, debug.value());
         assertEquals(2, normal.probe().calls.get());
         assertEquals(2, debug.probe().calls.get());
-        System.out.println("I095_D_NORMAL_DEBUG_PARITY=PASS");
+        assertEquals(normal.probe().depths(), debug.probe().depths(), debug.probe()::toString);
+        System.out.println("I095_D_DEBUGGER_PARITY=PASS");
     }
 
     /**
@@ -773,12 +776,17 @@ final class ProtosI095BooleanProtocolInlineTest {
         }
     }
 
+    /**
+     * Runs {@code source} in a fresh Context; with {@code debug}, a Truffle
+     * debugger session is attached to its Engine before the program is
+     * lowered (PLAT067-B: it observes, it never selects another lowering).
+     */
     private static Execution execute(boolean debug, String source) throws Exception {
-        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-        if (debug) {
-            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-        }
-        try (Context context = builder.build()) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                DebuggerSession attached =
+                        debug
+                                ? Debugger.find(context.getEngine()).startSession(event -> {})
+                                : null) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -855,11 +863,9 @@ final class ProtosI095BooleanProtocolInlineTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        // I101-A: lowered under the immutable profile of the entered Context.
         return new CanonicalToBytecodeLowerer(
                         LANGUAGE_REF.get(null),
-                        source,
-                        ProtosLanguageContext.current().executionMode())
+                        source)
                 .lowerRoot(sequence);
     }
 

@@ -583,16 +583,14 @@ final class ProtosClosureCallPreparation {
         }
 
         /*
-         * A template lowered under another language instance or under another
-         * NORMAL/DEBUG profile (for example a Context of the same Engine with
-         * a different mode) is projected through the entered Context's cache,
-         * never admitted with its own target.
+         * A template lowered under another language instance is projected
+         * through the entered Context's cache, never admitted with its own
+         * target. PLAT067-B: there is no compilation profile to compare.
          */
         ProtosLanguage enteredLanguage = enteredContext.languageForRuntime();
         boolean projectionRequired =
                 closure.requiresContextLocalExecutionProjectionForRuntime()
-                        || template.language().orElseThrow() != enteredLanguage
-                        || template.bytecodeProfileForRuntime() != enteredContext.executionMode();
+                        || template.language().orElseThrow() != enteredLanguage;
         ProtosClosureExecutionPlan effectivePlan;
         if (projectionRequired) {
             if (template.source().isEmpty()) {
@@ -605,9 +603,7 @@ final class ProtosClosureCallPreparation {
         }
         if (effectivePlan == null
                 || effectivePlan.definitionForRuntime() != definition
-                || effectivePlan.language().orElseThrow() != enteredLanguage
-                || effectivePlan.bytecodeProfileForRuntime()
-                        != enteredContext.executionMode()) {
+                || effectivePlan.language().orElseThrow() != enteredLanguage) {
             return null;
         }
 

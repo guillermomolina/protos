@@ -196,7 +196,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                                 sourceName)
                         .build();
 
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 

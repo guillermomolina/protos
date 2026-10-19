@@ -92,7 +92,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source, ProtosExecutionMode.NORMAL);
+                                source);
                 plan.bind(invocation);
 
                 assertSame(first, ProtosLexicalFallback.readByName(invocation, "head").orElseThrow());
@@ -158,7 +158,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        closureSource, ProtosExecutionMode.NORMAL),
+                                        closureSource),
                                 module));
 
                 Object nonEmpty =
@@ -225,7 +225,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         restDefinition,
                                         language,
-                                        restSource, ProtosExecutionMode.NORMAL),
+                                        restSource),
                                 module));
 
                 ProtosBytecodeRootNode missingRequired =
@@ -254,7 +254,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource, ProtosExecutionMode.NORMAL);
+                                                defaultSource);
             } finally {
                 context.leave();
             }
@@ -275,7 +275,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                 characters,
                                 sourceName)
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 

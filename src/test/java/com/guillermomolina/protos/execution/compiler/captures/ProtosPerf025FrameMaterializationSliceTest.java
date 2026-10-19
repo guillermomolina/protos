@@ -84,19 +84,19 @@ final class ProtosPerf025FrameMaterializationSliceTest {
         System.out.println("PARAMETER_ONLY_REQUIRES_MATERIALIZED_FRAME=NO");
     }
 
+    /**
+     * PLAT067-B: a proven scalar body keeps its bindings in Bytecode locals for every Context. An
+     * activation observed before entry keeps its identity and the result, and no eliminated
+     * binding is fabricated on it.
+     */
     @Test
-    void perf034ScalarBodyWithObservedActivationPreservesFrameAuthority()
+    void perf034ScalarBodyWithObservedActivationFabricatesNoEliminatedBinding()
             throws Exception {
-        withFixture(ProtosExecutionMode.DEBUG, fixture -> {
+        withFixture(fixture -> {
             ClosureUnderTest plan =
                     closurePlan(
                             fixture,
                             "() => { first: 7\nsecond: 9\nfirst }");
-
-            assertEquals(
-                    ProtosExecutionMode.DEBUG,
-                    plan.plan.bytecodeProfileForTesting(),
-                    "Observed activation must use the DEBUG lowering profile");
 
             // An unobserved rich carrier still owes no lexical authority.
             ProtosActivation unobserved =
@@ -111,7 +111,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
             assertNull(
                     unobserved.currentLexicalBindingAuthorityForRuntime());
 
-            // DEBUG observation before entry requires lexical authority.
+            // Observation before entry.
             ProtosActivation invocation =
                     deferredInvocation(
                             fixture, plan.closure, List.of());
@@ -123,21 +123,13 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             plan.plan.executeBytecodeActivationForTesting(
                                     invocation)));
 
-            assertNotNull(
-                    invocation.currentLexicalBindingAuthorityForRuntime());
             assertSame(observedContext, invocation.context());
-            assertEquals(
-                    7L,
-                    unwrapNumber(
-                            invocation.context()
-                                    .readLocalSlot("first")
-                                    .orElseThrow()));
-            assertEquals(
-                    9L,
-                    unwrapNumber(
-                            invocation.context()
-                                    .readLocalSlot("second")
-                                    .orElseThrow()));
+            assertTrue(
+                    invocation.context().readLocalSlot("first").isEmpty(),
+                    "an eliminated binding is never fabricated");
+            assertTrue(
+                    invocation.context().readLocalSlot("second").isEmpty(),
+                    "an eliminated binding is never fabricated");
         });
     }
 
@@ -449,18 +441,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     private static void withFixture(FixtureTest test) throws Exception {
-        withFixture(ProtosExecutionMode.NORMAL, test);
-    }
-
-    private static void withFixture(
-            ProtosExecutionMode mode, FixtureTest test) throws Exception {
-        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-        if (mode == ProtosExecutionMode.DEBUG) {
-            builder.allowExperimentalOptions(true)
-                    .option("protos.Debug", "true");
-        }
-
-        try (Context context = builder.build()) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -499,8 +480,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                 (CanonicalSequence) new Canonicalizer().canonicalize(new ProtosParser(characters).parseProgram());
         return new CanonicalToBytecodeLowerer(
                         fixture.language,
-                        source,
-                        ProtosLanguageContext.current().executionMode())
+                        source)
                 .lowerRoot(canonical)
                 .getCallTarget()
                 .call(fixture.module);

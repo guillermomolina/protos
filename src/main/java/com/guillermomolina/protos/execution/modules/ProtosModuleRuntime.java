@@ -213,8 +213,7 @@ public final class ProtosModuleRuntime {
         ProtosLanguageContext languageContext = ProtosLanguageContext.current();
         return compiler.compileBytecode(
                 languageContext.materializeModuleSource(source),
-                languageContext.languageForRuntime(),
-                languageContext.executionMode());
+                languageContext.languageForRuntime());
     }
 
     private PreparedModuleInitialization prepareBytecodeCanonicalModule(

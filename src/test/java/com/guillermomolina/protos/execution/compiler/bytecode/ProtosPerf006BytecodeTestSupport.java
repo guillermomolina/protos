@@ -109,9 +109,7 @@ public final class ProtosPerf006BytecodeTestSupport {
         Object result =
                 new CanonicalToBytecodeLowerer(
                                 LANGUAGE_REF.get(null),
-                                source,
-                                // I101-A: shared helper; the entered Context owns the profile.
-                                ProtosLanguageContext.current().executionMode())
+                                source)
                         .lowerRoot(canonical)
                         .getCallTarget()
                         .call(activation);

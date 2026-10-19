@@ -21,12 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -150,7 +153,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
-    void i104UnaryAdmissionExcludesComplexBodiesAndDebug() throws Exception {
+    void i104UnaryAdmissionExcludesComplexBodiesAndHoldsWithDebugger() throws Exception {
         withCore(module -> {
             for (String source : List.of(
                     "(value: 1) => { value }",
@@ -167,13 +170,14 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             }
         });
 
-        withCoreDebug(module -> {
+        // PLAT067-B: an attached debugger never selects another entry.
+        withCoreAndDebugger(module -> {
             ProtosClosureValue identity =
                     closure("(value) => { value }", module);
             List<String> instructions = instructionNames(identity);
 
-            assertNone(instructions, "BindUnaryFrameParameter");
-            assertContains(instructions, "BindClosureFrameParameter");
+            assertContains(instructions, "BindUnaryFrameParameter");
+            assertNone(instructions, "BindClosureFrameParameter");
 
             ProtosIntegerValue value = integer(17);
             assertSame(value, enter(fastDirect(identity, module, value)));
@@ -542,9 +546,17 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf034ScalarLaneFollowsPublishedActivation() throws Exception {
-        withCoreDebug(module -> {
+        /*
+         * PLAT067-B: a proven scalar body has no compact-frame test at all, so
+         * the lane is exercised by the mutated alias, which keeps it (see
+         * perf043EarlyIntegerFoldingRecognizesLiteralsAndScalarAliases).
+         */
+        withCoreAndDebugger(module -> {
             ProtosClosureValue scalar =
-                    closure("() => { value: 1\nvalue }", module);
+                    closure(
+                            "() => { left: 1\nalias: left\nright: 2\n"
+                                    + "alias = right\nleft + alias }",
+                            module);
             assertContains(instructionNames(scalar), "IsCompactLocalFrame");
 
             Object[] direct =
@@ -570,7 +582,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                 .isUnmaterializedCompactScalarLocalCall(arguments),
                         "a published activation leaves the scalar lane");
 
-                assertEquals("1", integerValue(target(scalar).call(arguments)), "the authoritative path creates and reads the binding");
+                assertEquals(
+                        "3",
+                        integerValue(
+                                com.guillermomolina.protos.runtime
+                                        .ProtosNumericValueSupport.guestValue(
+                                                target(scalar).call(arguments))),
+                        "the authoritative path creates and reads the bindings");
                 assertSame(
                         published, arguments[0],
                         "the observed execution context keeps its identity");
@@ -693,8 +711,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
-    void perf034eMaterializedEntryTakesAuthoritativeLanes() throws Exception {
-        withCoreDebug(module -> {
+    void perf034eMaterializedEntryFabricatesNoEliminatedBinding() throws Exception {
+        // PLAT067-B: proven scalar bindings live only in Bytecode locals.
+        withCoreAndDebugger(module -> {
             for (ScalarBody body : PERF034E_SCALAR_BODIES) {
                 ProtosClosureValue scalar = closure(body.characters(), module);
                 Object[] direct =
@@ -708,14 +727,20 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosActivation published =
                             ProtosFrameArguments.activation(arguments);
                     ProtosObjectValue observed = published.context();
-                    assertEquals(Long.toString(body.expected()), integerValue(target(scalar).call(arguments)), body.characters());
+                    assertEquals(
+                            Long.toString(body.expected()),
+                            integerValue(
+                                    com.guillermomolina.protos.runtime
+                                            .ProtosNumericValueSupport.guestValue(
+                                                    target(scalar).call(arguments))),
+                            body.characters());
                     assertSame(published, arguments[0]);
                     assertSame(observed, published.context());
                     for (String name : body.created()) {
                         assertTrue(
-                                observed.readLocalSlot(name).isPresent(),
+                                observed.readLocalSlot(name).isEmpty(),
                                 () -> body.characters()
-                                        + ": the observed context holds " + name);
+                                        + ": no eliminated binding " + name + " is fabricated");
                     }
                 }
             }
@@ -724,7 +749,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     @Test
     void perf034eFinalReadKeepsStatementAndExpressionTags() throws Exception {
-        withCoreDebug(module -> {
+        withCoreAndDebugger(module -> {
             ProtosClosureValue scalar =
                     closure("() => { first: 7\nsecond: first\nsecond }", module);
             ProtosBytecodeRootNode root =
@@ -753,7 +778,12 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosFrameArguments.compactDirectClosureCall(
                             scalar, module, null, new Object[0]);
             ProtosFrameArguments.activation(observed).context();
-            assertEquals("7", integerValue(target(scalar).call(observed)));
+            // The raw internal entry returns the private Long carrier (I101-B).
+            assertEquals(
+                    "7",
+                    integerValue(
+                            com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                                    .guestValue(target(scalar).call(observed))));
         });
     }
 
@@ -817,18 +847,21 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
+    /**
+     * PLAT067-B: an attached debugger observes the one proof-optimized
+     * lowering. A caller that publishes the activation still receives the
+     * folded result through the same root, the eliminated bindings are not
+     * fabricated on the observed context, and the folded send has no CallTag,
+     * exactly as without a debugger. The three surviving statements keep their
+     * passive StatementTag + ExpressionTag over their exact source sections,
+     * which BytecodeConfig.DEFAULT never materializes.
+     */
     @Test
-    void perf043FoldKeepsObservedActivationAndSourceTags() throws Exception {
-        // Full implicit observability is a DEBUG guarantee, not NORMAL.
-        // NORMAL retains only observations explicitly required by the
-        // guest program and preserves the physically minimal Builder.
-        withCoreDebug(module -> {
-            assertEquals(
-                    ProtosExecutionMode.DEBUG,
-                    ProtosLanguageContext.current().executionMode());
-
+    void perf043FoldWithAttachedDebuggerFabricatesNoEliminatedBinding() throws Exception {
+        withCoreAndDebugger(module -> {
             ProtosClosureValue sum =
                     closure("() => { left: 1\nright: 2\nleft + right }", module);
+            assertTrue(containsLoweredIntegerConstant(sum, 3L));
 
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -838,57 +871,69 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     ProtosFrameArguments.activation(arguments);
             ProtosObjectValue observed = activation.context();
 
-            assertEquals("3", integerValue(target(sum).call(arguments)));
+            Object raw = target(sum).call(arguments);
+            assertEquals(
+                    "3",
+                    integerValue(
+                            com.guillermomolina.protos.runtime
+                                    .ProtosNumericValueSupport.guestValue(raw)));
 
             assertSame(activation, arguments[0]);
             assertSame(observed, activation.context());
-
-            assertEquals(
-                    "1",
-                    integerValue(
-                            observed.readLocalSlot("left").orElseThrow()));
-            assertEquals(
-                    "2",
-                    integerValue(
-                            observed.readLocalSlot("right").orElseThrow()));
+            assertTrue(observed.readLocalSlot("left").isEmpty(),
+                    "an eliminated binding is never fabricated");
+            assertTrue(observed.readLocalSlot("right").isEmpty(),
+                    "an eliminated binding is never fabricated");
 
             ProtosBytecodeRootNode root =
                     sum.executionPlan()
                             .orElseThrow()
                             .bytecodeActivationRootForTesting();
-
             root.getRootNodes().ensureComplete();
-
+            TagTree tree = root.getBytecodeNode().getTagTree();
             List<TagTree> statements =
-                    collectTags(
-                            root.getBytecodeNode().getTagTree(),
-                            StandardTags.StatementTag.class);
-
+                    collectTags(tree, StandardTags.StatementTag.class);
             assertEquals(
                     List.of("left: 1", "right: 2", "left + right"),
                     statements.stream()
-                            .map(tag ->
-                                    tag.getSourceSection()
-                                            .getCharacters()
-                                            .toString())
+                            .map(tag -> tag.getSourceSection().getCharacters().toString())
                             .toList());
-
-            List<TagTree> calls =
-                    collectTags(
-                            root.getBytecodeNode().getTagTree(),
-                            StandardTags.CallTag.class);
-
+            assertEquals(statements, collectTags(tree, StandardTags.ExpressionTag.class));
             assertEquals(
-                    1,
-                    calls.size(),
-                    "DEBUG retains the source-visible arithmetic call");
+                    0,
+                    collectTags(tree, StandardTags.CallTag.class).size(),
+                    "the folded send is not a surviving call");
+        });
+    }
 
+    /**
+     * PLAT067-B: without any debugger, BytecodeConfig.DEFAULT materializes none
+     * of the folded body's passive statement tags, and their later on-demand
+     * materialization adds instrumentation (and the unreachable reparse
+     * epilogue) only: the semantic program keeps its exact minimal prefix.
+     */
+    @Test
+    void perf043FoldPassiveTagsLeaveTheDefaultProgramMinimal() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue sum =
+                    closure("() => { left: 1\nright: 2\nleft + right }", module);
+            List<String> physical = instructionNames(sum);
+            assertTrue(physical.stream().noneMatch(name -> name.startsWith("tag.")),
+                    () -> "DEFAULT materializes no tag: " + physical);
+
+            ProtosBytecodeRootNode root =
+                    sum.executionPlan().orElseThrow().bytecodeActivationRootForTesting();
+            root.getRootNodes().ensureComplete();
             assertEquals(
-                    "left + right",
-                    calls.get(0)
-                            .getSourceSection()
-                            .getCharacters()
-                            .toString());
+                    3,
+                    collectTags(root.getBytecodeNode().getTagTree(),
+                                    StandardTags.StatementTag.class)
+                            .size());
+            List<String> semantic = instructionNames(sum).stream()
+                    .filter(name -> !name.startsWith("tag.") && !name.startsWith("trace."))
+                    .toList();
+            assertEquals(physical, semantic.subList(0, physical.size()),
+                    () -> "semantic prefix changed: " + physical + " vs " + semantic);
         });
     }
 
@@ -1788,17 +1833,18 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         }
     }
 
-    private static void withCoreDebug(CoreTest test) throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID)
-                .allowExperimentalOptions(true)
-                .option("protos.Debug", "true")
-                .build()) {
+    /**
+     * As {@link #withCore}, with a Truffle debugger session attached to the
+     * Engine before any lowering (PLAT067-B: it observes, it never selects a
+     * lowering).
+     */
+    private static void withCoreAndDebugger(CoreTest test) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                DebuggerSession attached =
+                        Debugger.find(context.getEngine()).startSession(event -> {})) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(
-                        ProtosExecutionMode.DEBUG,
-                        ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude =
                         new ProtosCoreBootstrap().bootstrap(CORE);
                 test.run(prelude.newModuleActivation());
@@ -2013,6 +2059,152 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
     private static ProtosObjectValue newObject() {
         return new ProtosObjectValue(ProtosObjectValue.rootObject());
+    }
+
+    /**
+     * PLAT067-B: a debugger suspended at each statement of the I101-B scalar
+     * body {@code () => { first: 7; second: first; second }} sees, through
+     * the NodeLibrary scope of the surviving location, exactly the bindings
+     * created so far with their real values; a binding not yet created is
+     * absent, never shown as initialized. The suspension is the Closure's own
+     * frame over its caller: no frame or CallTarget is fabricated. The scope
+     * projects the invocation's own activation on demand (B5); no other
+     * activation is created. The same holds when the session was attached
+     * before the root was ever lowered and when it attaches, through a native
+     * {@code attach} binding, after a first DEFAULT execution of the Closure,
+     * so the tags are materialized on demand.
+     */
+    @Test
+    void scalarBodyDebuggerScopesShowExactlyTheLiveBindings() throws Exception {
+        for (boolean instrumentedFirst : new boolean[] {true, false}) {
+            String name = "perf034e-debugger-scope-" + instrumentedFirst + ".protos";
+            com.oracle.truffle.api.source.Source definition =
+                    com.oracle.truffle.api.source.Source.newBuilder(
+                                    ProtosLanguage.ID,
+                                    "run: () => {\n"
+                                            + "    first: 7\n"
+                                            + "    second: first\n"
+                                            + "    second\n"
+                                            + "}\n"
+                                            + "warm: run()\n"
+                                            + "attach()\n"
+                                            + "run() + warm - 7\n",
+                                    name)
+                            .uri(java.net.URI.create("memory:///" + name))
+                            .mimeType(ProtosLanguage.MIME_TYPE)
+                            .build();
+            ProtosActivation module =
+                    new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
+            List<String> observed = new java.util.ArrayList<>();
+            AtomicReference<Throwable> failure = new AtomicReference<>();
+            AtomicReference<DebuggerSession> session = new AtomicReference<>();
+
+            try (ProtosPolyglotExecutionContext polyglot =
+                    ProtosPolyglotExecutionContext.open(
+                            java.io.InputStream.nullInputStream(),
+                            java.io.OutputStream.nullOutputStream(),
+                            java.io.OutputStream.nullOutputStream())) {
+                Debugger debugger =
+                        polyglot.engineForTesting()
+                                .getInstruments()
+                                .get("debugger")
+                                .lookup(Debugger.class);
+                if (instrumentedFirst) {
+                    session.set(scopeSession(debugger, definition, observed, failure));
+                }
+                module.context().createLocalSlot(
+                        "attach",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> {
+                                    if (session.get() == null) {
+                                        // After the first DEFAULT call of run.
+                                        assertTrue(observed.isEmpty());
+                                        session.set(scopeSession(
+                                                debugger, definition, observed, failure));
+                                    }
+                                    return ProtosNullValue.INSTANCE;
+                                }));
+                try {
+                    assertCompleted(polyglot.execute(definition, module), 7);
+                } finally {
+                    if (session.get() != null) {
+                        session.get().close();
+                    }
+                }
+            }
+
+            if (failure.get() != null) {
+                throw new AssertionError("debugger callback failed", failure.get());
+            }
+            List<String> oneCall = List.of(
+                    "line 2: first=absent second=absent frames=2",
+                    "line 3: first=7 second=absent frames=2",
+                    "line 4: first=7 second=7 frames=2");
+            List<String> expected = new java.util.ArrayList<>(oneCall);
+            if (instrumentedFirst) {
+                // Both calls of run suspend; on demand, only the call after attach.
+                expected.addAll(oneCall);
+            }
+            assertEquals(expected, observed, "instrumentedFirst=" + instrumentedFirst);
+
+            // The observed root is the optimized I101-B scalar body.
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("run").orElseThrow());
+            List<String> instructions = instructionNames(run);
+            assertNone(instructions, "IsCompactLocalFrame");
+            assertNone(instructions, "CreateCurrentFrameLocal");
+            assertNone(instructions, "InstallFrameLexicalAuthority");
+        }
+        System.out.println("PLAT067_SCALAR_BODY_DEBUGGER_SCOPES=PASS");
+    }
+
+    private static DebuggerSession scopeSession(
+            Debugger debugger,
+            com.oracle.truffle.api.source.Source source,
+            List<String> observed,
+            AtomicReference<Throwable> failure) {
+        DebuggerSession session = debugger.startSession(event -> {
+            try {
+                com.oracle.truffle.api.debug.DebugScope scope =
+                        event.getTopStackFrame().getScope();
+                assertNotNull(scope, "a surviving location exposes a scope");
+                int frames = 0;
+                for (com.oracle.truffle.api.debug.DebugStackFrame ignored :
+                        event.getStackFrames()) {
+                    frames++;
+                }
+                observed.add("line " + event.getSourceSection().getStartLine()
+                        + ": first=" + display(scope.getDeclaredValue("first"))
+                        + " second=" + display(scope.getDeclaredValue("second"))
+                        + " frames=" + frames);
+            } catch (Throwable unexpected) {
+                failure.compareAndSet(null, unexpected);
+            } finally {
+                event.prepareContinue();
+            }
+        });
+        for (int line = 2; line <= 4; line++) {
+            session.install(
+                    com.oracle.truffle.api.debug.Breakpoint.newBuilder(source)
+                            .lineIs(line)
+                            .build());
+        }
+        return session;
+    }
+
+    private static String display(com.oracle.truffle.api.debug.DebugValue value) {
+        return value == null ? "absent" : value.toDisplayString();
+    }
+
+    private static void assertCompleted(ProtosExecutionOutcome outcome, long expected) {
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "outcome " + outcome.state() + " error=" + outcome.error());
+        assertEquals(Long.toString(expected), integerValue(
+                com.guillermomolina.protos.runtime.ProtosNumericValueSupport.guestValue(
+                        outcome.value())));
     }
 
     private static ProtosIntegerValue integer(long value) {

@@ -265,7 +265,7 @@ final class ProtosI115ARuntimeAdmissionTest {
             ProtosLanguageContext context = ProtosLanguageContext.current();
             ProtosClosureExecutionPlan template = first.preparedExecutionPlanOrNullForRuntime();
             ProtosClosureExecutionPlan otherTemplate = template.rebuildBytecodeForLanguage(
-                    first.definition(), context.languageForRuntime(), context.executionMode());
+                    first.definition(), context.languageForRuntime());
             assertNotSame(template, otherTemplate);
             ProtosClosureValue other = new ProtosClosureValue(
                     first.definition(), first.capturedLexicalContexts(), first.capturedReceiver(),
@@ -284,38 +284,40 @@ final class ProtosI115ARuntimeAdmissionTest {
 
     @Test
     void foreignContextClosureUsesTheEnteredContextProjection() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL);
-                Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
-            ProtosClosureValue normalClosure = normal.call(() -> normal.closure());
-            ProtosClosureValue debugClosure = debug.call(() -> debug.closure());
-            assertProjectedInto(debug, normalClosure, ProtosExecutionMode.DEBUG);
-            assertProjectedInto(normal, debugClosure, ProtosExecutionMode.NORMAL);
+        try (Harness first = new Harness(null);
+                Harness second = new Harness(null)) {
+            ProtosClosureValue firstClosure = first.call(() -> first.closure());
+            ProtosClosureValue secondClosure = second.call(() -> second.closure());
+            assertProjectedInto(second, firstClosure);
+            assertProjectedInto(first, secondClosure);
 
-            normal.run(() -> {
+            first.run(() -> {
                 DirectClosureExecutableFacts own =
                         ProtosClosureCallPreparation.establishDirectClosureExecutableFactsOrNull(
-                                normalClosure, ProtosLanguageContext.current());
+                                firstClosure, ProtosLanguageContext.current());
                 assertFalse(own.projectionRequired());
                 assertSame(own.template(), own.effectivePlan());
-                assertEquals(ProtosExecutionMode.NORMAL, own.effectivePlan().bytecodeProfileForRuntime());
+                assertSame(
+                        ProtosLanguageContext.current().languageForRuntime(),
+                        own.effectivePlan().language().orElseThrow());
             });
         }
     }
 
     /**
-     * NORMAL and DEBUG Contexts of one shared Engine: whether or not they share
-     * the language instance, a template of the other profile is projected
-     * through the entered Context's cache under the entered profile.
+     * Two Contexts of one shared Engine each own their language instance, so a
+     * template of the other Context is projected through the entered
+     * Context's cache. PLAT067-B: no compilation profile is involved.
      */
     @Test
-    void otherProfileTemplateOfASharedEngineIsProjected() throws Exception {
+    void otherContextTemplateOfASharedEngineIsProjected() throws Exception {
         try (Engine engine = Engine.create();
-                Harness normal = new Harness(ProtosExecutionMode.NORMAL, engine);
-                Harness debug = new Harness(ProtosExecutionMode.DEBUG, engine)) {
-            ProtosClosureValue normalClosure = normal.call(() -> normal.closure());
-            ProtosClosureValue debugClosure = debug.call(() -> debug.closure());
-            assertProjectedInto(debug, normalClosure, ProtosExecutionMode.DEBUG);
-            assertProjectedInto(normal, debugClosure, ProtosExecutionMode.NORMAL);
+                Harness first = new Harness(engine);
+                Harness second = new Harness(engine)) {
+            ProtosClosureValue firstClosure = first.call(() -> first.closure());
+            ProtosClosureValue secondClosure = second.call(() -> second.closure());
+            assertProjectedInto(second, firstClosure);
+            assertProjectedInto(first, secondClosure);
         }
     }
 
@@ -369,7 +371,7 @@ final class ProtosI115ARuntimeAdmissionTest {
     }
 
     private static void assertProjectedInto(
-            Harness destination, ProtosClosureValue foreign, ProtosExecutionMode mode) throws Exception {
+            Harness destination, ProtosClosureValue foreign) throws Exception {
         ProtosClosureExecutionPlan template = foreign.preparedExecutionPlanOrNullForRuntime();
         RootCallTarget foreignTarget = template.bytecodeActivationTargetForComposition();
         destination.run(() -> {
@@ -383,7 +385,6 @@ final class ProtosI115ARuntimeAdmissionTest {
             assertSame(facts.effectivePlan(),
                     context.bytecodeExecutionPlanForDefinition(foreign.definition(), template));
             assertSame(context.languageForRuntime(), facts.effectivePlan().language().orElseThrow());
-            assertEquals(mode, facts.effectivePlan().bytecodeProfileForRuntime());
             assertNotSame(foreignTarget, facts.target());
             assertSame(facts.effectivePlan().bytecodeActivationTargetForComposition(), facts.target());
 
@@ -516,22 +517,14 @@ final class ProtosI115ARuntimeAdmissionTest {
 
     /** One raw Polyglot Context with a published Core, entered only while an action runs. */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode) {
-            this(mode, null);
-        }
-
-        Harness(ProtosExecutionMode mode, Engine engine) {
-            this.mode = mode;
+        /** A Context of {@code engine}, or of its own Engine when {@code engine} is null. */
+        Harness(Engine engine) {
             Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
             if (engine != null) {
                 builder.engine(engine);
-            }
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
             }
             this.context = builder.build();
             context.initialize(ProtosLanguage.ID);
@@ -547,7 +540,6 @@ final class ProtosI115ARuntimeAdmissionTest {
         <T> T call(Producer<T> action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 }

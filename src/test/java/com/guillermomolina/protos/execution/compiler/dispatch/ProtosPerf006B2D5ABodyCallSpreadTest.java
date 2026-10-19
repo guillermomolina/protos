@@ -447,7 +447,7 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
                     new ProtosBytecodeClosureExecutionPlan(
                                                     definition,
                                                     language,
-                                                    source, ProtosExecutionMode.NORMAL);
+                                                    source);
                 }
             } finally {
                 context.leave();
@@ -474,7 +474,7 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source, ProtosExecutionMode.NORMAL)
+                        source)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);
@@ -507,7 +507,7 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
                         definition,
                         language,
                         source,
-                        root, ProtosExecutionMode.NORMAL),
+                        root),
                 creator);
     }
 

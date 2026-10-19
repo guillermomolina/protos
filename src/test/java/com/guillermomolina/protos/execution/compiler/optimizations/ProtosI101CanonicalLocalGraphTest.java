@@ -74,8 +74,7 @@ final class ProtosI101CanonicalLocalGraphTest {
         };
         Files.writeString(sourceFile, sourceText, StandardCharsets.UTF_8);
 
-        try (ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.openForTesting(
-                CORE, sourceFile, ProtosExecutionMode.NORMAL)) {
+        try (ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(CORE, sourceFile)) {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
             ProtosStandaloneHostedSession.PreparedTopLevel prepared = session.prepareTopLevel("run");
             ProtosHostExecutableClosure host = prepared.hostExecutableForTesting();

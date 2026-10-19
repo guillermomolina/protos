@@ -16,10 +16,10 @@
 //! Read-only metadata of the active Protos runtime.
 //!
 //! `info()` answers a fresh frozen ordinary Object, delegating to `Object`,
-//! with exactly five String slots: `implementation`, `implementationVersion`,
-//! `engineVersion`, `platform`, and `executionMode`. Every value is observed
-//! from the currently entered Context when `info()` is called; nothing is
-//! read at import time.
+//! with exactly four String slots: `implementation`, `implementationVersion`,
+//! `engineVersion`, and `platform`. Every value is observed from the
+//! currently entered Context when `info()` is called; nothing is read at
+//! import time.
 //!
 //! Importing this module grants no debugging, host access, foreign access,
 //! or inspection authority.

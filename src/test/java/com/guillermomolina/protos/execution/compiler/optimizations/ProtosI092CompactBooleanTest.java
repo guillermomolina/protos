@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -49,10 +51,10 @@ final class ProtosI092CompactBooleanTest {
     }
 
     /**
-     * I101-A: a NORMAL root holds only the admitted lowering of a constant
-     * Boolean-control site, with no execution-mode branch and no retained
-     * ordinary send; DEBUG roots are covered by
-     * ProtosI101ProfileSpecializedLoweringTest.
+     * I101-A: a root holds only the admitted lowering of a constant
+     * Boolean-control site, with no retained ordinary send; PLAT067-B: the
+     * same holds with a debugger attached
+     * (canonicalBooleanLiteralSiteHasOnlyTheAdmittedLowering).
      */
     @Test
     void constantBooleanControlHasOnlyTheNormalLowering()
@@ -827,30 +829,23 @@ final class ProtosI092CompactBooleanTest {
 
 
     /**
-     * I101-A: a NORMAL root holds only the admitted I095 lowering of this site, so the I092
-     * native ordinary lowering is observed in the DEBUG profile, which keeps it.
+     * PLAT067-B: a literal-receiver site holds only the admitted I095 lowering, with and without
+     * an attached debugger; no Context keeps the I092 native ordinary lowering for it. The I092
+     * native/generic branch of a dynamic receiver is covered by
+     * canonicalAndOverrideExecuteOppositePhysicalBranches.
      */
     @Test
-    void canonicalBooleanHasIndependentNativeBytecodeBranch() throws Exception {
-        List<String> names = debugRunInstructionNames(
-                "i092-native.protos",
-                """
+    void canonicalBooleanLiteralSiteHasOnlyTheAdmittedLowering() throws Exception {
+        String program = """
                 run: () => { true.ifTrue(() => { 41 }) }
                 run
-                """);
-
-        int selection = position(names, "TryCompactCanonicalBooleanOne");
-        int miss = position(names, "IsCompactCanonicalBooleanMiss");
-        int fallback = position(names, "PrepareSendOne");
-        int generic = position(names, "PrepareStructuredCall");
-        int nativeBranch = position(names, "IsCompactCanonicalBooleanNoCallback");
-
-        assertTrue(selection < 0 && miss >= 0, names.toString());
-        assertTrue(
-                position(names, "PrepareCanonicalIfTrueCallback") >= 0,
-                names.toString());
-        assertTrue(fallback > miss && generic > fallback, names.toString());
-        assertTrue(nativeBranch > generic, names.toString());
+                """;
+        for (boolean debugger : new boolean[] {false, true}) {
+            List<String> names = runInstructionNames("i092-native.protos", program, debugger);
+            assertTrue(normalControlAdmitted(names), names.toString());
+            assertTrue(position(names, "PrepareCanonicalIfTrueCallback") < 0, names.toString());
+            assertTrue(position(names, "PrepareSendOne") < 0, names.toString());
+        }
         for (Class<?> owner : List.of(
                 ProtosBytecodeRootNode.class,
                 ProtosPreparedCalls.class,
@@ -863,24 +858,25 @@ final class ProtosI092CompactBooleanTest {
     }
 
     /**
-     * I101-A: complete instruction names of the {@code run} Closure root (the first root the
-     * module root creates) of {@code characters}, parsed through the production ParsingRequest
-     * path of a DEBUG Context, so it is lowered under the DEBUG profile.
+     * Complete instruction names of the {@code run} Closure root (the first root the module root
+     * creates) of {@code characters}, parsed through the production ParsingRequest path. With
+     * {@code debugger}, a Truffle debugger session is attached to the Engine first (PLAT067-B: it
+     * observes, it never selects another lowering).
      */
-    private static List<String> debugRunInstructionNames(String name, String characters)
-            throws Exception {
+    private static List<String> runInstructionNames(
+            String name, String characters, boolean debugger) throws Exception {
         try (org.graalvm.polyglot.Context context =
-                org.graalvm.polyglot.Context.newBuilder(ProtosLanguage.ID)
-                        .allowExperimentalOptions(true)
-                        .option("protos.Debug", "true")
-                        .build()) {
+                        org.graalvm.polyglot.Context.newBuilder(ProtosLanguage.ID).build();
+                DebuggerSession attached =
+                        debugger
+                                ? Debugger.find(context.getEngine()).startSession(event -> {})
+                                : null) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 // Publishes the standard root before the program is lowered.
                 new ProtosCoreBootstrap().bootstrap(CORE);
                 ProtosLanguageContext languageContext = ProtosLanguageContext.current();
-                assertEquals(ProtosExecutionMode.DEBUG, languageContext.executionMode());
                 var target = assertInstanceOf(
                         com.oracle.truffle.api.RootCallTarget.class,
                         languageContext.parsePublic(
@@ -903,7 +899,7 @@ final class ProtosI092CompactBooleanTest {
     }
 
     /**
-     * I101-A: whether the NORMAL I095 lowering replaced the ordinary ifTrue
+     * I101-A: whether the I095 lowering replaced the ordinary ifTrue
      * send. A non-admitted site keeps the I092 canonical-miss protocol or the
      * PLAT044 B-prime callback admission of the ordinary send.
      */
@@ -1124,22 +1120,24 @@ final class ProtosI092CompactBooleanTest {
 
 
     /**
-     * I101-A: in NORMAL the outer site is the admitted I095 inline lowering, so the B-prime
-     * frame-native callback region holding the native inner controls exists in DEBUG.
+     * PLAT067-B: a literal outer site is always the admitted I095 inline lowering, so the
+     * B-prime frame-native callback region holding the native inner controls is reached through
+     * a dynamic outer receiver, whose MISS path keeps the ordinary send and its literal callback.
      */
     @Test
     void inlineFrameNativeEmitsNativeControl() throws Exception {
-        var names = debugRunInstructionNames(
+        var names = runInstructionNames(
                 "i092-inline-frame.protos",
                 """
-                run: (callback, callbacks) => {
-                    true.ifTrue(() => {
+                run: (flag, callback, callbacks) => {
+                    flag.ifTrue(() => {
                         true.ifTrue(callback)
                         true.ifTrue(...callbacks)
                     })
                 }
                 run
-                """);
+                """,
+                false);
 
         assertTrue(position(names, "TryCompactCanonicalBooleanInlineOne") >= 0);
         assertTrue(position(names, "TryCompactCanonicalBooleanVector") >= 0);
@@ -1161,7 +1159,7 @@ final class ProtosI092CompactBooleanTest {
                 ProtosClosureValue.class,
                 ProtosTestExecutionSupport.evaluate(
                         "i092-branch-definition.protos",
-                        // I095-C inlines a proven callback in NORMAL mode; a
+                        // I095-C inlines a proven callback; a
                         // module-binding read is unproven there, so this site
                         // keeps exercising the I092 native/generic branches.
                         """

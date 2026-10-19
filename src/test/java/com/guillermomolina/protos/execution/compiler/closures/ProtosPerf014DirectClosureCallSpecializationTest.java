@@ -117,7 +117,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
                 CanonicalClosure methodDefinition = closureDefinition(methodCharacters);
                 ProtosClosureExecutionPlan sharedTemplate =
                         ProtosClosureExecutionPlan.bytecode(
-                                methodDefinition, language, methodSource, ProtosExecutionMode.NORMAL);
+                                methodDefinition, language, methodSource);
 
                 RootCallTarget callTarget =
                         lower(language, "identity()", "perf014-churn-call.protos");
@@ -216,7 +216,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
                         semanticClosure(
                                 definition,
                                 ProtosClosureExecutionPlan.bytecode(
-                                        definition, language, source, ProtosExecutionMode.NORMAL),
+                                        definition, language, source),
                                 module);
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
@@ -228,7 +228,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
                                 module.executionDomain());
 
                 Object result =
-                        new ProtosBytecodeClosureExecutionPlan(definition, language, source, ProtosExecutionMode.NORMAL)
+                        new ProtosBytecodeClosureExecutionPlan(definition, language, source)
                                 .executeActivation(invocation);
 
                 assertSame(marker, result);
@@ -445,7 +445,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, sourceName)
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget();
     }
@@ -462,7 +462,7 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
         CanonicalClosure definition = closureDefinition(characters);
         return semanticClosure(
                 definition,
-                ProtosClosureExecutionPlan.bytecode(definition, language, source, ProtosExecutionMode.NORMAL),
+                ProtosClosureExecutionPlan.bytecode(definition, language, source),
                 creator);
     }
 

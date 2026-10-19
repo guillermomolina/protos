@@ -33,15 +33,13 @@ public final class ProtosSourceCompiler {
     }
 
     /**
-     * I101-A (PLAT058-D): compiles {@code source} under the immutable physical compilation
-     * {@code profile} of the Context that owns the resulting executable. The caller resolves that
-     * profile at its language-entry boundary; the compiler never guesses it.
+     * Compiles {@code source} through the single proof-optimized Bytecode DSL lowering
+     * (PLAT067-B). The result does not depend on whether the host enables a debugger: source,
+     * tag and instrumentation information is materialized on demand by Truffle.
      */
-    RootCallTarget compileBytecode(
-            Source source, ProtosLanguage language, ProtosExecutionMode profile) {
+    RootCallTarget compileBytecode(Source source, ProtosLanguage language) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(language, "language");
-        Objects.requireNonNull(profile, "profile");
         SurfaceSequence surface =
                 new ProtosParser(source.getCharacters().toString()).parseProgram();
         CanonicalSequence canonical =
@@ -49,7 +47,7 @@ public final class ProtosSourceCompiler {
         // I106: the whole-tree lexical analysis is built once, before lowering.
         CanonicalBindingAnalysis bindingAnalysis =
                 CanonicalBindingAnalyzer.analyzeModule(canonical);
-        return new CanonicalToBytecodeLowerer(language, source, bindingAnalysis, profile)
+        return new CanonicalToBytecodeLowerer(language, source, bindingAnalysis)
                 .lowerRoot(canonical)
                 .getCallTarget();
     }

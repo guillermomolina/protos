@@ -71,8 +71,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
 
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
@@ -210,8 +208,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
                 List<String> trueSignature = completeSignature(
@@ -375,9 +371,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(
-                        ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
 
                 ProtosPrelude prelude =
                         new ProtosCoreBootstrap().bootstrap(CORE);
@@ -464,9 +457,6 @@ final class ProtosI101CComparisonBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(
-                        ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
 
                 ProtosPrelude prelude =
                         new ProtosCoreBootstrap().bootstrap(CORE);
@@ -530,6 +520,8 @@ final class ProtosI101CComparisonBuilderOracleTest {
 
         int bodyStart = COMPARISON.indexOf('{');
         int bodyLength = COMPARISON.lastIndexOf('}') + 1 - bodyStart;
+        String statement = "1 < 2";
+        int statementStart = COMPARISON.indexOf(statement);
 
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
@@ -541,10 +533,15 @@ final class ProtosI101CComparisonBuilderOracleTest {
                             builder.beginRoot();
                             builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
-
+                            builder.beginSourceSection(statementStart, statement.length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadConstant(ProtosBooleanValue.TRUE);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
 
                             builder.endBlock();
                             builder.endTag(StandardTags.RootTag.class);

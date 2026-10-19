@@ -363,7 +363,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        source, ProtosExecutionMode.NORMAL),
+                                        source),
                                 module);
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
@@ -378,7 +378,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source, ProtosExecutionMode.NORMAL)
+                                        source)
                                 .executeActivation(invocation);
 
                 assertSame(marker, result);
@@ -417,7 +417,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                     new ProtosBytecodeClosureExecutionPlan(
                                                     definition,
                                                     language,
-                                                    source, ProtosExecutionMode.NORMAL);
+                                                    source);
                 }
             } finally {
                 context.leave();
@@ -442,7 +442,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source, ProtosExecutionMode.NORMAL)
+                        source)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);
@@ -467,7 +467,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source, ProtosExecutionMode.NORMAL),
+                        source),
                 creator);
     }
 
@@ -528,7 +528,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                         definition,
                         language,
                         source,
-                        root, ProtosExecutionMode.NORMAL),
+                        root),
                 creator);
     }
 

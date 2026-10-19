@@ -18,7 +18,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 Runtime: import("std:runtime")
 
-fields: ["implementation", "implementationVersion", "engineVersion", "platform", "executionMode"]
+fields: ["implementation", "implementationVersion", "engineVersion", "platform"]
 
 tests: [
     Test("std:runtime exports exactly info", () => {
@@ -27,15 +27,16 @@ tests: [
         Assertions.require(Runtime.hasSlot("_runtimeMetadataFacility") == false)
         null
     }),
-    Test("info answers exactly five String fields", () => {
+    Test("info answers exactly four String fields", () => {
         snapshot: Runtime.info()
         Assertions.require(snapshot.parent() === Object)
-        Assertions.require(snapshot.slotNames().size() == 5)
+        Assertions.require(snapshot.slotNames().size() == 4)
         fields.each((name) => {
             Assertions.require(snapshot.hasSlot(name))
             Assertions.require(snapshot.slotValue(name).parent() === String)
         })
         Assertions.require(snapshot.implementation == "Protos")
+        Assertions.require(snapshot.hasSlot("executionMode") == false)
         null
     }),
     Test("info snapshots are frozen", () => {
@@ -46,7 +47,7 @@ tests: [
         Assertions.signals(Error, () => {
             snapshot.platform = "changed"
         })
-        Assertions.require(snapshot.slotNames().size() == 5)
+        Assertions.require(snapshot.slotNames().size() == 4)
         null
     }),
     Test("every info call answers a distinct snapshot", () => {

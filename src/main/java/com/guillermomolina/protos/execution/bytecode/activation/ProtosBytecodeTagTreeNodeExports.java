@@ -51,10 +51,10 @@ import com.oracle.truffle.api.library.ExportMessage;
  * activation before it is projected; no additional frame is fabricated.</p>
  *
  * <p>I102 (PLAT060-B5): every ordinary Closure frame carries the same
- * argument header in NORMAL and DEBUG, so the frame layout says nothing about
- * the execution profile. Which scopes a Context guarantees is a property of
- * its immutable {@link ProtosExecutionMode} and of the lowering it selected,
- * never of the physical frame-argument structure.</p>
+ * argument header, so the frame layout says nothing about debugging. PLAT067-B:
+ * every Context uses one proof-optimized lowering; scopes are projected only
+ * for executable locations that survived it, and no frame is fabricated for an
+ * execution a valid optimization eliminated.</p>
  */
 @ExportLibrary(value = NodeLibrary.class, receiverType = TagTreeNode.class)
 final class ProtosBytecodeTagTreeNodeExports {
@@ -99,7 +99,29 @@ final class ProtosBytecodeTagTreeNodeExports {
             // I095-B6: virtual lexical scope; no carrier or guest activation.
             return new ProtosDebuggerScope(activation, ownInlineBindings);
         }
+        java.util.Map<String, Object> frameNativeBindings =
+                unprojectedFrameNativeBindings(node, frame, activation);
+        if (frameNativeBindings != null) {
+            /*
+             * PLAT067-B: the activation's Context already existed when this
+             * frame-native root ran, so the projection above could not apply.
+             * The live PRESENT frame bindings overlay that Context read-only.
+             */
+            return new ProtosDebuggerScope(activation, frameNativeBindings);
+        }
         return debuggerScope(activation);
+    }
+
+    private static java.util.Map<String, Object> unprojectedFrameNativeBindings(
+            TagTreeNode node, Frame frame, ProtosActivation activation) {
+        if (node == null) {
+            return null;
+        }
+        BytecodeNode bytecode = node.getBytecodeNode();
+        return bytecode.getBytecodeRootNode() instanceof ProtosBytecodeRootNode root
+                ? root.unprojectedFrameNativeBindingsForTooling(
+                        bytecode, node.getEnterBytecodeIndex(), frame.materialize(), activation)
+                : null;
     }
 
     /*

@@ -38,7 +38,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 /**
- * D205 (LIB022-A): the public surface of {@code std:runtime}, the exact five-field snapshot of
+ * D205 (LIB022-A), D208-A: the public surface of {@code std:runtime}, the exact four-field snapshot of
  * {@code info()}, its ordinary Error failures, and Actor-local module ownership of the deferred
  * private facility.
  */
@@ -50,8 +50,7 @@ final class ProtosRuntimeMetadataFacilityTest {
                     "implementation",
                     "implementationVersion",
                     "engineVersion",
-                    "platform",
-                    "executionMode");
+                    "platform");
 
     private static ProtosPrelude prelude;
     private static ProtosActivation caller;
@@ -86,7 +85,7 @@ final class ProtosRuntimeMetadataFacilityTest {
     // ---- 7.2 Snapshot structure ----
 
     @Test
-    void snapshotIsAFrozenOrdinaryObjectWithExactlyFiveStringSlots() {
+    void snapshotIsAFrozenOrdinaryObjectWithExactlyFourStringSlots() {
         ProtosObjectValue snapshot = info();
         assertSame(ProtosObjectValue.class, snapshot.getClass());
         assertSame(ProtosObjectValue.rootObject(), snapshot.parent().orElseThrow());
@@ -113,11 +112,12 @@ final class ProtosRuntimeMetadataFacilityTest {
     // ---- 7.4 Field values ----
 
     @Test
-    void fieldsDescribeTheEnteredJvmNormalContext() {
+    void fieldsDescribeTheEnteredJvmContext() {
         ProtosObjectValue snapshot = info();
         assertEquals("Protos", text(snapshot, "implementation"));
         assertEquals("JVM", text(snapshot, "platform"));
-        assertEquals("NORMAL", text(snapshot, "executionMode"));
+        // D208-A: no execution mode exists or is reported.
+        assertTrue(snapshot.readLocalSlot("executionMode").isEmpty());
         assertEquals(ProtosVersionIdentity.current(), text(snapshot, "implementationVersion"));
 
         String engineVersion =

@@ -136,8 +136,6 @@ final class ProtosI101BArithmeticBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
                 ProtosBytecodeRootNode module = parse(program, caseName);
@@ -198,6 +196,8 @@ final class ProtosI101BArithmeticBuilderOracleTest {
         Source source = source(code, "literal-add-oracle");
         int bodyStart = code.indexOf('{');
         int bodyLength = code.lastIndexOf('}') + 1 - bodyStart;
+        String statement = "1 + 2";
+        int statementStart = code.indexOf(statement);
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
                         LANGUAGE.get(null), BytecodeConfig.DEFAULT,
@@ -207,10 +207,15 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.beginRoot();
                             builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
-
+                            builder.beginSourceSection(statementStart, statement.length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadConstant(3L);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
 
                             builder.endBlock();
                             builder.endTag(StandardTags.RootTag.class);
@@ -243,21 +248,33 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(x);
                             builder.emitLoadConstant(1L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(yStart, "y: x + 1".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(y);
                             builder.emitLoadConstant(2L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(terminalStart, 1);
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadLocal(y);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.endBlock();
@@ -293,27 +310,43 @@ final class ProtosI101BArithmeticBuilderOracleTest {
                             builder.beginBlock();
 
                             builder.beginSourceSection(xStart, "x: 1".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(x);
                             builder.emitLoadConstant(1L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(yStart, "y: 2".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(y);
                             builder.emitLoadConstant(2L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(zStart, "z: x + y".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(z);
                             builder.emitLoadConstant(3L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(terminalStart, 1);
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadLocal(z);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.endBlock();

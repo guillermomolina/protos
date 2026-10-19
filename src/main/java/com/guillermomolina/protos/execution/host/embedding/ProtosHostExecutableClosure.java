@@ -75,8 +75,7 @@ import java.util.Objects;
  * same way.
  *
  * <p>I102 (PLAT060-B5): every execution on the compact path enters through the single ordinary
- * Closure-call ABI, whatever the Context's {@link ProtosExecutionMode}; the mode selects only the
- * lowering of the entered root, never the frame-argument layout.
+ * Closure-call ABI; no host configuration selects a different frame-argument layout.
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosHostExecutableClosure implements TruffleObject {
@@ -365,8 +364,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
     }
 
     /**
-     * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance, in
-     * NORMAL and DEBUG alike.
+     * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance.
      */
     private ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] supplied) {
         return (ProtosPreparedCalls.OrdinarySourceCall)

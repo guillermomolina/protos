@@ -34,6 +34,8 @@ final class ProtosLm009DDebugRuntimeHostTest {
         ProtosPolyglotRuntimeHost.DebugEndpoint endpoint;
         try (ProtosPolyglotRuntimeHost host =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics)) {
+            // D208-A: isDebugMode reports the real DAP host configuration, not a guest mode.
+            assertTrue(host.isDebugMode());
             endpoint = host.debugEndpoint();
             assertTrue(InetAddress.getByName(endpoint.host()).isLoopbackAddress());
             assertTrue(endpoint.port() > 0 && endpoint.port() <= 65535);
@@ -48,6 +50,7 @@ final class ProtosLm009DDebugRuntimeHostTest {
     @Test
     void ordinaryRuntimeHostDoesNotBecomeDebugEnabled() {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+            assertFalse(host.isDebugMode());
             assertThrows(IllegalStateException.class, host::debugEndpoint);
         }
     }

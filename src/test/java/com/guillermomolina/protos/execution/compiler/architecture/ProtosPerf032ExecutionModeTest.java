@@ -47,14 +47,32 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * PERF032: the immutable NORMAL/DEBUG execution mode, not instrumentation or debugger state,
- * selects the lowering of a Context's executables. I102 (PLAT060-B5): the mode never selects the
- * host-entry frame-argument ABI; NORMAL and DEBUG enter the same Closure through the same
- * five-slot header, and DEBUG keeps exact scopes for a debugger attached later.
+ * PLAT067-B / D208-A: there is no guest execution mode. Every Context lowers its executables
+ * through the one proof-optimized path, and a debugger, attached at any time, observes that same
+ * lowering: it never selects another one. I102 (PLAT060-B5): every host entry uses the same
+ * five-slot header, and a debugger attached after a call was prepared or first executed observes
+ * the exact scope of every surviving executable location.
+ *
+ * <p>Historically PERF032 selected an immutable NORMAL/DEBUG mode here; the class keeps its name
+ * so its history stays traceable, while each test now compares execution without and with an
+ * attached Truffle debugger.
  */
 final class ProtosPerf032ExecutionModeTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
+    /** A dynamic body: the ordinary statement lowering. */
     private static final String SOURCE =
+            """
+            marker: "perf032-marker"
+            run: () => {
+                marker.size() - 13
+            }
+            0
+            """;
+    /**
+     * The optimized body: I101 lowers {@code run} to a constant-return root whose surviving
+     * return keeps the statement's passive tags (PLAT067-B).
+     */
+    private static final String CONSTANT_SOURCE =
             """
             marker: "perf032-marker"
             run: () => {
@@ -68,7 +86,7 @@ final class ProtosPerf032ExecutionModeTest {
     Path directory;
 
     @Test
-    void i095B6aOwnScalarNormalDebugParity() throws Exception {
+    void i095B6aOwnScalarDebuggerParity() throws Exception {
         String source = """
                 run: () => {
                     value: 9
@@ -81,26 +99,26 @@ final class ProtosPerf032ExecutionModeTest {
                 }
                 0
                 """;
-        for (ProtosExecutionMode mode : new ProtosExecutionMode[] {
-                ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG}) {
-            Path file = directory.resolve("i095-b6a-" + mode + ".protos");
+        for (boolean debugger : new boolean[] {false, true}) {
+            String label = label(debugger);
+            Path file = directory.resolve("i095-b6a-" + debugger + ".protos");
             Files.writeString(file, source, StandardCharsets.UTF_8);
-            try (ProtosStandaloneHostedSession session =
-                    ProtosStandaloneHostedSession.openForTesting(CORE, file, mode)) {
+            try (ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = debugger ? attach(session) : null) {
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED,
-                        session.initialOutcome().state(), mode.toString());
+                        session.initialOutcome().state(), label);
                 Value run = session.prepareTopLevel("run").executable();
                 for (int i = 0; i < 3; i++) {
-                    assertEquals(51, run.execute().asInt(), mode.toString());
+                    assertEquals(51, run.execute().asInt(), label);
                 }
                 assertNoTask(session);
             }
         }
-        System.out.println("I095_B6A_NORMAL_DEBUG=PASS");
+        System.out.println("I095_B6A_DEBUGGER_PARITY=PASS");
     }
 
     @Test
-    void i095B6bMixedCaptureNormalDebugParity() throws Exception {
+    void i095B6bMixedCaptureDebuggerParity() throws Exception {
         String source = """
                 run: () => {
                     outer: 40
@@ -115,27 +133,27 @@ final class ProtosPerf032ExecutionModeTest {
                 }
                 0
                 """;
-        for (ProtosExecutionMode mode : new ProtosExecutionMode[] {
-                ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG}) {
-            Path file = directory.resolve("i095-b6b-" + mode + ".protos");
+        for (boolean debugger : new boolean[] {false, true}) {
+            String label = label(debugger);
+            Path file = directory.resolve("i095-b6b-" + debugger + ".protos");
             Files.writeString(file, source, StandardCharsets.UTF_8);
-            try (ProtosStandaloneHostedSession session =
-                    ProtosStandaloneHostedSession.openForTesting(CORE, file, mode)) {
+            try (ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = debugger ? attach(session) : null) {
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED,
-                        session.initialOutcome().state(), mode.toString());
+                        session.initialOutcome().state(), label);
                 Value run = session.prepareTopLevel("run").executable();
                 for (int i = 0; i < 3; i++) {
-                    assertEquals(95, run.execute().asInt(), mode.toString());
+                    assertEquals(95, run.execute().asInt(), label);
                 }
                 assertNoTask(session);
             }
         }
-        System.out.println("I095_B6B_NORMAL_DEBUG=PASS");
+        System.out.println("I095_B6B_DEBUGGER_PARITY=PASS");
     }
 
     @Test
-    void normalModeEntersTheClosureWithTheB5Header() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.NORMAL)) {
+    void hostEntersTheClosureWithTheB5Header() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("plain")) {
             assertFalse(session.runtimeHostForTesting().isDebugMode());
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                     session.prepareTopLevel("run");
@@ -144,13 +162,15 @@ final class ProtosPerf032ExecutionModeTest {
             assertB5ZeroArgumentHeader(adapter, arguments(session, adapter));
             assertNoTask(session);
         }
-        System.out.println("I102_NORMAL_B5_HEADER=PASS");
+        System.out.println("I102_B5_HEADER=PASS");
     }
 
     @Test
-    void debugModeEntersTheSameClosureWithProvenance() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.DEBUG)) {
-            assertTrue(session.runtimeHostForTesting().isDebugMode());
+    void attachedDebuggerEntersTheSameClosureWithTheB5Header() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("attached");
+                DebuggerSession attached = attach(session)) {
+            // D208-A: isDebugMode describes DAP configuration only; this host has no DAP.
+            assertFalse(session.runtimeHostForTesting().isDebugMode());
             ProtosStandaloneHostedSession.PreparedTopLevel prepared =
                     session.prepareTopLevel("run");
             ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
@@ -158,11 +178,11 @@ final class ProtosPerf032ExecutionModeTest {
             assertB5ZeroArgumentHeader(adapter, arguments(session, adapter));
             assertNoTask(session);
         }
-        System.out.println("PERF032_DEBUG_HEADER=PASS");
+        System.out.println("PLAT067_DEBUGGER_B5_HEADER=PASS");
     }
 
     @Test
-    void normalHostDoesNotStartDap() {
+    void ordinaryHostDoesNotStartDap() {
         try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
             assertFalse(host.isDebugMode());
             assertThrows(IllegalStateException.class, host::debugEndpoint);
@@ -170,25 +190,65 @@ final class ProtosPerf032ExecutionModeTest {
         System.out.println("PERF032_NORMAL_NO_DAP=PASS");
     }
 
+    /** PLAT067-B: a debugger attached after the first call observes the exact lexical scope. */
     @Test
-    void debugModeDebuggerObservesTheExactLexicalScope() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.DEBUG)) {
+    void debuggerAttachedAfterFirstExecutionObservesTheExactLexicalScope() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("late-attach")) {
             Value executable = session.prepareTopLevel("run").executable();
             assertEquals(1, executable.execute().asInt(), "first call precedes the debugger");
 
             ScopeObservation observation = new ScopeObservation();
-            try (DebuggerSession debugSession = startSession(session, observation)) {
+            try (DebuggerSession debugSession = startSession(session, "late-attach", observation)) {
                 assertEquals(1, executable.execute().asInt());
             }
             observation.assertObserved("perf032-marker");
             assertNoTask(session);
         }
-        System.out.println("PERF032_DEBUG_SCOPE=PASS");
+        System.out.println("PLAT067_LATE_ATTACH_SCOPE=PASS");
     }
 
+    /**
+     * PLAT067-B: the constant-return Closure {@code () => { 1 }} keeps its surviving statement
+     * location. A debugger attached after the first execution, before or after the on-demand
+     * materialization of the root's tags, halts there with the exact scope; the suspension is the
+     * Closure's own and no callback or frame is fabricated.
+     */
     @Test
-    void debugModeCallPreparedBeforeTheDebuggerKeepsItsScope() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.DEBUG)) {
+    void constantReturnClosureKeepsItsBreakpointLocation() throws Exception {
+        for (boolean materializedFirst : new boolean[] {false, true}) {
+            String name = "constant-" + materializedFirst;
+            try (ProtosStandaloneHostedSession session = open(name, CONSTANT_SOURCE)) {
+                ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                        session.prepareTopLevel("run");
+                Value executable = prepared.executable();
+                assertEquals(1, executable.execute().asInt(), "first call precedes the debugger");
+                if (materializedFirst) {
+                    ProtosHostExecutableClosure adapter = prepared.hostExecutableForTesting();
+                    session.processContextForTesting()
+                            .callForRuntime(
+                                    () -> {
+                                        ((ProtosBytecodeRootNode) adapter.target.getRootNode())
+                                                .getRootNodes()
+                                                .ensureComplete();
+                                        return null;
+                                    });
+                }
+
+                ScopeObservation observation = new ScopeObservation();
+                try (DebuggerSession debugSession = startSession(session, name, observation)) {
+                    assertEquals(1, executable.execute().asInt());
+                }
+                observation.assertObserved("perf032-marker");
+                assertNoTask(session);
+            }
+        }
+        System.out.println("PLAT067_CONSTANT_RETURN_BREAKPOINT=PASS");
+    }
+
+    /** PLAT067-B: a call prepared before the debugger attached keeps its exact scope. */
+    @Test
+    void callPreparedBeforeTheDebuggerKeepsItsScope() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("prepared")) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
             ProtosPreparedCalls.OrdinarySourceCall prepared =
@@ -197,7 +257,7 @@ final class ProtosPerf032ExecutionModeTest {
             assertB5ZeroArgumentHeader(adapter, prepared.targetArguments());
 
             ScopeObservation observation = new ScopeObservation();
-            try (DebuggerSession debugSession = startSession(session, observation)) {
+            try (DebuggerSession debugSession = startSession(session, "prepared", observation)) {
                 Object result =
                         session.processContextForTesting()
                                 .callForRuntime(
@@ -212,16 +272,16 @@ final class ProtosPerf032ExecutionModeTest {
             observation.assertObserved("perf032-marker");
             assertNoTask(session);
         }
-        System.out.println("PERF032_DEBUG_PREPARED_BEFORE_ATTACH=PASS");
+        System.out.println("PLAT067_PREPARED_BEFORE_ATTACH=PASS");
     }
 
     @Test
-    void normalModeToolingFrameIsNotRecognizedByItsArgumentShape() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(ProtosExecutionMode.NORMAL)) {
+    void toolingFrameIsNotRecognizedByItsArgumentShape() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("tooling")) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
 
-            // I102: tooling sees the same B5 frame as DEBUG; no profile is inferred from it.
+            // I102: tooling sees the B5 frame; nothing is inferred from its shape.
             session.processContextForTesting()
                     .callForRuntime(
                             () -> {
@@ -245,8 +305,7 @@ final class ProtosPerf032ExecutionModeTest {
                                         "hasScope does not materialize the activation");
                                 /*
                                  * Synthetic frame: this projects a scope whose information the
-                                 * B5 frame already carries. It is not a NORMAL late-attach
-                                 * guarantee, and no DEBUG instrumentation is enabled.
+                                 * B5 frame already carries; no debugger is attached.
                                  */
                                 InteropLibrary interop = InteropLibrary.getUncached();
                                 try {
@@ -279,7 +338,7 @@ final class ProtosPerf032ExecutionModeTest {
                                 return null;
                             });
 
-            // NORMAL does not require debugger breakpoints or suspension.
+            // Execution does not require debugger breakpoints or suspension.
             assertEquals(
                     1,
                     session.prepareTopLevel("run")
@@ -288,11 +347,11 @@ final class ProtosPerf032ExecutionModeTest {
                             .asInt());
             assertNoTask(session);
         }
-        System.out.println("I102_NORMAL_TOOLING_FRAME=PASS");
+        System.out.println("I102_TOOLING_FRAME=PASS");
     }
 
     @Test
-    void normalAndDebugExecuteTheSameWholeInlineBody()
+    void attachedDebuggerExecutesTheSameWholeInlineBody()
             throws Exception {
         String program = """
                 run: () => {
@@ -304,46 +363,37 @@ final class ProtosPerf032ExecutionModeTest {
                 0
                 """;
 
-        Path normalFile = directory.resolve(
-                "i095-b2-normal.protos");
-        Path debugFile = directory.resolve(
-                "i095-b2-debug.protos");
+        Path plainFile = directory.resolve("i095-b2-plain.protos");
+        Path debuggerFile = directory.resolve("i095-b2-debugger.protos");
+        Files.writeString(plainFile, program, StandardCharsets.UTF_8);
+        Files.writeString(debuggerFile, program, StandardCharsets.UTF_8);
 
-        Files.writeString(
-                normalFile, program, StandardCharsets.UTF_8);
-        Files.writeString(
-                debugFile, program, StandardCharsets.UTF_8);
-
-        try (ProtosStandaloneHostedSession normal =
-                        ProtosStandaloneHostedSession.openForTesting(
-                                CORE, normalFile, ProtosExecutionMode.NORMAL);
-                ProtosStandaloneHostedSession debug =
-                        ProtosStandaloneHostedSession.openForTesting(
-                                CORE, debugFile, ProtosExecutionMode.DEBUG)) {
+        try (ProtosStandaloneHostedSession plain =
+                        ProtosStandaloneHostedSession.open(CORE, plainFile);
+                ProtosStandaloneHostedSession observed =
+                        ProtosStandaloneHostedSession.open(CORE, debuggerFile);
+                DebuggerSession attached = attach(observed)) {
 
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
-                    normal.initialOutcome().state());
+                    plain.initialOutcome().state());
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
-                    debug.initialOutcome().state());
+                    observed.initialOutcome().state());
 
-            Value normalRun =
-                    normal.prepareTopLevel("run").executable();
-            Value debugRun =
-                    debug.prepareTopLevel("run").executable();
+            Value plainRun = plain.prepareTopLevel("run").executable();
+            Value observedRun = observed.prepareTopLevel("run").executable();
 
             for (int iteration = 0; iteration < 3; iteration++) {
-                assertEquals(12, normalRun.execute().asInt());
-                assertEquals(12, debugRun.execute().asInt());
+                assertEquals(12, plainRun.execute().asInt());
+                assertEquals(12, observedRun.execute().asInt());
             }
 
-            assertNoTask(normal);
-            assertNoTask(debug);
+            assertNoTask(plain);
+            assertNoTask(observed);
         }
 
-        System.out.println(
-                "I095_B2_NORMAL_DEBUG_WHOLE_BODY=PASS");
+        System.out.println("I095_B2_DEBUGGER_WHOLE_BODY=PASS");
     }
 
     @Test
@@ -413,56 +463,45 @@ final class ProtosPerf032ExecutionModeTest {
                         73));
 
         for (Case scenario : cases) {
-            Path normalFile = directory.resolve(
-                    "i095-b3-" + scenario.name() + "-normal.protos");
-            Path debugFile = directory.resolve(
-                    "i095-b3-" + scenario.name() + "-debug.protos");
+            Path plainFile = directory.resolve(
+                    "i095-b3-" + scenario.name() + "-plain.protos");
+            Path debuggerFile = directory.resolve(
+                    "i095-b3-" + scenario.name() + "-debugger.protos");
 
-            Files.writeString(
-                    normalFile, scenario.program(),
-                    StandardCharsets.UTF_8);
-            Files.writeString(
-                    debugFile, scenario.program(),
-                    StandardCharsets.UTF_8);
+            Files.writeString(plainFile, scenario.program(), StandardCharsets.UTF_8);
+            Files.writeString(debuggerFile, scenario.program(), StandardCharsets.UTF_8);
 
-            try (ProtosStandaloneHostedSession normal =
-                            ProtosStandaloneHostedSession.openForTesting(
-                                    CORE,
-                                    normalFile,
-                                    ProtosExecutionMode.NORMAL);
-                    ProtosStandaloneHostedSession debug =
-                            ProtosStandaloneHostedSession.openForTesting(
-                                    CORE,
-                                    debugFile,
-                                    ProtosExecutionMode.DEBUG)) {
+            try (ProtosStandaloneHostedSession plain =
+                            ProtosStandaloneHostedSession.open(CORE, plainFile);
+                    ProtosStandaloneHostedSession observed =
+                            ProtosStandaloneHostedSession.open(CORE, debuggerFile);
+                    DebuggerSession attached = attach(observed)) {
 
                 assertEquals(
                         ProtosExecutionOutcome.State.COMPLETED,
-                        normal.initialOutcome().state(),
+                        plain.initialOutcome().state(),
                         scenario.name());
                 assertEquals(
                         ProtosExecutionOutcome.State.COMPLETED,
-                        debug.initialOutcome().state(),
+                        observed.initialOutcome().state(),
                         scenario.name());
 
-                Value normalRun =
-                        normal.prepareTopLevel("run").executable();
-                Value debugRun =
-                        debug.prepareTopLevel("run").executable();
+                Value plainRun = plain.prepareTopLevel("run").executable();
+                Value observedRun = observed.prepareTopLevel("run").executable();
 
                 for (int iteration = 0; iteration < 3; iteration++) {
                     assertEquals(
                             scenario.expected(),
-                            normalRun.execute().asInt(),
-                            "NORMAL: " + scenario.name());
+                            plainRun.execute().asInt(),
+                            label(false) + ": " + scenario.name());
                     assertEquals(
                             scenario.expected(),
-                            debugRun.execute().asInt(),
-                            "DEBUG: " + scenario.name());
+                            observedRun.execute().asInt(),
+                            label(true) + ": " + scenario.name());
                 }
 
-                assertNoTask(normal);
-                assertNoTask(debug);
+                assertNoTask(plain);
+                assertNoTask(observed);
             }
 
             System.out.println(
@@ -473,71 +512,73 @@ final class ProtosPerf032ExecutionModeTest {
         }
     }
 
+    /** An attached debugger on one host never affects another host's execution. */
     @Test
-    void simultaneousNormalAndDebugHostsDoNotShareTheirMode() throws Exception {
-        try (ProtosStandaloneHostedSession normal = open(ProtosExecutionMode.NORMAL);
-                ProtosStandaloneHostedSession debug = open(ProtosExecutionMode.DEBUG)) {
-            ProtosStandaloneHostedSession.PreparedTopLevel normalRun =
-                    normal.prepareTopLevel("run");
-            ProtosStandaloneHostedSession.PreparedTopLevel debugRun =
-                    debug.prepareTopLevel("run");
+    void simultaneousHostsWithAndWithoutDebuggerStayIndependent() throws Exception {
+        try (ProtosStandaloneHostedSession plain = open("plain-host");
+                ProtosStandaloneHostedSession observed = open("observed-host");
+                DebuggerSession attached = attach(observed)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel plainRun =
+                    plain.prepareTopLevel("run");
+            ProtosStandaloneHostedSession.PreparedTopLevel observedRun =
+                    observed.prepareTopLevel("run");
             for (int index = 0; index < 3; index++) {
-                assertEquals(1, normalRun.executable().execute().asInt());
-                assertEquals(1, debugRun.executable().execute().asInt());
+                assertEquals(1, plainRun.executable().execute().asInt());
+                assertEquals(1, observedRun.executable().execute().asInt());
                 assertB5ZeroArgumentHeader(
-                        normalRun.hostExecutableForTesting(),
-                        arguments(normal, normalRun.hostExecutableForTesting()));
+                        plainRun.hostExecutableForTesting(),
+                        arguments(plain, plainRun.hostExecutableForTesting()));
                 assertB5ZeroArgumentHeader(
-                        debugRun.hostExecutableForTesting(),
-                        arguments(debug, debugRun.hostExecutableForTesting()));
+                        observedRun.hostExecutableForTesting(),
+                        arguments(observed, observedRun.hostExecutableForTesting()));
             }
-            assertFalse(normal.runtimeHostForTesting().isDebugMode());
-            assertTrue(debug.runtimeHostForTesting().isDebugMode());
-            assertNoTask(normal);
-            assertNoTask(debug);
+            assertFalse(plain.runtimeHostForTesting().isDebugMode());
+            assertFalse(observed.runtimeHostForTesting().isDebugMode());
+            assertNoTask(plain);
+            assertNoTask(observed);
         }
-        System.out.println("PERF032_MODE_ISOLATION=PASS");
+        System.out.println("PLAT067_HOST_ISOLATION=PASS");
     }
 
+    /** D208-A: the standard embedding has no execution-mode option; {@code protos.Debug} is gone. */
     @Test
-    void standardEmbeddingSelectsTheModeThroughTheContextOption() {
+    void standardEmbeddingHasNoExecutionModeOption() {
         String core = CORE.toAbsolutePath().toString();
-        try (Context normal =
-                        Context.newBuilder(ProtosLanguage.ID)
-                                .option("protos.CoreRoot", core)
-                                .build();
-                Context debug =
-                        Context.newBuilder(ProtosLanguage.ID)
-                                .option("protos.CoreRoot", core)
-                                .allowExperimentalOptions(true)
-                                .option("protos.Debug", "true")
-                                .build()) {
-            assertEquals(ProtosExecutionMode.NORMAL, mode(normal));
-            assertEquals(ProtosExecutionMode.DEBUG, mode(debug));
-            for (Context context : new Context[] {normal, debug}) {
-                context.eval(ProtosLanguage.ID, "run: () => {\n    1\n}\n0\n");
-                Value run = context.getBindings(ProtosLanguage.ID).getMember("run");
-                assertEquals(1, run.execute().asInt());
-            }
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> {
+                    try (Context retired =
+                            Context.newBuilder(ProtosLanguage.ID)
+                                    .option("protos.CoreRoot", core)
+                                    .allowExperimentalOptions(true)
+                                    .option("protos.Debug", "true")
+                                    .build()) {
+                        retired.initialize(ProtosLanguage.ID);
+                    }
+                });
+        try (Context context =
+                Context.newBuilder(ProtosLanguage.ID)
+                        .option("protos.CoreRoot", core)
+                        .build()) {
+            context.eval(ProtosLanguage.ID, "run: () => {\n    1\n}\n0\n");
+            Value run = context.getBindings(ProtosLanguage.ID).getMember("run");
+            assertEquals(1, run.execute().asInt());
         }
-        System.out.println("PERF032_EMBEDDING_MODE_OPTION=PASS");
+        System.out.println("D208_NO_EXECUTION_MODE_OPTION=PASS");
     }
 
-    private static ProtosExecutionMode mode(Context context) {
-        context.initialize(ProtosLanguage.ID);
-        context.enter();
-        try {
-            return ProtosLanguageContext.current().executionMode();
-        } finally {
-            context.leave();
-        }
+    private static String label(boolean debugger) {
+        return debugger ? "debugger attached" : "no debugger";
     }
 
-    private ProtosStandaloneHostedSession open(ProtosExecutionMode mode) throws Exception {
-        Path file = sourceFile(mode);
-        Files.writeString(file, SOURCE, StandardCharsets.UTF_8);
-        ProtosStandaloneHostedSession session =
-                ProtosStandaloneHostedSession.openForTesting(CORE, file, mode);
+    private ProtosStandaloneHostedSession open(String name) throws Exception {
+        return open(name, SOURCE);
+    }
+
+    private ProtosStandaloneHostedSession open(String name, String source) throws Exception {
+        Path file = sourceFile(name);
+        Files.writeString(file, source, StandardCharsets.UTF_8);
+        ProtosStandaloneHostedSession session = ProtosStandaloneHostedSession.open(CORE, file);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());
         return session;
     }
@@ -551,20 +592,20 @@ final class ProtosPerf032ExecutionModeTest {
         return debugger;
     }
 
-    private Path sourceFile(ProtosExecutionMode mode) {
-        return directory.resolve("perf032-" + mode.name().toLowerCase() + ".protos");
+    /** PLAT067-B: an in-process debugger session with no breakpoint; it only observes. */
+    private static DebuggerSession attach(ProtosStandaloneHostedSession session) {
+        return debugger(session).startSession(event -> {});
     }
 
-    private Breakpoint breakpoint(ProtosExecutionMode mode) {
-        return Breakpoint.newBuilder(sourceFile(mode).toUri())
-                .lineIs(BODY_LINE)
-                .build();
+    private Path sourceFile(String name) {
+        return directory.resolve("perf032-" + name + ".protos");
     }
 
     private DebuggerSession startSession(
-            ProtosStandaloneHostedSession session, ScopeObservation observation) {
+            ProtosStandaloneHostedSession session, String name, ScopeObservation observation) {
         DebuggerSession debugSession = debugger(session).startSession(observation::onSuspend);
-        debugSession.install(breakpoint(ProtosExecutionMode.DEBUG));
+        debugSession.install(
+                Breakpoint.newBuilder(sourceFile(name).toUri()).lineIs(BODY_LINE).build());
         return debugSession;
     }
 
@@ -576,8 +617,8 @@ final class ProtosPerf032ExecutionModeTest {
 
     /**
      * I102: the zero-argument host entry of {@code adapter}'s unobservable-home Closure, identical
-     * in NORMAL and DEBUG: the Closure, no explicit Task, the adapter's exact caller and the
-     * unobservable marker, with no supplied value.
+     * with and without a debugger: the Closure, no explicit Task, the adapter's exact caller and
+     * the unobservable marker, with no supplied value.
      */
     private static void assertB5ZeroArgumentHeader(
             ProtosHostExecutableClosure adapter, Object[] arguments) {

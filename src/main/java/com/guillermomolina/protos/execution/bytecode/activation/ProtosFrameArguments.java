@@ -38,7 +38,7 @@ final class ProtosFrameArguments {
      * Captured lexical state and executable identity remain owned by the
      * Closure. Caller-owned module/domain/control provenance is referenced,
      * rather than copied into another rich per-call aggregate. Every ordinary
-     * Closure call into a CallTarget, in NORMAL and DEBUG alike, carries this
+     * Closure call into a CallTarget carries this
      * one fixed five-slot header followed by the supplied positional values:
      *
      *   [0] the invoked ProtosClosureValue, or the exact published
@@ -66,7 +66,7 @@ final class ProtosFrameArguments {
      *
      * Publication replaces only argument 0 by the materialized activation;
      * the length, the offsets and every other slot stay unchanged. Arity,
-     * Task, ReturnHome, method reception, execution profile and
+     * Task, ReturnHome, method reception, host debugging and
      * materialization never change any offset.
      */
     private static final int CLOSURE_INDEX = 0;

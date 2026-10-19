@@ -534,6 +534,21 @@
         "ProtosBytecodeRootNode.BindUnaryFrameParameter.isCompactUnbound(LocalRangeAccessor,int,BytecodeNode,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "unprojectedFrameNativeBindingsForTooling(BytecodeNode,int,MaterializedFrame,ProtosActivation)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "TRUFFLE_BOUNDARY",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.unprojectedFrameNativeBindingsForTooling(BytecodeNode,int,MaterializedFrame,ProtosActivation)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosBytecodeRootNode.unprojectedFrameNativeBindingsForTooling"
     }
   ]
 }

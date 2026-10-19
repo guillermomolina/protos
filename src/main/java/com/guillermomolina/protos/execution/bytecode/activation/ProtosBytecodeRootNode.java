@@ -363,6 +363,45 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * PLAT067-B tooling-only read of this root's PRESENT frame-native bindings
+     * at {@code bytecodeIndex} of {@code frame}, in layout order, or {@code
+     * null} when this root keeps no frame-native bindings or {@code
+     * activation} already projects them through this frame's authority. A
+     * cleared (not yet created) local is ABSENT and omitted; a primitive
+     * carrier is answered as its guest value. Nothing is installed, published
+     * or retained: the activation and its Context are left unchanged.
+     */
+    @TruffleBoundary
+    final java.util.Map<String, Object> unprojectedFrameNativeBindingsForTooling(
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex,
+            com.oracle.truffle.api.frame.MaterializedFrame materialized,
+            ProtosActivation activation) {
+        if (frameNativeBindingLocals == null) {
+            return null;
+        }
+        if (activation.currentLexicalBindingAuthorityForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority installed
+                && installed.isInstalledFor(bytecodeNode, materialized)) {
+            return null;
+        }
+        java.util.LinkedHashMap<String, Object> present = new java.util.LinkedHashMap<>();
+        for (int ordinal = 0; ordinal < frameNativeBindingLayout.length(); ordinal++) {
+            if (frameNativeBindingLocals.isCleared(bytecodeNode, materialized, ordinal)) {
+                continue;
+            }
+            present.put(
+                    frameNativeBindingLayout.nameAt(ordinal),
+                    ProtosNumericValueSupport.guestValue(
+                            bytecodeNode.getLocalValue(
+                                    bytecodeIndex,
+                                    materialized,
+                                    frameNativeBindingLayout.localOffsetAt(ordinal))));
+        }
+        return java.util.Collections.unmodifiableMap(present);
+    }
+
+    /**
      * Installs, for tooling scope projection, the materialized-frame authority
      * of this root over {@code frame} on {@code activation}, when this root was
      * lowered without a persistent frame authority. {@code frame} must be the
@@ -6749,9 +6788,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     /** Spread: exact arity is part of canonical classification. */
 
     /*
-     * I101-A (PLAT058-D): there is no run-time execution-mode operation. The
-     * immutable profile of the owning Context selects the physical lowering
-     * when the root is built (CanonicalToBytecodeLowerer).
+     * PLAT067-B: there is no run-time execution-mode operation and no
+     * compilation profile; CanonicalToBytecodeLowerer emits one proof-optimized
+     * lowering for every Context.
      */
 
     @Operation

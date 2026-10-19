@@ -20,6 +20,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -44,16 +46,16 @@ import org.junit.jupiter.api.Test;
 
 /**
  * I095-C focal evidence: ordinary {@code ifTrue}, {@code ifFalse}, {@code if}
- * and {@code else} sends share one NORMAL lowering. A canonical literal
+ * and {@code else} sends share one lowering. A canonical literal
  * receiver selects its branch statically; any other receiver is evaluated
  * once and classified at run time, a non-canonical receiver keeping the
  * ordinary send. A selected literal callback whose whole activation is proven
- * unobservable runs inline in the caller's Bytecode root. DEBUG mode and
- * unproven callbacks keep the established topology.
+ * unobservable runs inline in the caller's Bytecode root. Unproven callbacks
+ * keep the established topology.
  *
- * <p>I101-A: each program is lowered under the immutable profile of the
- * entered Context, so a NORMAL root holds only the admitted lowering and a
- * DEBUG root only the ordinary one. Inline admission is observed through
+ * <p>PLAT067-B: every Context uses the one proof-optimized lowering, so a
+ * root holds only the admitted lowering whether or not a debugger is
+ * attached. Inline admission is observed through
  * {@code run}'s bytecode; physical callees through the guest CallTarget stack
  * seen by a native {@code probe} (depth 2 is {@code run} over the module
  * root). No test mutates the frozen global root.
@@ -223,11 +225,11 @@ final class ProtosI095BooleanControlInlineTest {
     }
 
     /**
-     * NORMAL and DEBUG agree on the result and on exactly one callback
-     * execution, each under its own profile-specific lowering.
+     * PLAT067-B: with and without an attached debugger the result, the single
+     * callback execution and the physical frame depths agree.
      */
     @Test
-    void normalAndDebugAgreeOnResultAndSingleCallbackExecution() throws Exception {
+    void attachedDebuggerAgreesOnResultAndSingleCallbackExecution() throws Exception {
         String source = """
                 run: (b) => {
                     p: probe
@@ -248,7 +250,8 @@ final class ProtosI095BooleanControlInlineTest {
         assertInteger(9, debug.value());
         assertEquals(1, normal.probe().calls.get());
         assertEquals(1, debug.probe().calls.get());
-        System.out.println("I095_C_NORMAL_DEBUG_PARITY=PASS");
+        assertEquals(normal.probe().depths(), debug.probe().depths(), debug.probe()::toString);
+        System.out.println("I095_C_DEBUGGER_PARITY=PASS");
     }
 
     /** Receiver and argument are evaluated once, in order, on every path. */
@@ -569,12 +572,17 @@ final class ProtosI095BooleanControlInlineTest {
         }
     }
 
+    /**
+     * Runs {@code source} in a fresh Context; with {@code debug}, a Truffle
+     * debugger session is attached to its Engine before the program is
+     * lowered (PLAT067-B: it observes, it never selects another lowering).
+     */
     private static Execution execute(boolean debug, String source) throws Exception {
-        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-        if (debug) {
-            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-        }
-        try (Context context = builder.build()) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                DebuggerSession attached =
+                        debug
+                                ? Debugger.find(context.getEngine()).startSession(event -> {})
+                                : null) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -587,7 +595,7 @@ final class ProtosI095BooleanControlInlineTest {
         }
     }
 
-    /** NORMAL and DEBUG produce the same result for the same program. */
+    /** The same program produces the same result with and without a debugger attached. */
     private static void assertParity(String source, long expected) throws Exception {
         assertInteger(expected, execute(false, source).value());
         assertInteger(expected, execute(true, source).value());
@@ -655,11 +663,9 @@ final class ProtosI095BooleanControlInlineTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        // I101-A: lowered under the immutable profile of the entered Context.
         return new CanonicalToBytecodeLowerer(
                         LANGUAGE_REF.get(null),
-                        source,
-                        ProtosLanguageContext.current().executionMode())
+                        source)
                 .lowerRoot(sequence);
     }
 

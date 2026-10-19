@@ -19,11 +19,13 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -53,16 +55,17 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * I101-A (PLAT058-D) focal evidence: the immutable NORMAL/DEBUG profile of the owning Context
- * selects the physical lowering of every executable it owns, and NORMAL emits the proven minimal
- * representation of the primary constant Boolean-control witness.
+ * I101-A focal evidence, PLAT067-B: every Context lowers every executable it owns through the one
+ * proof-optimized path, which emits the proven minimal representation of the primary constant
+ * Boolean-control witness. A Truffle debugger attached before lowering observes exactly the same
+ * roots: it never selects another lowering and never fabricates an eliminated callback root.
  *
- * <p>The expected NORMAL activation root of {@code () => { true.ifTrue() { 1 } }} is a handwritten
+ * <p>The expected activation root of {@code () => { true.ifTrue() { 1 } }} is a handwritten
  * {@link ProtosBytecodeRootNodeGen.Builder} program authored from the language root
  * contract (a parameterless Closure root with one terminal statement returning the literal's
  * Long carrier; D203/I105 lowers no arity-rejection root). It never consults the parser, the
  * canonicalizer, the lowerer or any lowered root. Real roots always come from the production
- * {@code ParsingRequest} path of an entered Context, so the profile is the Context's own.
+ * {@code ParsingRequest} path of an entered Context.
  *
  * <p>Instruction signatures carry every instruction name, every argument kind, every constant
  * with its exact host type (Long is distinct from Integer and Double, Double compares by raw
@@ -90,7 +93,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     /** DIRECT_LITERAL == FOLDED_BOOLEAN == HANDWRITTEN_ORACLE for complete activation roots. */
     @Test
     void foldedWitnessMatchesDirectLiteralAndHandwrittenOracle() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+        for (boolean debugger : new boolean[] {false, true}) {
+          try (Harness normal = new Harness(debugger, null)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode oracle = handwrittenLiteralOneActivationRoot();
                 ProtosBytecodeRootNode direct = activationRoot(compile(DIRECT, "direct"));
@@ -120,8 +124,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosBytecodeRootNode unfolded =
                         activationRoot(compile("() => { true.ifTrue() { 1 + 0 } }", "unfolded"));
                 assertTrue(!unfolded.provablyNonSuspendingBody());
-                System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS");
+                System.out.println("I101_A_THREE_WAY_SIGNATURE=PASS " + label(debugger));
             });
+          }
         }
     }
 
@@ -132,7 +137,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     @Test
     void unaryNormalEntryMatchesIndependentBuilderOracle()
             throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+        try (Harness normal = new Harness(false, null)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module =
                         compile(UNARY, "i104-unary");
@@ -176,26 +181,30 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             });
         }
 
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+        // PLAT067-B: with a debugger attached the same fused entry is emitted.
+        try (Harness debug = new Harness(true, null)) {
             debug.run(() -> {
                 ProtosBytecodeRootNode production =
                         activationRoot(compile(UNARY, "i104-debug"));
-                List<String> instructions = completeSignature(production);
-                assertTrue(
-                        instructions.stream().noneMatch(
-                                item -> item.contains("BindUnaryFrameParameter")));
-                assertTrue(
-                        instructions.stream().anyMatch(
-                                item -> item.contains("BindClosureFrameParameter")));
+                assertEquals(
+                        completeSignature(handwrittenUnaryIdentityRoot(true)),
+                        completeSignature(production),
+                        "with a debugger the production root must equal the independent Builder");
             });
         }
     }
 
-    /** Root count/order and CallTargets of the NORMAL groups. */
+    /**
+     * Root count/order and CallTargets: {@code () => { 1 }} and
+     * {@code () => { true.ifTrue() { 1 } }} lower to the same minimum two-root topology and the
+     * same handwritten Builder oracle, without and with a debugger attached before lowering.
+     */
     @Test
-    void normalGroupTopologyHasNoCallbackRoot() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+    void groupTopologyHasNoCallbackRootWithAndWithoutDebugger() throws Exception {
+        for (boolean debugger : new boolean[] {false, true}) {
+          try (Harness normal = new Harness(debugger, null)) {
             normal.run(() -> {
+                List<String> oracle = completeSignature(handwrittenLiteralOneActivationRoot());
                 for (String characters : List.of(DIRECT, WITNESS)) {
                     ProtosBytecodeRootNode module =
                             compile(characters, "topology-" + characters.length());
@@ -206,6 +215,17 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                      */
                     assertEquals(2, roots.size(), characters);
                     assertSame(module, roots.get(0));
+                    /*
+                     * PLAT067-B: under BytecodeConfig.DEFAULT the passive statement tags
+                     * materialize nothing; the physical program equals the oracle's.
+                     */
+                    List<String> physical = signature(roots.get(1));
+                    assertEquals(signature(handwrittenLiteralOneActivationRoot()), physical,
+                            label(debugger) + " DEFAULT " + characters);
+                    assertTrue(physical.stream().noneMatch(entry -> entry.startsWith("tag.")),
+                            physical::toString);
+                    assertEquals(oracle, completeSignature(roots.get(1)),
+                            label(debugger) + " " + characters);
 
                     ProtosClosureValue closure = assertInstanceOf(
                             ProtosClosureValue.class,
@@ -215,51 +235,43 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     assertSame(
                             roots.get(1).getCallTarget(),
                             plan.bytecodeActivationTargetForComposition());
-                    assertEquals(ProtosExecutionMode.NORMAL, plan.bytecodeProfileForTesting());
                     assertInteger(1, callClosure(normal, closure));
                 }
-                System.out.println("I101_A_NORMAL_TOPOLOGY=PASS");
+                System.out.println("I101_A_TOPOLOGY=PASS " + label(debugger));
             });
+          }
         }
     }
 
-    /** DEBUG keeps the ordinary send, the physical callback root and its source/RootTag. */
+    /**
+     * PLAT067-B: with a debugger attached, the folded witness keeps no ordinary send and no
+     * callback root; complete instrumentation materializes the activation root's own source and
+     * RootTag without fabricating the eliminated callback.
+     */
     @Test
-    void debugWitnessKeepsTheOrdinarySendAndPhysicalCallback() throws Exception {
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+    void attachedDebuggerWitnessFabricatesNoCallbackRoot() throws Exception {
+        try (Harness debug = new Harness(true, null)) {
             debug.run(() -> {
                 ProtosBytecodeRootNode module = compile(WITNESS, "debug-witness");
                 List<ProtosBytecodeRootNode> roots = groupRoots(module);
-                // Module, Closure and the callback root.
-                assertEquals(3, roots.size());
+                assertEquals(2, roots.size(), "module and Closure roots only");
 
-                // Unfolded in DEBUG: the ordinary send keeps no literal-body capability.
-                assertTrue(!roots.get(1).provablyNonSuspendingBody());
-                List<String> activation = completeSignature(roots.get(1));
-                assertNotEquals(
-                        completeSignature(handwrittenLiteralOneActivationRoot()), activation);
-                assertTrue(activation.stream().anyMatch(entry -> entry.contains("PrepareSendOne")),
-                        activation::toString);
-                assertTrue(
-                        activation.stream()
-                                .anyMatch(entry -> entry.contains("IsCompactCanonicalBooleanMiss")),
-                        activation::toString);
-
-                ProtosBytecodeRootNode callback = roots.get(2);
-                assertNotNull(callback.getSourceSection());
-                // A Closure root spans its body sequence, as the direct Closure root does.
-                assertEquals("1", callback.getSourceSection().getCharacters().toString());
-                assertTrue(hasRootTag(callback.getBytecodeNode().getTagTree()),
-                        "the callback keeps its own RootTag");
+                ProtosBytecodeRootNode activationRoot = roots.get(1);
+                assertTrue(activationRoot.provablyNonSuspendingBody());
+                List<String> activation = completeSignature(activationRoot);
+                assertEquals(completeSignature(handwrittenLiteralOneActivationRoot()), activation);
+                assertNoForbiddenNormalOperation(activation);
+                assertEquals(2, groupRoots(module).size(), "instrumentation adds no root");
+                assertNotNull(activationRoot.getSourceSection());
+                assertTrue(hasRootTag(activationRoot.getBytecodeNode().getTagTree()));
 
                 ProtosClosureValue closure = assertInstanceOf(
                         ProtosClosureValue.class,
                         module.getCallTarget().call(debug.moduleActivation()));
-                assertEquals(
-                        ProtosExecutionMode.DEBUG,
-                        closure.executionPlan().orElseThrow().bytecodeProfileForTesting());
+                assertSame(activationRoot,
+                        closure.executionPlan().orElseThrow().bytecodeActivationRootForTesting());
                 assertInteger(1, callClosure(debug, closure));
-                System.out.println("I101_A_DEBUG_PHYSICAL_CALLBACK=PASS");
+                System.out.println("I101_A_DEBUGGER_NO_FABRICATED_CALLBACK=PASS");
             });
         }
     }
@@ -270,8 +282,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      */
     @Test
     void reparseKeepsTopologyIdentitiesAndSemanticInstructions() throws Exception {
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
-            try (Harness harness = new Harness(mode, null)) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
+            try (Harness harness = new Harness(debugger, null)) {
                 harness.run(() -> {
                     ProtosBytecodeRootNode module =
                             compile(WITNESS, "reparse-" + mode);
@@ -318,40 +331,41 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         System.out.println("I101_A_REPARSE_STABLE=PASS");
     }
 
-    /** NORMAL and DEBUG Contexts of one shared Engine each lower under their own profile. */
+    /**
+     * Two Contexts of one shared Engine, with a debugger attached to that Engine, each lower the
+     * witness to the same oracle: there is no per-Context profile.
+     */
     @Test
-    void mixedContextsOfOneEngineKeepTheirOwnProfiles() throws Exception {
+    void contextsOfOneDebuggedEngineShareTheSingleLowering() throws Exception {
         try (Engine engine = Engine.create();
-                Harness normal = new Harness(ProtosExecutionMode.NORMAL, engine);
-                Harness debug = new Harness(ProtosExecutionMode.DEBUG, engine)) {
+                DebuggerSession attached = Debugger.find(engine).startSession(event -> {});
+                Harness first = new Harness(false, engine);
+                Harness second = new Harness(false, engine)) {
             for (int round = 0; round < 2; round++) {
                 String name = "mixed-" + round;
-                List<String> normalSignature = normal.call(() -> {
+                List<String> firstSignature = first.call(() -> {
                     List<String> expected =
                             completeSignature(handwrittenLiteralOneActivationRoot());
                     List<String> actual = completeSignature(activationRoot(compile(WITNESS, name)));
                     assertEquals(expected, actual);
                     return actual;
                 });
-                List<String> debugSignature = debug.call(() ->
+                List<String> secondSignature = second.call(() ->
                         completeSignature(activationRoot(compile(WITNESS, name))));
-                assertNotEquals(normalSignature, debugSignature);
-                assertTrue(
-                        debugSignature.stream().anyMatch(entry -> entry.contains("PrepareSendOne")),
-                        debugSignature::toString);
+                assertEquals(firstSignature, secondSignature);
             }
         }
-        System.out.println("I101_A_MIXED_CONTEXTS=PASS");
+        System.out.println("I101_A_SHARED_ENGINE_CONTEXTS=PASS");
     }
 
     /**
-     * A Closure projected into another Context is lowered under the destination profile, in both
-     * directions; the source template keeps its own executable.
+     * A Closure projected into another Context is lowered for the destination Context, in both
+     * directions, through the same single lowering; the source template keeps its own executable.
      */
     @Test
-    void closureProjectionUsesTheDestinationContextProfile() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null);
-                Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+    void closureProjectionUsesTheDestinationContext() throws Exception {
+        try (Harness normal = new Harness(false, null);
+                Harness debug = new Harness(true, null)) {
             ProtosClosureValue normalClosure = normal.call(() -> assertInstanceOf(
                     ProtosClosureValue.class,
                     compile(WITNESS, "projection-normal").getCallTarget()
@@ -368,38 +382,38 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 ProtosClosureExecutionPlan projected =
                         destination.bytecodeExecutionPlanForDefinition(
                                 normalClosure.definition(), normalTemplate);
-                assertEquals(ProtosExecutionMode.DEBUG, projected.bytecodeProfileForTesting());
+                assertSame(destination.languageForRuntime(), projected.language().orElseThrow());
                 assertSame(projected, destination.bytecodeExecutionPlanForDefinition(
                         normalClosure.definition(), normalTemplate));
-                List<String> signature =
-                        completeSignature(projected.bytecodeActivationRootForTesting());
-                assertTrue(signature.stream().anyMatch(entry -> entry.contains("PrepareSendOne")),
-                        signature::toString);
+                assertEquals(
+                        completeSignature(handwrittenLiteralOneActivationRoot()),
+                        completeSignature(projected.bytecodeActivationRootForTesting()));
             });
             normal.run(() -> {
                 ProtosLanguageContext destination = ProtosLanguageContext.current();
                 ProtosClosureExecutionPlan projected =
                         destination.bytecodeExecutionPlanForDefinition(
                                 debugClosure.definition(), debugTemplate);
-                assertEquals(ProtosExecutionMode.NORMAL, projected.bytecodeProfileForTesting());
+                assertSame(destination.languageForRuntime(), projected.language().orElseThrow());
                 assertEquals(
                         completeSignature(handwrittenLiteralOneActivationRoot()),
                         completeSignature(projected.bytecodeActivationRootForTesting()));
             });
-            assertEquals(ProtosExecutionMode.NORMAL, normalTemplate.bytecodeProfileForTesting());
-            assertEquals(ProtosExecutionMode.DEBUG, debugTemplate.bytecodeProfileForTesting());
+            assertNotSame(normalTemplate.language().orElseThrow(),
+                    debugTemplate.language().orElseThrow());
         }
-        System.out.println("I101_A_PROJECTION_DESTINATION_PROFILE=PASS");
+        System.out.println("I101_A_PROJECTION_DESTINATION_CONTEXT=PASS");
     }
 
-    /** An imported module is compiled under its owning Context's profile. */
+    /** An imported module is compiled by the one lowering, with and without a debugger. */
     @Test
-    void importedModuleUsesTheOwningContextProfile() throws Exception {
+    void importedModuleUsesTheSingleLowering() throws Exception {
         List<String> oracle;
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+        try (Harness normal = new Harness(false, null)) {
             oracle = normal.call(() -> completeSignature(handwrittenLiteralOneActivationRoot()));
         }
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
             Path root = Files.createDirectories(directory.resolve(mode.toString()));
             Files.writeString(
                     root.resolve("helper.protos"),
@@ -415,33 +429,27 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     """,
                     StandardCharsets.UTF_8);
             try (ProtosStandaloneHostedSession session =
-                    ProtosStandaloneHostedSession.openForTesting(CORE, main, mode)) {
+                    ProtosStandaloneHostedSession.open(CORE, main);
+                    DebuggerSession attached = attach(session, debugger)) {
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED,
                         session.initialOutcome().state(), mode.toString());
                 ProtosStandaloneHostedSession.PreparedTopLevel run =
                         session.prepareTopLevel("run");
                 ProtosClosureExecutionPlan plan =
                         run.closureForTesting().executionPlan().orElseThrow();
-                assertEquals(mode, plan.bytecodeProfileForTesting());
                 List<String> signature =
                         completeSignature(plan.bytecodeActivationRootForTesting());
-                if (mode == ProtosExecutionMode.NORMAL) {
-                    assertEquals(oracle, signature);
-                } else {
-                    assertTrue(
-                            signature.stream().anyMatch(entry -> entry.contains("PrepareSendOne")),
-                            signature::toString);
-                }
+                assertEquals(oracle, signature, mode);
                 for (int iteration = 0; iteration < 3; iteration++) {
                     assertEquals(1, run.executable().execute().asInt(), mode.toString());
                 }
             }
         }
-        System.out.println("I101_A_IMPORTED_MODULE_PROFILE=PASS");
+        System.out.println("I101_A_IMPORTED_MODULE_SINGLE_LOWERING=PASS");
     }
 
     /**
-     * A NORMAL root omits the roots of the Boolean callbacks it inlines or never selects, so an
+     * A root omits the roots of the Boolean callbacks it inlines or never selects, so an
      * I096 inline copy of that root lowers them at its own site, where the callee's root is
      * already closed. Their captures of the callee's bindings must take the runtime-authority
      * path; both I096 sites keep their inline region and every capture keeps its by-reference
@@ -476,8 +484,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 }
                 run()
                 """;
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
-            try (Harness harness = new Harness(mode, null)) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
+            try (Harness harness = new Harness(debugger, null)) {
                 harness.run(() -> {
                     ProtosBytecodeRootNode module =
                             compile(program, "omitted-callbacks-" + mode);
@@ -485,8 +494,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     long inlineSites = run.stream()
                             .filter(entry -> entry.startsWith("c.PrepareInlineClosureLiteralCall"))
                             .count();
-                    assertEquals(mode == ProtosExecutionMode.NORMAL ? 2L : 0L, inlineSites,
-                            () -> mode + " " + run);
+                    assertEquals(2L, inlineSites, () -> mode + " " + run);
                     for (int iteration = 0; iteration < 3; iteration++) {
                         assertInteger(11022,
                                 module.getCallTarget().call(harness.moduleActivation()));
@@ -499,7 +507,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
     /**
      * Fold boundary: only an admitted literal receiver whose selected EXACT callback body is one
-     * pure literal folds. Every other shape keeps ordinary semantics under both profiles.
+     * pure literal folds. Every other shape keeps ordinary semantics, with or without a
+     * debugger.
      */
     @Test
     void foldBoundaryKeepsOrdinarySemantics() throws Exception {
@@ -527,8 +536,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 new Case("() => { Error.handle(() => { true.ifTrue() }, (caught) => { 7 }) }",
                         null, 7L));
         List<Integer> foldedCases = List.of(0, 1, 2, 3);
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
-            try (Harness harness = new Harness(mode, null)) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
+            try (Harness harness = new Harness(debugger, null)) {
                 harness.run(() -> {
                     for (int index = 0; index < cases.size(); index++) {
                         Case test = cases.get(index);
@@ -538,8 +548,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         if (test.folded() != null) {
                             List<String> folded = completeSignature(activationRoot(
                                     compile(test.folded(), name + "-folded")));
-                            boolean expectFold = mode == ProtosExecutionMode.NORMAL
-                                    && foldedCases.contains(index);
+                            boolean expectFold = foldedCases.contains(index);
                             assertEquals(expectFold, folded.equals(actual),
                                     mode + " " + test.closure() + "\n" + actual);
                         }
@@ -556,11 +565,11 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * I101-C/D203 cross-profile acceptance. This is a semantic and root-topology
+     * I101-C/D203 acceptance with and without a debugger. This is a semantic and root-topology
      * integration test, not a claim of a new physically minimal encoding.
      */
     @Test
-    void i101CD203BindingsRetainRootTopologyAcrossProfiles() throws Exception {
+    void i101CD203BindingsRetainRootTopologyWithAndWithoutDebugger() throws Exception {
         record Case(String definition, String arguments, Object expected) {}
 
         List<Case> cases = List.of(
@@ -580,8 +589,9 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         "(first: 7, ...tail) => { tail.size() }",
                         "9, 8, 42", 2L));
 
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
-            try (Harness harness = new Harness(mode, null)) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
+            try (Harness harness = new Harness(debugger, null)) {
                 harness.run(() -> {
                     for (int index = 0; index < cases.size(); index++) {
                         Case example = cases.get(index);
@@ -622,7 +632,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         ProtosClosureExecutionPlan plan =
                                 closure.executionPlan().orElseThrow();
 
-                        assertEquals(mode, plan.bytecodeProfileForTesting());
                         assertSame(target,
                                 plan.bytecodeActivationTargetForComposition());
 
@@ -648,7 +657,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
     /**
      * I101-C integration of lexical authority and structured control with
-     * NORMAL/DEBUG root identity, reparse and real hosted execution.
+     * root identity, reparse and real hosted execution, with and without a debugger.
      */
     @Test
     void i101CCrossFamilyControlAndCaptureAcceptance() throws Exception {
@@ -720,7 +729,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         0
                         """, 111));
 
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
             for (Case example : cases) {
                 Path file = directory.resolve(
                         "i101-c-" + mode + "-" + example.name() + ".protos");
@@ -729,8 +739,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         file, example.program(), StandardCharsets.UTF_8);
 
                 try (ProtosStandaloneHostedSession session =
-                        ProtosStandaloneHostedSession.openForTesting(
-                                CORE, file, mode)) {
+                    ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = attach(session, debugger)) {
 
                     assertEquals(
                             ProtosExecutionOutcome.State.COMPLETED,
@@ -743,7 +753,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             run.closureForTesting()
                                     .executionPlan().orElseThrow();
 
-                    assertEquals(mode, plan.bytecodeProfileForTesting());
 
                     ProtosBytecodeRootNode root =
                             plan.bytecodeActivationRootForTesting();
@@ -796,13 +805,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
 
     /**
-     * I101-C: guarded NORMAL specializations must retain their actual MISS
-     * path. NORMAL/I095 has a specialized physical Boolean-control selection
-     * with a fallback; DEBUG may retain the pre-existing I092/PERF041
-     * canonical ifTrue classifier, so the absence of
-     * {@code IsCanonicalBooleanFalseClass} is the appropriate negative
-     * control for the Boolean witness. I096 keeps a NORMAL-only inline
-     * Closure-call guard that DEBUG must not emit. Reparse may materialize
+     * I101-C: guarded specializations must retain their actual MISS path.
+     * I095 has a specialized physical Boolean-control selection with a
+     * fallback and I096 an inline Closure-call guard; PLAT067-B: both are
+     * emitted identically with a debugger attached. Reparse may materialize
      * instrumentation but must not change the semantic instruction stream,
      * root identities, CallTargets or the selected guest behavior.
      *
@@ -854,7 +860,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         "LoadInlineLiteralFallbackCall",
                         33));
 
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
             for (Family family : families) {
                 Path folder = Files.createDirectories(
                         directory.resolve(
@@ -864,8 +871,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         file, family.source(), StandardCharsets.UTF_8);
 
                 try (ProtosStandaloneHostedSession session =
-                        ProtosStandaloneHostedSession.openForTesting(
-                                CORE, file, mode)) {
+                    ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = attach(session, debugger)) {
                     assertEquals(
                             ProtosExecutionOutcome.State.COMPLETED,
                             session.initialOutcome().state(),
@@ -877,7 +884,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                     ProtosClosureExecutionPlan plan =
                             run.closureForTesting()
                                     .executionPlan().orElseThrow();
-                    assertEquals(mode, plan.bytecodeProfileForTesting());
 
                     ProtosBytecodeRootNode activation =
                             plan.bytecodeActivationRootForTesting();
@@ -942,10 +948,10 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                                             family.guard())))
                                     .toList();
 
-                    if (mode == ProtosExecutionMode.NORMAL) {
+                    {
                         assertEquals(
                                 1, guarded.size(),
-                                "one NORMAL guarded site: "
+                                "one guarded site: " + mode + " "
                                         + family.name());
 
                         List<String> instructions =
@@ -975,7 +981,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 instructions.stream().noneMatch(
                                         instruction -> instruction.contains(
                                                 "IsNormalExecutionMode")),
-                                "NORMAL must not contain a runtime mode branch");
+                                "no runtime mode branch exists");
                         assertTrue(
                                 guardIndex >= 0,
                                 "missing guard: " + instructions);
@@ -983,33 +989,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                                 fallbackIndex > guardIndex,
                                 "missing or misplaced MISS fallback: "
                                         + instructions);
-                    } else if ("boolean".equals(family.name())) {
-                        assertTrue(
-                                guarded.stream().anyMatch(root ->
-                                        signature(root).stream().anyMatch(instruction ->
-                                                instruction.contains(
-                                                        "TryCompactCanonicalBooleanOne"))),
-                                "DEBUG retains the pre-existing I092/PERF041 "
-                                        + "canonical ifTrue classifier");
-
-                        assertTrue(
-                                roots.stream().noneMatch(root ->
-                                        signature(root).stream().anyMatch(instruction ->
-                                                instruction.contains(
-                                                        "IsCanonicalBooleanFalseClass"))),
-                                "DEBUG must not emit the NORMAL I095 "
-                                        + "Boolean-control selection");
-
-                        assertTrue(
-                                roots.stream().anyMatch(root ->
-                                        signature(root).stream().anyMatch(instruction ->
-                                                instruction.contains("PrepareSendOne"))),
-                                "DEBUG must retain the ordinary ifTrue send");
-                    } else {
-                        assertTrue(
-                                guarded.isEmpty(),
-                                "DEBUG must not emit the NORMAL I096 "
-                                        + "inline Closure-call guard");
                     }
 
                     for (int repetition = 0; repetition < 2;
@@ -1033,14 +1012,14 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * ({@code cleaned} is 1), that the handler receives the identical
      * cleanup Error ({@code caught === cleanupError}), that the cleanup
      * Error takes precedence over the original cancellation transfer, and
-     * that NORMAL and DEBUG produce the same result.
+     * that the result is the same with and without a debugger.
      *
      * The operation is entered through a cooperative RootTask only because
      * it contains a real suspension; ordinary synchronous calls elsewhere
      * remain task-free.
      */
     @Test
-    void i101CCancellationEnsureAndTaskRetainProfileParity()
+    void i101CCancellationEnsureAndTaskRetainDebuggerParity()
             throws Exception {
         String source = """
                 run: () => {
@@ -1079,15 +1058,16 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 0
                 """;
 
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
             Path folder = Files.createDirectories(
                     directory.resolve("i101-cancellation-" + mode));
             Path file = folder.resolve("fixture.protos");
             Files.writeString(file, source, StandardCharsets.UTF_8);
 
             try (ProtosStandaloneHostedSession session =
-                    ProtosStandaloneHostedSession.openForTesting(
-                            CORE, file, mode)) {
+                    ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = attach(session, debugger)) {
                 assertEquals(
                         ProtosExecutionOutcome.State.COMPLETED,
                         session.initialOutcome().state(),
@@ -1100,7 +1080,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         run.closureForTesting()
                                 .executionPlan().orElseThrow();
 
-                assertEquals(mode, plan.bytecodeProfileForTesting());
 
                 for (int repetition = 0; repetition < 2; repetition++) {
                     ProtosExecutionOutcome result = run.invoke();
@@ -1182,7 +1161,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
      * I101-C/D203: defaults, rest parameters and spread arguments are
      * intentionally outside the admitted I096 direct-binding inline shapes.
      * They must keep ordinary argument binding and invocation semantics,
-     * including in NORMAL. DEBUG must not acquire a NORMAL-only guard.
+     * with and without a debugger.
      */
     @Test
     void i101CD203ExcludedCallsKeepOrdinaryTopology()
@@ -1203,15 +1182,16 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 0
                 """;
 
-        for (ProtosExecutionMode mode : ProtosExecutionMode.values()) {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = label(debugger);
             Path folder = Files.createDirectories(
                     directory.resolve("i101-d203-negative-" + mode));
             Path file = folder.resolve("fixture.protos");
             Files.writeString(file, program, StandardCharsets.UTF_8);
 
             try (ProtosStandaloneHostedSession session =
-                    ProtosStandaloneHostedSession.openForTesting(
-                            CORE, file, mode)) {
+                    ProtosStandaloneHostedSession.open(CORE, file);
+                    DebuggerSession attached = attach(session, debugger)) {
                 assertEquals(
                         ProtosExecutionOutcome.State.COMPLETED,
                         session.initialOutcome().state(),
@@ -1224,7 +1204,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                         run.closureForTesting()
                                 .executionPlan().orElseThrow();
 
-                assertEquals(mode, plan.bytecodeProfileForTesting());
 
                 ProtosBytecodeRootNode root =
                         plan.bytecodeActivationRootForTesting();
@@ -1363,7 +1342,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     void i104RequiredPrefixMatchesIndependentBuilderOracle() throws Exception {
         final String source = "(a, b, c) => { b }";
 
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL, null)) {
+        try (Harness normal = new Harness(false, null)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module =
                         compile(source, "i104-b-normal");
@@ -1434,20 +1413,21 @@ final class ProtosI101ProfileSpecializedLoweringTest {
             });
         }
 
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG, null)) {
+        // PLAT067-B: with a debugger attached the same required-prefix entry is emitted.
+        try (Harness debug = new Harness(true, null)) {
             debug.run(() -> {
                 var root = activationRoot(
                         compile(source, "i104-b-debug"));
                 List<String> signature = completeSignature(root);
                 assertTrue(
-                        signature.stream().noneMatch(
+                        signature.stream().anyMatch(
                                 entry -> entry.contains("BindRequiredFrameParameter")),
                         signature::toString);
                 assertTrue(
-                        signature.stream().anyMatch(
+                        signature.stream().noneMatch(
                                 entry -> entry.contains("BindClosureFrameParameter")),
                         signature::toString);
-                System.out.println("I104_B_DEBUG_NEGATIVE_CONTROL=PASS");
+                System.out.println("I104_B_DEBUGGER_SAME_ENTRY=PASS");
             });
         }
     }
@@ -1538,7 +1518,7 @@ final class ProtosI101ProfileSpecializedLoweringTest {
     }
 
     /**
-     * Handwritten expectation of the NORMAL activation root: a parameterless Closure root with a
+     * Handwritten expectation of the activation root: a parameterless Closure root with a
      * direct return of the Long carrier of {@code 1}. Ordinary guest-value materialization is
      * handled by the call boundary; D203/I105 nests no arity-rejection root.
      */
@@ -1548,6 +1528,8 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
+        String statement = "1";
+        int statementStart = characters.indexOf(statement);
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
@@ -1558,10 +1540,15 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                             builder.beginRoot();
                             builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
-
+                            builder.beginSourceSection(statementStart, statement.length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadConstant(1L);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
 
                             builder.endBlock();
                             builder.endTag(StandardTags.RootTag.class);
@@ -1788,20 +1775,25 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
     /** One raw Polyglot Context with a published Core, entered only while an action runs. */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode, Engine engine) {
-            this.mode = mode;
+        /**
+         * A Context of {@code engine} (or of its own Engine when null). With {@code debugger}, a
+         * Truffle debugger session is attached to the Engine before any lowering (PLAT067-B: it
+         * observes, it never selects another lowering).
+         */
+        Harness(boolean debugger, Engine engine) {
             Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
             if (engine != null) {
                 builder.engine(engine);
             }
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
             this.context = builder.build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
@@ -1815,7 +1807,6 @@ final class ProtosI101ProfileSpecializedLoweringTest {
         <T> T call(Producer<T> action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     // Publishes the standard root before any witness is lowered.
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
@@ -1832,7 +1823,22 @@ final class ProtosI101ProfileSpecializedLoweringTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
+    }
+
+    private static String label(boolean debugger) {
+        return debugger ? "debugger" : "plain";
+    }
+
+    /** PLAT067-B: a Truffle debugger session on {@code session}'s Engine, or none. */
+    private static DebuggerSession attach(ProtosStandaloneHostedSession session, boolean debugger) {
+        return debugger
+                ? Debugger.find(session.runtimeHostForTesting().engineForTesting())
+                        .startSession(event -> {})
+                : null;
     }
 }

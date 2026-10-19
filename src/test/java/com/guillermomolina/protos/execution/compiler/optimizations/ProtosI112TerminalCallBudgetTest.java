@@ -16,6 +16,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -35,8 +37,9 @@ import org.junit.jupiter.api.Test;
  * branches, returns, cleanup and instrumentation. No execution-prefix
  * filtering, operation-name filtering or argument removal is permitted.
  *
- * NORMAL: default Protos Context, without explicit debug option.
- * DEBUG: experimental option protos.Debug=true.
+ * PLAT067-B: every Context uses the one proof-optimized lowering. The
+ * census is taken without and with an attached Truffle debugger session,
+ * before any instrumentation is activated, and both must be identical.
  *
  * The source-root group is enumerated independently of the invocation
  * result. An auxiliary root in that group is an acceptance failure.
@@ -79,7 +82,7 @@ final class ProtosI112TerminalCallBudgetTest {
             throws Exception {
 
         try (Harness harness =
-                     new Harness(ProtosExecutionMode.NORMAL)) {
+                     new Harness(false)) {
 
             harness.run(() -> {
                 Census census = census(
@@ -163,26 +166,29 @@ final class ProtosI112TerminalCallBudgetTest {
     }
 
     @Test
-    void debugIdentityHasIndependentCompleteCensus()
+    void attachedDebuggerIdentityHasTheSameCompleteCensus()
             throws Exception {
 
-        try (Harness harness =
-                     new Harness(ProtosExecutionMode.DEBUG)) {
+        List<Census> censuses = new ArrayList<>();
+        for (boolean debugger : new boolean[] {false, true}) {
+            try (Harness harness = new Harness(debugger)) {
+                harness.run(() -> {
+                    Census census = census(
+                            IDENTITY, debugger ? "identity-debugger" : "identity-plain", 2);
 
-            harness.run(() -> {
-                Census census = census(
-                        IDENTITY, "identity-debug", 2);
-
-                assertEquals(2, census.roots().size());
-
-                // DEBUG is deliberately not compared against NORMAL's
-                // physical budget: instrumentation must remain visible.
-                assertInteger(
-                        1,
-                        census.module().getCallTarget().call(
-                                harness.moduleActivation()));
-            });
+                    assertEquals(2, census.roots().size());
+                    assertInteger(
+                            1,
+                            census.module().getCallTarget().call(
+                                    harness.moduleActivation()));
+                    censuses.add(census);
+                });
+            }
         }
+
+        // PLAT067-B: attaching a debugger selects no other lowering.
+        assertEquals(censuses.get(0).signatures(), censuses.get(1).signatures());
+        assertEquals(censuses.get(0).total(), censuses.get(1).total());
     }
 
     @Test
@@ -190,7 +196,7 @@ final class ProtosI112TerminalCallBudgetTest {
             throws Exception {
 
         try (Harness harness =
-                     new Harness(ProtosExecutionMode.NORMAL)) {
+                     new Harness(false)) {
 
             harness.run(() -> {
                 Census census = census(
@@ -231,7 +237,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
         /*
          * The physical census is BytecodeConfig.DEFAULT, the configuration
-         * NORMAL executes. ensureComplete() would materialize instrumentation
+         * every Context executes. ensureComplete() would materialize instrumentation
          * (trace.instruction, tag.enter/leave), which is not part of that
          * physical program; only source information is requested here.
          */
@@ -248,11 +254,8 @@ final class ProtosI112TerminalCallBudgetTest {
         StringBuilder report = new StringBuilder();
 
         report.append("I112_CASE=").append(name).append('\n');
-        report.append("I112_MODE=")
-                .append(ProtosLanguageContext.current().executionMode())
-                .append('\n');
         report.append("I112_CONFIG=")
-                .append("NORMAL=default; DEBUG=protos.Debug:true")
+                .append("BytecodeConfig.DEFAULT; single lowering (PLAT067-B)")
                 .append('\n');
         report.append("I112_ROOT_COUNT=")
                 .append(roots.size())
@@ -442,23 +445,18 @@ final class ProtosI112TerminalCallBudgetTest {
 
     private static final class Harness implements AutoCloseable {
 
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode) {
+        /** With {@code debugger}, a Truffle debugger session is attached to the Engine first. */
+        Harness(boolean debugger) {
 
-            this.mode = mode;
-
-            Context.Builder builder =
-                    Context.newBuilder(ProtosLanguage.ID);
-
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true)
-                        .option("protos.Debug", "true");
-            }
-
-            context = builder.build();
+            context = Context.newBuilder(ProtosLanguage.ID).build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
@@ -467,10 +465,6 @@ final class ProtosI112TerminalCallBudgetTest {
             context.enter();
 
             try {
-                assertEquals(
-                        mode,
-                        ProtosLanguageContext.current().executionMode());
-
                 if (prelude == null) {
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 }
@@ -488,6 +482,9 @@ final class ProtosI112TerminalCallBudgetTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
     }

@@ -40,9 +40,9 @@ Context context = Context.newBuilder("protos")
   ordinary `Error`. Guest code cannot grant itself the authority.
 - The option is fixed for the life of the Context. Two Contexts of the same
   Engine can have different settings.
-- `protos.Inspect` and `protos.Debug` are independent. DEBUG mode does not enable
-  inspection, and enabling inspection does not select DEBUG. Inspecting never
-  changes the Context's execution mode.
+- `protos.Inspect` is independent of debugging. Starting a debugger does not
+  enable inspection, and enabling inspection does not start a debugger.
+  Inspecting never changes how the Context runs your code.
 - Each operation checks the authority of the Context it runs in, so keeping a
   reference to one of its functions grants nothing in another Context.
 

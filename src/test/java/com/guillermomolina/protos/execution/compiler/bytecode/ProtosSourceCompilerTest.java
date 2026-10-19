@@ -77,7 +77,7 @@ class ProtosSourceCompilerTest {
                                     return new ProtosSourceCompiler()
                                             .compileBytecode(
                                                     source,
-                                                    context.languageForTesting(), ProtosExecutionMode.NORMAL);
+                                                    context.languageForTesting());
                                 }));
     }
 
@@ -97,7 +97,7 @@ class ProtosSourceCompilerTest {
                     return new ProtosSourceCompiler()
                             .compileBytecode(
                                     source,
-                                    context.languageForTesting(), ProtosExecutionMode.NORMAL)
+                                    context.languageForTesting())
                             .call(activation);
                 });
     }

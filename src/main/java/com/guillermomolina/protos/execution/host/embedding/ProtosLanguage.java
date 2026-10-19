@@ -65,29 +65,14 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
     static final OptionKey<String> CORE_ROOT = new OptionKey<>("");
 
     /*
-     * PERF032: selects the immutable DEBUG execution mode of the Context (or, on an Engine, of
-     * every Context it creates). It does not start DAP or any other debugger front end.
-     */
-    @Option(
-            name = "Debug",
-            help =
-                    "Run this Context in DEBUG execution mode: every call transports activation"
-                            + " provenance so debugger scopes are exact from the first call. The"
-                            + " default NORMAL mode does not support debugging scopes. Fixed for the"
-                            + " life of the Context.",
-            category = OptionCategory.USER,
-            stability = OptionStability.EXPERIMENTAL)
-    static final OptionKey<Boolean> DEBUG = new OptionKey<>(false);
-
-    /*
-     * D205 (LIB022-B): the only authority of std:inspect. It selects no execution mode and has
-     * no relation to DEBUG.
+     * D205 (LIB022-B): the only authority of std:inspect. D208-A: it is independent of host
+     * debugging (DAP) and selects no lowering.
      */
     @Option(
             name = "Inspect",
             help =
                     "Allow explicit, implementation-specific runtime inspection in this Context."
-                            + " Independent of DEBUG and fixed for the life of the Context.",
+                            + " Independent of debugging and fixed for the life of the Context.",
             category = OptionCategory.USER,
             stability = OptionStability.STABLE)
     static final OptionKey<Boolean> INSPECT = new OptionKey<>(false);
@@ -155,13 +140,9 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             throw new IllegalArgumentException(
                     "Protos top-level parsing does not accept host argument names");
         }
-        /*
-         * I101-A (PLAT058-D): the ParsingRequest is served for the entered Context, whose
-         * immutable profile selects the physical lowering of the parsed executable.
-         */
-        ProtosExecutionMode profile = ProtosLanguageContext.current().executionMode();
+        // PLAT067-B: every Context uses the one proof-optimized lowering.
         return new ProtosHostEvalRootNode(
-                        this, sourceCompiler.compileBytecode(request.getSource(), this, profile))
+                        this, sourceCompiler.compileBytecode(request.getSource(), this))
                 .getCallTarget();
     }
 }

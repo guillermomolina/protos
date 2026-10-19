@@ -428,7 +428,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
         return new CanonicalToBytecodeLowerer(
                         LANGUAGE_REF.get(null),
-                        source, ProtosExecutionMode.NORMAL)
+                        source)
                 .lowerRoot(sequence);
     }
 

@@ -26,6 +26,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
@@ -715,7 +717,7 @@ final class ProtosI112TailContinuationTest {
     void eachContextOwnsItsRootsAndTerminalCaches() throws Exception {
         List<ProtosBytecodeRootNode> roots = new ArrayList<>();
         for (int round = 0; round < 2; round++) {
-            try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
+            try (Harness harness = new Harness(false)) {
                 harness.run(() -> {
                     ProtosBytecodeRootNode module = compile(IDENTITY, "contexts");
                     assertInteger(1, module.getCallTarget().call(harness.moduleActivation()));
@@ -828,7 +830,7 @@ final class ProtosI112TailContinuationTest {
      */
     @Test
     void prologueInstalledModuleAuthorityKeepsBindingsVisible() throws Exception {
-        try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness harness = new Harness(false)) {
             harness.run(() -> {
                 ProtosBytecodeRootNode root = compile(
                         "identity: (value) => { value }\nlater: () => { identity }\nobserve(later)",
@@ -862,7 +864,7 @@ final class ProtosI112TailContinuationTest {
     /** D179: the compact module read never ignores a removal or a recreation. */
     @Test
     void prologueInstalledModuleReadObservesRemovalAndRecreation() throws Exception {
-        try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness harness = new Harness(false)) {
             harness.run(() -> {
                 ProtosBytecodeRootNode root = compile(
                         "identity: (value) => { value }\nchange()\nidentity(1)", "d179");
@@ -902,7 +904,7 @@ final class ProtosI112TailContinuationTest {
     /** Modules outside the conservative admission keep the original body installation. */
     @Test
     void nonAdmittedModulesKeepTheOriginalPersistentAuthority() throws Exception {
-        try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness harness = new Harness(false)) {
             harness.run(() -> {
                 for (String program : List.of(
                         "a: 1\na",
@@ -923,7 +925,7 @@ final class ProtosI112TailContinuationTest {
 
     @Test
     void reparseKeepsTheSamePhysicalDecisionsWithoutDuplicatingRoots() throws Exception {
-        try (Harness harness = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness harness = new Harness(false)) {
             harness.run(() -> {
                 ProtosBytecodeRootNode module = compile(IDENTITY, "reparse");
                 // The first completion adds instrumentation; a second one adds nothing.
@@ -945,19 +947,24 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
-    // ---- 19. NORMAL versus DEBUG: tags, spans and scopes ------------------------------------
+    // ---- 19. Without versus with an attached debugger: tags, spans and scopes --------------
 
+    /**
+     * PLAT067-B: the terminal call is lowered identically with and without an attached
+     * debugger, and its materialized tags keep the exact call and statement spans.
+     */
     @Test
-    void normalAndDebugKeepEquivalentSemanticsTagsAndSpans() throws Exception {
-        for (ProtosExecutionMode mode : List.of(ProtosExecutionMode.NORMAL, ProtosExecutionMode.DEBUG)) {
-            try (Harness harness = new Harness(mode)) {
+    void attachedDebuggerKeepsTheTerminalCallTagsAndSpans() throws Exception {
+        for (boolean debugger : new boolean[] {false, true}) {
+            String mode = debugger ? "debugger attached" : "no debugger";
+            try (Harness harness = new Harness(debugger)) {
                 harness.run(() -> {
-                    ProtosBytecodeRootNode module = compile(IDENTITY, "tags-" + mode);
+                    ProtosBytecodeRootNode module = compile(IDENTITY, "tags-" + debugger);
                     module.getRootNodes().ensureComplete();
                     List<String> instructions = signature(module);
                     boolean terminal = instructions.stream()
                             .anyMatch(entry -> entry.startsWith("c.InvokeClosureOneTail"));
-                    assertEquals(mode == ProtosExecutionMode.NORMAL, terminal, instructions::toString);
+                    assertTrue(terminal, () -> mode + ": " + instructions);
 
                     TagTree tree = module.getBytecodeNode().getTagTree();
                     assertNotNull(tree);
@@ -1300,7 +1307,7 @@ final class ProtosI112TailContinuationTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source(characters, sourceName), ProtosExecutionMode.NORMAL);
+                        source(characters, sourceName));
         return new ProtosClosureValue(
                 definition,
                 creator.lexicalContextsForClosureCapture(),
@@ -1386,7 +1393,7 @@ final class ProtosI112TailContinuationTest {
             String sourceName)
             throws Exception {
         Source source = source(characters, sourceName);
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 
@@ -1420,24 +1427,23 @@ final class ProtosI112TailContinuationTest {
 
     /** One raw Polyglot Context with a published Core, entered only while an action runs. */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode) {
-            this.mode = mode;
-            Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
-            this.context = builder.build();
+        /** With {@code debugger}, a Truffle debugger session is attached to the Engine first. */
+        Harness(boolean debugger) {
+            this.context = Context.newBuilder(ProtosLanguage.ID).build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
         void run(Action action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     prelude = core();
                 }
@@ -1453,6 +1459,9 @@ final class ProtosI112TailContinuationTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
     }

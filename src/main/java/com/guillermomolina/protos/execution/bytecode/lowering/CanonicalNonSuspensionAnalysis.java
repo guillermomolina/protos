@@ -84,7 +84,6 @@ final class CanonicalNonSuspensionAnalysis {
 
     /** Validity preconditions a proof depends on. */
     enum Precondition {
-        NORMAL_PROFILE,
         STANDARD_OBJECT_PUBLISHED,
         DIRECT_FRAME_LOCALS,
         UNOBSERVABLE_RETURN_HOME,

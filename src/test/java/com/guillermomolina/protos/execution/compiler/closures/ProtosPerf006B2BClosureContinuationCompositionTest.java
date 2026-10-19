@@ -80,7 +80,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                 leafDefinition,
                                 language,
                                 leafSource,
-                                syntheticLeafRoot, ProtosExecutionMode.NORMAL);
+                                syntheticLeafRoot);
                 ProtosClosureValue leaf =
                         semanticClosure(
                                 leafDefinition,
@@ -103,7 +103,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 middleDefinition,
                                 language,
-                                middleSource, ProtosExecutionMode.NORMAL);
+                                middleSource);
                 ProtosClosureValue middle =
                         semanticClosure(
                                 middleDefinition,
@@ -125,7 +125,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 ProtosBytecodeRootNode topRoot =
                         new CanonicalToBytecodeLowerer(
                                         language,
-                                        topSource, ProtosExecutionMode.NORMAL)
+                                        topSource)
                                 .lowerRoot(topCanonical);
 
                 Object first = topRoot.getCallTarget().call(module);
@@ -242,7 +242,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                         ProtosClosureExecutionPlan.bytecode(
                                 definition,
                                 language,
-                                source, ProtosExecutionMode.NORMAL);
+                                source);
                 ProtosClosureValue closure =
                         semanticClosure(definition, plan, module);
 
@@ -292,7 +292,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source, ProtosExecutionMode.NORMAL);
+                                                source);
             } finally {
                 context.leave();
             }

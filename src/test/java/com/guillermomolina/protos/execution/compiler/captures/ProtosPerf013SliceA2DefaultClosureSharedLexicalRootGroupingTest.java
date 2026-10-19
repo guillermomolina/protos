@@ -80,7 +80,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+                        new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 
                 Object finalResult = root.getCallTarget().call(module);
@@ -160,7 +160,7 @@ final class ProtosPerf013SliceA2DefaultClosureSharedLexicalRootGroupingTest {
                 CanonicalSequence sequence = canonicalize(characters);
 
                 ProtosBytecodeRootNode root =
-                        new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+                        new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 
                 Object finalResult = root.getCallTarget().call(module);

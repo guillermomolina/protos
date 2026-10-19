@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -49,16 +51,16 @@ import org.junit.jupiter.api.Test;
 /**
  * I096-A (PLAT057-B) focal evidence: an ordinary C0/C1 call whose receiver is
  * an immediate Closure literal runs that literal's body inline in the caller's
- * Bytecode root in NORMAL mode, after ordinary {@code call} selection proved
- * the canonical standard selection of the literal's own body; every
- * non-admitted shape, a non-canonical {@code call} selection, and DEBUG mode
- * keep the physical callee root. No test mutates the frozen global root.
+ * Bytecode root, after ordinary {@code call} selection proved the canonical
+ * standard selection of the literal's own body; every non-admitted shape and
+ * a non-canonical {@code call} selection keep the physical callee root. No
+ * test mutates the frozen global root.
  *
- * <p>I101-A: each program is lowered under the immutable profile of the
- * entered Context. A NORMAL root holds only the inline region (its run-time
- * admission and the carrier's physical fallback), with no execution-mode
- * branch and no retained ordinary call; a DEBUG root holds only the ordinary
- * call.
+ * <p>PLAT067-B: every Context uses the one proof-optimized lowering. An
+ * admitted root holds only the inline region (its run-time admission and the
+ * carrier's physical fallback), with no retained ordinary call, whether or
+ * not a debugger is attached; an attached debugger never recreates the
+ * eliminated callee frame.
  *
  * <p>Inline execution is observed through the guest CallTarget stack seen by a
  * native {@code probe}: an admitted body leaves only {@code run} over the
@@ -550,7 +552,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
             assertInteger(251, debug.value());
             assertEquals(
                     8, debug.probe().calls.get(),
-                    label + ": DEBUG parity");
+                    label + ": attached-debugger parity");
         }
     }
 
@@ -689,17 +691,16 @@ final class ProtosI096InlineClosureLiteralCallTest {
         int admit = position(names, "AdmitsInlineClosureLiteralCall");
         assertTrue(prepare >= 0 && admit > prepare, names::toString);
         // The admission miss keeps the carrier's ordinary physical fallback;
-        // I101-A: no ordinary direct-call alternative remains in NORMAL.
+        // I101-A: no ordinary direct-call alternative remains.
         assertTrue(position(names, "LoadInlineLiteralFallbackCall") > admit, names::toString);
         assertTrue(position(names, "InvokeClosureZero") < 0, names::toString);
         /*
          * Physical frames and semantic RootTags are separate evidence. The
          * stack proves no callee CallTarget frame exists (only run over the
          * module root); the tag tree proves the callee keeps its own semantic
-         * RootTag region inside run. Neither alone proves debugging
-         * equivalence: DEBUG keeps the physical callee (see
-         * debugModeKeepsThePhysicalCalleeRoot) and NORMAL/DEBUG results are
-         * compared by the parity checks.
+         * RootTag region inside run. PLAT067-B: an attached debugger keeps
+         * this topology (see attachedDebuggerKeepsTheInlineCallee); results
+         * with and without a debugger are compared by the parity checks.
          */
         List<RootNode> stack = normal.probe().stacks.get(0);
         assertSame(runRoot, stack.get(0));
@@ -998,8 +999,13 @@ final class ProtosI096InlineClosureLiteralCallTest {
         System.out.println("I096_A_INSTANCE_OVERRIDE_FALLBACK=YES");
     }
 
+    /**
+     * PLAT067-B: with a debugger attached before lowering, the literal still
+     * runs inline: no callee frame is fabricated and no ordinary call is
+     * retained, while the callee keeps its semantic RootTag inside run.
+     */
     @Test
-    void debugModeKeepsThePhysicalCalleeRoot() throws Exception {
+    void attachedDebuggerKeepsTheInlineCallee() throws Exception {
         Execution debug = execute(true, """
                 run: () => {
                     ((value) => {
@@ -1012,17 +1018,17 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 """);
         assertInteger(42, debug.value());
         assertEquals(1, debug.probe().calls.get());
-        assertTrue(
-                debug.probe().depths().get(0) > INLINE_DEPTH,
-                debug.probe()::toString);
-        ProtosBytecodeRootNode callee = debug.innermostRoot();
-        callee.getRootNodes().ensureComplete();
-        assertEquals(1, rootTags(callee.getBytecodeNode()), "the callee's own RootTag");
-        // I101-A: the DEBUG caller holds only the ordinary C1 call, no inline region.
-        List<String> runNames = instructionNames(debug.outermostGuestRoot());
-        assertTrue(position(runNames, "PrepareInlineClosureLiteralCall") < 0, runNames::toString);
-        assertTrue(position(runNames, "InvokeClosureOne") >= 0, runNames::toString);
-        System.out.println("I096_A_DEBUG_TOPOLOGY_PRESERVED=YES");
+        assertEquals(List.of(INLINE_DEPTH), debug.probe().depths(), debug.probe()::toString);
+        ProtosBytecodeRootNode runRoot = debug.innermostRoot();
+        runRoot.getRootNodes().ensureComplete();
+        List<String> runNames = instructionNames(runRoot.getBytecodeNode());
+        assertTrue(position(runNames, "PrepareInlineClosureLiteralCall") >= 0, runNames::toString);
+        assertTrue(position(runNames, "InvokeClosureOne") < 0, runNames::toString);
+        assertEquals(
+                2,
+                rootTags(runRoot.getBytecodeNode()),
+                "explicit RootTag of run plus the inline callee semantic RootTag");
+        System.out.println("I096_A_DEBUGGER_KEEPS_INLINE=YES");
     }
 
     @Test
@@ -1448,7 +1454,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
     }
 
     @Test
-    void bindingCallDebugModeKeepsThePhysicalCalleeRoot() throws Exception {
+    void bindingCallWithAttachedDebuggerKeepsTheInlineCallee() throws Exception {
         Execution debug = execute(true, """
                 run: () => {
                     f: (value) => {
@@ -1461,11 +1467,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 run()
                 """);
         assertInteger(42, debug.value());
-        assertTrue(debug.probe().depths().get(0) > INLINE_DEPTH, debug.probe()::toString);
-        ProtosBytecodeRootNode callee = debug.innermostRoot();
-        callee.getRootNodes().ensureComplete();
-        assertEquals(1, rootTags(callee.getBytecodeNode()), "the callee's own RootTag");
-        System.out.println("I096_B1_DEBUG_TOPOLOGY_PRESERVED=YES");
+        assertEquals(List.of(INLINE_DEPTH), debug.probe().depths(), debug.probe()::toString);
+        System.out.println("I096_B1_DEBUGGER_KEEPS_INLINE=YES");
     }
 
     /**
@@ -1767,7 +1770,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
     }
 
     @Test
-    void multipleArgumentDebugModeKeepsThePhysicalCalleeRoot() throws Exception {
+    void multipleArgumentCallWithAttachedDebuggerKeepsTheInlineCallee() throws Exception {
         Execution debug = execute(true, """
                 run: () => {
                     f: (a, b, c) => {
@@ -1779,8 +1782,8 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 run()
                 """);
         assertInteger(123, debug.value());
-        assertTrue(debug.probe().depths().get(0) > INLINE_DEPTH, debug.probe()::toString);
-        System.out.println("I096_N_DEBUG_TOPOLOGY_PRESERVED=YES");
+        assertEquals(List.of(INLINE_DEPTH), debug.probe().depths(), debug.probe()::toString);
+        System.out.println("I096_N_DEBUGGER_KEEPS_INLINE=YES");
     }
 
     /** C8, the expansion budget itself, runs inline with distinct arguments. */
@@ -1801,9 +1804,10 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertEquals(List.of(INLINE_DEPTH), normal.probe().depths(), normal.probe()::toString);
         assertInlineSiteWithParameters(normal.innermostRoot(), 8);
         assertParity(source, 87654321);
-        assertTrue(
-                execute(true, source).probe().depths().get(0) > INLINE_DEPTH,
-                "DEBUG keeps the physical C8 call");
+        assertEquals(
+                List.of(INLINE_DEPTH),
+                execute(true, source).probe().depths(),
+                "an attached debugger keeps the inline C8 call");
         System.out.println("I096_C8_INLINE=YES");
     }
 
@@ -1869,7 +1873,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         assertParity(source, 123456789);
         assertTrue(
                 execute(true, source).probe().depths().get(0) > INLINE_DEPTH,
-                "DEBUG keeps the physical C9 call");
+                "C9 stays a physical call with a debugger attached too");
         System.out.println("I096_EXPANSION_BUDGET_FALLBACK=YES");
     }
 
@@ -1915,10 +1919,11 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 rootTags(runRoot.getBytecodeNode()),
                 "run's RootTag plus the inline outer callee RootTag");
 
+        // PLAT067-B: an attached debugger observes the same physical frames.
         Execution debug = execute(true, source);
         assertInteger(42, debug.value());
-        assertEquals(INLINE_DEPTH + 1, debug.probe().stacks.get(0).size(), debug.probe()::toString);
-        assertEquals(INLINE_DEPTH + 2, debug.probe().stacks.get(1).size(), debug.probe()::toString);
+        assertEquals(INLINE_DEPTH, debug.probe().stacks.get(0).size(), debug.probe()::toString);
+        assertEquals(INLINE_DEPTH + 1, debug.probe().stacks.get(1).size(), debug.probe()::toString);
 
         // f(41, 0) is never a candidate (arity), so it lowers the same
         // Closure roots without any inline region.
@@ -2364,12 +2369,17 @@ final class ProtosI096InlineClosureLiteralCallTest {
         }
     }
 
+    /**
+     * Runs {@code source} in a fresh Context; with {@code debug}, a Truffle
+     * debugger session is attached to its Engine before the program is
+     * lowered (PLAT067-B: it observes, it never selects another lowering).
+     */
     private static Execution execute(boolean debug, String source) throws Exception {
-        Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-        if (debug) {
-            builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-        }
-        try (Context context = builder.build()) {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build();
+                DebuggerSession attached =
+                        debug
+                                ? Debugger.find(context.getEngine()).startSession(event -> {})
+                                : null) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
@@ -2382,7 +2392,7 @@ final class ProtosI096InlineClosureLiteralCallTest {
         }
     }
 
-    /** NORMAL and DEBUG produce the same result for the same program. */
+    /** The same program produces the same result with and without a debugger attached. */
     private static void assertParity(String source, long expected) throws Exception {
         assertInteger(expected, execute(false, source).value());
         assertInteger(expected, execute(true, source).value());
@@ -2452,11 +2462,9 @@ final class ProtosI096InlineClosureLiteralCallTest {
                 (CanonicalSequence)
                         new Canonicalizer()
                                 .canonicalize(new ProtosParser(characters).parseProgram());
-        // I101-A: lowered under the immutable profile of the entered Context.
         return new CanonicalToBytecodeLowerer(
                         LANGUAGE_REF.get(null),
-                        source,
-                        ProtosLanguageContext.current().executionMode())
+                        source)
                 .lowerRoot(sequence);
     }
 

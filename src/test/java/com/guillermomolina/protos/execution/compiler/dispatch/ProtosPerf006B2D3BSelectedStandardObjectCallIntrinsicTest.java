@@ -349,7 +349,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        source, ProtosExecutionMode.NORMAL),
+                                        source),
                                 module);
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
@@ -364,7 +364,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source, ProtosExecutionMode.NORMAL)
+                                        source)
                                 .executeActivation(invocation);
 
                 assertSame(overrideMarker, result);
@@ -397,7 +397,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                 ProtosBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(
                                         language,
-                                        source, ProtosExecutionMode.NORMAL)
+                                        source)
                                 .lowerRoot(
                                         canonicalize(characters));
 
@@ -457,7 +457,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         .build();
         return new CanonicalToBytecodeLowerer(
                         language,
-                        source, ProtosExecutionMode.NORMAL)
+                        source)
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);
@@ -482,7 +482,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                 ProtosClosureExecutionPlan.bytecode(
                         definition,
                         language,
-                        source, ProtosExecutionMode.NORMAL),
+                        source),
                 creator);
     }
 
@@ -513,7 +513,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         definition,
                         language,
                         source,
-                        root, ProtosExecutionMode.NORMAL),
+                        root),
                 creator);
     }
 

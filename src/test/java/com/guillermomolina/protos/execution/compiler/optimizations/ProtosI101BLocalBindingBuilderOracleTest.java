@@ -86,8 +86,6 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquals(ProtosExecutionMode.NORMAL,
-                        ProtosLanguageContext.current().executionMode());
                 ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
 
                 // Observe the real Protos lowering and its real source-Closure topology.
@@ -192,12 +190,16 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                             builder.beginBlock();
 
                             builder.beginSourceSection(creationStart, "x: 1".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(x);
                             builder.emitLoadConstant(1L);
                             builder.endStoreLocal();
                             builder.beginReturn();
                             builder.emitLoadLocal(x);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.endBlock();
@@ -238,15 +240,23 @@ final class ProtosI101BLocalBindingBuilderOracleTest {
                             builder.beginBlock();
 
                             builder.beginSourceSection(creationStart, "x: 1".length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginStoreLocal(x);
                             builder.emitLoadConstant(1L);
                             builder.endStoreLocal();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.beginSourceSection(readStart, 1);
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadLocal(x);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
                             builder.endSourceSection();
 
                             builder.endBlock();

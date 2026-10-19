@@ -23,6 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.oracle.truffle.api.debug.DebuggerSession;
+import com.oracle.truffle.api.debug.Debugger;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -74,7 +76,7 @@ final class ProtosI107ContinuationEmissionTest {
 
     @Test
     void nestedConstantControlFoldsToTheIndependentOracle() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(NESTED, "nested");
                 ProtosBytecodeRootNode activation = activationRoot(module);
@@ -112,7 +114,7 @@ final class ProtosI107ContinuationEmissionTest {
     /** The previous topology of the same shape: ordinary send plus continuation. */
     @Test
     void unprovenNestingKeepsTheGenericTopology() throws Exception {
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module = compile(NESTED_UNPROVEN, "unproven");
                 List<String> actual = completeSignature(activationRoot(module));
@@ -128,16 +130,21 @@ final class ProtosI107ContinuationEmissionTest {
         }
     }
 
+    /**
+     * PLAT067-B: with a debugger attached the same nested shape still folds to the independent
+     * oracle: no callback root, no continuation, and no fabricated ordinary send.
+     */
     @Test
-    void debugKeepsTheOrdinarySendAndContinuation() throws Exception {
-        try (Harness debug = new Harness(ProtosExecutionMode.DEBUG)) {
+    void attachedDebuggerKeepsTheFoldedOracleTopology() throws Exception {
+        try (Harness debug = new Harness(true)) {
             debug.run(() -> {
                 ProtosBytecodeRootNode module = compile(NESTED, "debug");
                 ProtosBytecodeRootNode activation = activationRoot(module);
                 List<String> actual = completeSignature(activation);
-                assertHasContinuation(actual);
-                assertTrue(groupRoots(module).size() > 2);
-                assertFalse(activation.provablyNonSuspendingBody());
+                assertEquals(completeSignature(handwrittenLiteralRoot(NESTED, 7L)), actual);
+                assertNoContinuation(actual);
+                assertEquals(2, groupRoots(module).size());
+                assertTrue(activation.provablyNonSuspendingBody());
                 assertInteger(7, callClosure(debug, closureOf(debug, module)));
             });
         }
@@ -159,7 +166,7 @@ final class ProtosI107ContinuationEmissionTest {
                 new Case("() => { true.ifTrue() { 1 }\n false.ifFalse() { 2 }\n 3 }", 3L),
                 new Case("(value: 7) => { value }", 7L),
                 new Case("(a, b) => { a === b }", null));
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 for (Case test : cases) {
                     ProtosBytecodeRootNode module = compile(test.source(), "safe");
@@ -187,7 +194,7 @@ final class ProtosI107ContinuationEmissionTest {
                 "(b) => { b.ifTrue() { 1 } }",
                 "() => { self: () => { self() }\n 1 }",
                 "() => { Error.handle(() => { true.ifTrue() }, (caught) => { 7 }) }");
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 for (String source : sources) {
                     ProtosBytecodeRootNode activation =
@@ -218,7 +225,7 @@ final class ProtosI107ContinuationEmissionTest {
                 "(b, g) => { b.ifTrue(g) }",
                 // Spread argument.
                 "(f, items) => { f(...items) }");
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 for (String source : sources) {
                     List<String> instructions =
@@ -249,7 +256,7 @@ final class ProtosI107ContinuationEmissionTest {
                         "(value) => { value + 4 }", 5),
                 new Case("(f) => { f(2, 3) }", "c.InvokeClosureArgumentsTail",
                         "(a, b) => { a + b }", 5));
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 for (Case test : terminal) {
                     ProtosBytecodeRootNode module = compile(test.source(), "terminal");
@@ -301,7 +308,7 @@ final class ProtosI107ContinuationEmissionTest {
                     b.ifTrue() { 1 }
                 }
                 """;
-        try (Harness normal = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness normal = new Harness(false)) {
             normal.run(() -> {
                 ProtosBytecodeRootNode module =
                         compile(source, "inline-fallback");
@@ -336,10 +343,10 @@ final class ProtosI107ContinuationEmissionTest {
     @Test
     void contextsDoNotShareRootsOrFacts() throws Exception {
         List<String> first = new ArrayList<>();
-        try (Harness one = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness one = new Harness(false)) {
             one.run(() -> first.addAll(completeSignature(activationRoot(compile(NESTED, "one")))));
         }
-        try (Harness two = new Harness(ProtosExecutionMode.NORMAL)) {
+        try (Harness two = new Harness(false)) {
             two.run(() -> {
                 ProtosBytecodeRootNode activation = activationRoot(compile(NESTED, "two"));
                 assertEquals(first, completeSignature(activation));
@@ -349,7 +356,7 @@ final class ProtosI107ContinuationEmissionTest {
     }
 
     /**
-     * Handwritten NORMAL Closure root returning one Long literal carrier, with the source section
+     * Handwritten Closure root returning one Long literal carrier, with the source section
      * of {@code characters}' outermost body.
      */
     private static ProtosBytecodeRootNode handwrittenLiteralRoot(
@@ -358,6 +365,8 @@ final class ProtosI107ContinuationEmissionTest {
                 .build();
         int bodyStart = characters.indexOf('{');
         int bodyLength = characters.lastIndexOf('}') + 1 - bodyStart;
+        String statement = bodyText(characters);
+        int statementStart = characters.indexOf(statement);
         BytecodeRootNodes<ProtosBytecodeRootNode> nodes =
                 ProtosBytecodeRootNodeGen.create(
                         LANGUAGE_REF.get(null),
@@ -368,9 +377,15 @@ final class ProtosI107ContinuationEmissionTest {
                             builder.beginRoot();
                             builder.beginTag(StandardTags.RootTag.class);
                             builder.beginBlock();
+                            builder.beginSourceSection(statementStart, statement.length());
+                            builder.beginTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.beginBlock();
                             builder.beginReturn();
                             builder.emitLoadConstant(value);
                             builder.endReturn();
+                            builder.endBlock();
+                            builder.endTag(StandardTags.StatementTag.class, StandardTags.ExpressionTag.class);
+                            builder.endSourceSection();
                             builder.endBlock();
                             builder.endTag(StandardTags.RootTag.class);
                             builder.endRoot();
@@ -525,24 +540,26 @@ final class ProtosI107ContinuationEmissionTest {
 
     /** One raw Polyglot Context with a published Core, entered only while an action runs. */
     private static final class Harness implements AutoCloseable {
-        private final ProtosExecutionMode mode;
         private final Context context;
+        private final DebuggerSession debugger;
         private ProtosPrelude prelude;
 
-        Harness(ProtosExecutionMode mode) {
-            this.mode = mode;
-            Context.Builder builder = Context.newBuilder(ProtosLanguage.ID);
-            if (mode == ProtosExecutionMode.DEBUG) {
-                builder.allowExperimentalOptions(true).option("protos.Debug", "true");
-            }
-            this.context = builder.build();
+        /**
+         * With {@code debugger}, a Truffle debugger session is attached to the Engine before any
+         * lowering (PLAT067-B: it observes, it never selects another lowering).
+         */
+        Harness(boolean debugger) {
+            this.context = Context.newBuilder(ProtosLanguage.ID).build();
+            this.debugger =
+                    debugger
+                            ? Debugger.find(context.getEngine()).startSession(event -> {})
+                            : null;
             context.initialize(ProtosLanguage.ID);
         }
 
         void run(Action action) throws Exception {
             context.enter();
             try {
-                assertEquals(mode, ProtosLanguageContext.current().executionMode());
                 if (prelude == null) {
                     prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 }
@@ -558,6 +575,9 @@ final class ProtosI107ContinuationEmissionTest {
 
         @Override
         public void close() {
+            if (debugger != null) {
+                debugger.close();
+            }
             context.close();
         }
     }

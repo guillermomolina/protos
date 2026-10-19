@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.383-SNAPSHOT
+
+- `I116-A` (#935, PLAT067-B, D208-A): one proof-optimized Bytecode DSL
+  lowering for every Context; NORMAL/DEBUG guest execution modes removed.
+  - `ProtosExecutionMode` and the experimental `protos.Debug` option are
+    removed, together with the profile plumbing through the language, the
+    Context, the source compiler, module compilation, the runtime host, the
+    standalone session, both Closure execution plans, call preparation and the
+    Context-local projection cache, which now keys on language identity only.
+  - `CanonicalToBytecodeLowerer` drops the eight mode prerequisites (constant
+    return root, direct scalar-local body, unary identity entry, required
+    parameter prefix, module prolog frame authority, terminal Closure call,
+    canonical Boolean control, literal/binding Closure-call inlining) and the
+    `NORMAL_PROFILE` proof precondition; every semantic, ownership, arity,
+    capture, suspension and fallback guard is retained.
+  - Surviving optimized locations keep passive `StatementTag` +
+    `ExpressionTag` instrumentation: the constant-return root, every statement
+    of the direct scalar-local body, and the surviving terminal of an I095
+    dead-prefix inline body. `BytecodeConfig.DEFAULT` materializes none of
+    them, so physical budgets and minimum Builder topology are unchanged.
+  - Debugger scopes of a frame-native root whose activation Context already
+    exists overlay the live PRESENT frame bindings read-only, so a suspension
+    inside an optimized body sees exactly the bindings created so far; nothing
+    is installed, published or fabricated.
+  - `std:runtime.info()` answers exactly four fields; `executionMode` is
+    removed (intentional D205 break, D208-A). `isDebugMode()` now reports only
+    whether the host was opened with the real Graal DAP service.
+  - The DAP host, readiness endpoint, CLI debug command and
+    `PROTOS_DEBUG_READY` are unchanged.
+
 ## 0.3.382-SNAPSHOT
 
 - `I115` (#931): converge the terminal direct Call1 (`InvokeClosureOneTail`)

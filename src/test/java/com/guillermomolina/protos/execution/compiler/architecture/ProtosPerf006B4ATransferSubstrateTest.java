@@ -162,7 +162,7 @@ final class ProtosPerf006B4ATransferSubstrateTest {
                                 characters,
                                 "perf006-b4a-transfer-substrate.protos")
                         .build();
-        return new CanonicalToBytecodeLowerer(language, source, ProtosExecutionMode.NORMAL)
+        return new CanonicalToBytecodeLowerer(language, source)
                 .lowerRoot(canonicalize(characters));
     }
 

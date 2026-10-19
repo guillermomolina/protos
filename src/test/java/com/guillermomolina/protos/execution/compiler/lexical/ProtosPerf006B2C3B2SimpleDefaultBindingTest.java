@@ -87,7 +87,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
                                         language,
-                                        source, ProtosExecutionMode.NORMAL)
+                                        source)
                                 .executeActivation(invocation);
 
                 assertSame(head, result);
@@ -152,7 +152,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                 ProtosClosureExecutionPlan.bytecode(
                                         definition,
                                         language,
-                                        closureSource, ProtosExecutionMode.NORMAL),
+                                        closureSource),
                                 module));
 
                 String callCharacters =
@@ -164,7 +164,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                         "perf006-b2c3b2-suppression-call.protos")
                                 .build();
                 ProtosBytecodeRootNode caller =
-                        new CanonicalToBytecodeLowerer(language, callSource, ProtosExecutionMode.NORMAL)
+                        new CanonicalToBytecodeLowerer(language, callSource)
                                 .lowerRoot(canonicalize(callCharacters));
 
                 assertSame(third, caller.getCallTarget().call(module));
@@ -215,7 +215,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                source, ProtosExecutionMode.NORMAL);
+                                source);
 
                 ProtosActivation omitted =
                         ProtosActivation.forClosureInvocation(
@@ -299,7 +299,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 requiredDefinition,
                                 language,
-                                requiredSource, ProtosExecutionMode.NORMAL);
+                                requiredSource);
                 // D203/I105: head binds null, then the default reads it.
                 assertSame(
                         ProtosNullValue.INSTANCE,
@@ -318,7 +318,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 new ProtosBytecodeClosureExecutionPlan(
                                                 complexDefinition,
                                                 language,
-                                                complexSource, ProtosExecutionMode.NORMAL);
+                                                complexSource);
             } finally {
                 context.leave();
             }

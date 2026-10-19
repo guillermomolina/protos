@@ -694,7 +694,7 @@ Module:            std:runtime
 Public operations: info/0
 Result:            fresh frozen ordinary Object
 Delegation parent: Object
-Own slots:         exactly five
+Own slots:         exactly four
 Slot values:       String
 Failures:          fresh ordinary Error
 ```
@@ -704,7 +704,7 @@ other operation, facility, helper object, or bootstrap slot, and adds no
 Prelude binding.
 
 `info()` accepts no arguments. Each successful call answers a newly created
-ordinary Object whose parent is `Object`, whose local slots are exactly the five
+ordinary Object whose parent is `Object`, whose local slots are exactly the four
 below, each holding a semantic `String`, and which is frozen before it becomes
 observable. Distinct calls answer distinct objects; no snapshot is cached or
 shared, and a later call never changes an earlier result.
@@ -715,7 +715,6 @@ shared, and a later call never changes an earlier result.
 | `implementationVersion` | The distribution's implementation version: the packaged implementation version when present and nonempty, otherwise the distribution-supplied version when present and nonempty, otherwise `"development"`. It is the same identity reported by the command-line `--version`. Supplied versions are reported verbatim. |
 | `engineVersion` | The nonempty version of the host Engine that owns the currently entered Context. Its format is opaque and implementation-defined. |
 | `platform` | `"NATIVE_IMAGE"` when the runtime executes as an ahead-of-time compiled native image, otherwise `"JVM"`. It does not describe optimization or JIT state. |
-| `executionMode` | The execution mode of the currently entered Context: exactly `"NORMAL"` or `"DEBUG"`. |
 
 Ownership and availability:
 
@@ -723,8 +722,9 @@ Ownership and availability:
     the call executes. Importing the module, initializing it, accessing a
     cached module instance, and unrelated execution retrieve no runtime
     metadata.
--   `info()` does not change the execution mode, initialize a debugger, or
-    otherwise alter the observed Context.
+-   `info()` does not initialize a debugger or otherwise alter the observed
+    Context. A snapshot reports no execution, compilation, debugging, or
+    instrumentation mode; no such mode is observable.
 -   Calling `info` with one or more arguments, or when a required metadata
     source is unavailable, signals a fresh ordinary `Error`. No partially
     populated snapshot escapes, and no value is fabricated.
@@ -763,8 +763,8 @@ Authority:
 
 -   The only authority is the Context option `protos.Inspect`, a Boolean that
     defaults to `false` and is fixed for the life of the Context. It is
-    independent of the DEBUG execution mode: enabling DEBUG does not authorize
-    inspection, and enabling `protos.Inspect` does not select DEBUG.
+    independent of host debugging: a debugger enabled by the host does not
+    authorize inspection, and enabling `protos.Inspect` enables no debugger.
 -   Importing `std:inspect` in a Context without that authority signals a fresh
     ordinary `Error`. The check is made against the currently entered Context
     before any cached Actor-local instance is consulted, so a module instance
@@ -810,9 +810,9 @@ not owned by the currently entered Context, an unavailable physical
 representation, and failed preparation or materialization each signal a fresh
 ordinary `Error`. No empty String or other substitute result is answered.
 
-Execution profile: inspection does not change the execution mode of the
-Context, does not alter the NORMAL or DEBUG physical profile, and imposes no
-cost on programs that do not import the module.
+Execution: inspection does not change how the Context executes or how its
+code is lowered, and imposes no cost on programs that do not import the
+module.
 
 Each Actor that imports `std:inspect` in an authorized Context receives its own
 module instance under the ordinary Actor-local module rules; any private
