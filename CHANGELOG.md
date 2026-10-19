@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.385-SNAPSHOT
+
+- `I115-C/D` (#931): optimize terminal Closure Call1 execution
+  while preserving D013 polymorphic invocation semantics.
+  - I115-C: install invalidatable, per-instance certificates for
+    local `call` absence and Context projection stability.
+    Cache ReturnHome admission under the prepared executable
+    template rather than repeating proof on every PIC hit.
+  - I115-D: introduce the admitted terminal B5+ frame-argument
+    construction path and propagate internal numeric carriers
+    to the existing return epilogue for final projection.
+  - Dynamic `call` overrides, ordinary fallback, captured
+    ReturnHome and Context ownership remain governed by D013.
+    The separate D207 semantic experiment is not included.
+  - Maintainer validation: focused I115/I112/PERF042 regressions
+    PASS; integrated `make test` PASS with I116-B.
+
 ## 0.3.384-SNAPSHOT
 
 - `I116-B` (#935, PLAT067-B): accept proof-optimized Bytecode DSL
