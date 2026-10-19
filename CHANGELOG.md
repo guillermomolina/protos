@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.384-SNAPSHOT
+
+- `I116-B` (#935, PLAT067-B): accept proof-optimized Bytecode DSL
+  Closure bodies over the real Graal DAP TCP protocol.
+  - A constant-return Closure stops at its surviving source statement,
+    retains the original source and two real stack frames, and completes
+    with the expected value `1` after continuation.
+  - Frame-native scalar locals are inspected at three real breakpoints:
+    both `first` and `second` are initially absent; `first` becomes `7`;
+    then both bindings are visible with value `7`. Execution completes
+    with the expected value `7`.
+  - DAP stack frames preserve the original caller location without
+    fabricated callback frames or receiver bindings. Frame identifiers
+    are consumed within the stackTrace response that supplied them.
+  - The two acceptance cases share one test helper in
+    `ProtosI116OptimizedDapAcceptanceTest` and reuse the existing DAP TCP
+    client and JSON helpers. The original DAP behavior test is preserved.
+  - No production lowering, execution semantics, DAP configuration,
+    Bytecode DSL operations or physical budgets are changed.
+  - Maintainer validation: focal DAP integration, I101, I112 and
+    PLAT067 regressions PASS; `make test` PASS.
+
 ## 0.3.383-SNAPSHOT
 
 - `I116-A` (#935, PLAT067-B, D208-A): one proof-optimized Bytecode DSL
