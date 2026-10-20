@@ -8,6 +8,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.2-SNAPSHOT
+
+- `I115-G` (PLAT066-C): classify whether each created Closure actually
+  captures its creator's execution context. For a non-capturing Closure,
+  reuse the creator's outer lexical environment instead of retaining its
+  invocation's frame/activation; keep the capturing path for Closures that
+  read, write or otherwise observe creator bindings.
+  - Store eligible ordinary Closure bindings in plain Bytecode DSL locals
+    instead of installing persistent lexical frame authority. Preserve the
+    distinct storage path for genuinely captured bindings.
+  - Extend lexical capture, terminal-call budget, independent-builder and
+    PERF042 identity-root structural tests for the compact local layout.
+  - **Historical semantic limitation:** at this point the optimization was
+    explicitly recorded as diverging from the unconditional creator-context
+    capture required by `spec/semantics/CALLABLES.md`, pending a design/semantic
+    reconciliation. This entry does not claim full conformance or acceptance.
+  - Historical reconstruction of original commit
+    `015f76f946f2857c25f278142d475f2daf61e496` from I115. No new
+    behavioral tests have been run on this versioned replay.
+
 ## 0.4.1-SNAPSHOT
 
 - `PERF042` (PLAT066-C / I115): lower eligible terminal calls of a lexically

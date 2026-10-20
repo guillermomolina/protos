@@ -394,6 +394,94 @@ final class ProtosPerf042IdentityBuilderOracleTest {
                             root.getCallTarget().call(module)));
         });
     }
+    /**
+     * I115 / PLAT066-C: the nested run program follows GraalPy's physical
+     * sequence for a non-cell local. run keeps identity in an ordinary local,
+     * creates it without capturing run's context, installs no frame
+     * authority, and its compact invocation never publishes an activation.
+     */
+    @Test
+    void nestedRunKeepsCompactFrameWithOrdinaryLocals() throws Exception {
+        String sourceText = """
+                run: () => {
+                    identity: (value) => { value }
+                    identity(1)
+                }
+                """;
+
+        withCore(module -> {
+            ProtosBytecodeRootNode moduleRoot =
+                    parse(sourceText, "i115-nested-run-ordinary-locals");
+
+            assertEquals(3, moduleRoot.getRootNodes().getNodes().size(),
+                    "Expected module, run and identity roots");
+
+            moduleRoot.getCallTarget().call(module);
+
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("run").orElseThrow());
+            ProtosBytecodeRootNode root =
+                    run.executionPlan().orElseThrow()
+                            .bytecodeActivationRootForTesting();
+
+            List<String> names = root.getBytecodeNode().getInstructionsAsList()
+                    .stream()
+                    .map(com.oracle.truffle.api.bytecode.Instruction::getName)
+                    .toList();
+            assertEquals(1, names.stream().filter("c.InvokeClosureOneTail"::equals).count(),
+                    () -> "one terminal call in run: " + names);
+            assertTrue(!names.contains("c.InstallFrameLexicalAuthority"),
+                    () -> "run installs frame authority: " + names);
+            assertTrue(!names.contains("c.CurrentActivation"),
+                    () -> "run loads its activation: " + names);
+            assertEquals(1, names.stream().filter(
+                            name -> name.startsWith("store.local") && !name.contains(".mat")).count(),
+                    () -> "one store.local in run: " + names);
+            assertEquals(1, names.stream().filter(
+                            name -> name.startsWith("load.local") && !name.contains(".mat")).count(),
+                    () -> "one load.local in run: " + names);
+            for (String absent : List.of(
+                    "c.IsCompactLocalFrame",
+                    "c.CreateCurrentFrameLocal",
+                    "c.ReadRootFrameLocal")) {
+                assertTrue(!names.contains(absent),
+                        () -> absent + " in run: " + names);
+            }
+            assertEquals(1, names.stream().filter("c.MaterializeCurrentClosure"::equals).count(),
+                    () -> "one Closure creation in run: " + names);
+
+            /*
+             * The uncached tier executes InvokeClosureOneTail.generic, whose
+             * D013 fallback resolves the exact caller and therefore publishes
+             * run's activation. Only the cached tier, where the direct
+             * specializations pass the compact argument array as the caller,
+             * is the GraalPy-equivalent physical path asserted here.
+             */
+            for (int i = 0; i < 128
+                    && root.getBytecodeNode().getTier() != BytecodeTier.CACHED; i++) {
+                assertEquals("1",
+                        ProtosNumericValueSupport.integerDecimalText(
+                                root.getCallTarget().call(
+                                        ProtosFrameArguments.compactDirectClosureCall(
+                                                run, module, null, new Object[0]))));
+            }
+            assertEquals(BytecodeTier.CACHED, root.getBytecodeNode().getTier(),
+                    "run did not enter the cached interpreter");
+
+            for (int i = 0; i < 4; i++) {
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                run, module, null, new Object[0]);
+                assertEquals("1",
+                        ProtosNumericValueSupport.integerDecimalText(
+                                root.getCallTarget().call(arguments)));
+                assertTrue(!(arguments[0] instanceof ProtosActivation),
+                        "cached run published its activation");
+            }
+        });
+    }
+
     @Test
     void captureIdentityRootAtRequestedTier() throws Exception {
         Assumptions.assumeTrue(

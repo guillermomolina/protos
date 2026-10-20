@@ -295,6 +295,91 @@ final class ProtosI112TerminalCallBudgetTest {
         }
     }
 
+    /**
+     * I115 / PLAT066-C: {@code identity} reads only its own parameter, so
+     * its creation does not capture {@code run}'s context (GraalPy
+     * MakeFunction without freevars). {@code run} then installs no frame
+     * authority and keeps {@code identity} in an ordinary Bytecode DSL local
+     * (store.local / load.local) on its compact path.
+     */
+    @Test
+    void lexicalC1RunKeepsIdentityInAnOrdinaryLocal()
+            throws Exception {
+
+        try (Harness harness =
+                     new Harness(false)) {
+
+            harness.run(() -> {
+                Census census = census(
+                        LEXICAL_C1, "lexical-c1-ordinary-local", 3);
+
+                List<Integer> runs = new ArrayList<>();
+                for (int index = 1; index < census.roots().size(); index++) {
+                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
+                        runs.add(index);
+                    }
+                }
+                assertEquals(1, runs.size(), () -> "one run root\n" + census.fullReport());
+                int runIndex = runs.get(0);
+                int identityIndex = runIndex == 1 ? 2 : 1;
+                List<String> run = names(census.signatures().get(runIndex));
+                List<String> identity = names(census.signatures().get(identityIndex));
+
+                assertEquals(
+                        1,
+                        count(run, "c.InvokeClosureOneTail"),
+                        () -> "one terminal call in run\n" + census.fullReport());
+                for (String forbidden : List.of(
+                        "c.InstallFrameLexicalAuthority",
+                        "c.CurrentActivation")) {
+                    assertTrue(
+                            !run.contains(forbidden),
+                            () -> forbidden + " in run\n" + census.fullReport());
+                }
+                assertEquals(
+                        1,
+                        run.stream().filter(ProtosI112TerminalCallBudgetTest::isPlainStoreLocal).count(),
+                        () -> "one store.local in run\n" + census.fullReport());
+                assertEquals(
+                        1,
+                        run.stream().filter(ProtosI112TerminalCallBudgetTest::isPlainLoadLocal).count(),
+                        () -> "one load.local in run\n" + census.fullReport());
+                for (String absent : List.of(
+                        "c.IsCompactLocalFrame",
+                        "c.CreateCurrentFrameLocal",
+                        "c.ReadRootFrameLocal")) {
+                    assertEquals(
+                            0,
+                            count(run, absent),
+                            () -> absent + " in run\n" + census.fullReport());
+                }
+                assertEquals(
+                        1,
+                        count(run, "c.MaterializeCurrentClosure"),
+                        () -> "one Closure creation in run\n" + census.fullReport());
+                assertTrue(
+                        !run.contains("c.BindUnaryFrameParameter"),
+                        () -> "identity body copied into run\n" + census.fullReport());
+                assertTrue(
+                        identity.contains("c.BindUnaryFrameParameter"),
+                        () -> "identity keeps its own root\n" + census.fullReport());
+
+                assertInteger(
+                        1,
+                        census.module().getCallTarget().call(
+                                harness.moduleActivation()));
+            });
+        }
+    }
+
+    private static boolean isPlainStoreLocal(String name) {
+        return name.startsWith("store.local") && !name.contains(".mat");
+    }
+
+    private static boolean isPlainLoadLocal(String name) {
+        return name.startsWith("load.local") && !name.contains(".mat");
+    }
+
     private static int count(List<String> names, String name) {
         return (int) names.stream().filter(name::equals).count();
     }
