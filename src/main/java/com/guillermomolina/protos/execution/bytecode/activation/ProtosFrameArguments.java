@@ -710,11 +710,20 @@ final class ProtosFrameArguments {
      * root's activation. The lowerer admits this only in a genuine root
      * that declares no frame-owned lexical bindings; every other root
      * retains MaterializeClosure's exact activation-based path.
+     *
+     * <p>I115 / PLAT066-C: when {@code capturesCreatorContext} is false the
+     * lowering classified {@code definition} as not capturing its creator's
+     * execution context, and the new Closure receives the creator's own
+     * captured environment (the invoked Closure's, B5 argument 0) unchanged:
+     * no deferred owner of this invocation is created, so nothing retains the
+     * frame or its arguments. A recorded divergence from the unconditional
+     * capture of {@code CALLABLES.md}, pending an owner decision.
      */
     static ProtosClosureValue materializeCompactClosure(
             Object[] arguments,
             CanonicalClosure definition,
-            ProtosClosureExecutionPlanCell executionPlanCell) {
+            ProtosClosureExecutionPlanCell executionPlanCell,
+            boolean capturesCreatorContext) {
         ProtosClosureValue currentClosure = compactClosure(arguments);
         boolean direct = isDirectClosureCall(arguments);
         Object receiver = direct
@@ -723,11 +732,12 @@ final class ProtosFrameArguments {
         ProtosObjectValue methodHome = direct
                 ? currentClosure.methodHome().orElse(null)
                 : (ProtosObjectValue) arguments[METHOD_HOME_INDEX];
-        ProtosLexicalEnvironment environment =
-                ProtosLexicalEnvironment.deferredCompactOwner(
+        ProtosLexicalEnvironment environment = capturesCreatorContext
+                ? ProtosLexicalEnvironment.deferredCompactOwner(
                         arguments,
                         COMPACT_CAPTURE_OWNER,
-                        currentClosure.capturedLexicalEnvironmentForRuntime());
+                        currentClosure.capturedLexicalEnvironmentForRuntime())
+                : currentClosure.capturedLexicalEnvironmentForRuntime();
         return new ProtosClosureValue(
                 definition,
                 environment,

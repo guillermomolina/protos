@@ -273,6 +273,15 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootScalarLocals =
             java.util.Set.of();
 
+    /*
+     * I115 / PLAT066-C: the bindings of the root being lowered that are
+     * ordinary Bytecode DSL locals while its frame is compact, GraalPy's
+     * non-cell varnames ({@link #ordinaryClosureLocalNamesForRoot}).
+     * Per-root lowering state, saved and restored with the other root state.
+     */
+    private java.util.Set<String> currentRootOrdinaryClosureLocals =
+            java.util.Set.of();
+
     private java.util.Map<CanonicalSend,
             ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> currentRootArithmeticHints =
@@ -890,6 +899,8 @@ final class CanonicalToBytecodeLowerer {
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
+        java.util.Set<String> savedOrdinaryClosureLocals =
+                currentRootOrdinaryClosureLocals;
         var savedArithmeticHints = currentRootArithmeticHints;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
@@ -932,6 +943,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
             currentRootScalarLocals = java.util.Set.of();
+            currentRootOrdinaryClosureLocals = java.util.Set.of();
             currentRootArithmeticHints = java.util.Map.of();
             currentRootTerminalIntegerSend = null;
             currentRootTerminalIntegerAddition = null;
@@ -956,6 +968,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
             currentRootScalarLocals = savedScalarLocals;
+            currentRootOrdinaryClosureLocals = savedOrdinaryClosureLocals;
             currentRootArithmeticHints = savedArithmeticHints;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
@@ -1118,6 +1131,8 @@ final class CanonicalToBytecodeLowerer {
                                 activationDefinition,
                                 currentRootAnalysis,
                                 scopeForThisRoot);
+        currentRootOrdinaryClosureLocals =
+                ordinaryClosureLocalNamesForRoot(sequence, activationDefinition);
 
         /*
          * I101-B: the lowering can encode a closed, proven sequence of
@@ -1326,7 +1341,7 @@ final class CanonicalToBytecodeLowerer {
                                 builder, (CanonicalLookup) last, null);
                     } else if (closureTerminal) {
                         builder.beginReturn();
-                        beginClosureCapture(builder);
+                        beginClosureCapture(builder, (CanonicalClosure) last);
                         builder.emitLoadConstant((CanonicalClosure) last);
                         builder.emitLoadConstant(terminalClosurePlan);
                         endClosureCapture(builder);
@@ -3824,7 +3839,7 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlanCell plan =
                         bytecodeClosurePlan(builder, closure);
                 builder.beginDiscardValue();
-                beginClosureCapture(builder);
+                beginClosureCapture(builder, closure);
                 builder.emitLoadConstant(closure);
                 builder.emitLoadConstant(plan);
                 endClosureCapture(builder);
@@ -3912,6 +3927,15 @@ final class CanonicalToBytecodeLowerer {
      * operation opens; the Closure is created at the statement and its
      * identity is the value the binding receives. The statement value is
      * discarded by the enclosing sequence.
+     *
+     * <p>I115 / PLAT066-C: an ordinary Closure local ({@link
+     * #ordinaryClosureLocalNamesForRoot}) is stored with a plain {@code
+     * StoreLocal}, GraalPy's {@code store.local} of a non-cell local: no
+     * creation operation, no authority, no frame materialization and no
+     * compact/published selection. KNOWN DIVERGENCE: when the activation is
+     * published (uncached D013 fallback, debugger), the frame-backed
+     * authority and tooling observe this local without the presence
+     * bookkeeping of {@code CreateCurrentFrameLocal}.
      */
     private void emitCompactClosureCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3919,14 +3943,87 @@ final class CanonicalToBytecodeLowerer {
         CanonicalClosure closure = (CanonicalClosure) create.value();
         beginStatement(builder, create);
         ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
-        emitCreateCurrentFrameLocal(
-                builder, frameNativeOrdinal(create.name()), create.name());
-        beginClosureCapture(builder);
+        boolean ordinaryLocal =
+                currentRootOrdinaryClosureLocals.contains(create.name());
+        if (ordinaryLocal) {
+            builder.beginStoreLocal(currentRootFrameLocals.get(create.name()));
+            emitClosureCapture(builder, closure, plan);
+            builder.endStoreLocal();
+        } else {
+            emitCreateCurrentFrameLocal(
+                    builder, frameNativeOrdinal(create.name()), create.name());
+            emitClosureCapture(builder, closure, plan);
+            builder.endCreateCurrentFrameLocal();
+        }
+        endStatement(builder);
+    }
+
+    private void emitClosureCapture(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure closure,
+            ProtosClosureExecutionPlanCell plan) {
+        beginClosureCapture(builder, closure);
         builder.emitLoadConstant(closure);
         builder.emitLoadConstant(plan);
         endClosureCapture(builder);
-        builder.endCreateCurrentFrameLocal();
-        endStatement(builder);
+    }
+
+    /**
+     * I115 / PLAT066-C: the bindings of a frame-native Closure root that are
+     * ordinary locals, GraalPy's {@code varnames} that are not {@code
+     * cellvars}. Conservative structural admission: every statement but the
+     * last is a target-less creation {@code name: <Closure literal>} of a
+     * distinct name that is neither a parameter nor a scalar local, and the
+     * last is such a creation or a call whose receiver and arguments are
+     * direct values. A frame-native root contains no capturing Closure,
+     * {@code context}, {@code compose} or Object construction ({@code
+     * CanonicalCompilationFacts#requiresPersistentFrameAuthority}), so
+     * nothing but these statements writes or removes the binding, and a
+     * {@code Resolved} read follows its single creation. Every other root,
+     * name or shape keeps the frame-native operations, which observe
+     * presence, duplicate creation, removal and dynamic resolution.
+     */
+    private java.util.Set<String> ordinaryClosureLocalNamesForRoot(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition) {
+        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        if (activationDefinition == null
+                || currentActivationLocal != null
+                || currentRootFrameNativeLayout == null
+                || expressions.isEmpty()) {
+            return java.util.Set.of();
+        }
+        java.util.Set<String> parameters = new java.util.HashSet<>();
+        for (CanonicalParameter parameter : activationDefinition.parameters()) {
+            parameters.add(parameter.name());
+        }
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (int index = 0; index < expressions.size(); index++) {
+            CanonicalExpression expression = expressions.get(index);
+            if (expression instanceof CanonicalCreate create
+                    && create.target().isEmpty()
+                    && create.value() instanceof CanonicalClosure) {
+                String name = create.name();
+                if (parameters.contains(name)
+                        || currentRootScalarLocals.contains(name)
+                        || frameNativeOrdinal(name) < 0
+                        || !names.add(name)) {
+                    return java.util.Set.of();
+                }
+                continue;
+            }
+            boolean directTerminalCall =
+                    index == expressions.size() - 1
+                            && expression instanceof CanonicalCall call
+                            && !hasSpreadArgument(call.arguments())
+                            && isTerminalCallOperand(call.receiver())
+                            && call.arguments().stream()
+                                    .allMatch(CanonicalToBytecodeLowerer::isTerminalCallOperand);
+            if (!directTerminalCall) {
+                return java.util.Set.of();
+            }
+        }
+        return java.util.Set.copyOf(names);
     }
 
     /**
@@ -7483,11 +7580,20 @@ final class CanonicalToBytecodeLowerer {
      * argument 0, bound by MaterializeCurrentClosure itself rather than
      * loaded as an operand; its compact capture remains restricted to the
      * I092 admission. Inline regions keep their explicit activation operand.
+     *
+     * I115 / PLAT066-C: the second constant operand carries the capture
+     * classification of this exact Closure under the root's analysis; a
+     * Closure that does not capture its creator is created from the
+     * creator's own environment (GraalPy MakeFunction without freevars).
      */
     private void beginClosureCapture(
-            ProtosBytecodeRootNodeGen.Builder builder) {
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure closure) {
         if (currentActivationLocal == null) {
-            builder.beginMaterializeCurrentClosure(useCompactClosureCapture());
+            builder.beginMaterializeCurrentClosure(
+                    useCompactClosureCapture(),
+                    CanonicalCompilationFacts.capturesCreatorContext(
+                            closure, currentRootAnalysis));
         } else {
             builder.beginMaterializeClosure();
             emitCurrentActivation(builder);
@@ -7520,7 +7626,7 @@ final class CanonicalToBytecodeLowerer {
              * own argument evaluation.
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
-            beginClosureCapture(builder);
+            beginClosureCapture(builder, closure);
             builder.emitLoadConstant(closure);
             builder.emitLoadConstant(cell);
             endClosureCapture(builder);
@@ -7693,6 +7799,16 @@ final class CanonicalToBytecodeLowerer {
                 if (local != null
                         && ordinal != null
                         && currentActivationLocal == null) {
+                    /*
+                     * I115 / PLAT066-C: an ordinary Closure local is read
+                     * with a plain LoadLocal (GraalPy load.local), with no
+                     * compact/published selection and no carrier
+                     * projection: it only ever holds a Closure.
+                     */
+                    if (currentRootOrdinaryClosureLocals.contains(resolvedName)) {
+                        builder.emitLoadLocal(local);
+                        return;
+                    }
                     if (!carrierOperand) {
                         builder.beginMaterializePrimitiveNumericCarrier();
                     }
