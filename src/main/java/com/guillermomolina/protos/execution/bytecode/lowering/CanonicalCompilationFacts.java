@@ -67,6 +67,8 @@ import java.util.Set;
  *       complete invocation and guarded call site.</li>
  *   <li>I115: whether creating a Closure must capture its creator's
  *       execution context ({@link #capturesCreatorContext}).</li>
+ *   <li>I115-H (experimental): whether a root's only use of a local Closure
+ *       is one static invocation ({@link #staticLocalClosureCall}).</li>
  * </ol>
  *
  * <p>Validity scopes are kept apart. The isolated analysis and ReturnHome
@@ -109,6 +111,23 @@ final class CanonicalCompilationFacts {
     private record CallCandidates(
             CanonicalLexicalScope scope,
             Map<CanonicalCall, CanonicalClosure> candidates) {}
+
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): a local Closure definition whose only
+     * observable use in its root is one static invocation. {@code creation}
+     * creates the binding from {@code definition}; {@code call} is the root's
+     * terminal call through that binding. A canonical fact only: it carries
+     * no physical, runtime or Context state.
+     */
+    record StaticLocalClosureCall(
+            CanonicalCreate creation,
+            CanonicalCall call,
+            CanonicalClosure definition) {}
+
+    /** Memoized {@link #staticLocalClosureCall} answer; {@code call} may be null. */
+    private record StaticCallProof(
+            CanonicalLexicalScope scope,
+            StaticLocalClosureCall call) {}
 
     /**
      * I107: identity of one effective emitted root: the canonical root
@@ -200,6 +219,9 @@ final class CanonicalCompilationFacts {
     private final IdentityHashMap<
                     CanonicalBindingAnalysis, IdentityHashMap<CanonicalClosure, CallCandidates>>
             closureCallCandidates = new IdentityHashMap<>();
+    private final IdentityHashMap<
+                    CanonicalBindingAnalysis, IdentityHashMap<CanonicalClosure, StaticCallProof>>
+            staticLocalClosureCalls = new IdentityHashMap<>();
 
     /**
      * The analysis of {@code definition} with no statically known enclosing
@@ -304,6 +326,110 @@ final class CanonicalCompilationFacts {
                         new IdentityHashMap<>(collectCandidates(body, analysis, scope)));
         byDefinition.put(definition, new CallCandidates(scope, candidates));
         return candidates;
+    }
+
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): the static local Closure call of the
+     * root of {@code definition} under {@code analysis} and {@code scope}, or
+     * empty when none is proven. Memoized for that exact triple, so a
+     * Bytecode reparse receives the same instance.
+     *
+     * <p>The admission is strictly structural. The root body is exactly
+     * {@code name: <Closure literal>} followed by {@code name(argument)}:
+     * <ul>
+     *   <li>the creation has no target and its binding identity belongs to
+     *       {@code scope} and is not one of the root's parameters;</li>
+     *   <li>the call receiver is a lookup {@code Resolved} to that same
+     *       identity, and the call has one non-spread argument;</li>
+     *   <li>the definition does not capture its creator's context ({@link
+     *       #capturesCreatorContext}), has exactly one required parameter
+     *       without default or rest, and its body is one expression: a
+     *       literal or a lookup {@code Resolved} to that parameter's own
+     *       identity.</li>
+     * </ul>
+     * Because the body holds nothing else, the binding has no other read,
+     * write, reference, escape or replacement. Identities, never names,
+     * decide membership. Whether the argument admits the existing direct
+     * lowering is a lowering decision, not part of this fact.
+     */
+    Optional<StaticLocalClosureCall> staticLocalClosureCall(
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (body == null
+                || definition == null
+                || analysis == null
+                || scope == null
+                || body != definition.body()
+                || analysis.scopeOf(definition).orElse(null) != scope) {
+            return Optional.empty();
+        }
+        IdentityHashMap<CanonicalClosure, StaticCallProof> byDefinition =
+                staticLocalClosureCalls.computeIfAbsent(
+                        analysis, ignored -> new IdentityHashMap<>());
+        StaticCallProof cached = byDefinition.get(definition);
+        if (cached == null || cached.scope() != scope) {
+            cached = new StaticCallProof(
+                    scope, proveStaticLocalClosureCall(body, definition, analysis, scope));
+            byDefinition.put(definition, cached);
+        }
+        return Optional.ofNullable(cached.call());
+    }
+
+    private static StaticLocalClosureCall proveStaticLocalClosureCall(
+            CanonicalSequence body,
+            CanonicalClosure rootDefinition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        List<CanonicalExpression> expressions = body.expressions();
+        if (expressions.size() != 2
+                || !(expressions.get(0) instanceof CanonicalCreate create)
+                || !(expressions.get(1) instanceof CanonicalCall call)
+                || create.target().isPresent()
+                || !(create.value() instanceof CanonicalClosure callee)) {
+            return null;
+        }
+        CanonicalBindingIdentity binding = analysis.identityOf(create).orElse(null);
+        if (binding == null || binding.owner() != scope) {
+            return null;
+        }
+        for (CanonicalParameter parameter : rootDefinition.parameters()) {
+            if (analysis.identityOf(parameter).orElse(null) == binding) {
+                return null;
+            }
+        }
+        if (!(call.receiver() instanceof CanonicalLookup receiver)
+                || !(analysis.resolutionOf(receiver).orElse(null)
+                        instanceof CanonicalBindingResolution.Resolved resolvedReceiver)
+                || resolvedReceiver.identity() != binding
+                || call.arguments().size() != 1
+                || call.arguments().get(0) instanceof CanonicalSpread) {
+            return null;
+        }
+        if (capturesCreatorContext(callee, analysis)
+                || callee.parameters().size() != 1
+                || callee.body().expressions().size() != 1) {
+            return null;
+        }
+        CanonicalParameter parameter = callee.parameters().get(0);
+        if (parameter.rest() || parameter.defaultValue().isPresent()) {
+            return null;
+        }
+        CanonicalExpression calleeResult = callee.body().expressions().get(0);
+        if (calleeResult instanceof CanonicalLiteral) {
+            return new StaticLocalClosureCall(create, call, callee);
+        }
+        CanonicalBindingIdentity parameterIdentity =
+                analysis.identityOf(parameter).orElse(null);
+        if (parameterIdentity != null
+                && calleeResult instanceof CanonicalLookup read
+                && analysis.resolutionOf(read).orElse(null)
+                        instanceof CanonicalBindingResolution.Resolved resolvedRead
+                && resolvedRead.identity() == parameterIdentity) {
+            return new StaticLocalClosureCall(create, call, callee);
+        }
+        return null;
     }
 
     /**

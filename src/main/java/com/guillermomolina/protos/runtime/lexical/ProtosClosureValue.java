@@ -181,6 +181,32 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         this.nativeBody = nativeBody;
     }
 
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): minimal materialization of a source
+     * Closure the lowering classified as not capturing its creator's context
+     * ({@code capturesCreatorContext == false}): its definition and prepared
+     * plan, the stable root receiver, and no captured lexical environment,
+     * methodHome, ReturnHome, Prelude or plan rematerializer. Never used for
+     * a capturing Closure, and other constructions keep their contract.
+     *
+     * <p>NORMATIVE DIVERGENCE (not an established equivalence): the creator's
+     * receiver, methodHome, ReturnHome and Prelude are not retained.
+     */
+    public static ProtosClosureValue experimentalNonCapturing(
+            CanonicalClosure definition,
+            ProtosClosureExecutionPlan executionPlan) {
+        return new ProtosClosureValue(
+                Objects.requireNonNull(definition, "definition"),
+                (ProtosLexicalEnvironment) null,
+                ProtosObjectValue.rootObject(),
+                null,
+                null,
+                null,
+                Objects.requireNonNull(executionPlan, "executionPlan"),
+                null,
+                null);
+    }
+
     public static ProtosClosureValue nativeClosure(ProtosNativeClosureBody body) {
         return new ProtosClosureValue(null, List.of(), ProtosObjectValue.rootObject(), null, null, null, null, Objects.requireNonNull(body, "body"));
     }

@@ -285,6 +285,30 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootOrdinaryClosureLocals =
             java.util.Set.of();
 
+    /*
+     * I115-H (EXPERIMENTAL, PLAT066-C): the static local Closure call admitted
+     * for the root being lowered ({@link #admitStaticLocalClosureCall}), and
+     * the plan cell its elided creation registered in this parse. The fact is
+     * recomputed (or recovered from the canonical cache) on every parse; the
+     * cell is physical state and never stored in the canonical facts.
+     * Per-root lowering state, saved and restored with the other root state.
+     */
+    private CanonicalCompilationFacts.StaticLocalClosureCall currentRootStaticClosureCall;
+    private ProtosClosureExecutionPlanCell currentStaticClosurePlanCell;
+
+    /*
+     * I115-H: handshake between an elided static creation and the lowering
+     * of its callee root. The definition whose root is about to be lowered
+     * for a static invocation; consumed at the start of that root. The set
+     * holds the definitions whose root entry and body consume only the
+     * experimental static unary ABI (ProtosFrameArguments
+     * #experimentalStaticUnaryCall); a definition missing from it keeps the
+     * ordinary creation and call.
+     */
+    private CanonicalClosure staticUnaryCalleeRequest;
+    private final java.util.Set<CanonicalClosure> staticUnaryCalleeRoots =
+            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
     private java.util.Map<CanonicalSend,
             ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> currentRootArithmeticHints =
@@ -904,6 +928,10 @@ final class CanonicalToBytecodeLowerer {
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
         java.util.Set<String> savedOrdinaryClosureLocals =
                 currentRootOrdinaryClosureLocals;
+        CanonicalCompilationFacts.StaticLocalClosureCall savedStaticClosureCall =
+                currentRootStaticClosureCall;
+        ProtosClosureExecutionPlanCell savedStaticClosurePlanCell =
+                currentStaticClosurePlanCell;
         var savedArithmeticHints = currentRootArithmeticHints;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
@@ -947,6 +975,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootIndexedParameterLayout = null;
             currentRootScalarLocals = java.util.Set.of();
             currentRootOrdinaryClosureLocals = java.util.Set.of();
+            currentRootStaticClosureCall = null;
+            currentStaticClosurePlanCell = null;
             currentRootArithmeticHints = java.util.Map.of();
             currentRootTerminalIntegerSend = null;
             currentRootTerminalIntegerAddition = null;
@@ -972,6 +1002,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
             currentRootScalarLocals = savedScalarLocals;
             currentRootOrdinaryClosureLocals = savedOrdinaryClosureLocals;
+            currentRootStaticClosureCall = savedStaticClosureCall;
+            currentStaticClosurePlanCell = savedStaticClosurePlanCell;
             currentRootArithmeticHints = savedArithmeticHints;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
@@ -1027,6 +1059,11 @@ final class CanonicalToBytecodeLowerer {
         boolean requiresPersistentFrameAuthority =
                 rootFacts.requiresPersistentFrameAuthority();
         SourceSpan rootSpan = sequence.span();
+        // I115-H: this root is the callee of an elided static creation.
+        boolean staticUnaryCallee =
+                activationDefinition != null
+                        && activationDefinition == staticUnaryCalleeRequest;
+        staticUnaryCalleeRequest = null;
         UnaryNormalEntry unaryEntry =
                 admitUnaryNormalEntry(
                         sequence,
@@ -1034,6 +1071,16 @@ final class CanonicalToBytecodeLowerer {
                         currentRootAnalysis,
                         scopeForThisRoot,
                         requiresPersistentFrameAuthority);
+        if (unaryEntry == null && staticUnaryCallee) {
+            unaryEntry =
+                    admitStaticUnaryLiteralEntry(
+                            sequence,
+                            activationDefinition,
+                            currentRootAnalysis,
+                            scopeForThisRoot,
+                            requiresPersistentFrameAuthority);
+        }
+        boolean staticUnaryEntryEmitted = false;
 
         builder.beginSourceSection(
                 rootSpan.startOffset(),
@@ -1149,6 +1196,15 @@ final class CanonicalToBytecodeLowerer {
                 admitsNormalDirectScalarLocalBody(
                         sequence, activationDefinition, scopeForThisRoot);
 
+        currentRootStaticClosureCall =
+                admitStaticLocalClosureCall(
+                        sequence,
+                        activationDefinition,
+                        scopeForThisRoot,
+                        directScalarLocalBody,
+                        rootPlan.foldedTerminal());
+        currentStaticClosurePlanCell = null;
+
         currentRootArithmeticHints =
                 arithmeticHintsForRoot(sequence, scopeForThisRoot);
 
@@ -1217,6 +1273,7 @@ final class CanonicalToBytecodeLowerer {
                         currentRootFrameNativeLayout,
                         ordinal,
                         unaryEntry.name());
+                staticUnaryEntryEmitted = staticUnaryCallee;
             } else {
                 emitClosureParameterBindings(
                         builder,
@@ -1226,6 +1283,15 @@ final class CanonicalToBytecodeLowerer {
                         defaultChildResult,
                         defaultResumeValue);
             }
+        }
+        /*
+         * I115-H: the static callee's entry is BindUnaryFrameParameter and its
+         * single-expression body (a primitive-carrier literal, guest literal or
+         * the parameter's ReadRootFrameLocal) reads nothing else from the frame
+         * arguments, so its root consumes the experimental static unary ABI.
+         */
+        if (staticUnaryEntryEmitted) {
+            staticUnaryCalleeRoots.add(activationDefinition);
         }
 
         /*
@@ -2187,6 +2253,76 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return new UnaryNormalEntry(parameter.name());
+    }
+
+    /**
+     * I115-H (EXPERIMENTAL): the unary entry of a static callee whose body is
+     * one literal, admitted only for a root requested by an elided static
+     * creation ({@link #staticUnaryCalleeRequest}); every other root keeps
+     * {@link #admitUnaryNormalEntry}. A large Integer literal is excluded:
+     * its operation reads the caller operand from the frame arguments.
+     */
+    private UnaryNormalEntry admitStaticUnaryLiteralEntry(
+            CanonicalSequence body,
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope,
+            boolean requiresPersistentFrameAuthority) {
+        if (definition == null
+                || analysis == null
+                || scope == null
+                || requiresPersistentFrameAuthority
+                || analysis.scopeOf(definition).orElse(null) != scope
+                || definition.parameters().size() != 1
+                || body.expressions().size() != 1
+                || !(body.expressions().get(0) instanceof CanonicalLiteral literal)
+                || (literal.kind() == CanonicalLiteral.Kind.NUMBER
+                        && primitiveNumberLiteralOrNull(literal) == null)) {
+            return null;
+        }
+        CanonicalParameter parameter = definition.parameters().get(0);
+        CanonicalBindingIdentity parameterIdentity =
+                analysis.identityOf(parameter).orElse(null);
+        if (parameter.rest()
+                || parameter.defaultValue().isPresent()
+                || !scope.declaredNames().equals(java.util.Set.of(parameter.name()))
+                || parameterIdentity == null
+                || parameterIdentity.owner() != scope) {
+            return null;
+        }
+        return new UnaryNormalEntry(parameter.name());
+    }
+
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): the canonical static local Closure
+     * call of this root ({@link
+     * CanonicalCompilationFacts#staticLocalClosureCall}), admitted only when
+     * its creation takes the compact creation statement and its call the
+     * terminal Call1 lowering with a directly lowered argument. Every other
+     * root keeps the ordinary creation and the D013 terminal call.
+     */
+    private CanonicalCompilationFacts.StaticLocalClosureCall admitStaticLocalClosureCall(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            CanonicalLexicalScope scope,
+            boolean directScalarLocalBody,
+            CanonicalLiteral foldedTerminal) {
+        if (activationDefinition == null
+                || directScalarLocalBody
+                || foldedTerminal != null
+                || currentRootFrameNativeLayout == null) {
+            return null;
+        }
+        CanonicalCompilationFacts.StaticLocalClosureCall proven =
+                compilationFacts.staticLocalClosureCall(
+                                sequence, activationDefinition, currentRootAnalysis, scope)
+                        .orElse(null);
+        if (proven == null
+                || !admitsCompactClosureCreate(proven.creation())
+                || !admitsTerminalClosureCall(proven.call())) {
+            return null;
+        }
+        return proven;
     }
 
     /**
@@ -3939,13 +4075,42 @@ final class CanonicalToBytecodeLowerer {
      * published (uncached D013 fallback, debugger), the frame-backed
      * authority and tooling observe this local without the presence
      * bookkeeping of {@code CreateCurrentFrameLocal}.
+     *
+     * <p>I115-H (EXPERIMENTAL): the creation of the admitted static local
+     * Closure call ({@link #currentRootStaticClosureCall}) only registers the
+     * callee's independent root and keeps its plan cell for the terminal
+     * {@code InvokeStaticClosureOneTail}: no Closure is materialized and no
+     * binding is stored or created. A callee root that did not take the
+     * static unary entry keeps the ordinary creation with the same cell.
      */
     private void emitCompactClosureCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create) {
         CanonicalClosure closure = (CanonicalClosure) create.value();
-        beginStatement(builder, create);
-        ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
+        ProtosClosureExecutionPlanCell plan;
+        if (currentRootStaticClosureCall != null
+                && currentRootStaticClosureCall.creation() == create) {
+            /*
+             * Membership must come from this parse's lowering of the callee
+             * root, never from an earlier parse.
+             */
+            staticUnaryCalleeRoots.remove(closure);
+            staticUnaryCalleeRequest = closure;
+            try {
+                plan = bytecodeClosurePlan(builder, closure);
+            } finally {
+                staticUnaryCalleeRequest = null;
+            }
+            if (staticUnaryCalleeRoots.contains(closure)) {
+                currentStaticClosurePlanCell = plan;
+                return;
+            }
+            currentRootStaticClosureCall = null;
+            beginStatement(builder, create);
+        } else {
+            beginStatement(builder, create);
+            plan = bytecodeClosurePlan(builder, closure);
+        }
         boolean ordinaryLocal =
                 currentRootOrdinaryClosureLocals.contains(create.name());
         if (ordinaryLocal) {
@@ -4154,19 +4319,19 @@ final class CanonicalToBytecodeLowerer {
             builder.beginInvokeClosureZeroTail();
             emitTerminalCallOperand(builder, call.receiver());
             builder.endInvokeClosureZeroTail();
+        } else if (isStaticLocalClosureCall(call)) {
+            /*
+             * I115-H (EXPERIMENTAL): the proven static call. The plan cell is
+             * a constant operand; only the argument is evaluated. No receiver
+             * read, no call selection, no Closure.
+             */
+            builder.beginInvokeStaticClosureOneTail(currentStaticClosurePlanCell);
+            emitTerminalCallOneArgument(builder, arguments.get(0));
+            builder.endInvokeStaticClosureOneTail();
         } else if (arguments.size() == 1) {
             builder.beginInvokeClosureOneTail();
             emitTerminalCallOperand(builder, call.receiver());
-            CanonicalExpression argument = arguments.get(0);
-            Object carrier =
-                    argument instanceof CanonicalLiteral literal
-                            ? primitiveNumberLiteralOrNull(literal)
-                            : null;
-            if (carrier != null) {
-                builder.emitLoadConstant(carrier);
-            } else {
-                emitTerminalCallOperand(builder, argument);
-            }
+            emitTerminalCallOneArgument(builder, arguments.get(0));
             builder.endInvokeClosureOneTail();
         } else {
             builder.beginInvokeClosureArgumentsTail();
@@ -4180,6 +4345,28 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
+    }
+
+    /** I115-H: whether {@code call} is the static call whose creation was elided. */
+    private boolean isStaticLocalClosureCall(CanonicalCall call) {
+        return currentRootStaticClosureCall != null
+                && currentRootStaticClosureCall.call() == call
+                && currentStaticClosurePlanCell != null;
+    }
+
+    /** The single Call1 argument; a number literal stays a primitive carrier. */
+    private void emitTerminalCallOneArgument(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression argument) {
+        Object carrier =
+                argument instanceof CanonicalLiteral literal
+                        ? primitiveNumberLiteralOrNull(literal)
+                        : null;
+        if (carrier != null) {
+            builder.emitLoadConstant(carrier);
+        } else {
+            emitTerminalCallOperand(builder, argument);
+        }
     }
 
     private void emitTerminalCallOperand(
@@ -7596,10 +7783,12 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure closure) {
         if (currentActivationLocal == null) {
+            // I115-H: the ReturnHome fact gates the lightweight representation.
             builder.beginMaterializeCurrentClosure(
                     useCompactClosureCapture(),
                     CanonicalCompilationFacts.capturesCreatorContext(
-                            closure, currentRootAnalysis));
+                            closure, currentRootAnalysis),
+                    compilationFacts.mayObserveReturnHome(closure));
         } else {
             builder.beginMaterializeClosure();
             emitCurrentActivation(builder);
