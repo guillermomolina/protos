@@ -830,13 +830,14 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
     /**
      * I114 graph-convergence fixture: the PERF042 reference topology, where
      * each {@code run} invocation materializes a fresh Closure of one
-     * definition and calls it terminally. A direct {@code identity(1)} on the
-     * locally bound literal is lowered to the inline Closure-literal path
-     * ({@code PrepareInlineClosureLiteralCall}), not to {@code
-     * InvokeClosureOneTail}; the alias {@code f} keeps the same Closure and
-     * definition while reaching the terminal operation under test. The structural assertions prove the installed terminal
-     * specialization; the physical After-TruffleTier criteria require a real
-     * Graal capture of {@code run}'s root by the human executor.
+     * definition and calls it terminally. The alias {@code f} keeps the same
+     * Closure and definition through a non-literal binding; since PERF042 /
+     * PLAT066-C, the direct {@code identity(1)} of {@code runDirect} on the
+     * locally bound literal also reaches {@code InvokeClosureOneTail} instead
+     * of the inline Closure-literal path. The structural assertions prove the
+     * installed terminal specialization for both sites; the physical
+     * After-TruffleTier criteria require a real Graal capture of {@code
+     * run}'s root by the human executor.
      */
     @Test
     void i114NormalWorkloadInstallsTheTerminalDirectSpecialization() throws Exception {
@@ -847,20 +848,26 @@ final class ProtosPerf042DefinitionKeyedDirectCallTest {
                         f: identity
                         f(1)
                     }
+                    runDirect: () => {
+                        identity: (value) => { value }
+                        identity(1)
+                    }
                     """, "i114-graph-define.protos", module);
-            enterCachedTier("run", module);
-            for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
-                assertInteger(1, evaluate("run()\n", "i114-graph-run.protos", module));
+            for (String function : List.of("run", "runDirect")) {
+                enterCachedTier(function, module);
+                for (int i = 0; i < PAST_CACHE_LIMITS; i++) {
+                    assertInteger(1, evaluate(function + "()\n", "i114-graph-run.protos", module));
+                }
+                List<String> names =
+                        functionRoot(function, module).getBytecodeNode().getInstructionsAsList().stream()
+                                .map(ProtosInstructionNames::of)
+                                .toList();
+                assertTrue(names.contains("c.InvokeClosureOneTail"), names::toString);
+                List<Object> entries =
+                        definitionTierEntries(function, InvokeClosureOneTail.class, module);
+                assertSingleAdmittedEntry(entries, 1);
+                assertTerminalDirectEntryHasNoIndirectFallback(entries.get(0));
             }
-            List<String> names =
-                    functionRoot("run", module).getBytecodeNode().getInstructionsAsList().stream()
-                            .map(ProtosInstructionNames::of)
-                            .toList();
-            assertTrue(names.contains("c.InvokeClosureOneTail"), names::toString);
-            List<Object> entries =
-                    definitionTierEntries("run", InvokeClosureOneTail.class, module);
-            assertSingleAdmittedEntry(entries, 1);
-            assertTerminalDirectEntryHasNoIndirectFallback(entries.get(0));
         });
     }
 

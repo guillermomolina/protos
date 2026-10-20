@@ -3981,9 +3981,21 @@ final class CanonicalToBytecodeLowerer {
      * the invocation cannot suspend.
      *
      * <p>Not admitted, and therefore lowered unchanged: spread arguments,
-     * composed or control operands, an I096 inline Closure-literal
-     * candidate, and every inline callback or activation region, whose
-     * enclosing work must still resume physically.
+     * composed or control operands, and every inline callback or activation
+     * region, whose enclosing work must still resume physically.
+     *
+     * <p>PERF042 / PLAT066-C: PLAT057-B permitted proven inlining during
+     * lowering, and an I096 candidate other than a lexical one-argument
+     * binding call (an immediate Closure literal, a C0 or C2/N binding call)
+     * keeps that inline lowering. For an ordinary terminal C1 call whose
+     * receiver is the lexical binding of a known Closure, the approved
+     * direction is to keep the callee's physical CallTarget: the existence of
+     * an I096 candidate does not justify expanding that call in the caller,
+     * so it is admitted here and Graal decides inlining between CallTargets.
+     * This compact admission is not a proof that the call cannot suspend, and
+     * the terminal operation keeps the dynamic D013 selection and its
+     * fallbacks. The exception covers only this scope; it does not presume a
+     * general retirement of PLAT057-B.
      */
     private boolean admitsTerminalClosureCall(CanonicalExpression last) {
         if (!(last instanceof CanonicalCall call)
@@ -3992,11 +4004,18 @@ final class CanonicalToBytecodeLowerer {
                 || currentInlineClosureCallBody
                 || !currentNormalCallbackScalarLocals.isEmpty()
                 || hasSpreadArgument(call.arguments())
-                || !isTerminalCallOperand(call.receiver())
-                || inlineClosureLiteralCallCandidate(call) != null
-                // Decided before the prefix materializes its literals: an
-                // I096-B1 binding candidate keeps its inline lowering.
-                || currentRootBindingCallCandidates.containsKey(call)) {
+                || !isTerminalCallOperand(call.receiver())) {
+            return false;
+        }
+        boolean lexicalC1BindingCandidate =
+                call.arguments().size() == 1
+                        && call.receiver() instanceof CanonicalLookup
+                        && currentRootBindingCallCandidates.containsKey(call);
+        // Decided before the prefix materializes its literals: every other
+        // I096 candidate keeps its inline lowering.
+        if (!lexicalC1BindingCandidate
+                && (inlineClosureLiteralCallCandidate(call) != null
+                        || currentRootBindingCallCandidates.containsKey(call))) {
             return false;
         }
         for (CanonicalExpression argument : call.arguments()) {

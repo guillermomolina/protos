@@ -829,6 +829,199 @@ final class ProtosPerf042IdentityBuilderOracleTest {
 
         });
     }
+
+    /**
+     * PERF042: compile the actual run Closure of primitive-closure-call.
+     * The nested identity is created and called inside run, not at module
+     * top level. The module root and the run root are distinct targets.
+     */
+    @Test
+    void captureNestedRunRootAtRequestedTier() throws Exception {
+        Assumptions.assumeTrue(
+                Boolean.getBoolean("protos.perf042.graphCapture"),
+                "PERF042 nested-run graph acquisition is opt-in");
+
+        assertEquals(
+                "true",
+                System.getProperty("protos.diagnostic.stableRootIdentity"));
+
+        String tierText =
+                System.getProperty("protos.perf042.graphTier", "1");
+
+        assertTrue(tierText.equals("1") || tierText.equals("2"));
+        int requestedTier = Integer.parseInt(tierText);
+
+        List<String> vmArguments =
+                java.lang.management.ManagementFactory
+                        .getRuntimeMXBean().getInputArguments();
+
+        assertTrue(vmArguments.stream().anyMatch(
+                value -> value.startsWith("-Djdk.graal.Dump=Truffle:")));
+        assertTrue(vmArguments.stream().anyMatch(
+                value -> value.startsWith("-Djdk.graal.DumpPath=")));
+        assertTrue(vmArguments.contains("-Djdk.graal.PrintGraph=File"));
+
+        String sourceText = """
+                run: () => {
+                    identity: (value) => { value }
+                    identity(1)
+                }
+                """;
+
+        withCore(module -> {
+            ProtosBytecodeRootNode moduleRoot =
+                    parse(sourceText, "nested-run-identity-program");
+
+            assertEquals(3, moduleRoot.getRootNodes().getNodes().size(),
+                    "Expected module, run and identity roots");
+
+            moduleRoot.getCallTarget().call(module);
+
+            ProtosClosureValue run = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("run").orElseThrow());
+
+            ProtosBytecodeRootNode root =
+                    run.executionPlan().orElseThrow()
+                            .bytecodeActivationRootForTesting();
+
+            root.getRootNodes().ensureSourceInformation();
+
+            assertTrue(moduleRoot != root,
+                    "Must compile run, not the module");
+            assertTrue(moduleRoot.getRootNodes().getNodes().contains(root),
+                    "Run must belong to the parsed source root group");
+
+            Object target = root.getCallTarget();
+
+            assertTrue(perf042OptimizedCallTarget(target.getClass()),
+                    "Requires optimizing Truffle runtime");
+
+            String targetName = root.toString();
+
+            assertTrue(targetName.startsWith("protos-root:")
+                            && !targetName.contains("unavailable"),
+                    "Unattributable run root: " + targetName);
+
+            System.out.println("PERF042_NESTED_RUN_SOURCE=RUN_IDENTITY");
+            System.out.println("PERF042_NESTED_RUN_TIER=" + requestedTier);
+            System.out.println("PERF042_NESTED_RUN_TARGET=" + targetName);
+            System.out.println("PERF042_NESTED_RUN_ROOT_SOURCE="
+                    + root.getSourceSection());
+
+            // Re-enter the same run definition. Each call creates a fresh
+            // nested identity Closure and executes identity(1).
+            for (int i = 0; i < 128; i++) {
+                Object[] arguments =
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                run, module, null, new Object[0]);
+
+                Object result = root.getCallTarget().call(arguments);
+
+                assertEquals("1",
+                        ProtosNumericValueSupport.integerDecimalText(result));
+            }
+
+            assertEquals(BytecodeTier.CACHED,
+                    root.getBytecodeNode().getTier(),
+                    "Run root did not enter the cached interpreter");
+
+            System.out.println("PERF042_NESTED_RUN_WARMUP_CALLS=128");
+            System.out.println("PERF042_NESTED_RUN_BYTECODE_TIER="
+                    + root.getBytecodeNode().getTier());
+
+            boolean compiled = (Boolean) perf042CompilerMethod(
+                    target, "compile", requestedTier == 2);
+
+            Object actualTier = perf042CompilerMethod(
+                    target, "highestCompiledTier");
+
+            System.out.println(
+                    "PERF042_NESTED_RUN_COMPILE_RETURN=" + compiled);
+            System.out.println(
+                    "PERF042_NESTED_RUN_COMPILED_TIER=" + actualTier);
+
+            assertTrue(compiled, "Run compilation did not complete");
+            assertEquals(requestedTier, actualTier);
+            assertTrue(
+                    (Boolean) perf042CompilerMethod(target, "isValid"));
+
+            Path dumpPath = Path.of(
+                    System.getProperty("jdk.graal.DumpPath", ""));
+
+            assertTrue(Files.isDirectory(dumpPath));
+
+            String selector = targetName.split("\\[", 2)[0];
+
+            List<Path> graphs;
+            try (var files = Files.walk(dumpPath)) {
+                graphs = files
+                        .filter(Files::isRegularFile)
+                        .filter(file -> file.toString().endsWith(".bgv"))
+                        .filter(file ->
+                                file.getFileName().toString()
+                                        .contains(selector))
+                        .sorted()
+                        .toList();
+            }
+
+            System.out.println(
+                    "PERF042_NESTED_RUN_BGV_COUNT=" + graphs.size());
+
+            for (Path graph : graphs) {
+                System.out.println("PERF042_NESTED_RUN_BGV="
+                        + graph.toAbsolutePath());
+            }
+
+            assertTrue(!graphs.isEmpty(),
+                    "No BGV attributed to the compiled run root");
+
+            System.out.println("PERF042_NESTED_RUN_CAPTURE=READY");
+        });
+
+        // Independent Context: inspect physical DEFAULT instructions
+        // without rematerializing instrumented bytecode in the compiled
+        // Context.
+        withCore(module -> {
+            ProtosBytecodeRootNode root =
+                    parse(sourceText, "nested-run-identity-census");
+
+            root.getRootNodes().ensureSourceInformation();
+
+            var group = root.getRootNodes().getNodes();
+
+            assertEquals(3, group.size());
+
+            int total = 0;
+
+            for (int index = 0; index < group.size(); index++) {
+                ProtosBytecodeRootNode member = assertInstanceOf(
+                        ProtosBytecodeRootNode.class, group.get(index));
+
+                List<String> instructions =
+                        member.getBytecodeNode()
+                                .getInstructionsAsList()
+                                .stream()
+                                .map(Instruction::getName)
+                                .toList();
+
+                String prefix = "PERF042_NESTED_RUN_ROOT_" + index;
+
+                System.out.println(prefix + "_NAME=" + member);
+                System.out.println(prefix + "_SOURCE="
+                        + member.getSourceSection());
+                System.out.println(prefix + "_FULL_COUNT="
+                        + instructions.size());
+                System.out.println(prefix + "_BYTECODE=" + instructions);
+
+                total += instructions.size();
+            }
+
+            System.out.println(
+                    "PERF042_NESTED_RUN_TOTAL_FULL=" + total);
+        });
+    }
+
     private static boolean perf042OptimizedCallTarget(Class<?> type) {
         for (Class<?> current = type;
                 current != null;
