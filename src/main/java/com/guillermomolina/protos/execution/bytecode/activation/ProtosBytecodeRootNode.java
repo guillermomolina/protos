@@ -2757,15 +2757,62 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * declares no frame-owned lexical bindings) holds, and otherwise
      * materializes and publishes its exact activation first, exactly as
      * {@link CurrentActivation} followed by {@link MaterializeClosure}.
+     *
+     * <p>I115 / PLAT066-C: {@code capturesCreatorContext} is the lowering's
+     * classification of this exact Closure ({@code
+     * CanonicalCompilationFacts#capturesCreatorContext}). When it is false
+     * the operation is GraalPy's {@code MakeFunction} with empty {@code
+     * freevars}: the Closure receives its creator's own captured environment
+     * and the creator's activation is neither materialized nor published,
+     * and no compact capture owner is created. That classification is a
+     * recorded divergence from the unconditional capture of {@code
+     * CALLABLES.md}, pending an owner decision.
      */
     @Operation
     @ConstantOperand(type = boolean.class, name = "compactCapture")
+    @ConstantOperand(type = boolean.class, name = "capturesCreatorContext")
     public static final class MaterializeCurrentClosure {
         @Specialization(guards = {
+                "!capturesCreatorContext",
+                "hasPublishedActivation(frame)"})
+        public static ProtosClosureValue publishedWithoutCreatorContext(
+                boolean compactCapture,
+                boolean capturesCreatorContext,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.publishedActivation(frame.getArguments());
+            return new ProtosClosureValue(
+                    definition,
+                    activation.capturedLexicalEnvironmentForRuntime(),
+                    activation.receiver(),
+                    activation.methodHomeOrNullForRuntime(),
+                    activation.returnHomeOrNullForRuntime(),
+                    activation.preludeOrNullForRuntime(),
+                    executionPlanCell.plan());
+        }
+
+        @Specialization(guards = {
+                "!capturesCreatorContext",
+                "!hasPublishedActivation(frame)"})
+        public static ProtosClosureValue compactWithoutCreatorContext(
+                boolean compactCapture,
+                boolean capturesCreatorContext,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
+            return ProtosFrameArguments.materializeCompactClosure(
+                    frame.getArguments(), definition, executionPlanCell, false);
+        }
+
+        @Specialization(guards = {
+                "capturesCreatorContext",
                 "hasPublishedActivation(frame)",
                 "hasMaterializedCaptureContext(frame)"})
         public static ProtosClosureValue publishedMaterialized(
                 boolean compactCapture,
+                boolean capturesCreatorContext,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
@@ -2782,10 +2829,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization(guards = {
+                "capturesCreatorContext",
                 "hasPublishedActivation(frame)",
                 "!hasMaterializedCaptureContext(frame)"})
         public static ProtosClosureValue publishedGeneral(
                 boolean compactCapture,
+                boolean capturesCreatorContext,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
@@ -2801,19 +2850,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     executionPlanCell.plan());
         }
 
-        @Specialization(guards = {"compactCapture", "!hasPublishedActivation(frame)"})
+        @Specialization(guards = {
+                "capturesCreatorContext",
+                "compactCapture",
+                "!hasPublishedActivation(frame)"})
         public static ProtosClosureValue compact(
                 boolean compactCapture,
+                boolean capturesCreatorContext,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
-                    frame.getArguments(), definition, executionPlanCell);
+                    frame.getArguments(), definition, executionPlanCell, true);
         }
 
-        @Specialization(guards = {"!compactCapture", "!hasPublishedActivation(frame)"})
+        @Specialization(guards = {
+                "capturesCreatorContext",
+                "!compactCapture",
+                "!hasPublishedActivation(frame)"})
         public static ProtosClosureValue rich(
                 boolean compactCapture,
+                boolean capturesCreatorContext,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {

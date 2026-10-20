@@ -639,6 +639,60 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                 .toList();
     }
 
+    /**
+     * I115 / PLAT066-C: a Closure that reads only its own parameter is
+     * created from its creator's own captured environment (GraalPy
+     * MakeFunction without freevars). This records the divergence from the
+     * unconditional capture of CALLABLES.md; it is not an equivalence proof.
+     */
+    @Test
+    void nonCapturingClosureReceivesItsCreatorsOuterEnvironment() throws Exception {
+        withCore(module -> {
+            List<Object> pair = elements(evaluate(
+                    "run: () => {\n identity: (value) => { value }\n identity\n}\n[run, run()]",
+                    "i115-non-capturing.protos", freshModule(module)));
+            ProtosClosureValue run = assertInstanceOf(ProtosClosureValue.class, pair.get(0));
+            ProtosClosureValue identity = assertInstanceOf(ProtosClosureValue.class, pair.get(1));
+            assertSame(
+                    run.capturedLexicalEnvironmentForRuntime(),
+                    identity.capturedLexicalEnvironmentForRuntime(),
+                    "identity does not capture run's execution context");
+            assertEquals("1", integerValue(invokeDirect(identity, module, integer(1)).result()));
+
+            assertEquals("1", integerValue(evaluate(
+                    "run: () => {\n identity: (value) => { value }\n identity(1)\n}\nrun()",
+                    "i115-ordinary-local.protos", freshModule(module))));
+        });
+        System.out.println("I115_NON_CAPTURING_CLOSURE=PASS");
+    }
+
+    /**
+     * I115 / PLAT066-C: a Closure that does read, write, remove or observe
+     * its creator's bindings keeps the capturing path unchanged.
+     */
+    @Test
+    void capturingClosureBesideOrdinaryLocalsKeepsCaptureSemantics() throws Exception {
+        withCore(module -> {
+            assertEquals(List.of("1", "2", "3"), integerValues(elements(evaluate(
+                    "run: () => {\n x: 1\n get: () => x\n set: (v) => { x = v }\n"
+                            + " identity: (value) => { value }\n"
+                            + " before: identity(get())\n set(2)\n written: get()\n"
+                            + " context.removeSlot(\"x\")\n context.x: 3\n"
+                            + " [before, written, get()]\n}\nrun()",
+                    "i115-capturing.protos", freshModule(module)))));
+
+            List<Object> pair = elements(evaluate(
+                    "run: () => {\n x: 1\n get: () => x\n [get, context]\n}\nrun()",
+                    "i115-capturing-context.protos", freshModule(module)));
+            ProtosClosureValue get = assertInstanceOf(ProtosClosureValue.class, pair.get(0));
+            assertSame(
+                    pair.get(1),
+                    get.capturedLexicalContexts().get(0),
+                    "a capturing Closure still captures the observable Context");
+        });
+        System.out.println("I115_CAPTURING_CLOSURE_PRESERVED=PASS");
+    }
+
     @Test
     void publishedModuleClosureCreationPreservesCaptureAndMetadata()
             throws Exception {
