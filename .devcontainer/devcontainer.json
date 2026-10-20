@@ -20,7 +20,10 @@
   // "runArgs": ["--userns=host"],
 
   // Podman rootless:
-  "runArgs": ["--userns=keep-id:uid=1000,gid=1000"],
+  "runArgs": [
+    "--userns=keep-id:uid=1000,gid=1000",
+    "--tmpfs=/tmp:rw,exec,mode=1777,size=256m"
+  ],
   "initializeCommand": "mkdir -p \"${localEnv:HOME}/.claude\"",
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
