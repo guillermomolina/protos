@@ -60,6 +60,14 @@ final class ProtosI112TerminalCallBudgetTest {
             run()
             """;
 
+    private static final String LEXICAL_C1 = """
+            run: () => {
+                identity: (value) => { value }
+                identity(1)
+            }
+            run()
+            """;
+
     /** PLAT062-T design target: 15 enumerated FULL instructions plus one of margin. */
     private static final int TARGET_IDENTITY_FULL = 16;
 
@@ -213,6 +221,82 @@ final class ProtosI112TerminalCallBudgetTest {
                                 harness.moduleActivation()));
             });
         }
+    }
+
+    /**
+     * PERF042 / PLAT066-C: a terminal C1 call of a lexical Closure binding
+     * keeps the callee's physical root; the caller holds one terminal
+     * operation and no inline copy of the callee body.
+     */
+    @Test
+    void lexicalC1TerminalCallKeepsPhysicalCalleeWithoutInlineBody()
+            throws Exception {
+
+        try (Harness harness =
+                     new Harness(false)) {
+
+            harness.run(() -> {
+                Census census = census(
+                        LEXICAL_C1, "lexical-c1-normal", 3);
+
+                assertEquals(3, census.roots().size(), census.fullReport());
+
+                List<Integer> runs = new ArrayList<>();
+                for (int index = 1; index < census.roots().size(); index++) {
+                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
+                        runs.add(index);
+                    }
+                }
+                assertEquals(1, runs.size(), () -> "one run root\n" + census.fullReport());
+                int runIndex = runs.get(0);
+                // The remaining non-module root is identity's own physical root.
+                int identityIndex = runIndex == 1 ? 2 : 1;
+
+                List<String> run = names(census.signatures().get(runIndex));
+                List<String> identity = names(census.signatures().get(identityIndex));
+                for (String required : List.of(
+                        "c.BindUnaryFrameParameter",
+                        "c.ReadRootFrameLocal")) {
+                    assertTrue(
+                            identity.contains(required),
+                            () -> required + " missing in identity\n" + census.fullReport());
+                }
+                for (String forbidden : List.of(
+                        "PrepareInlineClosureLiteralCall",
+                        "AdmitsInlineClosureLiteralCall",
+                        "LoadInlineClosureArgument",
+                        "BindInlineClosureFrameParameter",
+                        "ReadInlineFrameLocal",
+                        "LoadInlineLiteralFallbackCall")) {
+                    assertEquals(
+                            0,
+                            run.stream().filter(name -> name.contains(forbidden)).count(),
+                            () -> forbidden + " in run\n" + census.fullReport());
+                }
+                for (String forbidden : List.of(
+                        "c.IsPreparedClosureInvocation",
+                        "c.EnterNestedStructuredDispatch",
+                        "c.ResumeContinuation",
+                        "yield")) {
+                    assertTrue(
+                            !run.contains(forbidden),
+                            () -> forbidden + " in run\n" + census.fullReport());
+                }
+
+                assertInteger(
+                        1,
+                        census.module().getCallTarget().call(
+                                harness.moduleActivation()));
+
+                System.out.println("PERF042_RUN_PHYSICAL_CALL=PASS");
+                System.out.println("PERF042_RUN_INLINE_BODY_IN_LOWERER=ABSENT");
+                System.out.println("PERF042_RUN_TERMINAL_OPERATION=InvokeClosureOneTail");
+            });
+        }
+    }
+
+    private static int count(List<String> names, String name) {
+        return (int) names.stream().filter(name::equals).count();
     }
 
     private static Census census(
