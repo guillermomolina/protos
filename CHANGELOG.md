@@ -8,6 +8,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.3-SNAPSHOT
+
+- `I115-H` (PLAT066-C): introduce an experimental static invocation path for a
+  provably local Closure whose only use is a terminal one-argument call.
+  - Use canonical identity and body-shape proofs to emit `InvokeStaticClosureOneTail`
+    and a reduced unary call argument layout (`[marker, supplied0]`) instead of
+    the normal Closure call preparation for the narrowly admitted case.
+  - Add a lightweight non-capturing Closure representation when the body cannot
+    observe its creator's `ReturnHome`; keep ordinary creation and fallback
+    for cases outside the structural proof.
+  - Add independent-builder and static-call structural/runtime tests that
+    describe the admitted paths and their limitations.
+  - **Historical semantic limitation:** this path was explicitly experimental
+    and did not establish normative equivalence for dynamic D013 selection,
+    Closure identity, creator context, caller/Task ownership or `ReturnHome`.
+    It is not evidence of complete Protos semantic conformance.
+  - Reconstructed from original I115 commit
+    `7af12ea1c0c163da8de4bb745c6a245770914ba0`; no behavioral tests
+    have been run on this versioned replay.
+
 ## 0.4.2-SNAPSHOT
 
 - `I115-G` (PLAT066-C): classify whether each created Closure actually
