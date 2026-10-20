@@ -3,32 +3,6 @@
   "description": "Exact topology of every determinate PE-safe LocalAccessor/MaterializedLocalAccessor sink. Risks are never baselined.",
   "entries": [
     {
-      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
-      "class": "ProtosFrameLocalBindings",
-      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
-      "family": "LocalAccessor",
-      "operation": "isCleared",
-      "receiver": "accessor",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "HELPER_PARAMETER_RECEIVER",
-      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "PE_REACHABLE_PROVEN"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
-      "class": "ProtosFrameLocalBindings",
-      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
-      "family": "LocalAccessor",
-      "operation": "getObject",
-      "receiver": "accessor",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "HELPER_PARAMETER_RECEIVER",
-      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "PE_REACHABLE_PROVEN"
-    },
-    {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode.ReadRootFrameLocal",
       "method": "compact(LocalAccessor,Assumption,String,BytecodeNode,VirtualFrame)",
@@ -40,6 +14,32 @@
       "receiver_class": "CONSTANT_OPERAND_RECEIVER",
       "bytecode_node_class": "BOUND_BYTECODE_NODE",
       "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.ReadRootFrameLocal",
+      "method": "publishedPresent(LocalAccessor,Assumption,String,BytecodeNode,VirtualFrame)",
+      "family": "LocalAccessor",
+      "operation": "getObject",
+      "receiver": "accessor",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "CONSTANT_OPERAND_RECEIVER",
+      "bytecode_node_class": "BOUND_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode.ReadRootFrameLocal",
+      "method": "canReadPublishedFrameLocal(LocalAccessor,Assumption,BytecodeNode,VirtualFrame)",
+      "family": "LocalAccessor",
+      "operation": "isCleared",
+      "receiver": "accessor",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
+      "pe_reachability": "NOT_PE_REACHABLE"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosBytecodeRootNode.java",
@@ -203,6 +203,32 @@
       "method": "assignCapturedMaterializedDestination(MaterializedLocalAccessor,CapturedLexicalWriteTarget,String,Object,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
       "operation": "setObject",
+      "receiver": "accessor",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
+      "class": "ProtosFrameLocalBindings",
+      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
+      "family": "LocalAccessor",
+      "operation": "isCleared",
+      "receiver": "accessor",
+      "bytecode_node": "bytecodeNode",
+      "occurrence": 0,
+      "receiver_class": "HELPER_PARAMETER_RECEIVER",
+      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
+      "pe_reachability": "PE_REACHABLE_PROVEN"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/bytecode/activation/ProtosFrameLocalBindings.java",
+      "class": "ProtosFrameLocalBindings",
+      "method": "readRetainingCarrier(LocalAccessor,Assumption,ProtosActivation,String,BytecodeNode,VirtualFrame)",
+      "family": "LocalAccessor",
+      "operation": "getObject",
       "receiver": "accessor",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,

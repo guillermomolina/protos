@@ -21,13 +21,16 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.Assumption;
@@ -278,7 +281,143 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                 "distinct lowered layouts must own distinct speculation tokens");
     }
 
+    @Test
+    void publishedRootFrameReadPreservesPresenceAndInvalidation() {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                Fixture fixture = yieldingReadRoot(language, true);
+                Assumption xContinuity =
+                        fixture.layout().presentContinuityAt(0);
+
+                /* A: PRESENT binding while the continuity is still valid. */
+                ProtosActivation presentModule = moduleActivation();
+                ContinuationResult presentContinuation =
+                        suspend(fixture, presentModule);
+                ProtosObjectValue presentX =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                presentModule.context().createLocalSlot("x", presentX);
+                assertSame(
+                        presentX,
+                        presentContinuation.continueWith(
+                                ProtosNullValue.INSTANCE));
+                assertTrue(
+                        xContinuity.isValid(),
+                        "a PRESENT read must not invalidate membership");
+
+                /*
+                 * D: an activation whose x is never removed stays suspended
+                 * across the invalidation performed by another activation.
+                 */
+                ProtosActivation independentModule = moduleActivation();
+                ContinuationResult independentContinuation =
+                        suspend(fixture, independentModule);
+                ProtosObjectValue independentX =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                independentModule.context().createLocalSlot("x", independentX);
+
+                /* B: removal invalidates and the read reports ABSENT. */
+                ProtosActivation removedModule = moduleActivation();
+                ContinuationResult removedContinuation =
+                        suspend(fixture, removedModule);
+                ProtosObjectValue removedX =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                removedModule.context().createLocalSlot("x", removedX);
+                assertSame(
+                        removedX,
+                        removedModule.context().removeLocalSlot("x"));
+                assertFalse(
+                        xContinuity.isValid(),
+                        "PRESENT -> ABSENT must invalidate x");
+                ProtosSignalException rootFailure =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> removedContinuation.continueWith(
+                                        ProtosNullValue.INSTANCE));
+
+                /* The authoritative ReadFrameLocal path fails identically. */
+                Fixture authoritative = yieldingReadRoot(language, false);
+                ProtosActivation authoritativeModule = moduleActivation();
+                ContinuationResult authoritativeContinuation =
+                        suspend(authoritative, authoritativeModule);
+                authoritativeModule.context().createLocalSlot(
+                        "x",
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
+                authoritativeModule.context().removeLocalSlot("x");
+                ProtosSignalException authoritativeFailure =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> authoritativeContinuation.continueWith(
+                                        ProtosNullValue.INSTANCE));
+                assertSame(
+                        slotNotFoundOf(removedModule),
+                        rootFailure.error().parent().orElseThrow(),
+                        "root read must raise its activation's SlotNotFound");
+                assertSame(
+                        slotNotFoundOf(authoritativeModule),
+                        authoritativeFailure.error().parent().orElseThrow(),
+                        "authoritative read must raise its activation's SlotNotFound");
+
+                /* C: recreation after removal is observed exactly. */
+                ProtosActivation recreatedModule = moduleActivation();
+                ContinuationResult recreatedContinuation =
+                        suspend(fixture, recreatedModule);
+                recreatedModule.context().createLocalSlot(
+                        "x",
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
+                recreatedModule.context().removeLocalSlot("x");
+                ProtosObjectValue recreatedX =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                recreatedModule.context().createLocalSlot("x", recreatedX);
+                assertSame(
+                        recreatedX,
+                        recreatedContinuation.continueWith(
+                                ProtosNullValue.INSTANCE));
+
+                /* D: the untouched activation still reads its own x. */
+                assertSame(
+                        independentX,
+                        independentContinuation.continueWith(
+                                ProtosNullValue.INSTANCE));
+
+                /* E: PRESENT(null) is presence, not absence. */
+                ProtosActivation nullModule = moduleActivation();
+                ContinuationResult nullContinuation =
+                        suspend(fixture, nullModule);
+                nullModule.context().createLocalSlot(
+                        "x", ProtosNullValue.INSTANCE);
+                assertSame(
+                        ProtosNullValue.INSTANCE,
+                        nullContinuation.continueWith(
+                                ProtosNullValue.INSTANCE));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static ContinuationResult suspend(
+            Fixture fixture, ProtosActivation module) {
+        return assertInstanceOf(
+                ContinuationResult.class,
+                fixture.root().getCallTarget().call(module));
+    }
+
+    private static ProtosObjectValue slotNotFoundOf(
+            ProtosActivation activation) {
+        return ProtosCoreErrors.prototype(
+                activation,
+                ProtosCoreErrors.StandardError.SLOT_NOT_FOUND);
+    }
+
     private static Fixture yieldingReadRoot(ProtosLanguage language) {
+        return yieldingReadRoot(language, false);
+    }
+
+    private static Fixture yieldingReadRoot(
+            ProtosLanguage language, boolean rootRead) {
         /* The layout derives its local offsets from the first parse's locals. */
         ProtosFrameLexicalLayout[] layoutHolder = new ProtosFrameLexicalLayout[1];
 
@@ -317,12 +456,19 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                             builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginReadFrameLocal(
-                                    x,
-                                    layout.presentContinuityAt(0));
-                            builder.emitLoadArgument(0);
-                            builder.emitLoadConstant("x");
-                            builder.endReadFrameLocal();
+                            if (rootRead) {
+                                builder.emitReadRootFrameLocal(
+                                        x,
+                                        layout.presentContinuityAt(0),
+                                        "x");
+                            } else {
+                                builder.beginReadFrameLocal(
+                                        x,
+                                        layout.presentContinuityAt(0));
+                                builder.emitLoadArgument(0);
+                                builder.emitLoadConstant("x");
+                                builder.endReadFrameLocal();
+                            }
                             builder.endReturn();
 
                             builder.endRoot();
@@ -368,9 +514,11 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                 new ProtosObjectValue(contextPrototype);
 
         bindings.createLocalSlot("Context", contextPrototype);
+        ProtosObjectValue errorPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bindings.createLocalSlot("Error", errorPrototype);
         bindings.createLocalSlot(
-                "Error",
-                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+                "SlotNotFound", new ProtosObjectValue(errorPrototype));
         bindings.createLocalSlot(
                 "Array",
                 new ProtosObjectValue(ProtosObjectValue.rootObject()));

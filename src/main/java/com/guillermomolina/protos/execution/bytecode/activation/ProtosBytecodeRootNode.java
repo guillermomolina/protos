@@ -1243,10 +1243,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /**
      * PERF025-H1 root-level form of {@link ReadFrameLocal}, emitted when the
-     * current activation is the root's own. A frame still in compact
-     * source-call form denotes a genuine, unobserved execution context, so a
-     * PRESENT local is read directly; an ABSENT one (D179 C0) materializes the
-     * exact activation and resumes the unchanged fallback.
+     * current activation is the root's own. It has three paths:
+     * <ol>
+     * <li>a frame still in compact source-call form denotes a genuine,
+     * unobserved execution context, so the local is read directly;</li>
+     * <li>a published activation whose execution context is genuine reads the
+     * local directly while its binding is PRESENT, either because the
+     * presence continuity is still valid or because the slot is not
+     * cleared;</li>
+     * <li>every other case (an ABSENT binding, or a non-genuine context)
+     * resumes the general lexical resolution on the materialized frame.</li>
+     * </ol>
+     * The static identity of the binding does not guarantee its presence:
+     * D179 C0 structural removal may make it ABSENT, and that invalidation
+     * keeps the dynamic resolution exact.
      */
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
@@ -1279,7 +1289,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return accessor.getObject(bytecodeNode, frame);
         }
 
-        @Specialization(guards = "!isCompact(frame)")
+        @Specialization(
+                guards = {
+                    "!isCompact(frame)",
+                    "canReadPublishedFrameLocal(accessor, presenceContinuity, bytecodeNode, frame)"
+                })
+        public static Object publishedPresent(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                String name,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
+            return accessor.getObject(bytecodeNode, frame);
+        }
+
+        @Specialization(
+                guards = {
+                    "!isCompact(frame)",
+                    "!canReadPublishedFrameLocal(accessor, presenceContinuity, bytecodeNode, frame)"
+                })
         public static Object materialized(
                 LocalAccessor accessor,
                 Assumption presenceContinuity,
@@ -1289,6 +1317,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosFrameLocalBindings.readRootFrameLocalSlow(
                     accessor, presenceContinuity, frame.getArguments(),
                     name, bytecodeNode, frame.materialize());
+        }
+
+        @NonIdempotent
+        static boolean canReadPublishedFrameLocal(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                BytecodeNode bytecodeNode,
+                VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (!ProtosFrameArguments.hasPublishedActivation(arguments)) {
+                return false;
+            }
+
+            ProtosActivation activation =
+                    ProtosFrameArguments.publishedActivation(arguments);
+
+            return activation.hasGenuineExecutionContextForRuntime()
+                    && (presenceContinuity.isValid()
+                            || !accessor.isCleared(bytecodeNode, frame));
         }
 
         @NonIdempotent

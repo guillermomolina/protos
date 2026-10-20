@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.387-SNAPSHOT
+
+- `I115-F` (#931): read PRESENT root frame locals of published
+  activations directly.
+  - `ReadRootFrameLocal` gains a published-activation path: when
+    the activation's execution context is genuine and the binding
+    is PRESENT (valid presence continuity, or an uncleared slot),
+    the local is read directly instead of through
+    `readRootFrameLocalSlow`. ABSENT bindings and non-genuine
+    contexts keep the exact D179 C0 fallback, including removal
+    and recreation.
+  - The LocalAccessor PE guard baseline records the two new sites.
+  - Maintainer validation: `make check` PASS; integrated
+    `make test` PASS.
+
 ## 0.3.386-SNAPSHOT
 
 - `I115-E` (#931): reduce Closure creation and root-entry cost
