@@ -944,12 +944,39 @@ public final class ProtosActivation {
         return Optional.ofNullable(returnHome);
     }
 
+    /**
+     * Backend-private nullable return home for Closure creation.
+     * Equivalent to returnHome().orElse(null), without Optional allocation.
+     */
+    public ProtosReturnHome returnHomeOrNullForRuntime() {
+        return returnHome;
+    }
+
     public Optional<ProtosObjectValue> methodHome() {
         return Optional.ofNullable(methodHome);
     }
 
+    /**
+     * Backend-private nullable method home for Closure creation.
+     * Equivalent to methodHome().orElse(null), without Optional allocation.
+     */
+    public ProtosObjectValue methodHomeOrNullForRuntime() {
+        return methodHome;
+    }
+
     public boolean ownsReturnHome() {
         return ownsReturnHome;
+    }
+
+    /**
+     * Whether this activation can capture its already materialized
+     * genuine lexical context without using the deferred-context path.
+     *
+     * <p>Object construction is excluded because its Closures capture
+     * the enclosing lexical environment, not the construction context.
+     */
+    public boolean canCaptureMaterializedContextForRuntime() {
+        return !construction && context != null;
     }
 
     /**
@@ -971,6 +998,24 @@ public final class ProtosActivation {
             current = context != null
                     ? ProtosLexicalEnvironment.materialized(context, capturedEnvironment)
                     : ProtosLexicalEnvironment.deferred(this, capturedEnvironment);
+            currentEnvironment = current;
+        }
+        return current;
+    }
+
+    /**
+     * Fast path for a non-construction activation whose genuine
+     * execution context is already materialized.
+     *
+     * <p>The caller must first establish
+     * {@link #canCaptureMaterializedContextForRuntime()}. Reuses exactly the
+     * same activation-owned lexical environment as
+     * {@link #lexicalEnvironmentForClosureCapture()}.
+     */
+    public ProtosLexicalEnvironment lexicalEnvironmentForMaterializedContextCaptureForRuntime() {
+        ProtosLexicalEnvironment current = currentEnvironment;
+        if (current == null) {
+            current = ProtosLexicalEnvironment.materialized(context, capturedEnvironment);
             currentEnvironment = current;
         }
         return current;

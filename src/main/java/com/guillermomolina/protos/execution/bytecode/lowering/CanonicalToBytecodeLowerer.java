@@ -1082,18 +1082,18 @@ final class CanonicalToBytecodeLowerer {
                             frameLocalRange);
             currentRootFrameLayout = frameLocalLayout;
             /*
-             * PERF025 frame-materialization slice: declaring a binding no
-             * longer implies a persistent materialized frame. Only a root
-             * that may need its bindings outside its live frame installs the
-             * escape-safe (BUG013) materialized-frame authority at entry.
+             * PERF025 / I115-E1: declaring a binding does not
+             * materialize its frame. Admitted module roots defer durable
+             * authority until their first frame-native binding creation;
+             * other persistent-authority roots retain their existing
+             * installation path.
              */
             if (prologFrameAuthority) {
                 /*
-                 * I112 / PLAT062-T: the root still requires its persistent
-                 * authority; EnterRoot installs exactly that authority at
-                 * entry (recorded below), so its bindings use the
-                 * frame-native operations over the same range and layout and
-                 * no body operation installs it.
+                 * I115-E1: the admitted module uses frame-native
+                 * creation and read operations. The first creation
+                 * performs the existing live-frame transition to durable
+                 * authority. EnterRoot performs no installation.
                  */
                 currentRootFrameNativeLocals = frameLocalRange;
                 currentRootFrameNativeLayout = frameLocalLayout;
@@ -1509,17 +1509,11 @@ final class CanonicalToBytecodeLowerer {
                                     ? ProtosDiagnosticRootIdentity.TOP_LEVEL
                                     : ProtosDiagnosticRootIdentity.CLOSURE));
         }
-        if (prologFrameAuthority) {
-            result.recordPrologFrameLexicalAuthority(
-                    LocalRangeAccessor.constantOf(frameLocalRange),
-                    frameLocalLayout);
-        } else {
-            result.recordPrologFrameLexicalAuthority(null, null);
-            if (currentRootFrameNativeLayout != null) {
-                result.recordFrameNativeBindings(
-                        LocalRangeAccessor.constantOf(currentRootFrameNativeLocals),
-                        currentRootFrameNativeLayout);
-            }
+        if (currentRootFrameNativeLayout != null) {
+            result.recordFrameNativeBindings(
+                    LocalRangeAccessor.constantOf(
+                            currentRootFrameNativeLocals),
+                    currentRootFrameNativeLayout);
         }
         return result;
     }

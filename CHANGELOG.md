@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.386-SNAPSHOT
+
+- `I115-E` (#931): reduce Closure creation and root-entry cost
+  without changing D013 polymorphic invocation semantics.
+  - I115-E1: stop installing materialized-frame lexical authority
+    eagerly at root entry. Durable authority is installed on the
+    first admitted frame-native binding establishment, while the
+    frame is live, preserving binding identity, presence,
+    establishment history and installation invalidation.
+  - I115-E2: specialize published Closure creation for activations
+    whose genuine lexical context is already materialized, and read
+    ReturnHome/method home without Optional allocation. Object
+    construction keeps capturing the enclosing lexical environment.
+  - Maintainer validation: `make check` PASS; integrated
+    `make test` PASS.
+
 ## 0.3.385-SNAPSHOT
 
 - `I115-C/D` (#931): optimize terminal Closure Call1 execution

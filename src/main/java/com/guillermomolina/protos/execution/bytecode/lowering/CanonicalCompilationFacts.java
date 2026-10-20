@@ -588,15 +588,16 @@ final class CanonicalCompilationFacts {
     }
 
     /**
-     * PERF025 frame-materialization slice: conservative lowering decision on
-     * whether a genuine root must install its persistent, escape-safe
-     * materialized-frame authority at entry, or may keep its statically proven
-     * current bindings in its ordinary frame locals for the lifetime of its
-     * live frame.
+     * PERF025 / I115-E1: conservative lowering decision on whether
+     * a genuine root requires durable, escape-safe frame authority,
+     * or may keep its statically proven current bindings in ordinary
+     * frame locals for the lifetime of its live frame.
      *
      * <p>Only a Closure root can avoid the authority: a top-level/module root
      * may share its activation with later roots (REPL/module persistence and
-     * the I072-C authority handoff), so it always installs it. A Closure root
+     * the I072-C authority handoff), so it must install durable authority
+     * no later than its first admitted frame-native binding creation.
+     * A Closure root
      * avoids it only when nothing in its own parameters or body can make its
      * current execution context observable or capturable, or reach a current
      * binding other than through its static identity:

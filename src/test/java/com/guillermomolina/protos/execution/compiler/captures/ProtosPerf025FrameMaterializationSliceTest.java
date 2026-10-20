@@ -376,6 +376,120 @@ final class ProtosPerf025FrameMaterializationSliceTest {
     }
 
     @Test
+    void admittedModulePreservesCapturedBindingsAfterReturn()
+            throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue moduleContext = fixture.module.context();
+                    assertNull(
+                            fixture.module
+                                    .currentLexicalBindingAuthorityForRuntime());
+
+                    ProtosClosureValue value = assertInstanceOf(
+                            ProtosClosureValue.class,
+                            run(fixture,
+                                    "reader: () => value\n"
+                                            + "value: () => 7\n"
+                                            + "reader()"));
+
+                    ProtosClosureValue reader = assertInstanceOf(
+                            ProtosClosureValue.class,
+                            moduleContext.readLocalSlot("reader").orElseThrow());
+
+                    assertSame(
+                            value,
+                            moduleContext.readLocalSlot("value").orElseThrow());
+                    assertSame(
+                            moduleContext,
+                            reader.capturedLexicalEnvironmentForRuntime().context());
+                    assertSame(
+                            reader.capturedLexicalEnvironmentForRuntime(),
+                            value.capturedLexicalEnvironmentForRuntime());
+                    assertSame(value, run(fixture, "reader()"));
+
+                    moduleContext.removeLocalSlot("value");
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> run(fixture, "reader()"));
+
+                    ProtosObjectValue replacement = newObject();
+                    moduleContext.createLocalSlot("value", replacement);
+                    assertSame(replacement, run(fixture, "reader()"));
+                });
+    }
+
+    @Test
+    void admittedModuleRetainsEarlierBindingsAcrossRootHandoff()
+            throws Exception {
+        withFixture(
+                fixture -> {
+                    ProtosObjectValue moduleContext = fixture.module.context();
+
+                    assertNull(
+                            fixture.module
+                                    .currentLexicalBindingAuthorityForRuntime());
+
+                    assertEquals(
+                            7L,
+                            unwrapNumber(
+                                    run(fixture,
+                                            "reader: () => 7\n"
+                                                    + "reader()")));
+
+                    Object first = moduleContext
+                            .readLocalSlot("reader")
+                            .orElseThrow();
+
+                    assertInstanceOf(
+                            ProtosFrameLexicalBindingAuthority.class,
+                            fixture.module
+                                    .currentLexicalBindingAuthorityForRuntime());
+
+                    assertEquals(
+                            11L,
+                            unwrapNumber(
+                                    run(fixture,
+                                            "writer: () => 11\n"
+                                                    + "writer()")));
+
+                    assertSame(
+                            first,
+                            moduleContext
+                                    .readLocalSlot("reader")
+                                    .orElseThrow());
+
+                    assertEquals(
+                            7L,
+                            unwrapNumber(run(fixture, "reader()")));
+                });
+    }
+
+    @Test
+    void admittedModulePreservesBindingsOnExceptionalExit()
+            throws Exception {
+        withFixture(
+                fixture -> {
+                    assertThrows(
+                            ProtosSignalException.class,
+                            () -> run(
+                                    fixture,
+                                    "reader: () => value\n"
+                                            + "value: () => 7\n"
+                                            + "missing()"));
+
+                    ProtosObjectValue moduleContext = fixture.module.context();
+                    Object value = moduleContext
+                            .readLocalSlot("value").orElseThrow();
+
+                    assertInstanceOf(
+                            ProtosFrameLexicalBindingAuthority.class,
+                            fixture.module
+                                    .currentLexicalBindingAuthorityForRuntime());
+                    assertSame(value, run(fixture, "reader()"));
+                });
+    }
+
+    @Test
     void noLexicalAuthorityOrToolingViewRetainsAVirtualFrame() {
         for (Class<?> owner :
                 List.of(

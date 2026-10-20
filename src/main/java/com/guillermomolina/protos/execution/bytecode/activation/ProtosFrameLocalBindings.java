@@ -169,6 +169,27 @@ final class ProtosFrameLocalBindings {
     }
 
     /**
+     * Promotes the bindings of a live root only when durable lexical
+     * authority is required. The live Frame is never retained.
+     *
+     * The existing transition preserves binding identity, presence,
+     * establishment history and installation invalidation.
+     */
+    static void promoteLiveFrameLexicalAuthority(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            BytecodeLocation location,
+            com.oracle.truffle.api.frame.Frame liveFrame) {
+        installFrameLexicalAuthorityOnTransition(
+                frameBackedLocals,
+                frameBackedLayout,
+                activation,
+                location,
+                liveFrame.materialize());
+    }
+
+    /**
      * Installs the materialized-frame authority of a live root lowered
      * without {@link InstallFrameLexicalAuthority}, unless the authority
      * already installed is that root's own over this same frame. Callers pass

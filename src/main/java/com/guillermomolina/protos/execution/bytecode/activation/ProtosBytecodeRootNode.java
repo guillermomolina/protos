@@ -314,13 +314,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I112 / PLAT062-T: the persistent frame lexical authority of a root that
-     * EnterRoot installs at entry instead of an InstallFrameLexicalAuthority
-     * body operation, or null. Recorded by the lowerer once per parse, before
-     * the root can execute; the same range and layout as its frame-native
-     * creation and read operations.
-     */
-    /*
      * I112: whether EpilogForReturn applies the MaterializeReturnCarrier
      * projection, exactly at the roots whose terminal value the lowerer used
      * to wrap in that operation. Every other root (an I101-B scalar-lane
@@ -335,24 +328,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     final boolean epilogProjectsReturnCarrier() {
         return epilogProjectsReturnCarrier;
-    }
-
-    private LocalRangeAccessor prologAuthorityLocals;
-    private ProtosFrameLexicalLayout prologAuthorityLayout;
-
-    final void recordPrologFrameLexicalAuthority(
-            LocalRangeAccessor frameBackedLocals,
-            ProtosFrameLexicalLayout frameBackedLayout) {
-        this.prologAuthorityLocals = frameBackedLocals;
-        this.prologAuthorityLayout = frameBackedLayout;
-    }
-
-    final LocalRangeAccessor prologAuthorityLocals() {
-        return prologAuthorityLocals;
-    }
-
-    final ProtosFrameLexicalLayout prologAuthorityLayout() {
-        return prologAuthorityLayout;
     }
 
     final void recordFrameNativeBindings(
@@ -415,12 +390,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         if (frameNativeBindingLocals == null) {
             return;
         }
-        ProtosFrameLocalBindings.installFrameLexicalAuthorityOnTransition(
+        ProtosFrameLocalBindings.promoteLiveFrameLexicalAuthority(
                 frameNativeBindingLocals,
                 frameNativeBindingLayout,
                 activation,
                 location,
-                frame.materialize());
+                frame);
     }
 
     @Override
@@ -481,49 +456,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * returns it unchanged.
      */
     /**
-     * I112 / PLAT062-T root prologue. It never creates a rich activation (the
-     * activation stays lazy, {@link CurrentActivation}) and leaves every
-     * existing entry contract unchanged; a root registered by the lowerer
-     * additionally receives its persistent frame lexical authority here.
-     * I111-B: an auxiliary structured/C-prime root never records that
-     * authority, so the prologue does nothing for it.
+     * I115-E1: root entry does not install a materialized-frame
+     * lexical authority.
+     *
+     * Admitted module bindings use the existing frame-native creation
+     * transition. The first establishment installs durable authority
+     * while the executing frame is live. Before any establishment,
+     * there is no frame-owned lexical state to preserve on exit,
+     * exception or suspension.
+     *
+     * Keeping the Prolog preserves the Bytecode DSL root shape.
      */
     @Prolog
     public static final class EnterRoot {
         @Specialization
-        public static void perform(
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind VirtualFrame frame) {
-            LocalRangeAccessor locals = root.prologAuthorityLocals();
-            if (locals != null) {
-                /*
-                 * I112: exactly the entry installation of
-                 * InstallFrameLexicalAuthority, before the first body
-                 * operation, over this root's own frame, location and the
-                 * layout its frame-native operations use. Those operations
-                 * then recognize it as the installed authority.
-                 */
-                InstallFrameLexicalAuthority.perform(
-                        locals,
-                        root.prologAuthorityLayout(),
-                        ProtosFrameArguments.activation(frame),
-                        bytecodeNode,
-                        firstBodyBytecodeIndex(bytecodeNode, bytecodeIndex),
-                        frame);
-            }
-        }
-
-        /*
-         * The authority's location must lie inside the root's local scope,
-         * which starts after the prologue: the first body instruction, where
-         * InstallFrameLexicalAuthority itself used to execute.
-         */
-        @TruffleBoundary
-        private static int firstBodyBytecodeIndex(BytecodeNode bytecodeNode, int prologIndex) {
-            return bytecodeNode.getInstruction(prologIndex).getNextBytecodeIndex();
-        }
+        public static void perform() {}
     }
 
     /**
@@ -2767,16 +2714,44 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     @ConstantOperand(type = boolean.class, name = "compactCapture")
     public static final class MaterializeCurrentClosure {
-        @Specialization(guards = "hasPublishedActivation(frame)")
-        public static ProtosClosureValue published(
+        @Specialization(guards = {
+                "hasPublishedActivation(frame)",
+                "hasMaterializedCaptureContext(frame)"})
+        public static ProtosClosureValue publishedMaterialized(
                 boolean compactCapture,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
-            return MaterializeClosure.perform(
-                    ProtosFrameArguments.publishedActivation(frame.getArguments()),
+            ProtosActivation activation =
+                    ProtosFrameArguments.publishedActivation(frame.getArguments());
+            return new ProtosClosureValue(
                     definition,
-                    executionPlanCell);
+                    activation.lexicalEnvironmentForMaterializedContextCaptureForRuntime(),
+                    activation.receiver(),
+                    activation.methodHomeOrNullForRuntime(),
+                    activation.returnHomeOrNullForRuntime(),
+                    activation.preludeOrNullForRuntime(),
+                    executionPlanCell.plan());
+        }
+
+        @Specialization(guards = {
+                "hasPublishedActivation(frame)",
+                "!hasMaterializedCaptureContext(frame)"})
+        public static ProtosClosureValue publishedGeneral(
+                boolean compactCapture,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlanCell executionPlanCell,
+                @Bind VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.publishedActivation(frame.getArguments());
+            return new ProtosClosureValue(
+                    definition,
+                    activation.lexicalEnvironmentForClosureCapture(),
+                    activation.receiver(),
+                    activation.methodHomeOrNullForRuntime(),
+                    activation.returnHomeOrNullForRuntime(),
+                    activation.preludeOrNullForRuntime(),
+                    executionPlanCell.plan());
         }
 
         @Specialization(guards = {"compactCapture", "!hasPublishedActivation(frame)"})
@@ -2799,6 +2774,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosFrameArguments.activation(frame),
                     definition,
                     executionPlanCell);
+        }
+
+        @NonIdempotent
+        static boolean hasMaterializedCaptureContext(VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.publishedActivation(frame.getArguments());
+            return activation.canCaptureMaterializedContextForRuntime();
         }
 
         @NonIdempotent

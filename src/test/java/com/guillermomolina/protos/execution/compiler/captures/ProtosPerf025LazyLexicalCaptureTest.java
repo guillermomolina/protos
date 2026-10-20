@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -34,6 +35,7 @@ import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.Truffle;
@@ -635,6 +637,133 @@ final class ProtosPerf025LazyLexicalCaptureTest {
         return values.stream()
                 .map(ProtosPerf025LazyLexicalCaptureTest::integerValue)
                 .toList();
+    }
+
+    @Test
+    void publishedModuleClosureCreationPreservesCaptureAndMetadata()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue first =
+                    parsedClosure(
+                            "() => 1",
+                            "i115-e2a-published-first.protos",
+                            module);
+            ProtosClosureValue second =
+                    parsedClosure(
+                            "() => 2",
+                            "i115-e2a-published-second.protos",
+                            module);
+            assertNotSame(first, second);
+
+            ProtosLexicalEnvironment expectedEnvironment =
+                    module.lexicalEnvironmentForClosureCapture();
+            assertSame(
+                    expectedEnvironment,
+                    first.capturedLexicalEnvironmentForRuntime());
+            assertSame(
+                    expectedEnvironment,
+                    second.capturedLexicalEnvironmentForRuntime());
+            assertSame(
+                    module.context(),
+                    first.capturedLexicalEnvironmentForRuntime().context());
+            assertSame(module.receiver(), first.capturedReceiver());
+            assertEquals(module.methodHome(), first.methodHome());
+            assertEquals(module.returnHome(), first.returnHome());
+            assertEquals(module.prelude(), first.prelude());
+
+            assertEquals(
+                    "1",
+                    integerValue(invokeDirect(first, module).result()));
+            assertEquals(
+                    "2",
+                    integerValue(invokeDirect(second, module).result()));
+        });
+    }
+
+    @Test
+    void nullableClosureMetadataAccessorsPreserveExactValues()
+            throws Exception {
+        withCore(module -> {
+            assertNull(module.methodHomeOrNullForRuntime());
+            assertNull(module.returnHomeOrNullForRuntime());
+            assertSame(
+                    module.prelude().orElseThrow(),
+                    module.preludeOrNullForRuntime());
+
+            ProtosObjectValue methodHome =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosActivation withMethodHome =
+                    ProtosActivation.withMethodHome(
+                            module.context(),
+                            List.of(),
+                            module.receiver(),
+                            methodHome);
+            assertSame(
+                    methodHome,
+                    withMethodHome.methodHomeOrNullForRuntime());
+            assertSame(
+                    withMethodHome.methodHome().orElseThrow(),
+                    withMethodHome.methodHomeOrNullForRuntime());
+
+            ProtosReturnHome returnHome = new ProtosReturnHome();
+            ProtosActivation withReturnHome =
+                    ProtosActivation.withReturnHome(
+                            module.context(),
+                            List.of(),
+                            module.receiver(),
+                            returnHome);
+            assertSame(
+                    returnHome,
+                    withReturnHome.returnHomeOrNullForRuntime());
+            assertSame(
+                    withReturnHome.returnHome().orElseThrow(),
+                    withReturnHome.returnHomeOrNullForRuntime());
+        });
+    }
+
+    @Test
+    void materializedCaptureFastPathSharesExactLexicalEnvironment()
+            throws Exception {
+        withCore(module -> {
+            assertTrue(module.canCaptureMaterializedContextForRuntime());
+            ProtosLexicalEnvironment expected =
+                    module.lexicalEnvironmentForMaterializedContextCaptureForRuntime();
+            assertSame(expected, module.lexicalEnvironmentForClosureCapture());
+            assertSame(module.context(), expected.context());
+
+            ProtosClosureValue first = parsedClosure(
+                    "() => 1", "i115-e2b-materialized-first.protos", module);
+            ProtosClosureValue second = parsedClosure(
+                    "() => 2", "i115-e2b-materialized-second.protos", module);
+
+            assertNotSame(first, second);
+            assertSame(expected, first.capturedLexicalEnvironmentForRuntime());
+            assertSame(expected, second.capturedLexicalEnvironmentForRuntime());
+            assertEquals("1", integerValue(invokeDirect(first, module).result()));
+            assertEquals("2", integerValue(invokeDirect(second, module).result()));
+        });
+    }
+
+    @Test
+    void objectConstructionCaptureRetainsEnclosingEnvironment()
+            throws Exception {
+        withCore(module -> {
+            ProtosLexicalEnvironment enclosing =
+                    module.lexicalEnvironmentForClosureCapture();
+            ProtosObjectValue object =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosActivation construction =
+                    ProtosActivation.forObjectConstruction(object, module);
+
+            assertFalse(construction.canCaptureMaterializedContextForRuntime());
+            assertSame(enclosing, construction.lexicalEnvironmentForClosureCapture());
+
+            ProtosClosureValue closure = parsedClosure(
+                    "() => 3", "i115-e2b-construction-fallback.protos", construction);
+
+            assertSame(enclosing, closure.capturedLexicalEnvironmentForRuntime());
+            assertEquals("3", integerValue(invokeDirect(closure, module).result()));
+        });
     }
 
     private static Object privateField(Object target, String name)

@@ -311,6 +311,75 @@ final class ProtosI112TailContinuationTest {
         }
     }
 
+    @Test
+    void i115E1AdmittedModuleRetainsLexicalAuthorityAcrossSuspension()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain =
+                    new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosFutureValue wait =
+                    new ProtosFutureValue(prelude.futurePrototype(), domain);
+            AtomicInteger before = new AtomicInteger();
+            AtomicInteger after = new AtomicInteger();
+
+            module.context().createLocalSlot("wait", wait);
+            module.context().createLocalSlot("before", counter(before));
+            module.context().createLocalSlot("after", counter(after));
+
+            ProtosBytecodeRootNode root = lowerRoot(
+                    scope.language(),
+                    "seed: () => 7\n"
+                            + "reader: () => { before()\n"
+                            + "wait.value()\n"
+                            + "after()\n"
+                            + "seed() }\n"
+                            + "reader()",
+                    "i115-e1-suspension.protos");
+
+            assertTerminal(root, "c.InvokeClosureZeroTail");
+
+            ProtosTask task = execute(domain, module, root);
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+            assertEquals(1, before.get());
+            assertEquals(0, after.get());
+
+            assertInstanceOf(
+                    ProtosFrameLexicalBindingAuthority.class,
+                    module.currentLexicalBindingAuthorityForRuntime());
+
+            assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("seed").orElseThrow());
+
+            ProtosClosureValue reader = assertInstanceOf(
+                    ProtosClosureValue.class,
+                    module.context().readLocalSlot("reader").orElseThrow());
+
+            assertSame(
+                    module.context(),
+                    reader.capturedLexicalEnvironmentForRuntime().context());
+
+            ProtosObjectValue resolved =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+            assertTrue(wait.resolve(resolved, module));
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.COMPLETED, task.state());
+            assertInteger(7, task.result().orElseThrow());
+            assertEquals(1, before.get());
+            assertEquals(1, after.get());
+
+            assertInstanceOf(
+                    ProtosFrameLexicalBindingAuthority.class,
+                    module.currentLexicalBindingAuthorityForRuntime());
+        }
+    }
+
     // ---- 7. A suspending call override --------------------------------------------------
 
     @Test
