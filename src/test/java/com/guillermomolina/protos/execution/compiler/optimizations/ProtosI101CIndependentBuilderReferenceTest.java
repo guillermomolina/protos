@@ -476,8 +476,9 @@ final class ProtosI101CIndependentBuilderReferenceTest {
 
                     // I112: the creating activation is bound from the frame.
                     // I115: the literal reads no outer binding, so it does not
-                    // capture its creator's context.
-                    builder.beginMaterializeCurrentClosure(true, false);
+                    // capture its creator's context. I115-H: nor can it
+                    // observe its ReturnHome.
+                    builder.beginMaterializeCurrentClosure(true, false, false);
                     builder.emitLoadConstant(literal);
                     builder.emitLoadConstant(literalPlan);
                     builder.endMaterializeCurrentClosure();

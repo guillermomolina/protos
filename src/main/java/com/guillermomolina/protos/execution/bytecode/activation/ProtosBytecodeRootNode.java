@@ -907,13 +907,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     frame.materialize());
         }
 
+        /*
+         * I115-H (EXPERIMENTAL): the static unary layout is admitted like a
+         * compact call; compactSuppliedArgumentOrNull reads both layouts.
+         */
         @NonIdempotent
         static boolean isCompactUnbound(
                 LocalRangeAccessor frameBackedLocals,
                 int ordinal,
                 BytecodeNode bytecodeNode,
                 VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
+            Object[] arguments = frame.getArguments();
+            return (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                            || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments))
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
         }
@@ -1338,9 +1344,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             || !accessor.isCleared(bytecodeNode, frame));
         }
 
+        /*
+         * I115-H (EXPERIMENTAL): a static unary invocation never publishes an
+         * activation, so its frame is read directly like a compact one. Local
+         * to this operation; isUnmaterializedCompactCall is unchanged.
+         */
         @NonIdempotent
         static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments);
         }
     }
 
@@ -2767,10 +2780,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * and no compact capture owner is created. That classification is a
      * recorded divergence from the unconditional capture of {@code
      * CALLABLES.md}, pending an owner decision.
+     *
+     * <p>I115-H (EXPERIMENTAL): when {@code mayObserveReturnHome} (the
+     * lowering's {@code CanonicalCompilationFacts#mayObserveReturnHome}) is
+     * also false, both non-capturing specializations build the lightweight
+     * {@link ProtosClosureValue#experimentalNonCapturing} representation and
+     * consult neither the creator's activation nor its frame arguments. A
+     * definition that may observe its ReturnHome ({@code ^}) keeps the I115-G
+     * construction with the creator's ReturnHome. The capturing
+     * specializations are unchanged.
      */
     @Operation
     @ConstantOperand(type = boolean.class, name = "compactCapture")
     @ConstantOperand(type = boolean.class, name = "capturesCreatorContext")
+    @ConstantOperand(type = boolean.class, name = "mayObserveReturnHome")
     public static final class MaterializeCurrentClosure {
         @Specialization(guards = {
                 "!capturesCreatorContext",
@@ -2778,9 +2801,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue publishedWithoutCreatorContext(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
+            if (!mayObserveReturnHome) {
+                return ProtosClosureValue.experimentalNonCapturing(
+                        definition, executionPlanCell.plan());
+            }
             ProtosActivation activation =
                     ProtosFrameArguments.publishedActivation(frame.getArguments());
             return new ProtosClosureValue(
@@ -2799,11 +2827,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue compactWithoutCreatorContext(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
-                    frame.getArguments(), definition, executionPlanCell, false);
+                    frame.getArguments(), definition, executionPlanCell,
+                    false, mayObserveReturnHome);
         }
 
         @Specialization(guards = {
@@ -2813,6 +2843,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue publishedMaterialized(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
@@ -2835,6 +2866,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue publishedGeneral(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
@@ -2857,11 +2889,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue compact(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
             return ProtosFrameArguments.materializeCompactClosure(
-                    frame.getArguments(), definition, executionPlanCell, true);
+                    frame.getArguments(), definition, executionPlanCell,
+                    true, mayObserveReturnHome);
         }
 
         @Specialization(guards = {
@@ -2871,6 +2905,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue rich(
                 boolean compactCapture,
                 boolean capturesCreatorContext,
+                boolean mayObserveReturnHome,
                 CanonicalClosure definition,
                 ProtosClosureExecutionPlanCell executionPlanCell,
                 @Bind VirtualFrame frame) {
@@ -9380,6 +9415,188 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return PrepareSendArguments
                     .fastOrdinarySendTarget(admittedClosure, enteredContext);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): the terminal Call1 of a statically
+     * proven local Closure call (CanonicalCompilationFacts
+     * .StaticLocalClosureCall). The lowering elided the Closure creation and
+     * its binding; the callee's plan cell is a constant operand and the only
+     * dynamic operand is the supplied value. There is no receiver, no
+     * {@code Object.call} (D013) selection and no Closure instance.
+     *
+     * <p>The direct tier caches, per entered Context, the Context-owned
+     * {@link RootCallTarget} of the plan ({@link #staticTargetOrNull}, at
+     * installation only) and one {@link DirectCallNode}. The callee is
+     * entered with the reduced {@link
+     * ProtosFrameArguments#experimentalStaticUnaryCall} layout: no caller,
+     * Task, ReturnHome or Closure is transported, no caller activation is
+     * created and no suspension transport is compiled, since the direct tier
+     * requires the callee root's non-suspension proof. A Context change past
+     * the PIC limit, the uncached interpreter, or a target without that proof
+     * takes {@link #generic}, which resolves the same target and uses the
+     * same layout; it never degrades to {@link InvokeClosureOneTail}. A
+     * missing target or a suspended outcome contradicts the static admission
+     * and is an explicit internal error.
+     *
+     * <p>NORMATIVE DIVERGENCE: later changes to {@code Object.call} are not
+     * observed, and the callee has no caller, Task or ReturnHome.
+     */
+    @Operation
+    @ConstantOperand(
+            type = ProtosClosureExecutionPlanCell.class,
+            name = "planCell")
+    public static final class InvokeStaticClosureOneTail {
+        /*
+         * The Context guard of direct must bind ContextReference.get
+         * visibly: the DSL treats a guard as cache-keying (allowing more
+         * than one instance) only when it binds an operand or a
+         * ContextReference/LanguageReference/Reference.get call. Otherwise
+         * the explicit limit is ignored and code generation fails (25.4.4).
+         * The node argument is $bytecodeNode, not $node: in a cache-keying
+         * guard, $node would denote the cache entry being selected.
+         */
+        static final com.oracle.truffle.api.TruffleLanguage.ContextReference<ProtosLanguageContext>
+                CONTEXT = com.oracle.truffle.api.TruffleLanguage.ContextReference.create(
+                        ProtosLanguage.class);
+
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static Object direct(
+                ProtosClosureExecutionPlanCell planCell,
+                Object supplied0,
+                @Bind("CONTEXT.get($bytecodeNode)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("provenStaticTargetOrNull(planCell, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node) {
+            Object outcome;
+            try {
+                outcome = node.call(
+                        ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+            java.util.Objects.requireNonNull(outcome, "static Closure invocation returned null");
+            return outcome;
+        }
+
+        @Specialization
+        @InliningCutoff
+        public static Object generic(
+                ProtosClosureExecutionPlanCell planCell,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached IndirectCallNode indirectCall) {
+            RootCallTarget target = staticTargetOrNull(planCell, enteredContext);
+            if (target == null) {
+                throw staticAdmissionContradiction(
+                        "the admitted plan has no Bytecode target in the entered Context");
+            }
+            Object outcome;
+            try {
+                outcome = indirectCall.call(
+                        target,
+                        ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+            java.util.Objects.requireNonNull(outcome, "static Closure invocation returned null");
+            if (ProtosTailCallContinuation.isSuspended(outcome)) {
+                throw staticAdmissionContradiction(
+                        "the statically admitted callee suspended");
+            }
+            return outcome;
+        }
+
+        /*
+         * An internal error, never a guest Error: the lowering admitted this
+         * site, so the plan contradicts the static admission.
+         */
+        @TruffleBoundary
+        private static IllegalStateException staticAdmissionContradiction(String reason) {
+            return new IllegalStateException(
+                    "I115-H static Closure call admission contradicts its executable plan: "
+                            + reason);
+        }
+
+        /*
+         * Cache initializers may run before the cachedTarget != null guard
+         * rejects an entry, so a null target must not reach
+         * DirectCallNode.create.
+         */
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+        }
+
+        /**
+         * The direct tier's target: {@link #staticTargetOrNull} when its root
+         * also carries the non-suspension proof, so the entry compiles no
+         * suspension handling. Otherwise the site stays on {@link #generic}.
+         */
+        @TruffleBoundary
+        static RootCallTarget provenStaticTargetOrNull(
+                ProtosClosureExecutionPlanCell planCell,
+                ProtosLanguageContext enteredContext) {
+            RootCallTarget target = staticTargetOrNull(planCell, enteredContext);
+            return target != null
+                            && ((ProtosBytecodeRootNode) target.getRootNode())
+                                    .provablyNonSuspendingBody()
+                    ? target
+                    : null;
+        }
+
+        /**
+         * The Context-owned target of the plan in {@code enteredContext}: the
+         * plan itself when it was lowered by the entered language, else the
+         * entered Context's projection of the same definition, provided it is
+         * a Bytecode root. No Closure is created to obtain it.
+         */
+        @TruffleBoundary
+        static RootCallTarget staticTargetOrNull(
+                ProtosClosureExecutionPlanCell planCell,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null) {
+                return null;
+            }
+            ProtosClosureExecutionPlan template = planCell.plan();
+            CanonicalClosure definition = template.definitionForRuntime();
+            if (definition == null) {
+                return null;
+            }
+            ProtosLanguage enteredLanguage = enteredContext.languageForRuntime();
+            ProtosClosureExecutionPlan effectivePlan =
+                    template.language().orElseThrow() == enteredLanguage
+                            ? template
+                            : enteredContext.bytecodeExecutionPlanForDefinition(
+                                    definition, template);
+            if (effectivePlan == null
+                    || effectivePlan.definitionForRuntime() != definition
+                    || effectivePlan.language().orElseThrow() != enteredLanguage) {
+                return null;
+            }
+            RootCallTarget target = effectivePlan.bytecodeActivationTargetForComposition();
+            if (target == null
+                    || !(target.getRootNode() instanceof ProtosBytecodeRootNode)) {
+                return null;
+            }
+            return target;
         }
 
         @NonIdempotent
