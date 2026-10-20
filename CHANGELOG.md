@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.389-SNAPSHOT
+
+- `LM013` (#861): D209-C document-local LSP intelligence.
+  - Hover, completion and signature help now answer for any open
+    Protos document, including loose files and documents opened
+    without a workspace folder, using only the exact current buffer.
+  - The analyses are unchanged: proven Closure parameters,
+    parser-accepted reserved words and literal-Closure signatures
+    only; no slot, member, import, module or dynamic-call inference.
+  - Definition, references and workspace symbols still require a
+    canonical ProjectBinding; opening a document never infers project
+    membership.
+  - Coverage in the Hover, Completion, Signature Help and integrated
+    JSON-RPC editor tests; `docs/guide/tools/language-server.md`
+    distinguishes document-local features from project navigation.
+
 ## 0.3.388-SNAPSHOT
 
 - `BUG022`: the formatter rejected or dropped document-boundary

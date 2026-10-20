@@ -91,8 +91,11 @@ class ProtosLanguageServerSignatureHelpTest {
 
         assertNull(signatureHelp(server, uri, 0, 0));
 
+        // D209-C: document-local signature help does not depend on ProjectBinding ownership.
         current.set(Optional.empty());
-        assertNull(signatureHelp(server, uri, 0, source.length()));
+        assertEquals(
+                "(first, second: 2, ...rest)",
+                signatureHelp(server, uri, 0, source.length()).getSignatures().get(0).getLabel());
     }
 
     @Test
@@ -141,21 +144,51 @@ class ProtosLanguageServerSignatureHelpTest {
     }
 
     @Test
-    void looseOrNonCanonicalOpenDocumentNeverGainsSignatureAuthority() throws Exception {
+    void looseAndNonCanonicalOpenDocumentsGetDocumentLocalSignatureHelp() throws Exception {
         ProjectFixture project = project("authority");
         ProtosLanguageServer server = initialized(project, canonical(project));
         String source = "((a) => a)(1)";
 
+        // The disk content differs from the open buffer: only the snapshot answers.
         Path loose = temporary.resolve("Loose.protos");
-        Files.writeString(loose, source);
+        Files.writeString(loose, "((disk) => disk)(1)");
         String looseUri = loose.toUri().toString();
         server.textDocuments().didOpen(open(looseUri, 1, source));
-        assertNull(signatureHelp(server, looseUri, 0, 12));
+        SignatureHelp help = signatureHelp(server, looseUri, 0, 12);
+        assertEquals("(a)", help.getSignatures().get(0).getLabel());
+        assertEquals(0, help.getActiveParameter());
+        assertNull(signatureHelp(server, looseUri, 0, 99));
+
+        // Calls through a name or a dynamic receiver never invent a signature.
+        server.textDocuments().didChange(change(looseUri, 2, "f: (a, b) => a\nf(1, 2)"));
+        assertNull(signatureHelp(server, looseUri, 1, 5));
+        String receiver = "receiver.member(1, ";
+        server.textDocuments().didChange(change(looseUri, 3, receiver));
+        assertNull(signatureHelp(server, looseUri, 0, receiver.length()));
+
+        server.textDocuments().didChange(change(looseUri, 4, "((other) => other)("));
+        assertEquals(
+                "(other)",
+                signatureHelp(server, looseUri, 0, 19).getSignatures().get(0).getLabel());
+
+        DidCloseTextDocumentParams close = new DidCloseTextDocumentParams();
+        close.setTextDocument(new TextDocumentIdentifier(looseUri));
+        server.textDocuments().didClose(close);
+        assertNull(signatureHelp(server, looseUri, 0, 19));
+
+        // U+1F600 occupies two UTF-16 code units at characters 15 and 16.
+        Path wide = temporary.resolve("Wide.protos");
+        String wideUri = wide.toUri().toString();
+        server.textDocuments().didOpen(open(wideUri, 1, "((a, b) => a)(\"😀\",\r\n  "));
+        assertEquals(1, signatureHelp(server, wideUri, 1, 2).getActiveParameter());
+        assertNull(signatureHelp(server, wideUri, 0, 16));
 
         String nonCanonicalUri =
                 project.source().toUri().toString().replace("/Main.protos", "/./Main.protos");
         server.textDocuments().didOpen(open(nonCanonicalUri, 1, source));
-        assertNull(signatureHelp(server, nonCanonicalUri, 0, 12));
+        assertEquals(
+                "(a)",
+                signatureHelp(server, nonCanonicalUri, 0, 12).getSignatures().get(0).getLabel());
 
         // Canonical but not open: disk content is never consulted.
         Files.writeString(project.source(), source);

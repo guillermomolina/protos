@@ -87,27 +87,60 @@ class ProtosLanguageServerHoverTest {
         Hover literal = hover(server, uri, 0, 18);
         assertEquals("Syntax\nNumber literal", literal.getContents().getRight().getValue());
 
+        // D209-C: document-local hover does not depend on ProjectBinding ownership.
         current.set(Optional.empty());
-        assertNull(hover(server, uri, 1, 3));
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                hover(server, uri, 1, 3).getContents().getRight().getValue());
     }
 
     @Test
-    void looseOrNonCanonicalOpenDocumentNeverGainsHoverAuthority() throws Exception {
+    void looseAndNonCanonicalOpenDocumentsGetDocumentLocalHover() throws Exception {
         ProjectFixture project = project("authority");
         ProtosLanguageServer server = initialized(project, canonical(project));
-        String source = "f: (value) => value\n";
+        String source = "f: (value) => value\nn: 1\n";
 
+        // The disk content differs from the open buffer: only the snapshot answers.
         Path loose = temporary.resolve("Loose.protos");
-        Files.writeString(loose, source);
+        Files.writeString(loose, "diskOnly: 'text'\n");
         String looseUri = loose.toUri().toString();
         server.textDocuments().didOpen(open(looseUri, 1, source));
-        assertNull(hover(server, looseUri, 0, 14));
+        Hover proven = hover(server, looseUri, 0, 16);
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                proven.getContents().getRight().getValue());
+        assertEquals(range(0, 14, 0, 19), proven.getRange());
+        assertEquals(
+                "Syntax\nNumber literal",
+                hover(server, looseUri, 1, 3).getContents().getRight().getValue());
+        assertNull(hover(server, looseUri, 1, 99));
+        assertNull(hover(server, looseUri, 99, 0));
+
+        server.textDocuments().didChange(change(looseUri, 2, "n: 'one'\n"));
+        assertEquals(
+                "Syntax\nString literal",
+                hover(server, looseUri, 0, 3).getContents().getRight().getValue());
+        assertNull(hover(server, looseUri, 1, 3));
+
+        DidCloseTextDocumentParams close = new DidCloseTextDocumentParams();
+        close.setTextDocument(new TextDocumentIdentifier(looseUri));
+        server.textDocuments().didClose(close);
         assertNull(hover(server, looseUri, 0, 3));
+
+        // U+1F600 occupies two UTF-16 code units.
+        Path wide = temporary.resolve("Wide.protos");
+        String wideUri = wide.toUri().toString();
+        server.textDocuments().didOpen(open(
+                wideUri, 1, "f: (value, a: \"😀\") => {\r\n  \"😀\"\r\n  value\r\n}\r\n"));
+        assertEquals(range(1, 2, 1, 6), hover(server, wideUri, 1, 4).getRange());
+        assertEquals(range(2, 2, 2, 7), hover(server, wideUri, 2, 6).getRange());
 
         String nonCanonicalUri =
                 project.source().toUri().toString().replace("/Main.protos", "/./Main.protos");
         server.textDocuments().didOpen(open(nonCanonicalUri, 1, source));
-        assertNull(hover(server, nonCanonicalUri, 0, 14));
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                hover(server, nonCanonicalUri, 0, 14).getContents().getRight().getValue());
 
         // Canonical but not open: disk content is never consulted.
         assertNull(hover(server, project.source().toUri().toString(), 0, 10));

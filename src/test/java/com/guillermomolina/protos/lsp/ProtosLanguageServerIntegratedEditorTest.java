@@ -61,6 +61,8 @@ import org.eclipse.lsp4j.ParameterInformation;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.Range;
+import org.eclipse.lsp4j.ReferenceContext;
+import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.ServerCapabilities;
 import org.eclipse.lsp4j.ShowMessageRequestParams;
 import org.eclipse.lsp4j.SignatureHelp;
@@ -212,7 +214,8 @@ class ProtosLanguageServerIntegratedEditorTest {
 
     @Test
     @Timeout(10)
-    void unsavedSnapshotsAndDocumentAuthorityGovernEveryLm010Answer() throws Exception {
+    void documentLocalAnswersFollowSnapshotsWhileNavigationKeepsProjectAuthority()
+            throws Exception {
         ProjectFixture project = project("authority");
         connection = connect(project);
         String uri = project.source().toUri().toString();
@@ -233,19 +236,92 @@ class ProtosLanguageServerIntegratedEditorTest {
         assertNull(connection.hover(uri, 1, 3));
         assertEmptyComplete(connection.completion(uri, 1, 3));
 
+        // D209-C: loose and non-canonical open documents get document-local
+        // intelligence, but never Definition or References authority.
         String source = "f: (value) => value\n((a) => a)(1)";
         String nonCanonicalUri = uri.replace("/Main.protos", "/./Main.protos");
         connection.open(nonCanonicalUri, 1, source);
-        assertNull(connection.hover(nonCanonicalUri, 0, 14));
-        assertNull(connection.signatureHelp(nonCanonicalUri, 1, 12, null));
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                connection.hover(nonCanonicalUri, 0, 14).getContents().getRight().getValue());
+        assertEquals(
+                "(a)",
+                connection.signatureHelp(nonCanonicalUri, 1, 12, null)
+                        .getSignatures().get(0).getLabel());
+        assertTrue(connection.definition(nonCanonicalUri, 0, 14).isEmpty());
+        assertTrue(connection.references(nonCanonicalUri, 0, 14).isEmpty());
 
         Path loose = temporary.resolve("Loose.protos");
-        Files.writeString(loose, source);
+        Files.writeString(loose, "diskOnly: 1\n");
         String looseUri = loose.toUri().toString();
         connection.open(looseUri, 1, source);
-        assertNull(connection.hover(looseUri, 0, 14));
-        assertNull(connection.signatureHelp(looseUri, 1, 12, null));
+        Hover looseHover = connection.hover(looseUri, 0, 16);
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                looseHover.getContents().getRight().getValue());
+        assertEquals(range(0, 14, 0, 19), looseHover.getRange());
+        assertEquals(
+                "(a)",
+                connection.signatureHelp(looseUri, 1, 12, null).getSignatures().get(0).getLabel());
+        CompletionList looseCompletion = connection.completion(looseUri, 0, 19);
+        assertFalse(looseCompletion.isIncomplete());
+        assertEquals(
+                List.of("value", "this", "context", "true", "false", "null"),
+                looseCompletion.getItems().stream().map(CompletionItem::getLabel).toList());
+        assertTrue(connection.definition(looseUri, 0, 14).isEmpty());
+        assertTrue(connection.references(looseUri, 0, 14).isEmpty());
+        assertNull(connection.hover(looseUri, 99, 0));
+
+        connection.change(looseUri, 2, "f: (a, b) => a\nf(1, ");
+        assertNull(connection.signatureHelp(looseUri, 1, 5, ","));
+        assertNull(connection.hover(looseUri, 0, 16));
+
+        connection.close(looseUri);
+        assertNull(connection.hover(looseUri, 0, 3));
         assertEmptyComplete(connection.completion(looseUri, 0, 19));
+    }
+
+    @Test
+    @Timeout(10)
+    void standaloneDocumentWithoutWorkspaceHasLocalIntelligenceButNoNavigation()
+            throws Exception {
+        ProjectFixture project = project("standalone");
+        connection = connectWithoutWorkspace(project);
+
+        String uri = temporary.resolve("Standalone.protos")
+                .toUri()
+                .toString();
+
+        String source = "f: (value) => value\n((a) => a)(1)";
+        connection.open(uri, 1, source);
+
+        Hover hover = connection.hover(uri, 0, 16);
+        assertNotNull(hover);
+        assertEquals(
+                "Proven binding\nClosure parameter: value",
+                hover.getContents().getRight().getValue());
+        assertEquals(range(0, 14, 0, 19), hover.getRange());
+
+        CompletionList completion = connection.completion(uri, 0, 19);
+        assertFalse(completion.isIncomplete());
+        assertEquals(
+                List.of("value", "this", "context", "true", "false", "null"),
+                completion.getItems().stream()
+                        .map(CompletionItem::getLabel)
+                        .toList());
+
+        SignatureHelp signature = connection.signatureHelp(
+                uri, 1, 12, null);
+        assertNotNull(signature);
+        assertEquals("(a)", signature.getSignatures().get(0).getLabel());
+
+        assertTrue(connection.definition(uri, 0, 16).isEmpty());
+        assertTrue(connection.references(uri, 0, 16).isEmpty());
+
+        connection.close(uri);
+        assertNull(connection.hover(uri, 0, 16));
+        assertEmptyComplete(connection.completion(uri, 0, 19));
+        assertNull(connection.signatureHelp(uri, 1, 12, null));
     }
 
     @Test
@@ -280,6 +356,16 @@ class ProtosLanguageServerIntegratedEditorTest {
     }
 
     private Connection connect(ProjectFixture project) throws Exception {
+        return connect(project, true);
+    }
+
+    private Connection connectWithoutWorkspace(ProjectFixture project)
+            throws Exception {
+        return connect(project, false);
+    }
+
+    private Connection connect(ProjectFixture project, boolean withWorkspace)
+            throws Exception {
         Pipe toServer = Pipe.open();
         Pipe toClient = Pipe.open();
         AtomicInteger exitCode = new AtomicInteger(-1);
@@ -303,7 +389,7 @@ class ProtosLanguageServerIntegratedEditorTest {
         LanguageServer remote = launcher.getRemoteProxy();
         return new Connection(
                 remote,
-                initialize(remote, project.root()),
+                initialize(remote, withWorkspace ? project.root() : null),
                 client,
                 exitCode,
                 toServer,
@@ -317,10 +403,12 @@ class ProtosLanguageServerIntegratedEditorTest {
             throws Exception {
         InitializeParams params = new InitializeParams();
         params.setCapabilities(new ClientCapabilities());
-        WorkspaceFolder folder = new WorkspaceFolder();
-        folder.setUri(root.toUri().toString());
-        folder.setName(root.getFileName().toString());
-        params.setWorkspaceFolders(List.of(folder));
+        if (root != null) {
+            WorkspaceFolder folder = new WorkspaceFolder();
+            folder.setUri(root.toUri().toString());
+            folder.setName(root.getFileName().toString());
+            params.setWorkspaceFolders(List.of(folder));
+        }
         ServerCapabilities capabilities = server.initialize(params)
                 .get(WAIT_SECONDS, TimeUnit.SECONDS)
                 .getCapabilities();
@@ -481,6 +569,16 @@ class ProtosLanguageServerIntegratedEditorTest {
                             new Position(line, character)))
                     .get(WAIT_SECONDS, TimeUnit.SECONDS)
                     .getLeft();
+        }
+
+        private List<? extends Location> references(String uri, int line, int character)
+                throws Exception {
+            return server.getTextDocumentService()
+                    .references(new ReferenceParams(
+                            new TextDocumentIdentifier(uri),
+                            new Position(line, character),
+                            new ReferenceContext(true)))
+                    .get(WAIT_SECONDS, TimeUnit.SECONDS);
         }
 
         private PublishDiagnosticsParams nextDiagnostics() throws Exception {

@@ -39,9 +39,9 @@ and the portable JVM distributions.
 | Workspace symbols | `workspace/symbol` | Sources of a bound project (see below) |
 | Go to definition | `textDocument/definition` | Open sources of a bound project |
 | Find references | `textDocument/references` | Open sources of a bound project |
-| Hover | `textDocument/hover` | Open sources of a bound project |
-| Completion | `textDocument/completion` | Open sources of a bound project |
-| Signature help | `textDocument/signatureHelp`, triggers `(` and `,` | Open sources of a bound project |
+| Hover | `textDocument/hover` | Any open Protos document |
+| Completion | `textDocument/completion` | Any open Protos document |
+| Signature help | `textDocument/signatureHelp`, triggers `(` and `,` | Any open Protos document |
 
 Positions use LSP's default zero-based lines and UTF-16 character offsets,
 including for non-BMP text and CRLF line endings.
@@ -75,29 +75,16 @@ editor's tab-size and whitespace options are accepted but **ignored**: the
 canonical style is fixed. The answer is no edit when the buffer is already
 canonical, or one whole-document edit. Invalid source gets no edit.
 
-## Navigation needs a bound project
+## Document-local intelligence
 
-Workspace symbols, definition, references, hover, completion, and signature
-help work only for documents that belong to a **Protos project** whose root is
-exactly one of the editor's workspace folders. The server checks that root for
-`protos.toml`, `protos.lock`, and the generated `protos.project` metadata, and
-it reads nothing outside it. It does not search parent or child directories.
+Hover, completion, and signature help answer for **any open Protos document**,
+including a loose file or a file outside every project. They use only the
+exact current (possibly unsaved) buffer and never read the file on disk, other
+files, or project metadata. A closed document gets no answer.
 
-For a loose file, a file outside the workspace folder, or a folder without that
-project metadata, these requests return empty results. Diagnostics, formatting,
-and document symbols still work.
+The analysis is deliberately narrow and identical inside and outside a
+project:
 
-**Current limitation:** no public `protos` command writes `protos.lock` or
-`protos.project` yet (see [Package Tool](package-tool.md)). Until the Package
-Tool publishes that operation, navigation features are available only for
-projects that already carry exact, canonical metadata files; for an ordinary
-new project expect diagnostics, formatting, and document symbols only.
-
-Within a bound project the analysis is deliberately narrow:
-
-- **Definition and references** resolve Closure parameters and match bindings
-  only when the analysis proves the binding, and only within the same
-  document. Slots, module members, imports, and other files are not resolved.
 - **Hover** shows a "Proven binding" section for a proven Closure parameter
   reference; otherwise only labeled "Syntax" facts (literal kind, Closure
   parameter declaration, Closure head). Hover text is plain text.
@@ -107,7 +94,35 @@ Within a bound project the analysis is deliberately narrow:
   names, and every list is complete (`isIncomplete` is `false`).
 - **Signature help** works only when the callee is a literal Closure, for
   example `((a, b: 1) => { a + b })(`, showing source-text parameter labels.
-  Calls through a name get no signature help.
+  Calls through a name or a receiver get no signature help.
+
+Opening a document never makes it part of a project: these answers grant no
+navigation authority.
+
+## Navigation needs a bound project
+
+Workspace symbols, definition, and references work only for documents that
+belong to a **Protos project** whose root is
+exactly one of the editor's workspace folders. The server checks that root for
+`protos.toml`, `protos.lock`, and the generated `protos.project` metadata, and
+it reads nothing outside it. It does not search parent or child directories.
+
+For a loose file, a file outside the workspace folder, or a folder without that
+project metadata, these requests return empty results. Diagnostics, formatting,
+document symbols, hover, completion, and signature help still work.
+
+**Current limitation:** no public `protos` command writes `protos.lock` or
+`protos.project` yet (see [Package Tool](package-tool.md)). Until the Package
+Tool publishes that operation, navigation features are available only for
+projects that already carry exact, canonical metadata files; for an ordinary
+new project expect diagnostics, formatting, document symbols, hover,
+completion, and signature help only.
+
+Within a bound project the analysis is deliberately narrow:
+
+- **Definition and references** resolve Closure parameters and match bindings
+  only when the analysis proves the binding, and only within the same
+  document. Slots, module members, imports, and other files are not resolved.
 - **Workspace symbols** search the project's own sources; dependencies and
   `std:` modules are excluded, and at most 100 results are returned.
 
@@ -122,7 +137,8 @@ particular editor shows can still differ:
 - document symbols appear only when the editor declares hierarchical symbol
   support;
 - an editor that opens a single file without a workspace folder gets no
-  navigation features, because no project can be bound.
+  workspace symbols, definition, or references, because no project can be
+  bound; hover, completion, and signature help still work.
 
 This repository does not test any particular editor. The official VS Code
 extension is maintained in its own repository, and other editors are untested.

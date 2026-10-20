@@ -90,17 +90,18 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * snapshot through the TOOL010 whole-document authority and returns at most
  * one full-document edit; editor formatting options never select style.
  * LM010-A hover publishes only D110-proven bindings and explicitly labeled
- * parser-derived syntax facts, under the same canonical-source authority and
- * snapshot-freshness checks as definition. LM012-B1 adds the D194 warning
+ * parser-derived syntax facts. LM012-B1 adds the D194 warning
  * lint findings for a successfully parsed snapshot to the same single
  * publication; a stale snapshot publishes nothing. LM010-B completion
  * publishes only D110-proven Closure parameters and parser-accepted
- * reserved-word syntax at a proven read site, under the same authority and
- * freshness checks; every response is a complete list
- * ({@code isIncomplete=false}). LM010-C signature help publishes the one
- * signature of a call whose callee is a literal Closure, under the same
- * authority and freshness checks, and publishes nothing rather than a false
- * parameter highlight.</p>
+ * reserved-word syntax at a proven read site; every response is a complete
+ * list ({@code isIncomplete=false}). LM010-C signature help publishes the one
+ * signature of a call whose callee is a literal Closure, and publishes nothing
+ * rather than a false parameter highlight. Under D209-C (LM013) these three
+ * document-local capabilities answer for any open snapshot, project member or
+ * not: they need only the exact current snapshot and URI, never canonical
+ * ProjectBinding ownership, while definition and references keep the
+ * canonical-source authority gate.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -396,11 +397,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
 
-        Predicate<String> authority = navigationSourceAuthority;
-        if (!authority.test(uri)) {
-            return noHover();
-        }
-
         Optional<ProtosDocumentSnapshot> current =
                 session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
         if (current.isEmpty()) {
@@ -425,7 +421,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
         ProtosStaticHoverResult projected = hover.get();
         if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
-                || !authority.test(uri)
                 || !projected.snapshot().documentId().equals(uri)) {
             return noHover();
         }
@@ -453,11 +448,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
 
-        Predicate<String> authority = navigationSourceAuthority;
-        if (!authority.test(uri)) {
-            return noCompletion();
-        }
-
         Optional<ProtosDocumentSnapshot> current =
                 session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
         if (current.isEmpty()) {
@@ -482,7 +472,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
         ProtosStaticCompletionResult projected = completion.get();
         if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
-                || !authority.test(uri)
                 || !projected.snapshot().documentId().equals(uri)) {
             return noCompletion();
         }
@@ -503,11 +492,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
         String uri = Objects.requireNonNull(
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
-
-        Predicate<String> authority = navigationSourceAuthority;
-        if (!authority.test(uri)) {
-            return noSignatureHelp();
-        }
 
         Optional<ProtosDocumentSnapshot> current =
                 session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
@@ -533,7 +517,6 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
         ProtosStaticSignatureHelpResult projected = signatureHelp.get();
         if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, projected)
-                || !authority.test(uri)
                 || !projected.snapshot().documentId().equals(uri)) {
             return noSignatureHelp();
         }

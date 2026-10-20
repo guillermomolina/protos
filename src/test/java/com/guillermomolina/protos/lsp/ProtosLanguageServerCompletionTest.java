@@ -94,8 +94,13 @@ class ProtosLanguageServerCompletionTest {
         assertEquals("Syntax: reserved word", keyword.getDetail());
         assertEquals(new TextEdit(range(0, 22, 0, 25), "this"), keyword.getTextEdit().getLeft());
 
+        // D209-C: document-local completion does not depend on ProjectBinding ownership.
         current.set(Optional.empty());
-        assertEmptyComplete(completion(server, uri, 0, 25));
+        assertEquals(
+                concat(List.of("first", "second"), RESERVED),
+                completion(server, uri, 0, 25).getItems().stream()
+                        .map(CompletionItem::getLabel)
+                        .toList());
     }
 
     @Test
@@ -118,21 +123,52 @@ class ProtosLanguageServerCompletionTest {
     }
 
     @Test
-    void looseOrNonCanonicalOpenDocumentNeverGainsCompletionAuthority() throws Exception {
+    void looseAndNonCanonicalOpenDocumentsGetDocumentLocalCompletion() throws Exception {
         ProjectFixture project = project("authority");
         ProtosLanguageServer server = initialized(project, canonical(project));
         String source = "f: (first) => fi";
 
+        // The disk content differs from the open buffer: only the snapshot answers.
         Path loose = temporary.resolve("Loose.protos");
-        Files.writeString(loose, source);
+        Files.writeString(loose, "f: (disk) => di");
         String looseUri = loose.toUri().toString();
         server.textDocuments().didOpen(open(looseUri, 1, source));
+        CompletionList list = completion(server, looseUri, 0, 16);
+        assertFalse(list.isIncomplete());
+        assertEquals(
+                concat(List.of("first"), RESERVED),
+                list.getItems().stream().map(CompletionItem::getLabel).toList());
+        assertEquals(
+                new TextEdit(range(0, 14, 0, 16), "first"),
+                list.getItems().get(0).getTextEdit().getLeft());
+        assertEmptyComplete(completion(server, looseUri, 0, 99));
+
+        server.textDocuments().didChange(change(looseUri, 2, "f: (other) => fi"));
+        assertEquals("other", completion(server, looseUri, 0, 16).getItems().get(0).getLabel());
+        server.textDocuments().didChange(change(looseUri, 3, "f: (first) => {\n  first.se\n}\n"));
+        assertEmptyComplete(completion(server, looseUri, 1, 10));
+
+        DidCloseTextDocumentParams close = new DidCloseTextDocumentParams();
+        close.setTextDocument(new TextDocumentIdentifier(looseUri));
+        server.textDocuments().didClose(close);
         assertEmptyComplete(completion(server, looseUri, 0, 16));
+
+        // U+1F600 occupies two UTF-16 code units.
+        Path wide = temporary.resolve("Wide.protos");
+        String wideUri = wide.toUri().toString();
+        server.textDocuments().didOpen(open(
+                wideUri, 1, "f: (first) => {\r\n  \"😀\" + fi\r\n}\r\n"));
+        assertEquals(
+                new TextEdit(range(1, 9, 1, 11), "first"),
+                completion(server, wideUri, 1, 11).getItems().get(0).getTextEdit().getLeft());
+        assertEmptyComplete(completion(server, wideUri, 1, 4));
 
         String nonCanonicalUri =
                 project.source().toUri().toString().replace("/Main.protos", "/./Main.protos");
         server.textDocuments().didOpen(open(nonCanonicalUri, 1, source));
-        assertEmptyComplete(completion(server, nonCanonicalUri, 0, 16));
+        assertEquals(
+                "first",
+                completion(server, nonCanonicalUri, 0, 16).getItems().get(0).getLabel());
 
         // Canonical but not open: disk content is never consulted.
         assertEmptyComplete(completion(server, project.source().toUri().toString(), 0, 0));
