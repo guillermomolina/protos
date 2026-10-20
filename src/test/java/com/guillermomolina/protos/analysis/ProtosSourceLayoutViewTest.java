@@ -214,6 +214,75 @@ class ProtosSourceLayoutViewTest {
     }
 
     @Test
+    void bug022ClassifiesLeadingBlockCommentWithoutPredecessor() {
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:bug022-leading",
+                                1L,
+                                "/* probe */\nx: 10\n"));
+
+        assertEquals(1, view.commentAttachments().size());
+
+        ProtosSourceLayoutView.CommentAttachment comment =
+                view.commentAttachments().get(0);
+
+        assertEquals(
+                ProtosSourceLayoutView.CommentPlacement.OWN_LINE,
+                comment.placement());
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.DOCUMENT_PREFIX,
+                comment.boundaryKind());
+        assertTrue(comment.preceding().isEmpty());
+        assertTrue(comment.following().isPresent());
+    }
+
+    @Test
+    void bug022DistinguishesDocumentSuffixFromInternalComment() {
+        ProtosSourceLayoutView trailing =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:bug022-suffix",
+                                2L,
+                                "x: 10\n/* footer */"));
+
+        assertEquals(1, trailing.commentAttachments().size());
+
+        ProtosSourceLayoutView.CommentAttachment footer =
+                trailing.commentAttachments().get(0);
+
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.DOCUMENT_SUFFIX,
+                footer.boundaryKind());
+        assertEquals(
+                ProtosSourceLayoutView.CommentPlacement.OWN_LINE,
+                footer.placement());
+        assertTrue(footer.preceding().isPresent());
+        assertTrue(footer.following().isEmpty());
+
+        ProtosSourceLayoutView internal =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:bug022-internal",
+                                3L,
+                                "{ /* internal */ x: 1 }"));
+
+        assertEquals(1, internal.commentAttachments().size());
+
+        ProtosSourceLayoutView.CommentBoundaryKind boundary =
+                internal.commentAttachments().get(0).boundaryKind();
+
+        assertTrue(
+                boundary !=
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .DOCUMENT_PREFIX);
+        assertTrue(
+                boundary !=
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .DOCUMENT_SUFFIX);
+    }
+
+    @Test
     void commentRelationshipIsIndependentOfSourceOffsets() {
         ProtosSourceLayoutView first =
                 core.sourceLayout(

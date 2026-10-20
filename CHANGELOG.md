@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.388-SNAPSHOT
+
+- `BUG022`: the formatter rejected or dropped document-boundary
+  comments (for example a leading license block).
+  - `ProtosSourceLayoutView` classifies comments before the first
+    code token as `DOCUMENT_PREFIX` and comments after the last code
+    token as `DOCUMENT_SUFFIX`, with no predecessor or successor
+    respectively.
+  - The structural formatter (`protos/tools/formatter/Structural.protos`)
+    emits document-prefix comments before the formatted body and
+    document-suffix comments after it, keeping own-line, end-of-line
+    and blank-line separation; formatting is idempotent and preserves
+    license headers.
+  - Regression coverage in `ProtosSourceLayoutViewTest`,
+    `ProtosFormatterToolBootstrapTest` and
+    `ProtosLanguageServerFormattingTest`.
+
 ## 0.3.387-SNAPSHOT
 
 - `I115-F` (#931): read PRESENT root frame locals of published

@@ -77,7 +77,9 @@ public final class ProtosSourceLayoutView {
     public enum CommentBoundaryKind {
         NONE,
         SEQUENCE_SEPARATOR,
-        TRAILING_CLOSURE
+        TRAILING_CLOSURE,
+        DOCUMENT_PREFIX,
+        DOCUMENT_SUFFIX
     }
 
     /**
@@ -716,6 +718,21 @@ public final class ProtosSourceLayoutView {
         List<CommentAttachment> attachments =
                 new ArrayList<>();
 
+        SourceSpan firstCodeToken = null;
+        SourceSpan lastCodeToken = null;
+
+        for (TokenOccurrence token : tokenOccurrences) {
+            if (token.token().type() == TokenType.NEWLINE
+                    || token.token().type() == TokenType.EOF) {
+                continue;
+            }
+
+            if (firstCodeToken == null) {
+                firstCodeToken = token.span();
+            }
+            lastCodeToken = token.span();
+        }
+
         for (TriviaOccurrence occurrence : trivia) {
             if (occurrence.kind() != TriviaKind.LINE_COMMENT
                     && occurrence.kind() != TriviaKind.BLOCK_COMMENT) {
@@ -726,6 +743,35 @@ public final class ProtosSourceLayoutView {
                     classifyComment(
                             source,
                             occurrence.span());
+
+            if (firstCodeToken == null
+                    || occurrence.span().endOffset()
+                            <= firstCodeToken.startOffset()) {
+                attachments.add(
+                        new CommentAttachment(
+                                occurrence,
+                                placement,
+                                Optional.empty(),
+                                structuralIndex.nearestFollowing(
+                                        occurrence.span()),
+                                CommentBoundaryKind.DOCUMENT_PREFIX,
+                                Optional.empty()));
+                continue;
+            }
+
+            if (occurrence.span().startOffset()
+                    >= lastCodeToken.endOffset()) {
+                attachments.add(
+                        new CommentAttachment(
+                                occurrence,
+                                placement,
+                                structuralIndex.nearestPreceding(
+                                        occurrence.span()),
+                                Optional.empty(),
+                                CommentBoundaryKind.DOCUMENT_SUFFIX,
+                                Optional.empty()));
+                continue;
+            }
 
             Optional<ResolvedBoundary> boundary =
                     trailingClosureBoundary(

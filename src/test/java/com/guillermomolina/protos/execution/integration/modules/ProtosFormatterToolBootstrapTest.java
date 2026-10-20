@@ -827,6 +827,128 @@ final class ProtosFormatterToolBootstrapTest {
     }
 
     @Test
+    void bug022FormatsLeadingCommentsAndPreservesLicense()
+            throws Exception {
+        String[][] cases = {
+            {
+                "/* probe */\nx:  10\n",
+                "/* probe */\nx: 10\n"
+            },
+            {
+                "/* first */\n/* second */\n\nx:10",
+                "/* first */\n/* second */\n\nx: 10\n"
+            },
+            {
+                "/* first */ /* second */\nx:10",
+                "/* first */ /* second */\nx: 10\n"
+            },
+            {
+                "/* inline */x:10",
+                "/* inline */ x: 10\n"
+            },
+            {
+                "x:10\n/* footer */",
+                "x: 10\n/* footer */\n"
+            },
+            {
+                "x:10 // footer",
+                "x: 10 // footer\n"
+            },
+            {
+                "x:10\n\n/* footer */",
+                "x: 10\n\n/* footer */\n"
+            }
+        };
+
+        long version = 80L;
+
+        for (String[] sample : cases) {
+            ProtosWholeDocumentFormatter.Result result =
+                    ProtosWholeDocumentFormatter.format(
+                            CORE,
+                            TOOL_ROOT,
+                            new ProtosStandardLibraryModuleResolver(
+                                    STANDARD_LIBRARY),
+                            new ProtosDocumentSnapshot(
+                                    "memory:bug022-original",
+                                    version++,
+                                    sample[0]),
+                            ignored -> {},
+                            runtimeHost);
+
+            assertEquals(
+                    ProtosWholeDocumentFormatter.Status.SUCCESS,
+                    result.status());
+            assertEquals(sample[1], result.source());
+
+            ProtosWholeDocumentFormatter.Result repeated =
+                    ProtosWholeDocumentFormatter.format(
+                            CORE,
+                            TOOL_ROOT,
+                            new ProtosStandardLibraryModuleResolver(
+                                    STANDARD_LIBRARY),
+                            new ProtosDocumentSnapshot(
+                                    "memory:bug022-idempotence",
+                                    version++,
+                                    result.source()),
+                            ignored -> {},
+                            runtimeHost);
+
+            assertEquals(
+                    ProtosWholeDocumentFormatter.Status.SUCCESS,
+                    repeated.status());
+            assertEquals(result.source(), repeated.source());
+        }
+
+        String example =
+                java.nio.file.Files.readString(
+                        Path.of(
+                                "protos",
+                                "examples",
+                                "basics",
+                                "slots.protos"));
+
+        String license =
+                example.substring(0, example.indexOf("*/") + 2);
+
+        ProtosWholeDocumentFormatter.Result formatted =
+                ProtosWholeDocumentFormatter.format(
+                        CORE,
+                        TOOL_ROOT,
+                        new ProtosStandardLibraryModuleResolver(
+                                STANDARD_LIBRARY),
+                        new ProtosDocumentSnapshot(
+                                "memory:bug022-slots",
+                                version++,
+                                example),
+                        ignored -> {},
+                        runtimeHost);
+
+        assertEquals(
+                ProtosWholeDocumentFormatter.Status.SUCCESS,
+                formatted.status());
+        assertTrue(formatted.source().startsWith(license));
+
+        ProtosWholeDocumentFormatter.Result repeatedLicense =
+                ProtosWholeDocumentFormatter.format(
+                        CORE,
+                        TOOL_ROOT,
+                        new ProtosStandardLibraryModuleResolver(
+                                STANDARD_LIBRARY),
+                        new ProtosDocumentSnapshot(
+                                "memory:bug022-slots-idempotence",
+                                version++,
+                                formatted.source()),
+                        ignored -> {},
+                        runtimeHost);
+
+        assertEquals(
+                ProtosWholeDocumentFormatter.Status.SUCCESS,
+                repeatedLicense.status());
+        assertEquals(formatted.source(), repeatedLicense.source());
+    }
+
+    @Test
     void preservesOwnLineAndEndOfLineSequenceComments()
             throws Exception {
         String source =
@@ -1196,7 +1318,11 @@ final class ProtosFormatterToolBootstrapTest {
             "foo /* embedded  keep\ttext */+bar",
 
             "foo() /* comment\n"
-                    + "still  comment\t*/ {body()}"
+                    + "still  comment\t*/ {body()}",
+
+            "/* probe */\nx:10\n/* footer */",
+
+            "/* first */\n/* second */\n\nx:10"
         };
 
         long version = 20L;
@@ -1384,7 +1510,11 @@ final class ProtosFormatterToolBootstrapTest {
             "foo /* embedded */+bar",
 
             "foo() /* trailing\n"
-                    + "comment */ {body()}"
+                    + "comment */ {body()}",
+
+            "/* probe */\nx:10\n/* footer */",
+
+            "/* first */\n/* second */\n\nx:10"
         };
 
         long version = 40L;

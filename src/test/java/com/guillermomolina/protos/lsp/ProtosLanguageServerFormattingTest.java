@@ -170,6 +170,40 @@ class ProtosLanguageServerFormattingTest {
                 server.textDocuments().currentSnapshot(URI).orElseThrow().characters());
     }
 
+    @Test
+    void bug022RealFormatterPreservesLeadingBlockComment() {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(
+                open(URI, 1, "/* probe */\nx:  10\n"));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        assertEquals(
+                "/* probe */\nx: 10\n",
+                edits.get(0).getNewText());
+    }
+
+    @Test
+    void bug022RealFormatterPreservesTrailingBlockComment() {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(
+                open(URI, 1, "x:  10\n/* footer */"));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        assertEquals(
+                "x: 10\n/* footer */\n",
+                edits.get(0).getNewText());
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);

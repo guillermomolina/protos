@@ -1624,7 +1624,52 @@ formatExpression = (node, level, layout) => {
 }
 
 formatBody: (layout) => {
+    leadingComments: ""
+    pendingSeparator: ""
+    trailingComments: ""
+
     layout.comments.each((comment) => {
+        leadingComment:
+            (comment.boundaryKind == "DOCUMENT_PREFIX")
+
+        trailingComment:
+            (comment.boundaryKind == "DOCUMENT_SUFFIX")
+
+        leadingComment.ifTrue(() => {
+            leadingComments =
+                leadingComments +
+                pendingSeparator +
+                comment.rawText
+
+            pendingSeparator = " "
+
+            ((comment.placement == "OWN_LINE") ||
+                (comment.placement == "END_OF_LINE")).ifTrue(() => {
+                pendingSeparator = "\n"
+
+                comment.blankLineAfter.ifTrue(() => {
+                    pendingSeparator = "\n\n"
+                })
+            })
+        })
+
+        trailingComment.ifTrue(() => {
+            separator: " "
+
+            (comment.placement == "OWN_LINE").ifTrue(() => {
+                separator = "\n"
+
+                comment.blankLineBefore.ifTrue(() => {
+                    separator = "\n\n"
+                })
+            })
+
+            trailingComments =
+                trailingComments +
+                separator +
+                comment.rawText
+        })
+
         sequenceComment:
             (comment.boundaryKind == "SEQUENCE_SEPARATOR") &&
             ((comment.placement == "OWN_LINE") ||
@@ -1639,18 +1684,29 @@ formatBody: (layout) => {
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
             (comment.preceding !== null)
 
-        (sequenceComment ||
+        (leadingComment ||
+            trailingComment ||
+            sequenceComment ||
             trailingClosureComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })
     })
 
-    formatExpression(
-        layout.program,
-        0,
-        layout
-    )
+    body:
+        formatExpression(
+            layout.program,
+            0,
+            layout
+        )
+
+    (body.size() > 0).ifTrue(() => {
+        leadingComments =
+            leadingComments +
+            pendingSeparator
+    })
+
+    leadingComments + body + trailingComments
 }
 
 format: (layout) => {
