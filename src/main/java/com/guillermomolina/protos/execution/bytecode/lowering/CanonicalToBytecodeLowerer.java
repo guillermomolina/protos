@@ -368,6 +368,12 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map.of();
     private CanonicalBindingAnalysis currentNormalCallbackScalarAnalysis;
     private CanonicalLexicalScope currentNormalCallbackScalarScope;
+    /*
+     * I115-O EXPERIMENTAL: the returned binding of the compact root being
+     * emitted whose Integer literal stores load prepared guest constants;
+     * null outside such a root.
+     */
+    private CanonicalBindingIdentity currentExperimentalGuestIntegerBinding;
 
     /**
      * PLAT041 C′ lowering-time source of the current {@link
@@ -1314,8 +1320,10 @@ final class CanonicalToBytecodeLowerer {
         // I112: the terminal paths that used to emit MaterializeReturnCarrier.
         boolean epilogProjectsReturnCarrier = false;
         if (experimentalCompact != null) {
-            emitExperimentalCompactRoot(builder, sequence);
-            epilogProjectsReturnCarrier = true;
+            emitExperimentalCompactRoot(builder, sequence, experimentalCompact);
+            // I115-O: a certified guest-constant return delivers no carrier.
+            epilogProjectsReturnCarrier =
+                    experimentalCompact.guestIntegerReturn() == null;
         } else if (activationDefinition == null
                 && sequence.expressions().size() == 1
                 && sequence.expressions().get(0) instanceof CanonicalCreate create
@@ -9804,8 +9812,12 @@ final class CanonicalToBytecodeLowerer {
      * I115-M EXPERIMENTAL: compilation fact that every expression of a
      * parameterless Closure root belongs to the compact subset over the
      * bindings of {@code scope}. It carries no physical or runtime state.
+     * I115-O: {@code guestIntegerReturn} is the returned binding proven by
+     * admitExperimentalConstantIntegerReturn, or null.
      */
-    private record ExperimentalCompactRoot(CanonicalLexicalScope scope) {}
+    private record ExperimentalCompactRoot(
+            CanonicalLexicalScope scope,
+            CanonicalBindingIdentity guestIntegerReturn) {}
 
     /*
      * I115-N: compile-time binding families keyed by binding identity. A
@@ -9863,7 +9875,140 @@ final class CanonicalToBytecodeLowerer {
                 == null) {
             return null;
         }
-        return new ExperimentalCompactRoot(scope);
+        return new ExperimentalCompactRoot(
+                scope, admitExperimentalConstantIntegerReturn(sequence, scope));
+    }
+
+    /**
+     * I115-O EXPERIMENTAL: the identity of the binding an admitted compact
+     * root returns when that binding can hold prepared guest constants
+     * instead of primitive carriers, or null. The terminal must be a lookup
+     * of a root-scope binding; every store to it anywhere in the root
+     * (including inline callback and loop bodies) must be a statement whose
+     * value is an Integer (signed-64), null, true or false literal, with at
+     * least one Integer; and no other read of it may exist. Admission of the
+     * root already established the binding before every use.
+     */
+    private CanonicalBindingIdentity admitExperimentalConstantIntegerReturn(
+            CanonicalSequence sequence,
+            CanonicalLexicalScope scope) {
+        java.util.List<CanonicalExpression> expressions = sequence.expressions();
+        if (!(expressions.get(expressions.size() - 1) instanceof CanonicalLookup terminal)) {
+            return null;
+        }
+        CanonicalBindingIdentity identity = experimentalCompactIdentity(
+                currentRootAnalysis.resolutionOf(terminal).orElse(null),
+                scope,
+                terminal.name());
+        if (identity == null) {
+            return null;
+        }
+        int[] integerStores = {0};
+        for (int index = 0; index < expressions.size() - 1; index++) {
+            if (!experimentalGuestReturnScan(
+                    expressions.get(index), false, scope, identity, integerStores)) {
+                return null;
+            }
+        }
+        return integerStores[0] > 0 ? identity : null;
+    }
+
+    /*
+     * I115-O: scan one admitted compact expression. {@code value} is true
+     * when the expression's result may be consumed; the last expression of
+     * a callback body is treated as consumed whenever its control is.
+     */
+    private boolean experimentalGuestReturnScan(
+            CanonicalExpression expression,
+            boolean value,
+            CanonicalLexicalScope scope,
+            CanonicalBindingIdentity identity,
+            int[] integerStores) {
+        if (expression instanceof CanonicalLiteral) {
+            return true;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return !identity.equals(experimentalCompactIdentity(
+                    currentRootAnalysis.resolutionOf(lookup).orElse(null),
+                    scope,
+                    lookup.name()));
+        }
+        if (expression instanceof CanonicalCreate
+                || expression instanceof CanonicalAssign) {
+            CanonicalExpression stored = expression instanceof CanonicalCreate create
+                    ? create.value()
+                    : ((CanonicalAssign) expression).value();
+            if (!identity.equals(experimentalCompactStoreIdentity(expression, scope))) {
+                return experimentalGuestReturnScan(
+                        stored, true, scope, identity, integerStores);
+            }
+            if (value || !(stored instanceof CanonicalLiteral literal)) {
+                return false;
+            }
+            return switch (literal.kind()) {
+                case NULL, TRUE, FALSE -> true;
+                case NUMBER -> {
+                    if (!(primitiveNumberLiteralOrNull(literal) instanceof Long)) {
+                        yield false;
+                    }
+                    integerStores[0]++;
+                    yield true;
+                }
+                default -> false;
+            };
+        }
+        if (!(expression instanceof CanonicalSend send)) {
+            return false;
+        }
+        if ("whileTrue".equals(send.message())
+                || experimentalCompactBooleanControl(send.message()) != null) {
+            if (!(send.receiver() instanceof CanonicalClosure)
+                    && !experimentalGuestReturnScan(
+                            send.receiver(), true, scope, identity, integerStores)) {
+                return false;
+            }
+            java.util.List<CanonicalSequence> bodies = new java.util.ArrayList<>();
+            if (send.receiver() instanceof CanonicalClosure condition) {
+                bodies.add(condition.body());
+            }
+            for (CanonicalExpression argument : send.arguments()) {
+                bodies.add(((CanonicalClosure) argument).body());
+            }
+            for (CanonicalSequence body : bodies) {
+                java.util.List<CanonicalExpression> statements = body.expressions();
+                for (int index = 0; index < statements.size(); index++) {
+                    boolean last = index == statements.size() - 1;
+                    if (!experimentalGuestReturnScan(
+                            statements.get(index), value && last,
+                            scope, identity, integerStores)) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        for (CanonicalExpression operand : java.util.List.of(
+                send.receiver(), send.arguments().get(0))) {
+            if (!experimentalGuestReturnScan(
+                    operand, true, scope, identity, integerStores)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /* I115-O: the root-scope identity a compact create or assign stores. */
+    private CanonicalBindingIdentity experimentalCompactStoreIdentity(
+            CanonicalExpression binding,
+            CanonicalLexicalScope scope) {
+        if (binding instanceof CanonicalCreate create) {
+            return currentRootAnalysis.identityOf(create).orElse(null);
+        }
+        CanonicalAssign assign = (CanonicalAssign) binding;
+        return experimentalCompactIdentity(
+                currentRootAnalysis.resolutionOf(assign).orElse(null),
+                scope,
+                assign.name());
     }
 
     /* An empty sequence produces null (OBJECT). */
@@ -10162,23 +10307,33 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I115-M EXPERIMENTAL: emit an admitted root. Every prefix expression is
      * a discarded statement; the terminal value is returned directly and
-     * the existing EpilogForReturn projects a numeric carrier.
+     * the existing EpilogForReturn projects a numeric carrier. I115-O: the
+     * Integer literal stores of a certified returned binding load prepared
+     * guest constants instead, and the epilog projects nothing.
      */
     private void emitExperimentalCompactRoot(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalSequence sequence) {
-        java.util.List<CanonicalExpression> expressions =
-                sequence.expressions();
-        for (int index = 0; index < expressions.size() - 1; index++) {
-            emitExperimentalCompactStatement(builder, expressions.get(index));
+            CanonicalSequence sequence,
+            ExperimentalCompactRoot compact) {
+        CanonicalBindingIdentity savedGuestIntegerBinding =
+                currentExperimentalGuestIntegerBinding;
+        currentExperimentalGuestIntegerBinding = compact.guestIntegerReturn();
+        try {
+            java.util.List<CanonicalExpression> expressions =
+                    sequence.expressions();
+            for (int index = 0; index < expressions.size() - 1; index++) {
+                emitExperimentalCompactStatement(builder, expressions.get(index));
+            }
+            CanonicalExpression terminal =
+                    expressions.get(expressions.size() - 1);
+            beginStatement(builder, terminal);
+            builder.beginReturn();
+            emitExperimentalCompactValue(builder, terminal);
+            builder.endReturn();
+            endStatement(builder);
+        } finally {
+            currentExperimentalGuestIntegerBinding = savedGuestIntegerBinding;
         }
-        CanonicalExpression terminal =
-                expressions.get(expressions.size() - 1);
-        beginStatement(builder, terminal);
-        builder.beginReturn();
-        emitExperimentalCompactValue(builder, terminal);
-        builder.endReturn();
-        endStatement(builder);
     }
 
     private void emitExperimentalCompactSequence(
@@ -10195,9 +10350,9 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression) {
         beginStatement(builder, expression);
         if (expression instanceof CanonicalCreate create) {
-            emitExperimentalCompactStore(builder, create.name(), create.value());
+            emitExperimentalCompactStore(builder, create, create.name(), create.value());
         } else if (expression instanceof CanonicalAssign assign) {
-            emitExperimentalCompactStore(builder, assign.name(), assign.value());
+            emitExperimentalCompactStore(builder, assign, assign.name(), assign.value());
         } else if (expression instanceof CanonicalSend send
                 && "whileTrue".equals(send.message())) {
             emitExperimentalCompactWhile(builder, send, null);
@@ -10214,10 +10369,22 @@ final class CanonicalToBytecodeLowerer {
 
     private void emitExperimentalCompactStore(
             ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression binding,
             String name,
             CanonicalExpression value) {
         builder.beginStoreLocal(experimentalCompactLocal(name));
-        emitExperimentalCompactValue(builder, value);
+        if (currentExperimentalGuestIntegerBinding != null
+                && value instanceof CanonicalLiteral literal
+                && primitiveNumberLiteralOrNull(literal) instanceof Long
+                && currentExperimentalGuestIntegerBinding.equals(
+                        experimentalCompactStoreIdentity(
+                                binding,
+                                currentExperimentalGuestIntegerBinding.owner()))) {
+            // I115-O: the guest Integer is prepared at lowering time.
+            builder.emitLoadConstant(guestLiteralConstant(literal));
+        } else {
+            emitExperimentalCompactValue(builder, value);
+        }
         builder.endStoreLocal();
     }
 
@@ -10253,7 +10420,7 @@ final class CanonicalToBytecodeLowerer {
                     ? create.value()
                     : ((CanonicalAssign) expression).value();
             builder.beginBlock();
-            emitExperimentalCompactStore(builder, name, value);
+            emitExperimentalCompactStore(builder, expression, name, value);
             builder.emitLoadLocal(experimentalCompactLocal(name));
             builder.endBlock();
         } else {
