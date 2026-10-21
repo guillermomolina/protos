@@ -30,6 +30,14 @@ Historical implementation changelogs:
   - Reconstructed from original I115 commit `8de92642fa98eaa060fa39132fc97dfb472cc141`. No behavioral
     tests have been run on this versioned replay.
 
+- `PERF041` (test-only, historical commit `e835fc1a5d068fd83da9413e53159d94d02f4c19`):
+  add observational physical Bytecode DSL censuses for the primitive
+  `true.ifTrue` and variable `value.ifTrue` workloads. Enumerate all
+  source-group roots and instructions without filtering auxiliary roots,
+  fallback paths or instrumentation. Verify the guest result but pin no
+  static instruction-count budget. No behavioral tests were run during
+  this historical replay; the Maven version remains `0.4.4-SNAPSHOT`.
+
 ## 0.4.3-SNAPSHOT
 
 - `I115-H` (PLAT066-C): introduce an experimental static invocation path for a
