@@ -51,9 +51,9 @@ tests: Array(
             forwardExact: Error.handle(
                 () => {
                     Ranges.each(1, 4, (value) => {
-                        (value == 2).ifTrue(() => {
+                        if(value == 2) {
                             forwardError.signal()
-                        })
+                        }
                         null
                     })
                     false
@@ -66,9 +66,9 @@ tests: Array(
             reverseExact: Error.handle(
                 () => {
                     Ranges.reverseEach(1, 4, (value) => {
-                        (value == 2).ifTrue(() => {
+                        if(value == 2) {
                             reverseError.signal()
-                        })
+                        }
                         null
                     })
                     false
@@ -99,18 +99,18 @@ tests: Array(
 
             forwardProbe: () => {
                 Ranges.each(1, 6, (value) => {
-                    (value == 3).ifTrue(() => {
+                    if(value == 3) {
                         ^value
-                    })
+                    }
                 })
                 99
             }
 
             reverseProbe: () => {
                 Ranges.reverseEach(1, 6, (value) => {
-                    (value == 3).ifTrue(() => {
+                    if(value == 3) {
                         ^value
-                    })
+                    }
                 })
                 99
             }

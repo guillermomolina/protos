@@ -98,7 +98,7 @@ prelude.newModuleActivation());
                         "resourceRequirementsApplies: planLoader === \"manifest\""));
         assertTrue(
                 main.contains(
-                        "(planLoader === \"package-toml\").ifTrue(() => {"));
+                        "if(planLoader === \"package-toml\") {"));
         assertTrue(requirementsJoin >= 0);
         assertTrue(progressBinding > requirementsJoin);
         assertTrue(progressStart > progressBinding);

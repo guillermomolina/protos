@@ -101,24 +101,24 @@ recognizes: (value) => {
         (value.month <= 12)
 
     valid: false
-    shaped.ifTrue(() => {
+    if(shaped) {
         year: value.year
         month: value.month
         // Divisibility by 4, 100, and 400 is sign-independent, so the rule
         // applies unchanged to year zero and negative years.
         leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
         length: 31
-        ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        if((month == 4) || (month == 6) || (month == 9) || (month == 11)) {
             length = 30
-        })
-        (month == 2).ifTrue(() => {
+        }
+        if(month == 2) {
             length = 28
-            leap.ifTrue(() => {
+            if(leap) {
                 length = 29
-            })
-        })
+            }
+        }
         valid = (value.day >= 1) && (value.day <= length)
-    })
+    }
     valid
 }
 
@@ -135,21 +135,21 @@ compare: (left, right) => {
 
     compareIntegers: (first, second) => {
         result: 0
-        (first < second).ifTrue(() => {
+        if(first < second) {
             result = -1
-        })
-        (first > second).ifTrue(() => {
+        }
+        if(first > second) {
             result = 1
-        })
+        }
         result
     }
 
     result: compareIntegers(left.year, right.year)
-    (result == 0).ifTrue(() => {
+    if(result == 0) {
         result = compareIntegers(left.month, right.month)
-    })
-    (result == 0).ifTrue(() => {
+    }
+    if(result == 0) {
         result = compareIntegers(left.day, right.day)
-    })
+    }
     result
 }

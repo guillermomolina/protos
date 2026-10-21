@@ -69,9 +69,9 @@ isDigit: (octet) => {
 
 /// Answers the exact Integer spelled by `count` ASCII digits at `start`.
 digitsAt: (octets, start, count) => {
-    ((start + count) > octets.size()).ifTrue(() => {
+    if((start + count) > octets.size()) {
         fail()
-    })
+    }
 
     result: 0
     index: start
@@ -100,16 +100,16 @@ leadingSign: (octets) => {
     negative: false
     start: 0
 
-    (octets.size() > 0).ifTrue(() => {
+    if(octets.size() > 0) {
         first: octets[0]
-        (first == 45).ifTrue(() => {
+        if(first == 45) {
             negative = true
             start = 1
-        })
-        (first == 43).ifTrue(() => {
+        }
+        if(first == 43) {
             start = 1
-        })
-    })
+        }
+    }
 
     {
         negative: negative
@@ -129,9 +129,9 @@ officialInteger: (text) => {
 
     magnitude: digitsAt(octets, sign.start, count)
     result: magnitude
-    sign.negative.ifTrue(() => {
+    if(sign.negative) {
         result = 0 - magnitude
-    })
+    }
     result
 }
 
@@ -150,26 +150,26 @@ decimalFloat: (text) => {
 
     while(scanning) {
         scanning = false
-        (position < length).ifTrue(() => {
+        if(position < length) {
             octet: octets[position]
-            isDigit(octet).ifTrue(() => {
+            if(isDigit(octet)) {
                 coefficient = coefficient * 10 + (octet - 48)
                 digitCount = digitCount + 1
-                inFraction.ifTrue(() => {
+                if(inFraction) {
                     fractionDigits = fractionDigits + 1
-                })
+                }
                 position = position + 1
                 scanning = true
-            })
-            (octet == 46).ifTrue(() => {
-                inFraction.ifTrue(() => {
+            }
+            if(octet == 46) {
+                if(inFraction) {
                     fail()
-                })
+                }
                 inFraction = true
                 position = position + 1
                 scanning = true
-            })
-        })
+            }
+        }
     }
 
     (digitCount > 0).ifFalse(() => {
@@ -177,7 +177,7 @@ decimalFloat: (text) => {
     })
 
     exponent: 0
-    (position < length).ifTrue(() => {
+    if(position < length) {
         marker: octets[position]
         ((marker == 101) || (marker == 69)).ifFalse(() => {
             fail()
@@ -185,39 +185,39 @@ decimalFloat: (text) => {
         position = position + 1
 
         exponentNegative: false
-        (position < length).ifTrue(() => {
+        if(position < length) {
             exponentSign: octets[position]
-            (exponentSign == 45).ifTrue(() => {
+            if(exponentSign == 45) {
                 exponentNegative = true
                 position = position + 1
-            })
-            (exponentSign == 43).ifTrue(() => {
+            }
+            if(exponentSign == 43) {
                 position = position + 1
-            })
-        })
+            }
+        }
 
         (position < length).ifFalse(() => {
             fail()
         })
         exponent = digitsAt(octets, position, length - position)
-        exponentNegative.ifTrue(() => {
+        if(exponentNegative) {
             exponent = 0 - exponent
-        })
-    })
+        }
+    }
 
     scale: exponent - fractionDigits
     magnitude: null
-    (scale >= 0).ifTrue(() => {
+    if(scale >= 0) {
         magnitude = Float(coefficient * power10(scale))
-    })
-    (scale < 0).ifTrue(() => {
+    }
+    if(scale < 0) {
         magnitude = Float(coefficient / power10(0 - scale))
-    })
+    }
 
     result: magnitude
-    sign.negative.ifTrue(() => {
+    if(sign.negative) {
         result = -magnitude
-    })
+    }
     result
 }
 
@@ -227,18 +227,18 @@ officialFloat: (text) => {
     result: null
     handled: false
 
-    ((text == "nan") || (text == "+nan") || (text == "-nan")).ifTrue(() => {
+    if((text == "nan") || (text == "+nan") || (text == "-nan")) {
         result = 0.0 / 0.0
         handled = true
-    })
-    ((text == "inf") || (text == "+inf")).ifTrue(() => {
+    }
+    if((text == "inf") || (text == "+inf")) {
         result = positiveInfinity
         handled = true
-    })
-    (text == "-inf").ifTrue(() => {
+    }
+    if(text == "-inf") {
         result = -positiveInfinity
         handled = true
-    })
+    }
     handled.ifFalse(() => {
         result = decimalFloat(text)
     })
@@ -278,27 +278,27 @@ officialTime: (octets, start) => {
     coefficient: 0
     digits: 0
 
-    (position < length).ifTrue(() => {
-        (octets[position] == 46).ifTrue(() => {
+    if(position < length) {
+        if(octets[position] == 46) {
             position = position + 1
             scanning: true
             while(scanning) {
                 scanning = false
-                (position < length).ifTrue(() => {
+                if(position < length) {
                     octet: octets[position]
-                    isDigit(octet).ifTrue(() => {
+                    if(isDigit(octet)) {
                         coefficient = coefficient * 10 + (octet - 48)
                         digits = digits + 1
                         position = position + 1
                         scanning = true
-                    })
-                })
+                    }
+                }
             }
             (digits > 0).ifFalse(() => {
                 fail()
             })
-        })
-    })
+        }
+    }
 
     {
         hour: hour
@@ -320,13 +320,13 @@ officialOffset: (octets, start) => {
 
     marker: octets[start]
     result: null
-    ((marker == 90) || (marker == 122)).ifTrue(() => {
+    if((marker == 90) || (marker == 122)) {
         (length == (start + 1)).ifFalse(() => {
             fail()
         })
         result = 0
-    })
-    ((marker == 43) || (marker == 45)).ifTrue(() => {
+    }
+    if((marker == 43) || (marker == 45)) {
         (length == (start + 6)).ifFalse(() => {
             fail()
         })
@@ -334,13 +334,13 @@ officialOffset: (octets, start) => {
         expectOctet(octets, start + 3, 58)
         minutes: digitsAt(octets, start + 4, 2)
         result = hours * 60 + minutes
-        (marker == 45).ifTrue(() => {
+        if(marker == 45) {
             result = 0 - result
-        })
-    })
-    (result === null).ifTrue(() => {
+        }
+    }
+    if(result === null) {
         fail()
-    })
+    }
     result
 }
 
@@ -365,21 +365,21 @@ officialTemporal: (tag, text) => {
     offsetMinutes: 0
     handled: false
 
-    (tag == "date-local").ifTrue(() => {
+    if(tag == "date-local") {
         date = officialDate(octets, 0)
         (length == 10).ifFalse(() => {
             fail()
         })
         handled = true
-    })
-    (tag == "time-local").ifTrue(() => {
+    }
+    if(tag == "time-local") {
         time = officialTime(octets, 0)
         (time.end == length).ifFalse(() => {
             fail()
         })
         handled = true
-    })
-    ((tag == "datetime-local") || (tag == "datetime")).ifTrue(() => {
+    }
+    if((tag == "datetime-local") || (tag == "datetime")) {
         date = officialDate(octets, 0)
         (length > 10).ifFalse(() => {
             fail()
@@ -388,16 +388,16 @@ officialTemporal: (tag, text) => {
             fail()
         })
         time = officialTime(octets, 11)
-        (tag == "datetime").ifTrue(() => {
+        if(tag == "datetime") {
             offsetMinutes = officialOffset(octets, time.end)
-        })
-        (tag == "datetime-local").ifTrue(() => {
+        }
+        if(tag == "datetime-local") {
             (time.end == length).ifFalse(() => {
                 fail()
             })
-        })
+        }
         handled = true
-    })
+    }
     handled.ifFalse(() => {
         fail()
     })
@@ -418,12 +418,12 @@ officialTemporal: (tag, text) => {
 /// Answers a fraction truncated to nanoseconds, the precision of Go `time.Time`.
 nanoseconds: (coefficient, digits) => {
     result: null
-    (digits <= 9).ifTrue(() => {
+    if(digits <= 9) {
         result = coefficient * power10(9 - digits)
-    })
-    (digits > 9).ifTrue(() => {
+    }
+    if(digits > 9) {
         result = coefficient.div(power10(digits - 9))
-    })
+    }
     result
 }
 
@@ -470,17 +470,17 @@ requireSameTime: (actual, expected) => {
 /// Answers the Protos TOML kind named by an official tag.
 kindOfTag: (tag) => {
     result: null
-    (tag == "string").ifTrue(() => { result = "string" })
-    (tag == "integer").ifTrue(() => { result = "integer" })
-    (tag == "float").ifTrue(() => { result = "float" })
-    (tag == "bool").ifTrue(() => { result = "boolean" })
-    (tag == "datetime").ifTrue(() => { result = "offsetDateTime" })
-    (tag == "datetime-local").ifTrue(() => { result = "localDateTime" })
-    (tag == "date-local").ifTrue(() => { result = "localDate" })
-    (tag == "time-local").ifTrue(() => { result = "localTime" })
-    (result === null).ifTrue(() => {
+    if(tag == "string") { result = "string" }
+    if(tag == "integer") { result = "integer" }
+    if(tag == "float") { result = "float" }
+    if(tag == "bool") { result = "boolean" }
+    if(tag == "datetime") { result = "offsetDateTime" }
+    if(tag == "datetime-local") { result = "localDateTime" }
+    if(tag == "date-local") { result = "localDate" }
+    if(tag == "time-local") { result = "localTime" }
+    if(result === null) {
         fail()
-    })
+    }
     result
 }
 
@@ -488,10 +488,10 @@ kindOfTag: (tag) => {
 /// exactly the names `type` and `value`, both of which must then be strings.
 isTagged: (expected) => {
     result: false
-    (expected.kind == "object").ifTrue(() => {
+    if(expected.kind == "object") {
         members: expected.value
-        (members.size() == 2).ifTrue(() => {
-            (members.containsKey("type") && members.containsKey("value")).ifTrue(() => {
+        if(members.size() == 2) {
+            if(members.containsKey("type") && members.containsKey("value")) {
                 (members["type"].kind == "string").ifFalse(() => {
                     fail()
                 })
@@ -499,9 +499,9 @@ isTagged: (expected) => {
                     fail()
                 })
                 result = true
-            })
-        })
-    })
+            }
+        }
+    }
     result
 }
 
@@ -512,36 +512,36 @@ requireScalar: (node, expected) => {
 
     Assertions.require(node.kind == kind)
 
-    (kind == "string").ifTrue(() => {
+    if(kind == "string") {
         Assertions.require(node.value == text)
-    })
-    (kind == "integer").ifTrue(() => {
+    }
+    if(kind == "integer") {
         Assertions.require(node.value == officialInteger(text))
-    })
-    (kind == "float").ifTrue(() => {
+    }
+    if(kind == "float") {
         expectedValue: officialFloat(text)
-        (expectedValue == expectedValue).ifTrue(() => {
+        if(expectedValue == expectedValue) {
             Assertions.require(node.value == expectedValue)
-        })
+        }
         (expectedValue == expectedValue).ifFalse(() => {
             Assertions.require(node.value != node.value)
         })
-    })
-    (kind == "boolean").ifTrue(() => {
+    }
+    if(kind == "boolean") {
         Assertions.require(node.value === (text == "true"))
-    })
-    (kind == "localDate").ifTrue(() => {
+    }
+    if(kind == "localDate") {
         requireSameDate(node.value, officialTemporal(tag, text))
-    })
-    (kind == "localTime").ifTrue(() => {
+    }
+    if(kind == "localTime") {
         requireSameTime(node.value, officialTemporal(tag, text))
-    })
-    (kind == "localDateTime").ifTrue(() => {
+    }
+    if(kind == "localDateTime") {
         expectedValue: officialTemporal(tag, text)
         requireSameDate(node.value, expectedValue)
         requireSameTime(node.value, expectedValue)
-    })
-    (kind == "offsetDateTime").ifTrue(() => {
+    }
+    if(kind == "offsetDateTime") {
         actual: node.value
         expectedValue: officialTemporal(tag, text)
         Assertions.require(utcSeconds(actual) == utcSeconds(expectedValue))
@@ -549,7 +549,7 @@ requireScalar: (node, expected) => {
             nanoseconds(actual.fraction.coefficient, actual.fraction.digits) ==
                 nanoseconds(expectedValue.coefficient, expectedValue.digits)
         )
-    })
+    }
 }
 
 /// Requires the Protos TOML node `node` to be equivalent to the official tagged
@@ -557,12 +557,12 @@ requireScalar: (node, expected) => {
 requireEquivalent: (node, expected) => {
     handled: false
 
-    isTagged(expected).ifTrue(() => {
+    if(isTagged(expected)) {
         requireScalar(node, expected)
         handled = true
-    })
-    (handled === false).ifTrue(() => {
-        (expected.kind == "object").ifTrue(() => {
+    }
+    if(handled === false) {
+        if(expected.kind == "object") {
             Assertions.require(node.kind == "table")
             members: expected.value
             Assertions.require(node.value.size() == members.size())
@@ -571,10 +571,10 @@ requireEquivalent: (node, expected) => {
                 requireEquivalent(node.value[name], child)
             })
             handled = true
-        })
-    })
-    (handled === false).ifTrue(() => {
-        (expected.kind == "array").ifTrue(() => {
+        }
+    }
+    if(handled === false) {
+        if(expected.kind == "array") {
             Assertions.require(node.kind == "array")
             items: expected.value
             Assertions.require(node.value.size() == items.size())
@@ -584,8 +584,8 @@ requireEquivalent: (node, expected) => {
                 index = index + 1
             }
             handled = true
-        })
-    })
+        }
+    }
     handled.ifFalse(() => {
         fail()
     })
@@ -595,10 +595,10 @@ temporalNode: (kind, tag, text) => {
     fields: officialTemporal(tag, text)
     result: null
 
-    (kind == "localDate").ifTrue(() => {
+    if(kind == "localDate") {
         result = TOML.localDate(fields.year, fields.month, fields.day)
-    })
-    (kind == "localTime").ifTrue(() => {
+    }
+    if(kind == "localTime") {
         result = TOML.localTime(
             fields.hour,
             fields.minute,
@@ -606,8 +606,8 @@ temporalNode: (kind, tag, text) => {
             fields.coefficient,
             fields.digits
         )
-    })
-    (kind == "localDateTime").ifTrue(() => {
+    }
+    if(kind == "localDateTime") {
         result = TOML.localDateTime(
             fields.year,
             fields.month,
@@ -618,8 +618,8 @@ temporalNode: (kind, tag, text) => {
             fields.coefficient,
             fields.digits
         )
-    })
-    (kind == "offsetDateTime").ifTrue(() => {
+    }
+    if(kind == "offsetDateTime") {
         result = TOML.offsetDateTime(
             fields.year,
             fields.month,
@@ -631,7 +631,7 @@ temporalNode: (kind, tag, text) => {
             fields.digits,
             fields.offsetMinutes
         )
-    })
+    }
     result
 }
 
@@ -641,50 +641,50 @@ nodeFromOfficial: (expected) => {
     result: null
     handled: false
 
-    isTagged(expected).ifTrue(() => {
+    if(isTagged(expected)) {
         tag: expected.value["type"].value
         text: expected.value["value"].value
         kind: kindOfTag(tag)
 
-        (kind == "string").ifTrue(() => {
+        if(kind == "string") {
             result = TOML.string(text)
-        })
-        (kind == "integer").ifTrue(() => {
+        }
+        if(kind == "integer") {
             result = TOML.integer(officialInteger(text))
-        })
-        (kind == "float").ifTrue(() => {
+        }
+        if(kind == "float") {
             result = TOML.float(officialFloat(text))
-        })
-        (kind == "boolean").ifTrue(() => {
+        }
+        if(kind == "boolean") {
             ((text == "true") || (text == "false")).ifFalse(() => {
                 fail()
             })
             result = TOML.boolean(text == "true")
-        })
-        (result === null).ifTrue(() => {
+        }
+        if(result === null) {
             result = temporalNode(kind, tag, text)
-        })
+        }
         handled = true
-    })
-    (handled === false).ifTrue(() => {
-        (expected.kind == "object").ifTrue(() => {
+    }
+    if(handled === false) {
+        if(expected.kind == "object") {
             pairs: Array()
             expected.value.each((name, child) => {
                 pairs = Array(...pairs, name, nodeFromOfficial(child))
             })
             result = TOML.table(...pairs)
             handled = true
-        })
-    })
-    (handled === false).ifTrue(() => {
-        (expected.kind == "array").ifTrue(() => {
+        }
+    }
+    if(handled === false) {
+        if(expected.kind == "array") {
             nodes: Arrays.map(expected.value, (item) => {
                 nodeFromOfficial(item)
             })
             result = TOML.array(...nodes)
             handled = true
-        })
-    })
+        }
+    }
     handled.ifFalse(() => {
         fail()
     })

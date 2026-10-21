@@ -117,9 +117,9 @@ toInstant: (value) => {
     // a positive divisor.
     floorDiv: (dividend, divisor) => {
         quotient: dividend.div(divisor)
-        ((dividend - quotient * divisor) < 0).ifTrue(() => {
+        if((dividend - quotient * divisor) < 0) {
             quotient = quotient - 1
-        })
+        }
         quotient
     }
 
@@ -130,10 +130,10 @@ toInstant: (value) => {
     date: value.dateTime.date
     shiftedYear: date.year
     shiftedMonth: date.month - 3
-    (date.month <= 2).ifTrue(() => {
+    if(date.month <= 2) {
         shiftedYear = date.year - 1
         shiftedMonth = date.month + 9
-    })
+    }
     era: floorDiv(shiftedYear, 400)
     yearOfEra: shiftedYear - era * 400
     dayOfYear: (153 * shiftedMonth + 2).div(5) + date.day - 1
@@ -169,9 +169,9 @@ fromInstant: (instant, offset) => {
     local: instant.nanoseconds + offset.seconds * 1000000000
     // Floor division keeps the time of day non-negative before the epoch.
     days: local.div(nanosecondsPerDay)
-    ((local - days * nanosecondsPerDay) < 0).ifTrue(() => {
+    if((local - days * nanosecondsPerDay) < 0) {
         days = days - 1
-    })
+    }
     ofDay: local - days * nanosecondsPerDay
 
     // Period application owns the exact day-to-date arithmetic and signals an

@@ -25,12 +25,12 @@ SemVer: import("std:semver/SemVer")
 
 parse: (text) => {
     generic: SemVer.parse(text)
-    (generic.build.size() > 0).ifTrue(() => {
+    if(generic.build.size() > 0) {
         fail()
-    })
+    }
 
     prerelease: null
-    (generic.prerelease.size() > 0).ifTrue(() => {
+    if(generic.prerelease.size() > 0) {
         // The text is already validated and carries no build metadata, so the
         // prerelease spelling is every octet after the first "-", and its
         // "."-separated pieces are the identifiers in order.
@@ -38,15 +38,15 @@ parse: (text) => {
         current: Encoding.UTF8.encode("")
         inPrerelease: false
         Encoding.UTF8.encode(text).each((octet) => {
-            inPrerelease.ifTrue(() => {
-                (octet == 46).ifTrue(() => {
+            if(inPrerelease) {
+                if(octet == 46) {
                     pieces = Array(...pieces, Encoding.UTF8.decode(current))
                     current = Encoding.UTF8.encode("")
-                })
+                }
                 (octet == 46).ifFalse(() => {
                     current.add(octet)
                 })
-            })
+            }
             inPrerelease.ifFalse(() => {
                 inPrerelease = octet == 45
             })
@@ -58,9 +58,9 @@ parse: (text) => {
         generic.prerelease.each((identifier) => {
             numeric: Integer.recognizes(identifier)
             number: null
-            numeric.ifTrue(() => {
+            if(numeric) {
                 number = identifier
-            })
+            }
             prerelease = Array(...prerelease, {
                 numeric: numeric
                 number: number
@@ -68,7 +68,7 @@ parse: (text) => {
             })
             index = index + 1
         })
-    })
+    }
 
     {
         major: generic.major
@@ -86,9 +86,9 @@ semVerValue: (version) => {
     (version.prerelease === null).ifFalse(() => {
         version.prerelease.each((identifier) => {
             value: identifier.text
-            identifier.numeric.ifTrue(() => {
+            if(identifier.numeric) {
                 value = identifier.number
-            })
+            }
             identifiers = Array(...identifiers, value)
         })
     })

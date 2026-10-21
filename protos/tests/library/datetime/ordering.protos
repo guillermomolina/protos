@@ -27,12 +27,12 @@ requireIncreasing: (compare, values) => {
         j: 0
         while(j < values.size()) {
             expected: 0
-            (i < j).ifTrue(() => {
+            if(i < j) {
                 expected = -1
-            })
-            (i > j).ifTrue(() => {
+            }
+            if(i > j) {
                 expected = 1
-            })
+            }
             Assertions.require(compare(values[i], values[j]) == expected)
             Assertions.require(compare(values[j], values[i]) == (0 - expected))
             Assertions.require((values[i] == values[j]) == (expected == 0))

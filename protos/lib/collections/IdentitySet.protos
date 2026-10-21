@@ -70,9 +70,9 @@ union: (left, right) => {
 intersection: (left, right) => {
     result: IdentityMap()
     left.each((element, marker) => {
-        right.containsKey(element).ifTrue(() => {
+        if(right.containsKey(element)) {
             result[element] = true
-        })
+        }
     })
     result
 }
@@ -124,9 +124,9 @@ isSuperset: (left, right) => {
 /// Answers whether `left` and `right` have no member in common.
 isDisjoint: (left, right) => {
     left.each((element, marker) => {
-        right.containsKey(element).ifTrue(() => {
+        if(right.containsKey(element)) {
             ^false
-        })
+        }
     })
     true
 }

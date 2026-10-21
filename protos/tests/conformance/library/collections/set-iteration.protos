@@ -23,7 +23,7 @@ tests: Array(
         Set: import("std:collections/Set")
         nullMarkers: 0
         Set.each(Set(1), (element, marker) => {
-            (marker === null).ifTrue(() => { nullMarkers = nullMarkers + 1 })
+            if(marker === null) { nullMarkers = nullMarkers + 1 }
         })
         Assertions.require(nullMarkers == 1)
     }),
@@ -43,10 +43,10 @@ tests: Array(
             index: 0
             same: Set.each(values, (element) => {
                 visited[index] = element
-                (index == 0).ifTrue(() => {
+                if(index == 0) {
                     Set.add(values, 3)
                     Set.remove(values, 2)
-                })
+                }
                 index = index + 1
             })
 
@@ -55,10 +55,10 @@ tests: Array(
             identityIndex: 0
             sameIdentity: IdentitySet.each(identities, (element) => {
                 identityVisited[identityIndex] = element
-                (identityIndex == 0).ifTrue(() => {
+                if(identityIndex == 0) {
                     IdentitySet.add(identities, 3)
                     IdentitySet.remove(identities, 2)
-                })
+                }
                 identityIndex = identityIndex + 1
             })
 
@@ -68,7 +68,7 @@ tests: Array(
             (visited[0] === 1).ifFalse(() => { ok = false })
             (visited[1] === 2).ifFalse(() => { ok = false })
             (Set.size(values) == 2).ifFalse(() => { ok = false })
-            Set.contains(values, 2).ifTrue(() => { ok = false })
+            if(Set.contains(values, 2)) { ok = false }
             Set.contains(values, 3).ifFalse(() => { ok = false })
 
             (sameIdentity === identities).ifFalse(() => { ok = false })
@@ -76,7 +76,7 @@ tests: Array(
             (identityVisited[0] === 1).ifFalse(() => { ok = false })
             (identityVisited[1] === 2).ifFalse(() => { ok = false })
             (IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
-            IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
+            if(IdentitySet.contains(identities, 2)) { ok = false }
             IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
             ok
         }

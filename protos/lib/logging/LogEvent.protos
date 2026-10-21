@@ -91,10 +91,10 @@ call: ((facility) => (level, message, fields, error, timestamp) => {
             Float.recognizes(value)
 
         handled.ifFalse(() => {
-            Array.recognizes(value).ifTrue(() => {
-                active.containsKey(value).ifTrue(() => {
+            if(Array.recognizes(value)) {
+                if(active.containsKey(value)) {
                     Error().signal()
-                })
+                }
                 active[value] = true
 
                 copy: Arrays.map(value, (element) => snapshot(element))
@@ -103,14 +103,14 @@ call: ((facility) => (level, message, fields, error, timestamp) => {
                 active.remove(value)
                 result = copy
                 handled = true
-            })
+            }
         })
 
         handled.ifFalse(() => {
-            isMap(value).ifTrue(() => {
-                active.containsKey(value).ifTrue(() => {
+            if(isMap(value)) {
+                if(active.containsKey(value)) {
                     Error().signal()
-                })
+                }
                 active[value] = true
 
                 copy: Map()
@@ -125,7 +125,7 @@ call: ((facility) => (level, message, fields, error, timestamp) => {
                 active.remove(value)
                 result = copy
                 handled = true
-            })
+            }
         })
 
         handled.ifFalse(() => {

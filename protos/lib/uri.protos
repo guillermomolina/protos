@@ -71,9 +71,9 @@ parse: (text) => {
     }
 
     validatePercentTriplet: (index, end) => {
-        ((index + 2) >= end).ifTrue(() => {
+        if((index + 2) >= end) {
             fail()
-        })
+        }
         isHexDigit(source[index + 1]).ifFalse(() => {
             fail()
         })
@@ -98,17 +98,17 @@ parse: (text) => {
             octet: source[index]
             isPercent: octet == 37
 
-            isPercent.ifTrue(() => {
+            if(isPercent) {
                 validatePercentTriplet(index, end)
                 index = index + 3
-            })
+            }
 
             isPercent.ifFalse(() => {
                 allowed: isUnreserved(octet) || isSubDelimiter(octet)
-                (octet == 58).ifTrue(() => { allowed = true })
-                (octet == 64).ifTrue(() => { allowed = true })
-                (allowSlash && (octet == 47)).ifTrue(() => { allowed = true })
-                (allowQuestion && (octet == 63)).ifTrue(() => { allowed = true })
+                if(octet == 58) { allowed = true }
+                if(octet == 64) { allowed = true }
+                if(allowSlash && (octet == 47)) { allowed = true }
+                if(allowQuestion && (octet == 63)) { allowed = true }
 
                 allowed.ifFalse(() => {
                     fail()
@@ -124,10 +124,10 @@ parse: (text) => {
             octet: source[index]
             isPercent: octet == 37
 
-            isPercent.ifTrue(() => {
+            if(isPercent) {
                 validatePercentTriplet(index, end)
                 index = index + 3
-            })
+            }
 
             isPercent.ifFalse(() => {
                 allowed: isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58)
@@ -145,10 +145,10 @@ parse: (text) => {
             octet: source[index]
             isPercent: octet == 37
 
-            isPercent.ifTrue(() => {
+            if(isPercent) {
                 validatePercentTriplet(index, end)
                 index = index + 3
-            })
+            }
 
             isPercent.ifFalse(() => {
                 allowed: isUnreserved(octet) || isSubDelimiter(octet)
@@ -172,12 +172,12 @@ parse: (text) => {
             }
 
             tokenSize: index - tokenStart
-            ((tokenSize < 1) || (tokenSize > 3)).ifTrue(() => {
+            if((tokenSize < 1) || (tokenSize > 3)) {
                 fail()
-            })
-            ((tokenSize > 1) && (source[tokenStart] == 48)).ifTrue(() => {
+            }
+            if((tokenSize > 1) && (source[tokenStart] == 48)) {
                 fail()
-            })
+            }
 
             value: 0
             digitIndex: tokenStart
@@ -185,21 +185,21 @@ parse: (text) => {
                 value = value * 10 + (source[digitIndex] - 48)
                 digitIndex = digitIndex + 1
             }
-            (value > 255).ifTrue(() => {
+            if(value > 255) {
                 fail()
-            })
+            }
 
             partCount = partCount + 1
 
-            (index < end).ifTrue(() => {
+            if(index < end) {
                 (source[index] == 46).ifFalse(() => {
                     fail()
                 })
                 index = index + 1
-                (index == end).ifTrue(() => {
+                if(index == end) {
                     fail()
-                })
-            })
+                }
+            }
         }
 
         (partCount == 4).ifFalse(() => {
@@ -218,20 +218,20 @@ parse: (text) => {
             }
             tokenEnd: index
 
-            (tokenEnd == tokenStart).ifTrue(() => {
+            if(tokenEnd == tokenStart) {
                 fail()
-            })
+            }
 
             containsDot: false
             scan: tokenStart
             while(scan < tokenEnd) {
-                (source[scan] == 46).ifTrue(() => {
+                if(source[scan] == 46) {
                     containsDot = true
-                })
+                }
                 scan = scan + 1
             }
 
-            containsDot.ifTrue(() => {
+            if(containsDot) {
                 allowIpv4Tail.ifFalse(() => {
                     fail()
                 })
@@ -240,12 +240,12 @@ parse: (text) => {
                 })
                 validateIpv4(tokenStart, tokenEnd)
                 groupCount = groupCount + 2
-            })
+            }
 
             containsDot.ifFalse(() => {
-                ((tokenEnd - tokenStart) > 4).ifTrue(() => {
+                if((tokenEnd - tokenStart) > 4) {
                     fail()
-                })
+                }
                 scan = tokenStart
                 while(scan < tokenEnd) {
                     isHexDigit(source[scan]).ifFalse(() => {
@@ -256,12 +256,12 @@ parse: (text) => {
                 groupCount = groupCount + 1
             })
 
-            (index < end).ifTrue(() => {
+            if(index < end) {
                 index = index + 1
-                (index == end).ifTrue(() => {
+                if(index == end) {
                     fail()
-                })
-            })
+                }
+            }
         }
 
         groupCount
@@ -272,40 +272,40 @@ parse: (text) => {
         index: start
 
         while((index + 1) < end) {
-            ((source[index] == 58) && (source[index + 1] == 58)).ifTrue(() => {
-                (doubleColonIndex >= 0).ifTrue(() => {
+            if((source[index] == 58) && (source[index + 1] == 58)) {
+                if(doubleColonIndex >= 0) {
                     fail()
-                })
+                }
                 doubleColonIndex = index
-            })
+            }
             index = index + 1
         }
 
-        (doubleColonIndex < 0).ifTrue(() => {
+        if(doubleColonIndex < 0) {
             groupCount: parseIpv6Side(start, end, true)
             (groupCount == 8).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
-        (doubleColonIndex >= 0).ifTrue(() => {
+        if(doubleColonIndex >= 0) {
             leftCount: parseIpv6Side(start, doubleColonIndex, false)
             rightCount: parseIpv6Side(doubleColonIndex + 2, end, true)
-            ((leftCount + rightCount) >= 8).ifTrue(() => {
+            if((leftCount + rightCount) >= 8) {
                 fail()
-            })
-        })
+            }
+        }
     }
 
     validateIpLiteral: (start, end) => {
-        (start >= end).ifTrue(() => {
+        if(start >= end) {
             fail()
-        })
+        }
 
         first: source[start]
         isIpvFuture: (first == 118) || (first == 86)
 
-        isIpvFuture.ifTrue(() => {
+        if(isIpvFuture) {
             index: start + 1
             hexStart: index
 
@@ -313,13 +313,13 @@ parse: (text) => {
                 index = index + 1
             }
 
-            ((index == hexStart) || (index >= end) || (source[index] != 46)).ifTrue(() => {
+            if((index == hexStart) || (index >= end) || (source[index] != 46)) {
                 fail()
-            })
+            }
             index = index + 1
-            (index >= end).ifTrue(() => {
+            if(index >= end) {
                 fail()
-            })
+            }
 
             while(index < end) {
                 octet: source[index]
@@ -329,7 +329,7 @@ parse: (text) => {
                 })
                 index = index + 1
             }
-        })
+        }
 
         isIpvFuture.ifFalse(() => {
             validateIpv6(start, end)
@@ -341,42 +341,42 @@ parse: (text) => {
         index: start
 
         while(index < end) {
-            (source[index] == 64).ifTrue(() => {
-                (atIndex >= 0).ifTrue(() => {
+            if(source[index] == 64) {
+                if(atIndex >= 0) {
                     fail()
-                })
+                }
                 atIndex = index
-            })
+            }
             index = index + 1
         }
 
         hostPortStart: start
-        (atIndex >= 0).ifTrue(() => {
+        if(atIndex >= 0) {
             validateUserInfo(start, atIndex)
             userInfoValue = sliceText(start, atIndex)
             hostPortStart = atIndex + 1
-        })
+        }
 
         bracketed: (hostPortStart < end) && (source[hostPortStart] == 91)
 
-        bracketed.ifTrue(() => {
+        if(bracketed) {
             closeIndex: -1
             index = hostPortStart + 1
 
             while((index < end) && (closeIndex < 0)) {
-                (source[index] == 93).ifTrue(() => {
+                if(source[index] == 93) {
                     closeIndex = index
-                })
+                }
                 index = index + 1
             }
 
-            (closeIndex < 0).ifTrue(() => {
+            if(closeIndex < 0) {
                 fail()
-            })
+            }
             validateIpLiteral(hostPortStart + 1, closeIndex)
             hostValue = sliceText(hostPortStart, closeIndex + 1)
 
-            ((closeIndex + 1) < end).ifTrue(() => {
+            if((closeIndex + 1) < end) {
                 (source[closeIndex + 1] == 58).ifFalse(() => {
                     fail()
                 })
@@ -389,31 +389,31 @@ parse: (text) => {
                     portIndex = portIndex + 1
                 }
                 portValue = sliceText(closeIndex + 2, end)
-            })
-        })
+            }
+        }
 
         bracketed.ifFalse(() => {
             colonIndex: -1
             index = hostPortStart
 
             while(index < end) {
-                (source[index] == 58).ifTrue(() => {
-                    (colonIndex >= 0).ifTrue(() => {
+                if(source[index] == 58) {
+                    if(colonIndex >= 0) {
                         fail()
-                    })
+                    }
                     colonIndex = index
-                })
+                }
                 index = index + 1
             }
 
             hostEnd: end
-            (colonIndex >= 0).ifTrue(() => {
+            if(colonIndex >= 0) {
                 hostEnd = colonIndex
-            })
+            }
             validateRegName(hostPortStart, hostEnd)
             hostValue = sliceText(hostPortStart, hostEnd)
 
-            (colonIndex >= 0).ifTrue(() => {
+            if(colonIndex >= 0) {
                 portIndex: colonIndex + 1
                 while(portIndex < end) {
                     isDigit(source[portIndex]).ifFalse(() => {
@@ -422,16 +422,16 @@ parse: (text) => {
                     portIndex = portIndex + 1
                 }
                 portValue = sliceText(colonIndex + 1, end)
-            })
+            }
         })
     }
 
     // The initial profile is RFC 3986 URI syntax, not IRI or WHATWG URL input.
     asciiIndex: 0
     while(asciiIndex < size) {
-        (source[asciiIndex] > 127).ifTrue(() => {
+        if(source[asciiIndex] > 127) {
             fail()
-        })
+        }
         asciiIndex = asciiIndex + 1
     }
 
@@ -445,27 +445,27 @@ parse: (text) => {
     while((scanIndex < size) && scanningSchemeCandidate) {
         octet: source[scanIndex]
 
-        (octet == 58).ifTrue(() => {
+        if(octet == 58) {
             firstColon = scanIndex
             scanningSchemeCandidate = false
-        })
+        }
 
-        ((octet == 47) || (octet == 63) || (octet == 35)).ifTrue(() => {
+        if((octet == 47) || (octet == 63) || (octet == 35)) {
             scanningSchemeCandidate = false
-        })
+        }
 
-        scanningSchemeCandidate.ifTrue(() => {
+        if(scanningSchemeCandidate) {
             scanIndex = scanIndex + 1
-        })
+        }
     }
 
     hasScheme: firstColon >= 0
     index: 0
 
-    hasScheme.ifTrue(() => {
-        (firstColon == 0).ifTrue(() => {
+    if(hasScheme) {
+        if(firstColon == 0) {
             fail()
-        })
+        }
         isAlpha(source[0]).ifFalse(() => {
             fail()
         })
@@ -486,13 +486,13 @@ parse: (text) => {
 
         schemeValue = sliceText(0, firstColon)
         index = firstColon + 1
-    })
+    }
 
     hasAuthority: ((index + 1) < size) &&
         (source[index] == 47) &&
         (source[index + 1] == 47)
 
-    hasAuthority.ifTrue(() => {
+    if(hasAuthority) {
         authorityStart: index + 2
         authorityEnd: authorityStart
 
@@ -507,7 +507,7 @@ parse: (text) => {
 
         validateAuthority(authorityStart, authorityEnd)
         index = authorityEnd
-    })
+    }
 
     pathStart: index
     while((index < size) && (source[index] != 63) && (source[index] != 35)) {
@@ -517,23 +517,23 @@ parse: (text) => {
 
     validateComponent(pathStart, pathEnd, true, false)
 
-    (hasAuthority && (pathStart < pathEnd) && (source[pathStart] != 47)).ifTrue(() => {
+    if(hasAuthority && (pathStart < pathEnd) && (source[pathStart] != 47)) {
         fail()
-    })
+    }
 
-    ((!hasScheme) && (!hasAuthority) && (pathStart < pathEnd) && (source[pathStart] != 47)).ifTrue(() => {
+    if((!hasScheme) && (!hasAuthority) && (pathStart < pathEnd) && (source[pathStart] != 47)) {
         firstSegmentIndex: pathStart
         while((firstSegmentIndex < pathEnd) && (source[firstSegmentIndex] != 47)) {
-            (source[firstSegmentIndex] == 58).ifTrue(() => {
+            if(source[firstSegmentIndex] == 58) {
                 fail()
-            })
+            }
             firstSegmentIndex = firstSegmentIndex + 1
         }
-    })
+    }
 
     pathValue = sliceText(pathStart, pathEnd)
 
-    ((index < size) && (source[index] == 63)).ifTrue(() => {
+    if((index < size) && (source[index] == 63)) {
         queryStart: index + 1
         index = queryStart
 
@@ -543,14 +543,14 @@ parse: (text) => {
 
         validateComponent(queryStart, index, true, true)
         queryValue = sliceText(queryStart, index)
-    })
+    }
 
-    ((index < size) && (source[index] == 35)).ifTrue(() => {
+    if((index < size) && (source[index] == 35)) {
         fragmentStart: index + 1
         validateComponent(fragmentStart, size, true, true)
         fragmentValue = sliceText(fragmentStart, size)
         index = size
-    })
+    }
 
     (index == size).ifFalse(() => {
         fail()
@@ -614,48 +614,48 @@ format: (reference) => {
 
     // Authority presence is represented only by host presence. There is no
     // second raw-authority source of truth.
-    (hostValue === null).ifTrue(() => {
-        (userInfoValue !== null).ifTrue(() => {
+    if(hostValue === null) {
+        if(userInfoValue !== null) {
             fail()
-        })
-        (portValue !== null).ifTrue(() => {
+        }
+        if(portValue !== null) {
             fail()
-        })
-    })
+        }
+    }
 
-    (schemeValue !== null).ifTrue(() => {
+    if(schemeValue !== null) {
         appendText(schemeValue)
         output.add(58)
-    })
+    }
 
-    (hostValue !== null).ifTrue(() => {
+    if(hostValue !== null) {
         output.add(47)
         output.add(47)
 
-        (userInfoValue !== null).ifTrue(() => {
+        if(userInfoValue !== null) {
             appendText(userInfoValue)
             output.add(64)
-        })
+        }
 
         appendText(hostValue)
 
-        (portValue !== null).ifTrue(() => {
+        if(portValue !== null) {
             output.add(58)
             appendText(portValue)
-        })
-    })
+        }
+    }
 
     appendText(pathValue)
 
-    (queryValue !== null).ifTrue(() => {
+    if(queryValue !== null) {
         output.add(63)
         appendText(queryValue)
-    })
+    }
 
-    (fragmentValue !== null).ifTrue(() => {
+    if(fragmentValue !== null) {
         output.add(35)
         appendText(fragmentValue)
-    })
+    }
 
     candidate: Encoding.UTF8.decode(output)
 
@@ -669,15 +669,15 @@ format: (reference) => {
     sameOptionalText: (actual, expected) => {
         same: false
 
-        (expected === null).ifTrue(() => {
+        if(expected === null) {
             same = actual === null
-        })
+        }
 
-        (expected !== null).ifTrue(() => {
-            (actual !== null).ifTrue(() => {
+        if(expected !== null) {
+            if(actual !== null) {
                 same = actual == expected
-            })
-        })
+            }
+        }
 
         same
     }
@@ -700,20 +700,20 @@ resolve: (base, reference) => {
     ignoredBaseValidation: format(base)
     ignoredReferenceValidation: format(reference)
 
-    (base.scheme === null).ifTrue(() => {
+    if(base.scheme === null) {
         fail()
-    })
-    (base.fragment !== null).ifTrue(() => {
+    }
+    if(base.fragment !== null) {
         fail()
-    })
+    }
 
     removeLastSegment: (output) => {
         while((output.size() > 0) && (output[output.size() - 1] != 47)) {
             output.removeAt(output.size() - 1)
         }
-        (output.size() > 0).ifTrue(() => {
+        if(output.size() > 0) {
             output.removeAt(output.size() - 1)
-        })
+        }
     }
 
     // RFC 3986 section 5.2.4. Only literal dot-segment syntax is removed;
@@ -728,88 +728,88 @@ resolve: (base, reference) => {
             handled: false
 
             // A. "../" or "./"
-            (((index + 2) < size) &&
+            if(((index + 2) < size) &&
                 (source[index] == 46) &&
                 (source[index + 1] == 46) &&
-                (source[index + 2] == 47)).ifTrue(() => {
+                (source[index + 2] == 47)) {
                 index = index + 3
                 handled = true
-            })
+            }
 
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 1) < size) &&
                 (source[index] == 46) &&
-                (source[index + 1] == 47)).ifTrue(() => {
+                (source[index + 1] == 47)) {
                 index = index + 2
                 handled = true
-            })
+            }
 
             // B. "/./" -> "/" and terminal "/." -> "/".
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 2) < size) &&
                 (source[index] == 47) &&
                 (source[index + 1] == 46) &&
-                (source[index + 2] == 47)).ifTrue(() => {
+                (source[index + 2] == 47)) {
                 index = index + 2
                 handled = true
-            })
+            }
 
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 2) == size) &&
                 (source[index] == 47) &&
-                (source[index + 1] == 46)).ifTrue(() => {
+                (source[index + 1] == 46)) {
                 output.add(47)
                 index = size
                 handled = true
-            })
+            }
 
             // C. "/../" -> "/" and terminal "/.." -> "/", removing the
             // previous output segment in both cases.
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 3) < size) &&
                 (source[index] == 47) &&
                 (source[index + 1] == 46) &&
                 (source[index + 2] == 46) &&
-                (source[index + 3] == 47)).ifTrue(() => {
+                (source[index + 3] == 47)) {
                 removeLastSegment(output)
                 index = index + 3
                 handled = true
-            })
+            }
 
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 3) == size) &&
                 (source[index] == 47) &&
                 (source[index + 1] == 46) &&
-                (source[index + 2] == 46)).ifTrue(() => {
+                (source[index + 2] == 46)) {
                 removeLastSegment(output)
                 output.add(47)
                 index = size
                 handled = true
-            })
+            }
 
             // D. Entire remaining input is "." or "..".
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 1) == size) &&
-                (source[index] == 46)).ifTrue(() => {
+                (source[index] == 46)) {
                 index = size
                 handled = true
-            })
+            }
 
-            ((!handled) &&
+            if((!handled) &&
                 ((index + 2) == size) &&
                 (source[index] == 46) &&
-                (source[index + 1] == 46)).ifTrue(() => {
+                (source[index + 1] == 46)) {
                 index = size
                 handled = true
-            })
+            }
 
             // E. Move the next path segment, including a leading slash when
             // present, from input to output.
             handled.ifFalse(() => {
-                (source[index] == 47).ifTrue(() => {
+                if(source[index] == 47) {
                     output.add(47)
                     index = index + 1
-                })
+                }
 
                 while((index < size) && (source[index] != 47)) {
                     output.add(source[index])
@@ -827,17 +827,17 @@ resolve: (base, reference) => {
         referenceBytes: Encoding.UTF8.encode(referencePath)
         merged: Encoding.UTF8.encode("")
 
-        ((baseHasAuthority) && (baseBytes.size() == 0)).ifTrue(() => {
+        if((baseHasAuthority) && (baseBytes.size() == 0)) {
             merged.add(47)
-        })
+        }
 
         ((baseHasAuthority) && (baseBytes.size() == 0)).ifFalse(() => {
             lastSlash: -1
             scan: 0
             while(scan < baseBytes.size()) {
-                (baseBytes[scan] == 47).ifTrue(() => {
+                if(baseBytes[scan] == 47) {
                     lastSlash = scan
-                })
+                }
                 scan = scan + 1
             }
 
@@ -865,46 +865,46 @@ resolve: (base, reference) => {
     targetQuery: null
     targetFragment: reference.fragment
 
-    (reference.scheme !== null).ifTrue(() => {
+    if(reference.scheme !== null) {
         targetScheme = reference.scheme
         targetUserInfo = reference.userInfo
         targetHost = reference.host
         targetPort = reference.port
         targetPath = removeDotSegments(reference.path)
         targetQuery = reference.query
-    })
+    }
 
-    (reference.scheme === null).ifTrue(() => {
+    if(reference.scheme === null) {
         targetScheme = base.scheme
 
-        (reference.host !== null).ifTrue(() => {
+        if(reference.host !== null) {
             targetUserInfo = reference.userInfo
             targetHost = reference.host
             targetPort = reference.port
             targetPath = removeDotSegments(reference.path)
             targetQuery = reference.query
-        })
+        }
 
-        (reference.host === null).ifTrue(() => {
+        if(reference.host === null) {
             targetUserInfo = base.userInfo
             targetHost = base.host
             targetPort = base.port
 
-            (reference.path == "").ifTrue(() => {
+            if(reference.path == "") {
                 targetPath = base.path
                 targetQuery = base.query
-                (reference.query !== null).ifTrue(() => {
+                if(reference.query !== null) {
                     targetQuery = reference.query
-                })
-            })
+                }
+            }
 
             (reference.path == "").ifFalse(() => {
                 referenceBytes: Encoding.UTF8.encode(reference.path)
                 isAbsolutePath: (referenceBytes.size() > 0) && (referenceBytes[0] == 47)
 
-                isAbsolutePath.ifTrue(() => {
+                if(isAbsolutePath) {
                     targetPath = removeDotSegments(reference.path)
-                })
+                }
 
                 isAbsolutePath.ifFalse(() => {
                     mergedPath: mergePaths(base.path, reference.path, base.host !== null)
@@ -913,8 +913,8 @@ resolve: (base, reference) => {
 
                 targetQuery = reference.query
             })
-        })
-    })
+        }
+    }
 
     target: {
         scheme: targetScheme

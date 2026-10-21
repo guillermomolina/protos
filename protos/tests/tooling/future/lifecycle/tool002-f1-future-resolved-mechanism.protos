@@ -22,12 +22,12 @@ evaluate: (line, source, expectedPassed) => {
     observation: Runner.resultObservation(result)
 
     passed: Runner.resultPassed(result) === expectedPassed
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.state === "completed"
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.error === null
-    })
+    }
     passed
 }
 
@@ -45,52 +45,52 @@ passed:
     Runner.isFutureResolvedExpectation(integerSpec) &&
     Runner.isDExpectation(integerSpec)
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f1-source-resolved-integer.protos\tfuture-integer\t42",
         integerSource,
         true
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f1-source-resolved-null.protos\tfuture-null\t-",
         nullSource,
         true
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "future/tool002-f1-inline.protos\tfuture-boolean\ttrue",
         "(() => { true }).future()",
         true
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "future/tool002-f1-inline.protos\tfuture-boolean\tfalse",
         "(() => { true }).future()",
         false
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "future/tool002-f1-inline.protos\tfuture-integer\t42",
         "42",
         false
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "future/tool002-f1-inline.protos\tfuture-integer\t42",
         "(() => { Error().signal() }).future()",
         false
     )
-})
+}
 
 passed

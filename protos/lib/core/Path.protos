@@ -24,15 +24,15 @@ Path: {
     }
 
     child: (name) => {
-        (_corePathKernel.componentCount(this) < 0).ifTrue(() => {
+        if(_corePathKernel.componentCount(this) < 0) {
             Error().signal()
-        })
+        }
         String.recognizes(name).ifFalse(() => {
             Error().signal()
         })
-        ((name == "") || (name == ".") || (name == "..")).ifTrue(() => {
+        if((name == "") || (name == ".") || (name == "..")) {
             Error().signal()
-        })
+        }
 
         _corePathKernel.mint(this, name)
     }
@@ -40,9 +40,9 @@ Path: {
     // Installed by the runtime as `==`; a slot target cannot spell an operator.
     _corePathEquals: (other) => {
         size: _corePathKernel.componentCount(this)
-        (size < 0).ifTrue(() => {
+        if(size < 0) {
             Error().signal()
-        })
+        }
 
         result: _corePathKernel.componentCount(other) == size
         index: 0
@@ -62,22 +62,22 @@ Path: {
     // dividend's sign, so a negative remainder is lifted into 0..2^32-1.
     hash: () => {
         size: _corePathKernel.componentCount(this)
-        (size < 0).ifTrue(() => {
+        if(size < 0) {
             Error().signal()
-        })
+        }
 
         h: 1
         index: 0
         while(index < size) {
             h = (31 * h + _corePathKernel.componentAt(this, index).hash()).mod(4294967296)
-            (h < 0).ifTrue(() => {
+            if(h < 0) {
                 h = h + 4294967296
-            })
+            }
             index = index + 1
         }
-        (h >= 2147483648).ifTrue(() => {
+        if(h >= 2147483648) {
             h = h - 4294967296
-        })
+        }
         h
     }
 }

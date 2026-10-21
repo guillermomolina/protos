@@ -16,11 +16,11 @@
  */
 
 describe: (n) => {
-    (n < 0).ifTrue() {
+    if(n < 0) {
         print("negative")
     }
 
-    (n >= 0).ifTrue() {
+    if(n >= 0) {
         print("zero or positive")
     }
 }

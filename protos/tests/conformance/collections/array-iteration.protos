@@ -92,9 +92,9 @@ tests: [
                 first: seen == 0
                 seen = seen * 10 + value
 
-                first.ifTrue(() => {
+                if(first) {
                     xs[1] = 99
-                })
+                }
 
                 null
             })

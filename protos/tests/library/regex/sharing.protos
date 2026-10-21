@@ -32,9 +32,9 @@ summary: (matches) => {
     result: ""
     matches.each((found) => {
         group: found.group(1)
-        (group === null).ifTrue(() => {
+        if(group === null) {
             group = "-"
-        })
+        }
         result = result + number(found.start(0)) + ":" + number(found.end(0)) + ":" + group + ";"
     })
     result

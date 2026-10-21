@@ -23,7 +23,7 @@ tests: Array(
             (Network.parent() === Object).ifFalse(() => { ok = false })
             derived: Network()
             (derived.parent() === Network).ifFalse(() => { ok = false })
-            (derived === Network).ifTrue(() => { ok = false })
+            if(derived === Network) { ok = false }
             ok
         }
         Assertions.require(tool009LegacyCase())

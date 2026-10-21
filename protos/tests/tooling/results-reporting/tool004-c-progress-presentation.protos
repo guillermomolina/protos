@@ -118,13 +118,13 @@ terminal: Progress.observer(state)
 
 index: 1
 while(index <= 23) {
-    (index == 5).ifTrue(() => {
+    if(index == 5) {
         terminal(
             failSpec,
             failEvaluation,
             false
         )
-    })
+    }
 
     (index == 5).ifFalse(() => {
         terminal(

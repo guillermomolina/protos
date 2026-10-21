@@ -28,12 +28,12 @@ tests: [
             peer: view { id: 7 }
 
             flags: 0
-            view.hasSlot("equals").ifTrue(() => { flags = flags + 1 })
-            view.hasSlot("==").ifTrue(() => { flags = flags + 1 })
+            if(view.hasSlot("equals")) { flags = flags + 1 }
+            if(view.hasSlot("==")) { flags = flags + 1 }
             (source.hasSlot("==")).ifFalse(() => { flags = flags + 1 })
-            (view.slotValue("equals") === view.slotValue("==")).ifTrue(() => { flags = flags + 1 })
-            (view.parent() === Object).ifTrue(() => { flags = flags + 1 })
-            (left == peer).ifTrue(() => { flags = flags + 1 })
+            if(view.slotValue("equals") === view.slotValue("==")) { flags = flags + 1 }
+            if(view.parent() === Object) { flags = flags + 1 }
+            if(left == peer) { flags = flags + 1 }
             (left === peer).ifFalse(() => { flags = flags + 1 })
             result: flags
             result

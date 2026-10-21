@@ -86,9 +86,9 @@ parseDate: (text) => {
 
     negative: (text.size() > 0) && (text[0] == "-")
     start: 0
-    negative.ifTrue(() => {
+    if(negative) {
         start = 1
-    })
+    }
     (text.size() == (start + 10)).ifFalse(() => {
         Error().signal()
     })
@@ -96,12 +96,12 @@ parseDate: (text) => {
         Error().signal()
     })
     year: number(start, 4)
-    negative.ifTrue(() => {
-        (year == 0).ifTrue(() => {
+    if(negative) {
+        if(year == 0) {
             Error().signal()
-        })
+        }
         year = 0 - year
-    })
+    }
     Date(year, number(start + 5, 2), number(start + 8, 2))
 }
 
@@ -129,10 +129,10 @@ formatDate: (date) => {
 
     sign: ""
     year: date.year
-    (year < 0).ifTrue(() => {
+    if(year < 0) {
         sign = "-"
         year = 0 - year
-    })
+    }
     sign.concat(pad(year, 4), "-", pad(date.month, 2), "-", pad(date.day, 2))
 }
 
@@ -178,7 +178,7 @@ parseTime: (text) => {
         Error().signal()
     })
     nanosecond: 0
-    (size > 8).ifTrue(() => {
+    if(size > 8) {
         (text[8] == ".").ifFalse(() => {
             Error().signal()
         })
@@ -188,7 +188,7 @@ parseTime: (text) => {
             nanosecond = nanosecond * 10
             fractionDigits = fractionDigits + 1
         }
-    })
+    }
     Time(number(0, 2), number(3, 2), number(6, 2), nanosecond)
 }
 
@@ -217,7 +217,7 @@ formatTime: (time) => {
     }
 
     text: pad(time.hour, 2).concat(":", pad(time.minute, 2), ":", pad(time.second, 2))
-    (time.nanosecond > 0).ifTrue(() => {
+    if(time.nanosecond > 0) {
         fraction: time.nanosecond
         width: 9
         while((fraction % 10) == 0) {
@@ -225,7 +225,7 @@ formatTime: (time) => {
             width = width - 1
         }
         text = text.concat(".", pad(fraction, width))
-    })
+    }
     text
 }
 
@@ -323,32 +323,32 @@ parseOffsetDateTime: (text) => {
 
     dateTime: ISO8601.parseLocalDateTime(slice(0, start))
     offset: null
-    (text[start] == "Z").ifTrue(() => {
+    if(text[start] == "Z") {
         (size == (start + 1)).ifFalse(() => {
             Error().signal()
         })
         offset = Offset(0)
-    })
-    (offset === null).ifTrue(() => {
+    }
+    if(offset === null) {
         // The magnitude is `HH:MM` or `HH:MM:SS`; `parseTime` checks the
         // two-digit fields, and minutes and seconds are at most 59.
         magnitude: slice(start + 1, size)
-        (magnitude.size() == 5).ifTrue(() => {
+        if(magnitude.size() == 5) {
             magnitude = magnitude + ":00"
-        })
+        }
         (magnitude.size() == 8).ifFalse(() => {
             Error().signal()
         })
         fields: ISO8601.parseTime(magnitude)
         seconds: fields.hour * 3600 + fields.minute * 60 + fields.second
-        (text[start] == "-").ifTrue(() => {
-            (seconds == 0).ifTrue(() => {
+        if(text[start] == "-") {
+            if(seconds == 0) {
                 Error().signal()
-            })
+            }
             seconds = 0 - seconds
-        })
+        }
         offset = Offset(seconds)
-    })
+    }
     OffsetDateTime(dateTime, offset)
 }
 
@@ -381,17 +381,17 @@ formatOffsetDateTime: (value) => {
 
     offsetText: "Z"
     seconds: value.offset.seconds
-    (seconds != 0).ifTrue(() => {
+    if(seconds != 0) {
         offsetText = "+"
-        (seconds < 0).ifTrue(() => {
+        if(seconds < 0) {
             offsetText = "-"
             seconds = 0 - seconds
-        })
+        }
         offsetText = offsetText.concat(pad(seconds.div(3600), 2), ":", pad(seconds.div(60) % 60, 2))
-        ((seconds % 60) != 0).ifTrue(() => {
+        if((seconds % 60) != 0) {
             offsetText = offsetText.concat(":", pad(seconds % 60, 2))
-        })
-    })
+        }
+    }
     ISO8601.formatLocalDateTime(value.dateTime) + offsetText
 }
 

@@ -62,7 +62,7 @@ call: (mode, autoEnabled) => {
             // is read.
             plain: TextFormatter.format(event)
             result: plain
-            (stylingEnabled && palette.containsKey(event.level)).ifTrue(() => {
+            if(stylingEnabled && palette.containsKey(event.level)) {
                 // The canonical line is sliced, never re-rendered. The
                 // timestamp and LEVEL are ASCII and the ISO 8601 timestamp has
                 // no space, so octet offsets are scalar offsets here.
@@ -90,7 +90,7 @@ call: (mode, autoEnabled) => {
                     copy(levelEnd, octets.size())
                 )
                 result = ANSI.render(styled, stylingEnabled)
-            })
+            }
             result
         }
     }

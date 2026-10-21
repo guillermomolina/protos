@@ -19,24 +19,24 @@ Syntax: import("self:LockSyntax")
 
 nonEmptyQstring: (text) => {
     bytes: Encoding.UTF8.encode(text)
-    (bytes.size() == 0).ifTrue(() => {
+    if(bytes.size() == 0) {
         fail()
-    })
+    }
     ignoredCanonicalEncoding: Syntax.renderQstring(text)
     text
 }
 
 lowerHexDigit: (octet) => {
     digit: octet >= 48
-    (octet > 57).ifTrue(() => {
+    if(octet > 57) {
         digit = false
-    })
+    }
 
     digit.ifFalse(() => {
         digit = octet >= 97
-        (octet > 102).ifTrue(() => {
+        if(octet > 102) {
             digit = false
-        })
+        }
     })
 
     digit
@@ -75,21 +75,21 @@ bytesLess: (left, right) => {
 
     left.each((leftOctet) => {
         decided.ifFalse(() => {
-            (index < rightSize).ifTrue(() => {
+            if(index < rightSize) {
                 rightOctet: right[index]
 
-                (leftOctet < rightOctet).ifTrue(() => {
+                if(leftOctet < rightOctet) {
                     result = true
                     decided = true
-                })
+                }
 
                 decided.ifFalse(() => {
-                    (leftOctet > rightOctet).ifTrue(() => {
+                    if(leftOctet > rightOctet) {
                         result = false
                         decided = true
-                    })
+                    }
                 })
-            })
+            }
         })
         index = index + 1
     })
@@ -139,14 +139,14 @@ normalizeMembers: (members) => {
 
         packageId: nonEmptyQstring(member.packageId)
 
-        seenLocations.containsKey(location).ifTrue(() => {
+        if(seenLocations.containsKey(location)) {
             fail()
-        })
+        }
         seenLocations[location] = true
 
-        seenPackageIds.containsKey(packageId).ifTrue(() => {
+        if(seenPackageIds.containsKey(packageId)) {
             fail()
-        })
+        }
         seenPackageIds[packageId] = true
 
         copied = Array(
@@ -174,9 +174,9 @@ normalize: (model) => {
     members: normalizeMembers(model.members)
 
     members.each((member) => {
-        (member.packageId == rootPackageId).ifTrue(() => {
+        if(member.packageId == rootPackageId) {
             fail()
-        })
+        }
     })
 
     {

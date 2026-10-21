@@ -29,17 +29,17 @@ countText: (value) => {
     Integer.recognizes(value).ifFalse(() => {
         policyError()
     })
-    (value < 0).ifTrue(() => {
+    if(value < 0) {
         policyError()
-    })
+    }
 
     text: ""
 
-    (value == 0).ifTrue(() => {
+    if(value == 0) {
         text = "0"
-    })
+    }
 
-    (value > 0).ifTrue(() => {
+    if(value > 0) {
         divisor: 1
         probe: value
 
@@ -56,7 +56,7 @@ countText: (value) => {
             remaining = remaining.mod(divisor)
             divisor = divisor.div(10)
         }
-    })
+    }
 
     text
 }
@@ -65,9 +65,9 @@ selectedCount: (plan) => {
     count: 0
 
     Manifest.planCases(plan).each((spec) => {
-        Runner.isDExpectation(spec).ifTrue(() => {
+        if(Runner.isDExpectation(spec)) {
             count = count + 1
-        })
+        }
     })
 
     count
@@ -79,17 +79,17 @@ begin: (phaseName, total, emitLine) => {
     Integer.recognizes(total).ifFalse(() => {
         policyError()
     })
-    (total < 0).ifTrue(() => {
+    if(total < 0) {
         policyError()
-    })
+    }
 
     step: total.div(10)
-    (total.mod(10) > 0).ifTrue(() => {
+    if(total.mod(10) > 0) {
         step = step + 1
-    })
-    (step < 1).ifTrue(() => {
+    }
+    if(step < 1) {
         step = 1
-    })
+    }
 
     state: Array(
         phaseName,
@@ -152,24 +152,24 @@ lifecycleObserver: (state, displayReference) => {
     // An attached watchdog can only be fed display references, so the renderer
     // is mandatory exactly when a sink is present.
     (state[3] === null).ifFalse(() => {
-        (displayReference === null).ifTrue(() => {
+        if(displayReference === null) {
             policyError()
-        })
+        }
     })
 
     (kind, caseRef, result) => {
-        (kind === "started").ifTrue(() => {
+        if(kind === "started") {
             duplicate: false
 
             state[0].each((running) => {
-                (running === caseRef).ifTrue(() => {
+                if(running === caseRef) {
                     duplicate = true
-                })
+                }
             })
 
-            duplicate.ifTrue(() => {
+            if(duplicate) {
                 policyError()
-            })
+            }
 
             token: state[2]
             state[2] = token + 1
@@ -192,9 +192,9 @@ lifecycleObserver: (state, displayReference) => {
                     displayReference(caseRef)
                 )
             })
-        })
+        }
 
-        (kind === "terminal").ifTrue(() => {
+        if(kind === "terminal") {
             retained: Array()
             retainedTokens: Array()
             found: false
@@ -202,13 +202,13 @@ lifecycleObserver: (state, displayReference) => {
             index: 0
 
             state[0].each((running) => {
-                (running === caseRef).ifTrue(() => {
-                    found.ifTrue(() => {
+                if(running === caseRef) {
+                    if(found) {
                         policyError()
-                    })
+                    }
                     found = true
                     token = state[1][index]
-                })
+                }
 
                 (running === caseRef).ifFalse(() => {
                     retained =
@@ -240,14 +240,14 @@ lifecycleObserver: (state, displayReference) => {
                     null
                 )
             })
-        })
+        }
 
-        (
+        if(
             (kind === "started").not() &&
             (kind === "terminal").not()
-        ).ifTrue(() => {
+        ) {
             policyError()
-        })
+        }
 
         null
     }
@@ -269,30 +269,30 @@ observer: (state) => {
 
         state[2] = completed
 
-        failed.ifTrue(() => {
+        if(failed) {
             state[3] = state[3] + 1
 
             kind: "FAIL"
-            infrastructureFailed.ifTrue(() => {
+            if(infrastructureFailed) {
                 kind = "INFRA"
-            })
+            }
 
             reference: caseReference
-            (reference === null).ifTrue(() => {
+            if(reference === null) {
                 reference = Manifest.caseId(spec)
-            })
+            }
 
             state[6](
                 "[" + phaseName + "] " +
                 kind + " " +
                 reference
             )
-        })
+        }
 
-        (
+        if(
             (completed >= state[5]) &&
             (completed < total)
-        ).ifTrue(() => {
+        ) {
             state[6](
                 "[" + phaseName + "] " +
                 countText(completed) + "/" +
@@ -302,7 +302,7 @@ observer: (state) => {
             while(state[5] <= completed) {
                 state[5] = state[5] + state[4]
             }
-        })
+        }
 
         null
     }
@@ -316,17 +316,17 @@ finishPhase: (state, infrastructureAborted) => {
         countText(completed) + "/" +
         countText(total)
 
-    infrastructureAborted.ifTrue(() => {
+    if(infrastructureAborted) {
         line = line + " infrastructure-aborted"
-    })
+    }
 
     infrastructureAborted.ifFalse(() => {
-        (failed == 0).ifTrue(() => {
+        if(failed == 0) {
             line = line + " passed"
-        })
-        (failed > 0).ifTrue(() => {
+        }
+        if(failed > 0) {
             line = line + " failed=" + countText(failed)
-        })
+        }
     })
 
     state[6](line)
@@ -342,30 +342,30 @@ finishInvocation: (states, status, emitLine) => {
         failed = failed + state[3]
     })
 
-    (status === "completed").ifTrue(() => {
+    if(status === "completed") {
         emitLine(
             countText(completed - failed) +
             " passed, " +
             countText(failed) +
             " failed"
         )
-    })
+    }
 
-    (status === "infrastructure-aborted").ifTrue(() => {
+    if(status === "infrastructure-aborted") {
         emitLine(
             countText(completed) +
             " completed, " +
             countText(failed) +
             " failed - infrastructure-aborted"
         )
-    })
+    }
 
-    (
+    if(
         (status === "completed").not() &&
         (status === "infrastructure-aborted").not()
-    ).ifTrue(() => {
+    ) {
         policyError()
-    })
+    }
 
     null
 }

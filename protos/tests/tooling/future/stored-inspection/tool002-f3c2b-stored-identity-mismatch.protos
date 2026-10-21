@@ -42,14 +42,14 @@ evaluation: Runner.evaluateFutureStoredObservation(
 observation: Runner.resultObservation(evaluation)
 
 passed: Runner.resultPassed(evaluation) === false
-passed.ifTrue(() => {
+if(passed) {
     passed = observation.state === "completed"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.error === null
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.value === false
-})
+}
 
 passed

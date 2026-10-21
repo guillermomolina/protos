@@ -42,18 +42,18 @@ separatorKind: (layout, left, right) => {
             (separator.preceding === left.path) &&
             (separator.following === right.path)
 
-        matches.ifTrue(() => {
+        if(matches) {
             (selected === null).ifFalse(() => {
                 Error().signal()
             })
 
             selected = separator.kind
-        })
+        }
     })
 
-    (selected === null).ifTrue(() => {
+    if(selected === null) {
         Error().signal()
-    })
+    }
 
     selected
 }
@@ -70,9 +70,9 @@ usesLogicalNewline: (items, layout) => {
                 items[index]
             )
 
-        (kind == "LOGICAL_NEWLINE").ifTrue(() => {
+        if(kind == "LOGICAL_NEWLINE") {
             result = true
-        })
+        }
 
         index = index + 1
     }
@@ -87,9 +87,9 @@ containsNewline: (text) => {
     index: 0
 
     while(index < text.size()) {
-        (text[index] == "\n").ifTrue(() => {
+        if(text[index] == "\n") {
             result = true
-        })
+        }
 
         index = index + 1
     }
@@ -101,10 +101,10 @@ fitsAtIndent: (text, level) => {
     result:
         !containsNewline(text)
 
-    result.ifTrue(() => {
+    if(result) {
         result =
             (indent(level).size() + text.size()) <= 100
-    })
+    }
 
     result
 }
@@ -164,21 +164,21 @@ formatBinary: (node, level, layout) => {
 
     shouldBreak: false
 
-    containsNewline(left).ifTrue(() => {
+    if(containsNewline(left)) {
         shouldBreak = true
-    })
+    }
 
-    containsNewline(right).ifTrue(() => {
+    if(containsNewline(right)) {
         shouldBreak = true
-    })
+    }
 
-    (width > 100).ifTrue(() => {
+    if(width > 100) {
         shouldBreak = true
-    })
+    }
 
     result: flat
 
-    shouldBreak.ifTrue(() => {
+    if(shouldBreak) {
         result =
             left +
             " " +
@@ -186,7 +186,7 @@ formatBinary: (node, level, layout) => {
             "\n" +
             indent(level + 1) +
             right
-    })
+    }
 
     result
 }
@@ -194,9 +194,9 @@ formatBinary: (node, level, layout) => {
 formatArgument: (argument, level, layout) => {
     prefix: ""
 
-    argument.spread.ifTrue(() => {
+    if(argument.spread) {
         prefix = "..."
-    })
+    }
 
     prefix +
         formatExpression(
@@ -211,9 +211,9 @@ formatArgumentCount: (arguments, count, level, layout) => {
     index: 0
 
     while(index < count) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result = result + ", "
-        })
+        }
 
         result =
             result +
@@ -234,9 +234,9 @@ formatArguments: (arguments, level, layout) => {
     index: 0
 
     while(index < arguments.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result = result + ", "
-        })
+        }
 
         result =
             result +
@@ -257,12 +257,12 @@ formatArgumentLines: (arguments, count, level, layout) => {
     index: 0
 
     while(index < count) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result =
                 result +
                 ",\n" +
                 indent(level)
-        })
+        }
 
         result =
             result +
@@ -297,19 +297,19 @@ formatCallHead: (receiver, arguments, count, level, layout) => {
 
     shouldBreak: false
 
-    containsNewline(receiver).ifTrue(() => {
+    if(containsNewline(receiver)) {
         shouldBreak = true
-    })
+    }
 
-    containsNewline(flatArguments).ifTrue(() => {
+    if(containsNewline(flatArguments)) {
         shouldBreak = true
-    })
+    }
 
-    (indent(level).size() + flat.size() > 100).ifTrue(() => {
+    if(indent(level).size() + flat.size() > 100) {
         shouldBreak = true
-    })
+    }
 
-    ((count > 0) && shouldBreak).ifTrue(() => {
+    if((count > 0) && shouldBreak) {
         result =
             receiver +
             "(\n" +
@@ -323,7 +323,7 @@ formatCallHead: (receiver, arguments, count, level, layout) => {
             "\n" +
             indent(level) +
             ")"
-    })
+    }
 
     result
 }
@@ -345,15 +345,15 @@ formatArray: (arguments, level, layout) => {
 
     shouldBreak: false
 
-    containsNewline(flatArguments).ifTrue(() => {
+    if(containsNewline(flatArguments)) {
         shouldBreak = true
-    })
+    }
 
-    (indent(level).size() + flat.size() > 100).ifTrue(() => {
+    if(indent(level).size() + flat.size() > 100) {
         shouldBreak = true
-    })
+    }
 
-    ((arguments.size() > 0) && shouldBreak).ifTrue(() => {
+    if((arguments.size() > 0) && shouldBreak) {
         result =
             "[\n" +
             indent(level + 1) +
@@ -366,7 +366,7 @@ formatArray: (arguments, level, layout) => {
             "\n" +
             indent(level) +
             "]"
-    })
+    }
 
     result
 }
@@ -382,10 +382,10 @@ containsPhysicalNewline: (text) => {
         scalar:
             text.at(index)
 
-        ((scalar === "\n") ||
-            (scalar === "\r")).ifTrue(() => {
+        if((scalar === "\n") ||
+            (scalar === "\r")) {
             found = true
-        })
+        }
 
         index = index + 1
     }
@@ -416,9 +416,9 @@ shouldBreakAfterOperator: (
         containsPhysicalNewline(left) ||
         containsPhysicalNewline(right)
 
-    multiline.ifTrue(() => {
+    if(multiline) {
         result = false
-    })
+    }
 
     result
 }
@@ -443,13 +443,13 @@ formatSlotCreation: (node, level, layout) => {
         ": " +
         right
 
-    shouldBreakAfterOperator(
+    if(shouldBreakAfterOperator(
         left,
         "",
         ":",
         right,
         level
-    ).ifTrue(() => {
+    )) {
         result =
             left +
             ":\n" +
@@ -459,7 +459,7 @@ formatSlotCreation: (node, level, layout) => {
                 level + 1,
                 layout
             )
-    })
+    }
 
     result
 }
@@ -486,13 +486,13 @@ formatMultipleSlotCreation: (node, level, layout) => {
         ": " +
         right
 
-    shouldBreakAfterOperator(
+    if(shouldBreakAfterOperator(
         left,
         "",
         ":",
         right,
         level
-    ).ifTrue(() => {
+    )) {
         result =
             left +
             ":\n" +
@@ -502,7 +502,7 @@ formatMultipleSlotCreation: (node, level, layout) => {
                 level + 1,
                 layout
             )
-    })
+    }
 
     result
 }
@@ -527,13 +527,13 @@ formatAssignment: (node, level, layout) => {
         " = " +
         right
 
-    shouldBreakAfterOperator(
+    if(shouldBreakAfterOperator(
         left,
         " ",
         "=",
         right,
         level
-    ).ifTrue(() => {
+    )) {
         result =
             left +
             " =\n" +
@@ -543,7 +543,7 @@ formatAssignment: (node, level, layout) => {
                 level + 1,
                 layout
             )
-    })
+    }
 
     result
 }
@@ -560,18 +560,18 @@ separatorBlankLine: (
             (separator.preceding === preceding.path) &&
             (separator.following === following.path)
 
-        matches.ifTrue(() => {
+        if(matches) {
             (selected === null).ifFalse(() => {
                 Error().signal()
             })
 
             selected = separator.blankLine
-        })
+        }
     })
 
-    (selected === null).ifTrue(() => {
+    if(selected === null) {
         Error().signal()
-    })
+    }
 
     selected
 }
@@ -594,19 +594,19 @@ formatSequenceBoundary: (
             (comment.preceding === preceding.path) &&
             (comment.following === following.path)
 
-        sameBoundary.ifTrue(() => {
+        if(sameBoundary) {
             (kind == "LOGICAL_NEWLINE").ifFalse(() => {
                 Error().signal()
             })
 
-            comment.blankLineAfter.ifTrue(() => {
+            if(comment.blankLineAfter) {
                 commentBlankLineSeen = true
-            })
+            }
 
-            (comment.placement == "END_OF_LINE").ifTrue(() => {
-                matched.ifTrue(() => {
+            if(comment.placement == "END_OF_LINE") {
+                if(matched) {
                     Error().signal()
-                })
+                }
 
                 result =
                     " " +
@@ -617,16 +617,16 @@ formatSequenceBoundary: (
                     comment.blankLineAfter
 
                 matched = true
-            })
+            }
 
-            (comment.placement == "OWN_LINE").ifTrue(() => {
+            if(comment.placement == "OWN_LINE") {
                 // blankLineBefore is the physical line above the comment's
                 // line; for an OWN_LINE comment that line lies inside this
                 // boundary, while for an END_OF_LINE comment it precedes the
                 // owning expression and belongs to an earlier boundary.
-                comment.blankLineBefore.ifTrue(() => {
+                if(comment.blankLineBefore) {
                     commentBlankLineSeen = true
-                })
+                }
 
                 matched.ifFalse(() => {
                     result =
@@ -634,12 +634,12 @@ formatSequenceBoundary: (
                         "\n"
                 })
 
-                (pendingBlankAfter ||
-                    comment.blankLineBefore).ifTrue(() => {
+                if(pendingBlankAfter ||
+                    comment.blankLineBefore) {
                     result =
                         result +
                         "\n"
-                })
+                }
 
                 result =
                     result +
@@ -651,13 +651,13 @@ formatSequenceBoundary: (
                     comment.blankLineAfter
 
                 matched = true
-            })
+            }
 
             ((comment.placement == "END_OF_LINE") ||
                 (comment.placement == "OWN_LINE")).ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
     })
 
     blankLine:
@@ -667,42 +667,42 @@ formatSequenceBoundary: (
             following
         )
 
-    matched.ifTrue(() => {
+    if(matched) {
         (blankLine == commentBlankLineSeen).ifFalse(() => {
             Error().signal()
         })
 
-        pendingBlankAfter.ifTrue(() => {
+        if(pendingBlankAfter) {
             result =
                 result +
                 "\n"
-        })
+        }
 
         result =
             result +
             indent(level)
-    })
+    }
 
     matched.ifFalse(() => {
-        (kind == "SEMICOLON").ifTrue(() => {
-            blankLine.ifTrue(() => {
+        if(kind == "SEMICOLON") {
+            if(blankLine) {
                 Error().signal()
-            })
+            }
 
             result = "; "
-        })
+        }
 
-        (kind == "LOGICAL_NEWLINE").ifTrue(() => {
+        if(kind == "LOGICAL_NEWLINE") {
             result =
                 "\n" +
                 indent(level)
 
-            blankLine.ifTrue(() => {
+            if(blankLine) {
                 result =
                     "\n\n" +
                     indent(level)
-            })
-        })
+            }
+        }
 
         ((kind == "SEMICOLON") ||
             (kind == "LOGICAL_NEWLINE")).ifFalse(() => {
@@ -719,7 +719,7 @@ formatSequence: (sequence, level, layout) => {
     index: 0
 
     while(index < expressions.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             kind:
                 separatorKind(
                     layout,
@@ -736,7 +736,7 @@ formatSequence: (sequence, level, layout) => {
                     level,
                     layout
                 )
-        })
+        }
 
         result =
             result +
@@ -756,14 +756,14 @@ formatBracedSequence: (sequence, level, layout) => {
     expressions: sequence.expressions
     result: "{}"
 
-    (expressions.size() > 0).ifTrue(() => {
+    if(expressions.size() > 0) {
         multiline:
             usesLogicalNewline(
                 expressions,
                 layout
             )
 
-        multiline.ifTrue(() => {
+        if(multiline) {
             result =
                 "{\n" +
                 indent(level + 1) +
@@ -775,7 +775,7 @@ formatBracedSequence: (sequence, level, layout) => {
                 "\n" +
                 indent(level) +
                 "}"
-        })
+        }
 
         multiline.ifFalse(() => {
             result =
@@ -787,7 +787,7 @@ formatBracedSequence: (sequence, level, layout) => {
                 ) +
                 " }"
         })
-    })
+    }
 
     result
 }
@@ -811,7 +811,7 @@ formatMapEntries: (entries, level, layout) => {
     index: 0
 
     while(index < entries.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             kind:
                 separatorKind(
                     layout,
@@ -819,22 +819,22 @@ formatMapEntries: (entries, level, layout) => {
                     entries[index]
                 )
 
-            (kind == "SEMICOLON").ifTrue(() => {
+            if(kind == "SEMICOLON") {
                 result = result + "; "
-            })
+            }
 
-            (kind == "LOGICAL_NEWLINE").ifTrue(() => {
+            if(kind == "LOGICAL_NEWLINE") {
                 result =
                     result +
                     "\n" +
                     indent(level)
-            })
+            }
 
             ((kind == "SEMICOLON") ||
                 (kind == "LOGICAL_NEWLINE")).ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
 
         result =
             result +
@@ -853,14 +853,14 @@ formatMapEntries: (entries, level, layout) => {
 formatMap: (entries, level, layout) => {
     result: "%{}"
 
-    (entries.size() > 0).ifTrue(() => {
+    if(entries.size() > 0) {
         multiline:
             usesLogicalNewline(
                 entries,
                 layout
             )
 
-        multiline.ifTrue(() => {
+        if(multiline) {
             result =
                 "%{\n" +
                 indent(level + 1) +
@@ -872,7 +872,7 @@ formatMap: (entries, level, layout) => {
                 "\n" +
                 indent(level) +
                 "}"
-        })
+        }
 
         multiline.ifFalse(() => {
             result =
@@ -884,7 +884,7 @@ formatMap: (entries, level, layout) => {
                 ) +
                 " }"
         })
-    })
+    }
 
     result
 }
@@ -892,9 +892,9 @@ formatMap: (entries, level, layout) => {
 formatObjectItem: (item, level, layout) => {
     prefix: ""
 
-    item.composition.ifTrue(() => {
+    if(item.composition) {
         prefix = "..."
-    })
+    }
 
     prefix +
         formatExpression(
@@ -909,7 +909,7 @@ formatObjectItems: (items, level, layout) => {
     index: 0
 
     while(index < items.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             kind:
                 separatorKind(
                     layout,
@@ -917,22 +917,22 @@ formatObjectItems: (items, level, layout) => {
                     items[index]
                 )
 
-            (kind == "SEMICOLON").ifTrue(() => {
+            if(kind == "SEMICOLON") {
                 result = result + "; "
-            })
+            }
 
-            (kind == "LOGICAL_NEWLINE").ifTrue(() => {
+            if(kind == "LOGICAL_NEWLINE") {
                 result =
                     result +
                     "\n" +
                     indent(level)
-            })
+            }
 
             ((kind == "SEMICOLON") ||
                 (kind == "LOGICAL_NEWLINE")).ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
 
         result =
             result +
@@ -951,14 +951,14 @@ formatObjectItems: (items, level, layout) => {
 formatObjectBody: (items, level, layout) => {
     result: "{}"
 
-    (items.size() > 0).ifTrue(() => {
+    if(items.size() > 0) {
         multiline:
             usesLogicalNewline(
                 items,
                 layout
             )
 
-        multiline.ifTrue(() => {
+        if(multiline) {
             result =
                 "{\n" +
                 indent(level + 1) +
@@ -970,7 +970,7 @@ formatObjectBody: (items, level, layout) => {
                 "\n" +
                 indent(level) +
                 "}"
-        })
+        }
 
         multiline.ifFalse(() => {
             result =
@@ -982,7 +982,7 @@ formatObjectBody: (items, level, layout) => {
                 ) +
                 " }"
         })
-    })
+    }
 
     result
 }
@@ -990,9 +990,9 @@ formatObjectBody: (items, level, layout) => {
 formatParameter: (parameter, level, layout) => {
     result: parameter.name
 
-    parameter.rest.ifTrue(() => {
+    if(parameter.rest) {
         result = "..." + parameter.name
-    })
+    }
 
     (parameter.defaultValue === null).ifFalse(() => {
         result =
@@ -1013,9 +1013,9 @@ formatParameterList: (parameters, level, layout) => {
     index: 0
 
     while(index < parameters.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result = result + ", "
-        })
+        }
 
         result =
             result +
@@ -1036,12 +1036,12 @@ formatParameterLines: (parameters, level, layout) => {
     index: 0
 
     while(index < parameters.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result =
                 result +
                 ",\n" +
                 indent(level)
-        })
+        }
 
         result =
             result +
@@ -1074,15 +1074,15 @@ formatParenthesizedParameters: (parameters, level, layout) => {
 
     shouldBreak: false
 
-    containsNewline(flatParameters).ifTrue(() => {
+    if(containsNewline(flatParameters)) {
         shouldBreak = true
-    })
+    }
 
-    (indent(level).size() + flat.size() > 100).ifTrue(() => {
+    if(indent(level).size() + flat.size() > 100) {
         shouldBreak = true
-    })
+    }
 
-    ((parameters.size() > 0) && shouldBreak).ifTrue(() => {
+    if((parameters.size() > 0) && shouldBreak) {
         result =
             "(\n" +
             indent(level + 1) +
@@ -1094,7 +1094,7 @@ formatParenthesizedParameters: (parameters, level, layout) => {
             "\n" +
             indent(level) +
             ")"
-    })
+    }
 
     result
 }
@@ -1103,18 +1103,18 @@ singleParameterSourceForm: (closure, layout) => {
     selected: null
 
     layout.closureForms.each((form) => {
-        (form.closure === closure.path).ifTrue(() => {
+        if(form.closure === closure.path) {
             (selected === null).ifFalse(() => {
                 Error().signal()
             })
 
             selected = form.form
-        })
+        }
     })
 
-    (selected === null).ifTrue(() => {
+    if(selected === null) {
         Error().signal()
-    })
+    }
 
     selected
 }
@@ -1123,14 +1123,14 @@ formatClosureParameters: (closure, level, layout) => {
     parameters: closure.parameters
     result: "()"
 
-    (parameters.size() > 0).ifTrue(() => {
+    if(parameters.size() > 0) {
         usePreservedSingleForm: false
 
-        (parameters.size() == 1).ifTrue(() => {
+        if(parameters.size() == 1) {
             parameter: parameters[0]
 
-            ((!parameter.rest) &&
-                (parameter.defaultValue === null)).ifTrue(() => {
+            if((!parameter.rest) &&
+                (parameter.defaultValue === null)) {
                 usePreservedSingleForm = true
 
                 form:
@@ -1139,25 +1139,25 @@ formatClosureParameters: (closure, level, layout) => {
                         layout
                     )
 
-                (form == "BARE").ifTrue(() => {
+                if(form == "BARE") {
                     result = parameter.name
-                })
+                }
 
-                (form == "PARENTHESIZED").ifTrue(() => {
+                if(form == "PARENTHESIZED") {
                     result =
                         formatParenthesizedParameters(
                             parameters,
                             level,
                             layout
                         )
-                })
+                }
 
                 ((form == "BARE") ||
                     (form == "PARENTHESIZED")).ifFalse(() => {
                     Error().signal()
                 })
-            })
-        })
+            }
+        }
 
         usePreservedSingleForm.ifFalse(() => {
             result =
@@ -1167,7 +1167,7 @@ formatClosureParameters: (closure, level, layout) => {
                     layout
                 )
         })
-    })
+    }
 
     result
 }
@@ -1182,7 +1182,7 @@ formatClosure: (closure, level, layout) => {
 
     result: null
 
-    closure.expressionBody.ifTrue(() => {
+    if(closure.expressionBody) {
         (closure.body.expressions.size() == 1).ifFalse(() => {
             Error().signal()
         })
@@ -1203,7 +1203,7 @@ formatClosure: (closure, level, layout) => {
                 level
             )
 
-        containsPhysicalNewline(parameters).ifTrue(() => {
+        if(containsPhysicalNewline(parameters)) {
             breakAfterArrow =
                 shouldBreakAfterOperator(
                     ")",
@@ -1212,9 +1212,9 @@ formatClosure: (closure, level, layout) => {
                     body,
                     level
                 )
-        })
+        }
 
-        breakAfterArrow.ifTrue(() => {
+        if(breakAfterArrow) {
             result =
                 parameters +
                 " =>\n" +
@@ -1224,7 +1224,7 @@ formatClosure: (closure, level, layout) => {
                     level + 1,
                     layout
                 )
-        })
+        }
 
         breakAfterArrow.ifFalse(() => {
             result =
@@ -1232,7 +1232,7 @@ formatClosure: (closure, level, layout) => {
                 " => " +
                 body
         })
-    })
+    }
 
     closure.expressionBody.ifFalse(() => {
         result =
@@ -1252,13 +1252,13 @@ trailingClosurePath: (call, layout) => {
     selected: null
 
     layout.trailingClosures.each((trailing) => {
-        (trailing.call === call.path).ifTrue(() => {
+        if(trailing.call === call.path) {
             (selected === null).ifFalse(() => {
                 Error().signal()
             })
 
             selected = trailing.closure
-        })
+        }
     })
 
     selected
@@ -1277,23 +1277,23 @@ contextualHeaderComments: (
             (comment.boundaryKind == boundaryKind) &&
             (comment.preceding === node.path)
 
-        sameBoundary.ifTrue(() => {
+        if(sameBoundary) {
             (comment.placement ==
                 "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
                 Error().signal()
             })
 
-            (leadingSpace || (result.size() > 0)).ifTrue(() => {
+            if(leadingSpace || (result.size() > 0)) {
                 result = result + " "
-            })
+            }
 
             result = result + comment.rawText
-        })
+        }
     })
 
-    (result.size() > 0).ifTrue(() => {
+    if(result.size() > 0) {
         result = result + " "
-    })
+    }
 
     result
 }
@@ -1315,7 +1315,7 @@ contextualElseSeparatorComments: (
             (comment.preceding === node.path) &&
             (comment.following === node.falseBranch.path)
 
-        sameBoundary.ifTrue(() => {
+        if(sameBoundary) {
             (comment.placement ==
                 "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
                 Error().signal()
@@ -1325,7 +1325,7 @@ contextualElseSeparatorComments: (
                 result +
                 comment.rawText +
                 " "
-        })
+        }
     })
 
     result
@@ -1344,7 +1344,7 @@ formatTrailingClosureSeparator: (
             (comment.preceding === call.path) &&
             (comment.following === closure.path)
 
-        sameBoundary.ifTrue(() => {
+        if(sameBoundary) {
             (comment.placement ==
                 "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
                 Error().signal()
@@ -1354,7 +1354,7 @@ formatTrailingClosureSeparator: (
                 result +
                 comment.rawText +
                 " "
-        })
+        }
     })
 
     result
@@ -1377,7 +1377,7 @@ formatCall: (call, level, layout) => {
 
     result: null
 
-    (trailingPath === null).ifTrue(() => {
+    if(trailingPath === null) {
         result =
             formatCallHead(
                 receiver,
@@ -1386,7 +1386,7 @@ formatCall: (call, level, layout) => {
                 level,
                 layout
             )
-    })
+    }
 
     (trailingPath === null).ifFalse(() => {
         (arguments.size() > 0).ifFalse(() => {
@@ -1399,9 +1399,9 @@ formatCall: (call, level, layout) => {
         trailingArgument:
             arguments[ordinaryCount]
 
-        trailingArgument.spread.ifTrue(() => {
+        if(trailingArgument.spread) {
             Error().signal()
-        })
+        }
 
         trailingClosure:
             trailingArgument.expression
@@ -1436,9 +1436,9 @@ formatCall: (call, level, layout) => {
             )
     })
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         Error().signal()
-    })
+    }
 
     result
 }
@@ -1448,9 +1448,9 @@ formatTargets: (targets, level, layout) => {
     index: 0
 
     while(index < targets.size()) {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result = result + ", "
-        })
+        }
 
         result =
             result +
@@ -1480,12 +1480,12 @@ formatEmbeddedCommentsAfter: (
                 "EMBEDDED_BETWEEN_TOKENS") &&
             (comment.preceding === node.path)
 
-        matches.ifTrue(() => {
+        if(matches) {
             result =
                 result +
                 " " +
                 comment.rawText
-        })
+        }
     })
 
     result
@@ -1495,28 +1495,28 @@ formatExpression = (node, level, layout) => {
     formatted: null
     kind: node.kind
 
-    (kind == "LITERAL").ifTrue(() => {
+    if(kind == "LITERAL") {
         formatted = node.rawText
-    })
+    }
 
-    (kind == "NAME").ifTrue(() => {
+    if(kind == "NAME") {
         formatted = node.rawText
-    })
+    }
 
-    (kind == "INTRINSIC").ifTrue(() => {
+    if(kind == "INTRINSIC") {
         formatted = node.rawText
-    })
+    }
 
-    (kind == "SEQUENCE").ifTrue(() => {
+    if(kind == "SEQUENCE") {
         formatted =
             formatSequence(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "GROUP").ifTrue(() => {
+    if(kind == "GROUP") {
         formatted =
             "(" +
             formatExpression(
@@ -1525,27 +1525,27 @@ formatExpression = (node, level, layout) => {
                 layout
             ) +
             ")"
-    })
+    }
 
-    (kind == "MEMBER").ifTrue(() => {
+    if(kind == "MEMBER") {
         formatted =
             formatMember(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "CALL").ifTrue(() => {
+    if(kind == "CALL") {
         formatted =
             formatCall(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "CONTEXTUAL_WHILE").ifTrue(() => {
+    if(kind == "CONTEXTUAL_WHILE") {
         formatted =
             "while" +
             contextualHeaderComments(
@@ -1577,9 +1577,9 @@ formatExpression = (node, level, layout) => {
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "CONTEXTUAL_IF").ifTrue(() => {
+    if(kind == "CONTEXTUAL_IF") {
         formatted =
             "if" +
             contextualHeaderComments(
@@ -1633,27 +1633,27 @@ formatExpression = (node, level, layout) => {
                     layout
                 )
         })
-    })
+    }
 
-    (kind == "ARRAY_CONSTRUCTION").ifTrue(() => {
+    if(kind == "ARRAY_CONSTRUCTION") {
         formatted =
             formatArray(
                 node.arguments,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "MAP_CONSTRUCTION").ifTrue(() => {
+    if(kind == "MAP_CONSTRUCTION") {
         formatted =
             formatMap(
                 node.entries,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "INDEX").ifTrue(() => {
+    if(kind == "INDEX") {
         formatted =
             formatExpression(
                 node.receiver,
@@ -1667,9 +1667,9 @@ formatExpression = (node, level, layout) => {
                 layout
             ) +
             "]"
-    })
+    }
 
-    (kind == "UNARY").ifTrue(() => {
+    if(kind == "UNARY") {
         formatted =
             node.operator +
             formatExpression(
@@ -1677,18 +1677,18 @@ formatExpression = (node, level, layout) => {
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "BINARY").ifTrue(() => {
+    if(kind == "BINARY") {
         formatted =
             formatBinary(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "NON_LOCAL_RETURN").ifTrue(() => {
+    if(kind == "NON_LOCAL_RETURN") {
         formatted =
             "^" +
             formatExpression(
@@ -1696,36 +1696,36 @@ formatExpression = (node, level, layout) => {
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "SLOT_CREATION").ifTrue(() => {
+    if(kind == "SLOT_CREATION") {
         formatted =
             formatSlotCreation(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "MULTIPLE_SLOT_CREATION").ifTrue(() => {
+    if(kind == "MULTIPLE_SLOT_CREATION") {
         formatted =
             formatMultipleSlotCreation(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "ASSIGNMENT").ifTrue(() => {
+    if(kind == "ASSIGNMENT") {
         formatted =
             formatAssignment(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (kind == "SUPER_SEND").ifTrue(() => {
+    if(kind == "SUPER_SEND") {
         formatted =
             "super." +
             node.message +
@@ -1736,9 +1736,9 @@ formatExpression = (node, level, layout) => {
                 layout
             ) +
             ")"
-    })
+    }
 
-    (kind == "OBJECT").ifTrue(() => {
+    if(kind == "OBJECT") {
         body:
             formatObjectBody(
                 node.items,
@@ -1758,20 +1758,20 @@ formatExpression = (node, level, layout) => {
                 " " +
                 body
         })
-    })
+    }
 
-    (kind == "CLOSURE").ifTrue(() => {
+    if(kind == "CLOSURE") {
         formatted =
             formatClosure(
                 node,
                 level,
                 layout
             )
-    })
+    }
 
-    (formatted === null).ifTrue(() => {
+    if(formatted === null) {
         Error().signal()
-    })
+    }
 
     formatEmbeddedCommentsAfter(
         node,
@@ -1792,7 +1792,7 @@ formatBody: (layout) => {
         trailingComment:
             (comment.boundaryKind == "DOCUMENT_SUFFIX")
 
-        leadingComment.ifTrue(() => {
+        if(leadingComment) {
             leadingComments =
                 leadingComments +
                 pendingSeparator +
@@ -1800,32 +1800,32 @@ formatBody: (layout) => {
 
             pendingSeparator = " "
 
-            ((comment.placement == "OWN_LINE") ||
-                (comment.placement == "END_OF_LINE")).ifTrue(() => {
+            if((comment.placement == "OWN_LINE") ||
+                (comment.placement == "END_OF_LINE")) {
                 pendingSeparator = "\n"
 
-                comment.blankLineAfter.ifTrue(() => {
+                if(comment.blankLineAfter) {
                     pendingSeparator = "\n\n"
-                })
-            })
-        })
+                }
+            }
+        }
 
-        trailingComment.ifTrue(() => {
+        if(trailingComment) {
             separator: " "
 
-            (comment.placement == "OWN_LINE").ifTrue(() => {
+            if(comment.placement == "OWN_LINE") {
                 separator = "\n"
 
-                comment.blankLineBefore.ifTrue(() => {
+                if(comment.blankLineBefore) {
                     separator = "\n\n"
-                })
-            })
+                }
+            }
 
             trailingComments =
                 trailingComments +
                 separator +
                 comment.rawText
-        })
+        }
 
         sequenceComment:
             (comment.boundaryKind == "SEQUENCE_SEPARATOR") &&
@@ -1877,11 +1877,11 @@ formatBody: (layout) => {
             layout
         )
 
-    (body.size() > 0).ifTrue(() => {
+    if(body.size() > 0) {
         leadingComments =
             leadingComments +
             pendingSeparator
-    })
+    }
 
     leadingComments + body + trailingComments
 }

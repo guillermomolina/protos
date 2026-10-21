@@ -32,23 +32,23 @@ first.each((entry) => {
 
     recognized: false
 
-    (entry.name == "MixedCase.txt").ifTrue(() => {
+    if(entry.name == "MixedCase.txt") {
         recognized = true
         (entry.kind == "regular").ifFalse(() => { ok = false })
         regularCount = regularCount + 1
-    })
+    }
 
-    (entry.name == "nested").ifTrue(() => {
+    if(entry.name == "nested") {
         recognized = true
         (entry.kind == "directory").ifFalse(() => { ok = false })
         directoryCount = directoryCount + 1
-    })
+    }
 
-    (entry.name == "opaque-link").ifTrue(() => {
+    if(entry.name == "opaque-link") {
         recognized = true
         (entry.kind == "link").ifFalse(() => { ok = false })
         linkCount = linkCount + 1
-    })
+    }
 
     recognized.ifFalse(() => { ok = false })
 

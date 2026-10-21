@@ -44,7 +44,7 @@ pathWithinDirectory: (casePath, directoryPath) => {
     matches.ifFalse(() => {
         longEnough: casePath.size() > directoryPath.size()
 
-        longEnough.ifTrue(() => {
+        if(longEnough) {
             prefixMatches: true
             index: 0
 
@@ -60,7 +60,7 @@ pathWithinDirectory: (casePath, directoryPath) => {
             matches =
                 prefixMatches &&
                 (casePath[directoryPath.size()] == "/")
-        })
+        }
     })
 
     matches
@@ -101,23 +101,23 @@ caseMatches: (
     selected: false
 
     fileAssociations.each((association) => {
-        associationMatches(
+        if(associationMatches(
             association,
             corpusId,
             casePath
-        ).ifTrue(() => {
+        )) {
             selected = true
-        })
+        }
     })
 
     directoryAssociations.each((association) => {
-        directoryAssociationMatches(
+        if(directoryAssociationMatches(
             association,
             corpusId,
             casePath
-        ).ifTrue(() => {
+        )) {
             selected = true
-        })
+        }
     })
 
     selected
@@ -132,14 +132,14 @@ planHasMatch: (
     matched: false
 
     Manifest.planCases(plan).each((spec) => {
-        caseMatches(
+        if(caseMatches(
             corpusId,
             Manifest.casePath(spec),
             fileAssociations,
             directoryAssociations
-        ).ifTrue(() => {
+        )) {
             matched = true
-        })
+        }
     })
 
     matched
@@ -157,17 +157,17 @@ selectPlanWithDirectories: (
     selectedCases: []
 
     Manifest.planCases(plan).each((spec) => {
-        caseMatches(
+        if(caseMatches(
             corpusId,
             Manifest.casePath(spec),
             fileAssociations,
             directoryAssociations
-        ).ifTrue(() => {
+        )) {
             selectedCases = [
                 ...selectedCases,
                 spec
             ]
-        })
+        }
     })
 
     selectedCases.freeze()

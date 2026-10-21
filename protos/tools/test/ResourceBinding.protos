@@ -52,9 +52,9 @@ catalogByKey: (catalog) => {
 
     catalog.each((entry) => {
         key: ResourceCatalog.entryKey(entry)
-        byKey.containsKey(key).ifTrue(() => {
+        if(byKey.containsKey(key)) {
             fail()
-        })
+        }
         byKey[key] = entry
     })
 
@@ -69,9 +69,9 @@ bindRequirements: (requirements, catalog) => {
     requirements.each((requirementValue) => {
         key: Manifest.requirementKey(requirementValue)
 
-        seenRequirementKeys.containsKey(key).ifTrue(() => {
+        if(seenRequirementKeys.containsKey(key)) {
             fail()
-        })
+        }
         seenRequirementKeys[key] = true
 
         byKey.containsKey(key).ifFalse(() => {
@@ -85,22 +85,22 @@ bindRequirements: (requirements, catalog) => {
 
         knownMode: false
 
-        (mode == "shared").ifTrue(() => {
+        if(mode == "shared") {
             // Canonical Requirement construction already guarantees a positive
             // ordinary Integer. This check answers only static catalog
             // feasibility; current occupancy is a later concern.
-            (units > capacity).ifTrue(() => {
+            if(units > capacity) {
                 fail()
-            })
+            }
             knownMode = true
-        })
+        }
 
-        (mode == "exclusive").ifTrue(() => {
+        if(mode == "exclusive") {
             // Canonical Requirement construction already guarantees null units.
             // Every validated catalog entry has positive capacity, therefore an
             // exclusive request is statically feasible before occupancy exists.
             knownMode = true
-        })
+        }
 
         knownMode.ifFalse(() => {
             fail()

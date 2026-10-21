@@ -41,9 +41,9 @@ call: ((facility) => (foreground) => {
     })
     valid: false
     ["default", "black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"].each((name) => {
-        (name == foreground).ifTrue(() => {
+        if(name == foreground) {
             valid = true
-        })
+        }
     })
     valid.ifFalse(() => {
         Error().signal()

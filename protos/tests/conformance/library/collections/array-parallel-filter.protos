@@ -21,13 +21,13 @@ Arrays: import("std:collections/Array")
 
 sameElements: (actual, expected) => {
     ok: actual.size() == expected.size()
-    ok.ifTrue(() => {
+    if(ok) {
         index: 0
         expected.each((element) => {
             (actual[index] == element).ifFalse(() => { ok = false })
             index = index + 1
         })
-    })
+    }
     ok
 }
 
@@ -63,8 +63,8 @@ tests: Array(
         Assertions.signals(InvalidPredicateResult, () => {
             Arrays.parallelFilter(Array(0, 1, 2), (value) => {
                 decision: true
-                (value == 1).ifTrue(() => { decision = 7 })
-                (value == 2).ifTrue(() => { SlotNotFound().signal() })
+                if(value == 1) { decision = 7 }
+                if(value == 2) { SlotNotFound().signal() }
                 decision
             }).value()
         })

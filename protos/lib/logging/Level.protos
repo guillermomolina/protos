@@ -45,35 +45,35 @@ ERROR: "ERROR"
 compare: (left, right) => {
     rank: (level) => {
         result: -1
-        (level === "TRACE").ifTrue(() => {
+        if(level === "TRACE") {
             result = 0
-        })
-        (level === "DEBUG").ifTrue(() => {
+        }
+        if(level === "DEBUG") {
             result = 1
-        })
-        (level === "INFO").ifTrue(() => {
+        }
+        if(level === "INFO") {
             result = 2
-        })
-        (level === "WARN").ifTrue(() => {
+        }
+        if(level === "WARN") {
             result = 3
-        })
-        (level === "ERROR").ifTrue(() => {
+        }
+        if(level === "ERROR") {
             result = 4
-        })
-        (result < 0).ifTrue(() => {
+        }
+        if(result < 0) {
             Error().signal()
-        })
+        }
         result
     }
 
     leftRank: rank(left)
     rightRank: rank(right)
     result: 0
-    (leftRank < rightRank).ifTrue(() => {
+    if(leftRank < rightRank) {
         result = -1
-    })
-    (leftRank > rightRank).ifTrue(() => {
+    }
+    if(leftRank > rightRank) {
         result = 1
-    })
+    }
     result
 }

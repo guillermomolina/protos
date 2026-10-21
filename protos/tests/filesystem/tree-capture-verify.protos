@@ -46,7 +46,7 @@ second: captured.entries(rootPath).value()
 ok: first.size() == 3
 ((first === second) == false).ifFalse(() => { ok = false })
 
-captured.hasSlot("close").ifTrue(() => { ok = false })
+if(captured.hasSlot("close")) { ok = false }
 
 stableCount: 0
 nestedCount: 0
@@ -55,23 +55,23 @@ linkCount: 0
 first.each((entry) => {
     recognized: false
 
-    (entry.name == "stable.txt").ifTrue(() => {
+    if(entry.name == "stable.txt") {
         recognized = true
         (entry.kind == "regular").ifFalse(() => { ok = false })
         stableCount = stableCount + 1
-    })
+    }
 
-    (entry.name == "nested").ifTrue(() => {
+    if(entry.name == "nested") {
         recognized = true
         (entry.kind == "directory").ifFalse(() => { ok = false })
         nestedCount = nestedCount + 1
-    })
+    }
 
-    (entry.name == "opaque-link").ifTrue(() => {
+    if(entry.name == "opaque-link") {
         recognized = true
         (entry.kind == "link").ifFalse(() => { ok = false })
         linkCount = linkCount + 1
-    })
+    }
 
     recognized.ifFalse(() => { ok = false })
 })
@@ -93,7 +93,7 @@ ioFails(() => captured.remove(stablePath).value()).ifFalse(() => { ok = false })
 
 // D171: a host-captured Filesystem cannot mint another Filesystem; nested content stays
 // reachable through the retained entries/open operations.
-captured.hasSlot("captureTree").ifTrue(() => { ok = false })
+if(captured.hasSlot("captureTree")) { ok = false }
 (captured.entries(nestedPath).value().size() == 1).ifFalse(() => { ok = false })
 
 (stableCount == 1).ifFalse(() => { ok = false })

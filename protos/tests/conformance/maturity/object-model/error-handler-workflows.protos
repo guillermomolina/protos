@@ -27,12 +27,12 @@ tests: [
             engine: {
                 classify: (value) => {
                     calls = calls + 1
-                    (value == 2).ifTrue(() => {
+                    if(value == 2) {
                         minor.signal()
-                    })
-                    (value == 4).ifTrue(() => {
+                    }
+                    if(value == 4) {
                         major.signal()
-                    })
+                    }
                     successes = successes + 1
                     value * 10
                 }
@@ -59,9 +59,9 @@ tests: [
                             },
                             (caught) => {
                                 majorHits = majorHits + 1
-                                (caught === worker.major).ifTrue(() => {
+                                if(caught === worker.major) {
                                     identityHits = identityHits + 1
-                                })
+                                }
                                 worker.recoveries = worker.recoveries + 1
                                 400 + value
                             }
@@ -69,9 +69,9 @@ tests: [
                     },
                     (caught) => {
                         minorHits = minorHits + 1
-                        (caught === worker.minor).ifTrue(() => {
+                        if(caught === worker.minor) {
                             identityHits = identityHits + 1
-                        })
+                        }
                         worker.recoveries = worker.recoveries + 1
                         200 + value
                     }
@@ -106,9 +106,9 @@ tests: [
                 bonus: 0
 
                 checked: (value) => {
-                    (value > limit).ifTrue(() => {
+                    if(value > limit) {
                         Error().signal()
-                    })
+                    }
                     value + bonus
                 }
 
@@ -160,9 +160,9 @@ tests: [
             machine: {
                 step: (value) => {
                     attempts = attempts + 1
-                    (value == 2).ifTrue(() => {
+                    if(value == 2) {
                         problem.signal()
-                    })
+                    }
                     successes = successes + 1
                     value * 10
                 }
@@ -191,9 +191,9 @@ tests: [
                             },
                             (caught) => {
                                 innerCalls = innerCalls + 1
-                                (caught === worker.problem).ifTrue(() => {
+                                if(caught === worker.problem) {
                                     innerIdentity = innerIdentity + 1
-                                })
+                                }
                                 // The selected inner Error handler is already inactive here.
                                 // This replacement Error must therefore select the still-active
                                 // outer Error handler rather than recursively selecting itself.
@@ -208,9 +208,9 @@ tests: [
                 },
                 (caught) => {
                     outerCalls = outerCalls + 1
-                    (caught === replacement).ifTrue(() => {
+                    if(caught === replacement) {
                         outerIdentity = outerIdentity + 1
-                    })
+                    }
                     66
                 }
             )
@@ -236,9 +236,9 @@ tests: [
             processor: {
                 apply: (value) => {
                     attempts = attempts + 1
-                    (value > limit).ifTrue(() => {
+                    if(value > limit) {
                         problem.signal()
-                    })
+                    }
                     successes = successes + 1
                     value + bonus
                 }
@@ -264,9 +264,9 @@ tests: [
                     },
                     (caught) => {
                         handlerCalls = handlerCalls + 1
-                        (caught === worker.problem).ifTrue(() => {
+                        if(caught === worker.problem) {
                             identityHits = identityHits + 1
-                        })
+                        }
                         worker.failures = worker.failures + 1
                         fallbackSeed = fallbackSeed + 1
                         fallbackSeed + worker.failures

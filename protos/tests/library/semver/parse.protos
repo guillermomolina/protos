@@ -30,12 +30,12 @@ requireIdentifiers: (actual, ...expected) => {
     Assertions.require(actual.size() == expected.size())
     index: 0
     expected.each((identifier) => {
-        Integer.recognizes(identifier).ifTrue(() => {
+        if(Integer.recognizes(identifier)) {
             Assertions.require(Integer.recognizes(actual[index]))
-        })
-        String.recognizes(identifier).ifTrue(() => {
+        }
+        if(String.recognizes(identifier)) {
             Assertions.require(String.recognizes(actual[index]))
-        })
+        }
         Assertions.require(actual[index] == identifier)
         index = index + 1
     })

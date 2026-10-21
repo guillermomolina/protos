@@ -51,7 +51,7 @@ tests: [
         Schema: import("self:ManifestSchemaV1")
         model: Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[exports]\n[workspace]\nmembers = []\n")
         ok: model.compatibility === null
-        model.exports.containsKey("anything").ifTrue(() => { ok = false })
+        if(model.exports.containsKey("anything")) { ok = false }
         (model.workspace.members.size() == 0).ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
@@ -74,7 +74,7 @@ tests: [
         (model.package.version == "1.0.0").ifFalse(() => { ok = false })
         (model.package.locator === null).ifFalse(() => { ok = false })
         (model.compatibility === null).ifFalse(() => { ok = false })
-        model.exports.containsKey("anything").ifTrue(() => { ok = false })
+        if(model.exports.containsKey("anything")) { ok = false }
         (model.workspace === null).ifFalse(() => { ok = false })
         Assertions.require(ok)
     })

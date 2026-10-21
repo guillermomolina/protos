@@ -114,13 +114,13 @@ compileWithFlags: ((unicode, transfer) => {
     sized: null
     sized = (count) => {
         result: Array()
-        (count > 0).ifTrue(() => {
+        if(count > 0) {
             half: sized(count.div(2))
             result = Array(...half, ...half)
-            ((count % 2) == 1).ifTrue(() => {
+            if((count % 2) == 1) {
                 result = Array(...result, null)
-            })
-        })
+            }
+        }
         result
     }
 
@@ -154,27 +154,27 @@ compileWithFlags: ((unicode, transfer) => {
         low: -2
         high: -2
         add: (rangeLow, rangeHigh) => {
-            (rangeLow <= (high + 1)).ifTrueIfFalse(() => {
-                (rangeHigh > high).ifTrue(() => {
+            if(rangeLow <= (high + 1)) {
+                if(rangeHigh > high) {
                     high = rangeHigh
-                })
-            }, () => {
-                (high >= 0).ifTrue(() => {
+                }
+            } else {
+                if(high >= 0) {
                     bounds[count] = low
                     bounds[count + 1] = high
                     count = count + 2
-                })
+                }
                 low = rangeLow
                 high = rangeHigh
-            })
+            }
         }
         finish: () => {
-            (high >= 0).ifTrue(() => {
+            if(high >= 0) {
                 bounds[count] = low
                 bounds[count + 1] = high
                 count = count + 2
                 high = -2
-            })
+            }
             frozenArray(bounds, count)
         }
         writer: { add: add; finish: finish }
@@ -202,13 +202,13 @@ compileWithFlags: ((unicode, transfer) => {
         while((leftIndex < left.size()) || (rightIndex < right.size())) {
             takeLeft: (rightIndex >= right.size()) ||
                 ((leftIndex < left.size()) && (left[leftIndex] <= right[rightIndex]))
-            takeLeft.ifTrueIfFalse(() => {
+            if(takeLeft) {
                 writer.add(left[leftIndex], left[leftIndex + 1])
                 leftIndex = leftIndex + 2
-            }, () => {
+            } else {
                 writer.add(right[rightIndex], right[rightIndex + 1])
                 rightIndex = rightIndex + 2
-            })
+            }
         }
         writer.finish()
     }
@@ -219,21 +219,21 @@ compileWithFlags: ((unicode, transfer) => {
         rightIndex: 0
         while((leftIndex < left.size()) && (rightIndex < right.size())) {
             low: left[leftIndex]
-            (right[rightIndex] > low).ifTrue(() => {
+            if(right[rightIndex] > low) {
                 low = right[rightIndex]
-            })
+            }
             high: left[leftIndex + 1]
-            (right[rightIndex + 1] < high).ifTrue(() => {
+            if(right[rightIndex + 1] < high) {
                 high = right[rightIndex + 1]
-            })
-            (low <= high).ifTrue(() => {
+            }
+            if(low <= high) {
                 writer.add(low, high)
-            })
-            (left[leftIndex + 1] < right[rightIndex + 1]).ifTrueIfFalse(() => {
+            }
+            if(left[leftIndex + 1] < right[rightIndex + 1]) {
                 leftIndex = leftIndex + 2
-            }, () => {
+            } else {
                 rightIndex = rightIndex + 2
-            })
+            }
         }
         writer.finish()
     }
@@ -244,15 +244,15 @@ compileWithFlags: ((unicode, transfer) => {
         next: 0
         index: 0
         while(index < set.size()) {
-            (set[index] > next).ifTrue(() => {
+            if(set[index] > next) {
                 writer.add(next, set[index] - 1)
-            })
+            }
             next = set[index + 1] + 1
             index = index + 2
         }
-        (next <= maxScalar).ifTrue(() => {
+        if(next <= maxScalar) {
             writer.add(next, maxScalar)
-        })
+        }
         intersect(writer.finish(), scalarSet)
     }
 
@@ -287,13 +287,13 @@ compileWithFlags: ((unicode, transfer) => {
 
     includes: (names, candidate) => {
         found: false
-        (candidate !== null).ifTrue(() => {
+        if(candidate !== null) {
             names.each((name) => {
-                (name == candidate).ifTrue(() => {
+                if(name == candidate) {
                     found = true
-                })
+                }
             })
-        })
+        }
         found
     }
 
@@ -303,11 +303,11 @@ compileWithFlags: ((unicode, transfer) => {
         output: Encoding.UTF8.encode("")
         Encoding.UTF8.encode(text).each((octet) => {
             ((octet == 32) || (octet == 45) || (octet == 95)).ifFalse(() => {
-                ((octet >= 65) && (octet <= 90)).ifTrueIfFalse(() => {
+                if((octet >= 65) && (octet <= 90)) {
                     output.add(octet + 32)
-                }, () => {
+                } else {
                     output.add(octet)
-                })
+                }
             })
         })
         Encoding.UTF8.decode(output)
@@ -316,38 +316,38 @@ compileWithFlags: ((unicode, transfer) => {
     // Answers the set named by `\p{name}` (`value` null) or `\p{name=value}`.
     propertySet: (name, value) => {
         result: null
-        (value === null).ifTrueIfFalse(() => {
+        if(value === null) {
             result = unicode.ranges("General_Category", name)
-            (result === null).ifTrue(() => {
+            if(result === null) {
                 canonical: unicode.propertyName(name)
-                includes(binaryProperties, canonical).ifTrue(() => {
+                if(includes(binaryProperties, canonical)) {
                     result = unicode.ranges(canonical, "Yes")
-                })
-            })
-            (result === null).ifTrue(() => {
+                }
+            }
+            if(result === null) {
                 loose: looseName(name)
-                (loose == "any").ifTrue(() => {
+                if(loose == "any") {
                     result = scalarSet
-                })
-                (loose == "ascii").ifTrue(() => {
+                }
+                if(loose == "ascii") {
                     result = asciiSet
-                })
-                (loose == "assigned").ifTrue(() => {
+                }
+                if(loose == "assigned") {
                     result = complement(unicode.ranges("General_Category", "Unassigned"))
-                })
-            })
-            (result === null).ifTrue(() => {
+                }
+            }
+            if(result === null) {
                 result = unicode.ranges("Script", name)
-            })
-        }, () => {
+            }
+        } else {
             canonical: unicode.propertyName(name)
-            includes(enumeratedProperties, canonical).ifTrue(() => {
+            if(includes(enumeratedProperties, canonical)) {
                 result = unicode.ranges(canonical, value)
-            })
-        })
-        (result === null).ifTrue(() => {
+            }
+        }
+        if(result === null) {
             Error().signal()
-        })
+        }
         result
     }
 
@@ -378,15 +378,15 @@ compileWithFlags: ((unicode, transfer) => {
 
     hexValue: (scalar) => {
         result: -1
-        isAsciiDigit(scalar).ifTrue(() => {
+        if(isAsciiDigit(scalar)) {
             result = scalar - 48
-        })
-        ((scalar >= 65) && (scalar <= 70)).ifTrue(() => {
+        }
+        if((scalar >= 65) && (scalar <= 70)) {
             result = scalar - 55
-        })
-        ((scalar >= 97) && (scalar <= 102)).ifTrue(() => {
+        }
+        if((scalar >= 97) && (scalar <= 102)) {
             result = scalar - 87
-        })
+        }
         result
     }
 
@@ -408,28 +408,28 @@ compileWithFlags: ((unicode, transfer) => {
         pending: 0
         value: 0
         Encoding.UTF8.encode(text).each((octet) => {
-            (pending > 0).ifTrueIfFalse(() => {
+            if(pending > 0) {
                 value = value * 64 + (octet - 128)
                 pending = pending - 1
-            }, () => {
+            } else {
                 value = octet
-                ((octet >= 192) && (octet < 224)).ifTrue(() => {
+                if((octet >= 192) && (octet < 224)) {
                     value = octet - 192
                     pending = 1
-                })
-                ((octet >= 224) && (octet < 240)).ifTrue(() => {
+                }
+                if((octet >= 224) && (octet < 240)) {
                     value = octet - 224
                     pending = 2
-                })
-                (octet >= 240).ifTrue(() => {
+                }
+                if(octet >= 240) {
                     value = octet - 240
                     pending = 3
-                })
-            })
-            (pending == 0).ifTrue(() => {
+                }
+            }
+            if(pending == 0) {
                 scalars[count] = value
                 count = count + 1
-            })
+            }
         })
         scalars
     }
@@ -462,11 +462,11 @@ compileWithFlags: ((unicode, transfer) => {
             absent: (first === null) && (last === null) && (captured === null)
             present: Integer.recognizes(first) && Integer.recognizes(last) &&
                 String.recognizes(captured)
-            present.ifTrue(() => {
+            if(present) {
                 ((first >= 0) && (first <= last) && (captured.size() == (last - first))).ifFalse(() => {
                     Error().signal()
                 })
-            })
+            }
             ((absent || present) && (present || (groupIndex > 0))).ifFalse(() => {
                 Error().signal()
             })
@@ -476,19 +476,19 @@ compileWithFlags: ((unicode, transfer) => {
         // Answers the group number selected by an Integer number or a capture name.
         selectGroup: (key) => {
             selected: null
-            Integer.recognizes(key).ifTrue(() => {
-                ((key >= 0) && (key < groupTotal)).ifTrue(() => {
+            if(Integer.recognizes(key)) {
+                if((key >= 0) && (key < groupTotal)) {
                     selected = key
-                })
-            })
-            String.recognizes(key).ifTrue(() => {
-                captureNames.containsKey(key).ifTrue(() => {
+                }
+            }
+            if(String.recognizes(key)) {
+                if(captureNames.containsKey(key)) {
                     selected = captureNames[key]
-                })
-            })
-            (selected === null).ifTrue(() => {
+                }
+            }
+            if(selected === null) {
                 Error().signal()
-            })
+            }
             selected
         }
 
@@ -529,38 +529,38 @@ compileWithFlags: ((unicode, transfer) => {
         found: false
         while(!found && (low <= high)) {
             middle: (low + high).div(2)
-            (scalar < ranges[2 * middle]).ifTrueIfFalse(() => {
+            if(scalar < ranges[2 * middle]) {
                 high = middle - 1
-            }, () => {
-                (scalar > ranges[2 * middle + 1]).ifTrueIfFalse(() => {
+            } else {
+                if(scalar > ranges[2 * middle + 1]) {
                     low = middle + 1
-                }, () => {
+                } else {
                     found = true
-                })
-            })
+                }
+            }
         }
         found
     }
 
     appendScalar: (bytes, scalar) => {
-        (scalar < 128).ifTrue(() => {
+        if(scalar < 128) {
             bytes.add(scalar)
-        })
-        ((scalar >= 128) && (scalar < 2048)).ifTrue(() => {
+        }
+        if((scalar >= 128) && (scalar < 2048)) {
             bytes.add(192 + scalar.div(64))
             bytes.add(128 + (scalar % 64))
-        })
-        ((scalar >= 2048) && (scalar < 65536)).ifTrue(() => {
+        }
+        if((scalar >= 2048) && (scalar < 65536)) {
             bytes.add(224 + scalar.div(4096))
             bytes.add(128 + (scalar.div(64) % 64))
             bytes.add(128 + (scalar % 64))
-        })
-        (scalar >= 65536).ifTrue(() => {
+        }
+        if(scalar >= 65536) {
             bytes.add(240 + scalar.div(262144))
             bytes.add(128 + (scalar.div(4096) % 64))
             bytes.add(128 + (scalar.div(64) % 64))
             bytes.add(128 + (scalar % 64))
-        })
+        }
     }
 
     // Per-operation subject: the scalars are decoded once so the matcher reads
@@ -636,7 +636,7 @@ compileWithFlags: ((unicode, transfer) => {
             node: nodes[index]
             op: node.op
             consumes: op == "set"
-            ((op == "concat") || (op == "alternate")).ifTrue(() => {
+            if((op == "concat") || (op == "alternate")) {
                 position: 0
                 node.items.each((item) => {
                     parents[item] = index
@@ -644,26 +644,26 @@ compileWithFlags: ((unicode, transfer) => {
                     position = position + 1
                     consumes = consumes || consumers[item]
                 })
-            })
-            ((op == "capture") || (op == "repeat")).ifTrue(() => {
+            }
+            if((op == "capture") || (op == "repeat")) {
                 parents[node.item] = index
                 positions[node.item] = 0
                 consumes = consumers[node.item]
-            })
-            (op == "repeat").ifTrue(() => {
+            }
+            if(op == "repeat") {
                 maximum: node.max
                 consumes = consumes && ((maximum === null) || (maximum > 0))
                 simple: ((maximum !== null) && (maximum <= 1)) || ((maximum === null) && (node.min == 0))
                 simple.ifFalse(() => {
                     counterSlots[index] = counterTotal
                     bound: maximum
-                    (maximum === null).ifTrue(() => {
+                    if(maximum === null) {
                         bound = node.min
-                    })
+                    }
                     bounds[counterTotal] = bound
                     counterTotal = counterTotal + 1
                 })
-            })
+            }
             consumers[index] = consumes
             index = index + 1
         }
@@ -674,9 +674,9 @@ compileWithFlags: ((unicode, transfer) => {
             (parents[index] === null).ifFalse(() => {
                 depth = depths[parents[index]]
             })
-            (nodes[index].op == "repeat").ifTrue(() => {
+            if(nodes[index].op == "repeat") {
                 depth = depth + 1
-            })
+            }
             depths[index] = depth
             index = index - 1
         }
@@ -687,7 +687,7 @@ compileWithFlags: ((unicode, transfer) => {
         counterSlots.freeze()
         counterBounds: frozenArray(bounds, counterTotal)
         initialCounters: null
-        (counterTotal > 0).ifTrue(() => {
+        if(counterTotal > 0) {
             zeros: sized(counterTotal)
             index = 0
             while(index < counterTotal) {
@@ -696,7 +696,7 @@ compileWithFlags: ((unicode, transfer) => {
             }
             zeros.freeze()
             initialCounters = zeros
-        })
+        }
         initialCaptures: sized(groupSlots)
         initialCaptures.freeze()
         markerRange: nodeCount + 1
@@ -751,25 +751,25 @@ compileWithFlags: ((unicode, transfer) => {
             // A CR immediately followed by LF is one line-boundary sequence.
             holds: (kind) => {
                 result: false
-                ((kind == "textStart") || ((kind == "lineStart") && (position == 0))).ifTrue(() => {
+                if((kind == "textStart") || ((kind == "lineStart") && (position == 0))) {
                     result = position == 0
-                })
-                ((kind == "textEnd") || (kind == "end") || ((kind == "lineEnd") && (position == size))).ifTrue(() => {
+                }
+                if((kind == "textEnd") || (kind == "end") || ((kind == "lineEnd") && (position == size))) {
                     result = position == size
-                })
-                ((kind == "lineStart") && (position > 0)).ifTrue(() => {
+                }
+                if((kind == "lineStart") && (position > 0)) {
                     previous: scalars[position - 1]
                     result = isLineTerminator(previous) &&
                         !((previous == 13) && (position < size) && (scalars[position] == 10))
-                })
-                ((kind == "lineEnd") && (position < size)).ifTrue(() => {
+                }
+                if((kind == "lineEnd") && (position < size)) {
                     current: scalars[position]
                     result = isLineTerminator(current) &&
                         !((current == 10) && (position > 0) && (scalars[position - 1] == 13))
-                })
-                ((kind == "wordBoundary") || (kind == "notWordBoundary")).ifTrue(() => {
+                }
+                if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
                     result = (isWord(position - 1) != isWord(position)) == (kind == "wordBoundary")
-                })
+                }
                 result
             }
 
@@ -777,9 +777,9 @@ compileWithFlags: ((unicode, transfer) => {
             // outer active repeat already is.
             iterate: (at, marker, counters, captures) => {
                 fresh: marker
-                (marker == -1).ifTrue(() => {
+                if(marker == -1) {
                     fresh = at
-                })
+                }
                 push(3 * nodes[at].item, fresh, counters, captures)
             }
 
@@ -794,103 +794,103 @@ compileWithFlags: ((unicode, transfer) => {
                 phase: state % 3
                 node: nodes[at]
                 op: node.op
-                (phase == 0).ifTrue(() => {
-                    (op == "set").ifTrue(() => {
+                if(phase == 0) {
+                    if(op == "set") {
                         waiting[waitingCount] = entry
                         waitingCount = waitingCount + 1
-                    })
-                    (op == "empty").ifTrue(() => {
+                    }
+                    if(op == "empty") {
                         push(state + 1, marker, counters, captures)
-                    })
-                    (op == "assert").ifTrue(() => {
-                        holds(node.kind).ifTrue(() => {
+                    }
+                    if(op == "assert") {
+                        if(holds(node.kind)) {
                             push(state + 1, marker, counters, captures)
-                        })
-                    })
-                    (op == "concat").ifTrue(() => {
+                        }
+                    }
+                    if(op == "concat") {
                         push(3 * node.items[0], marker, counters, captures)
-                    })
-                    (op == "alternate").ifTrue(() => {
+                    }
+                    if(op == "alternate") {
                         item: node.items.size() - 1
                         while(item >= 0) {
                             push(3 * node.items[item], marker, counters, captures)
                             item = item - 1
                         }
-                    })
-                    (op == "capture").ifTrue(() => {
+                    }
+                    if(op == "capture") {
                         push(3 * node.item, marker, counters, replaced(captures, 2 * node.group, position))
-                    })
-                    (op == "repeat").ifTrue(() => {
+                    }
+                    if(op == "repeat") {
                         // Counters are reset to 0 whenever a repeat exits.
-                        ((counterSlots[at] === null) && (node.max !== null) && (node.max == 0)).ifTrueIfFalse(() => {
+                        if((counterSlots[at] === null) && (node.max !== null) && (node.max == 0)) {
                             push(state + 1, marker, counters, captures)
-                        }, () => {
-                            ((counterSlots[at] === null) && (node.min == 1)).ifTrueIfFalse(() => {
+                        } else {
+                            if((counterSlots[at] === null) && (node.min == 1)) {
                                 iterate(at, marker, counters, captures)
-                            }, () => {
+                            } else {
                                 push(state + 2, marker, counters, captures)
-                            })
-                        })
-                    })
-                })
-                ((phase == 1) && (at == root)).ifTrue(() => {
-                    ((toEnd == false) || (position == size)).ifTrue(() => {
+                            }
+                        }
+                    }
+                }
+                if((phase == 1) && (at == root)) {
+                    if((toEnd == false) || (position == size)) {
                         best = replaced(captures, 1, position)
                         cut = true
-                    })
-                })
-                ((phase == 1) && (at != root)).ifTrue(() => {
+                    }
+                }
+                if((phase == 1) && (at != root)) {
                     parent: parents[at]
                     owner: nodes[parent]
                     kind: owner.op
-                    (kind == "concat").ifTrue(() => {
+                    if(kind == "concat") {
                         next: positions[at] + 1
-                        (next < owner.items.size()).ifTrueIfFalse(() => {
+                        if(next < owner.items.size()) {
                             push(3 * owner.items[next], marker, counters, captures)
-                        }, () => {
+                        } else {
                             push(3 * parent + 1, marker, counters, captures)
-                        })
-                    })
-                    (kind == "alternate").ifTrue(() => {
+                        }
+                    }
+                    if(kind == "alternate") {
                         push(3 * parent + 1, marker, counters, captures)
-                    })
-                    (kind == "capture").ifTrue(() => {
+                    }
+                    if(kind == "capture") {
                         push(3 * parent + 1, marker, counters, replaced(captures, 2 * owner.group + 1, position))
-                    })
-                    (kind == "repeat").ifTrue(() => {
+                    }
+                    if(kind == "repeat") {
                         // One iteration of `parent` is complete.
                         empty: (marker != -1) && (depths[marker] <= depths[parent])
                         rest: marker
-                        (marker == parent).ifTrue(() => {
+                        if(marker == parent) {
                             rest = -1
-                        })
+                        }
                         slot: counterSlots[parent]
-                        (slot === null).ifTrueIfFalse(() => {
+                        if(slot === null) {
                             // `?` and `{1}` always exit; `*` loops back
                             // unless the optional iteration was empty.
-                            (((owner.max !== null) && (owner.max == 1)) || empty).ifTrueIfFalse(() => {
+                            if(((owner.max !== null) && (owner.max == 1)) || empty) {
                                 push(3 * parent + 1, rest, counters, captures)
-                            }, () => {
+                            } else {
                                 push(3 * parent + 2, rest, counters, captures)
-                            })
-                        }, () => {
+                            }
+                        } else {
                             count: counters[slot]
-                            (empty && (count >= owner.min)).ifTrueIfFalse(() => {
+                            if(empty && (count >= owner.min)) {
                                 push(3 * parent + 1, rest, replaced(counters, slot, 0), captures)
-                            }, () => {
+                            } else {
                                 next: count + 1
-                                ((consumers[owner.item] == false) && (next < owner.min)).ifTrue(() => {
+                                if((consumers[owner.item] == false) && (next < owner.min)) {
                                     next = owner.min
-                                })
-                                ((owner.max === null) && (next > owner.min)).ifTrue(() => {
+                                }
+                                if((owner.max === null) && (next > owner.min)) {
                                     next = owner.min
-                                })
+                                }
                                 push(3 * parent + 2, rest, replaced(counters, slot, next), captures)
-                            })
-                        })
-                    })
-                })
-                (phase == 2).ifTrue(() => {
+                            }
+                        }
+                    }
+                }
+                if(phase == 2) {
                     slot: counterSlots[at]
                     canIterate: true
                     canExit: true
@@ -901,22 +901,22 @@ compileWithFlags: ((unicode, transfer) => {
                         canExit = count >= node.min
                         exitCounters = replaced(counters, slot, 0)
                     })
-                    node.greedy.ifTrueIfFalse(() => {
-                        canExit.ifTrue(() => {
+                    if(node.greedy) {
+                        if(canExit) {
                             push(state - 1, marker, exitCounters, captures)
-                        })
-                        canIterate.ifTrue(() => {
+                        }
+                        if(canIterate) {
                             iterate(at, marker, counters, captures)
-                        })
-                    }, () => {
-                        canIterate.ifTrue(() => {
+                        }
+                    } else {
+                        if(canIterate) {
                             iterate(at, marker, counters, captures)
-                        })
-                        canExit.ifTrue(() => {
+                        }
+                        if(canExit) {
                             push(state - 1, marker, exitCounters, captures)
-                        })
-                    })
-                })
+                        }
+                    }
+                }
             }
 
             close: () => {
@@ -945,18 +945,18 @@ compileWithFlags: ((unicode, transfer) => {
                     close()
                     entryIndex = entryIndex + 1
                 }
-                (!cut && (best === null) && (!anchored || (position == from))).ifTrue(() => {
+                if(!cut && (best === null) && (!anchored || (position == from))) {
                     push(3 * root, -1, initialCounters, replaced(initialCaptures, 0, position))
                     close()
-                })
+                }
                 pending = Map()
                 pendingCount = 0
-                (position < size).ifTrue(() => {
+                if(position < size) {
                     scalar: scalars[position]
                     item: 0
                     while(item < waitingCount) {
                         entry: waiting[item]
-                        contains(nodes[entry.state.div(3)].ranges, scalar).ifTrue(() => {
+                        if(contains(nodes[entry.state.div(3)].ranges, scalar)) {
                             // Consuming input ends the freshness of every
                             // active iteration.
                             pending[pendingCount] = {
@@ -966,10 +966,10 @@ compileWithFlags: ((unicode, transfer) => {
                                 captures: entry.captures
                             }
                             pendingCount = pendingCount + 1
-                        })
+                        }
                         item = item + 1
                     }
-                })
+                }
                 position = position + 1
                 running = (pendingCount > 0) || ((best === null) && !anchored && (position <= size))
             }
@@ -1018,15 +1018,15 @@ compileWithFlags: ((unicode, transfer) => {
             from: 0
             while(from <= input.size) {
                 found: matchIn(input, from, false, false)
-                (found === null).ifTrueIfFalse(() => {
+                if(found === null) {
                     from = input.size + 1
-                }, () => {
+                } else {
                     visit(found)
                     from = found.end(0)
-                    (found.start(0) == from).ifTrue(() => {
+                    if(found.start(0) == from) {
                         from = from + 1
-                    })
-                })
+                    }
+                }
             }
         }
 
@@ -1043,24 +1043,24 @@ compileWithFlags: ((unicode, transfer) => {
             count: 0
             literal: Encoding.UTF8.encode("")
             flushLiteral: () => {
-                (literal.size() > 0).ifTrue(() => {
+                if(literal.size() > 0) {
                     parts[count] = Encoding.UTF8.decode(literal)
                     count = count + 1
                     literal = Encoding.UTF8.encode("")
-                })
+                }
             }
             index: 0
             while(index < size) {
                 scalar: scalars[index]
-                (scalar == 36).ifTrueIfFalse(() => {
+                if(scalar == 36) {
                     marker: -1
-                    ((index + 1) < size).ifTrue(() => {
+                    if((index + 1) < size) {
                         marker = scalars[index + 1]
-                    })
-                    (marker == 36).ifTrueIfFalse(() => {
+                    }
+                    if(marker == 36) {
                         literal.add(36)
                         index = index + 2
-                    }, () => {
+                    } else {
                         (marker == 123).ifFalse(() => {
                             Error().signal()
                         })
@@ -1073,10 +1073,10 @@ compileWithFlags: ((unicode, transfer) => {
                             Error().signal()
                         })
                         group: null
-                        ((scalars[first] >= 48) && (scalars[first] <= 57)).ifTrueIfFalse(() => {
-                            ((scalars[first] == 48) && (close > (first + 1))).ifTrue(() => {
+                        if((scalars[first] >= 48) && (scalars[first] <= 57)) {
+                            if((scalars[first] == 48) && (close > (first + 1))) {
                                 Error().signal()
-                            })
+                            }
                             number: 0
                             digit: first
                             while(digit < close) {
@@ -1090,7 +1090,7 @@ compileWithFlags: ((unicode, transfer) => {
                                 Error().signal()
                             })
                             group = number
-                        }, () => {
+                        } else {
                             nameBytes: Encoding.UTF8.encode("")
                             digit: first
                             while(digit < close) {
@@ -1102,16 +1102,16 @@ compileWithFlags: ((unicode, transfer) => {
                                 Error().signal()
                             })
                             group = program.captureNames[name]
-                        })
+                        }
                         flushLiteral()
                         parts[count] = group
                         count = count + 1
                         index = close + 1
-                    })
-                }, () => {
+                    }
+                } else {
                     appendScalar(literal, scalar)
                     index = index + 1
-                })
+                }
             }
             flushLiteral()
             frozenArray(parts, count)
@@ -1136,25 +1136,25 @@ compileWithFlags: ((unicode, transfer) => {
             replaceMatch: (found) => {
                 input.appendSpan(output, copyFrom, found.start(0))
                 template.each((part) => {
-                    String.recognizes(part).ifTrueIfFalse(() => {
+                    if(String.recognizes(part)) {
                         appendText(output, part)
-                    }, () => {
+                    } else {
                         captured: found.group(part)
                         (captured === null).ifFalse(() => {
                             appendText(output, captured)
                         })
-                    })
+                    }
                 })
                 copyFrom = found.end(0)
             }
-            every.ifTrueIfFalse(() => {
+            if(every) {
                 traverse(input, replaceMatch)
-            }, () => {
+            } else {
                 found: matchIn(input, 0, false, false)
                 (found === null).ifFalse(() => {
                     replaceMatch(found)
                 })
-            })
+            }
             input.appendSpan(output, copyFrom, input.size)
             Encoding.UTF8.decode(output)
         }
@@ -1238,59 +1238,59 @@ compileWithFlags: ((unicode, transfer) => {
         extended: false
         Encoding.UTF8.encode(flags).each((octet) => {
             known: false
-            (octet == 105).ifTrue(() => {
-                caseInsensitive.ifTrue(() => {
+            if(octet == 105) {
+                if(caseInsensitive) {
                     Error().signal()
-                })
+                }
                 caseInsensitive = true
                 known = true
-            })
-            (octet == 109).ifTrue(() => {
-                multiline.ifTrue(() => {
+            }
+            if(octet == 109) {
+                if(multiline) {
                     Error().signal()
-                })
+                }
                 multiline = true
                 known = true
-            })
-            (octet == 115).ifTrue(() => {
-                dotAll.ifTrue(() => {
+            }
+            if(octet == 115) {
+                if(dotAll) {
                     Error().signal()
-                })
+                }
                 dotAll = true
                 known = true
-            })
-            (octet == 120).ifTrue(() => {
-                extended.ifTrue(() => {
+            }
+            if(octet == 120) {
+                if(extended) {
                     Error().signal()
-                })
+                }
                 extended = true
                 known = true
-            })
+            }
             known.ifFalse(() => {
                 Error().signal()
             })
         })
         canonicalFlags: ""
-        caseInsensitive.ifTrue(() => {
+        if(caseInsensitive) {
             canonicalFlags = canonicalFlags + "i"
-        })
-        multiline.ifTrue(() => {
+        }
+        if(multiline) {
             canonicalFlags = canonicalFlags + "m"
-        })
-        dotAll.ifTrue(() => {
+        }
+        if(dotAll) {
             canonicalFlags = canonicalFlags + "s"
-        })
-        extended.ifTrue(() => {
+        }
+        if(extended) {
             canonicalFlags = canonicalFlags + "x"
-        })
+        }
 
         // Under `i`, every literal and class leaf is closed under simple case
         // folding before set operations and negation.
         caseFold: (set) => {
             result: set
-            caseInsensitive.ifTrue(() => {
+            if(caseInsensitive) {
                 result = unicode.caseClosure(set)
-            })
+            }
             result
         }
 
@@ -1301,9 +1301,9 @@ compileWithFlags: ((unicode, transfer) => {
         // Answers the scalar at `index`, or -1 past the end of the source.
         scalarAt: (index) => {
             result: -1
-            (index < length).ifTrue(() => {
+            if(index < length) {
                 result = scalars[index]
-            })
+            }
             result
         }
 
@@ -1366,25 +1366,25 @@ compileWithFlags: ((unicode, transfer) => {
         }
 
         pushAssertion: (kind) => {
-            ((kind == "wordBoundary") || (kind == "notWordBoundary")).ifTrue(() => {
+            if((kind == "wordBoundary") || (kind == "notWordBoundary")) {
                 usesWordBoundary = true
-            })
+            }
             pushItem(addNode({ op: "assert"; kind: kind; weight: 1 }), "assert")
         }
 
         finishSequence: (current) => {
             count: current.itemCount
             result: null
-            (count == 0).ifTrue(() => {
+            if(count == 0) {
                 result = addNode({ op: "empty"; weight: 1 })
-            })
-            (count == 1).ifTrue(() => {
+            }
+            if(count == 1) {
                 result = current.items[0]
-            })
-            (count > 1).ifTrue(() => {
+            }
+            if(count > 1) {
                 items: frozenArray(current.items, count)
                 result = addNode({ op: "concat"; items: items; weight: weightOf(items) })
-            })
+            }
             current.items = Map()
             current.itemCount = 0
             current.last = "none"
@@ -1396,10 +1396,10 @@ compileWithFlags: ((unicode, transfer) => {
             current.alternativeCount = current.alternativeCount + 1
             count: current.alternativeCount
             result: current.alternatives[0]
-            (count > 1).ifTrue(() => {
+            if(count > 1) {
                 items: frozenArray(current.alternatives, count)
                 result = addNode({ op: "alternate"; items: items; weight: weightOf(items) + count - 1 })
-            })
+            }
             result
         }
 
@@ -1425,34 +1425,34 @@ compileWithFlags: ((unicode, transfer) => {
             position = position + 1
             group: null
             name: null
-            (scalarAt(position) == 63).ifTrueIfFalse(() => {
+            if(scalarAt(position) == 63) {
                 position = position + 1
                 marker: scalarAt(position)
                 handled: false
-                (marker == 58).ifTrue(() => {
+                if(marker == 58) {
                     position = position + 1
                     handled = true
-                })
-                (marker == 60).ifTrue(() => {
+                }
+                if(marker == 60) {
                     position = position + 1
                     name = parseCaptureName()
                     captureCount = captureCount + 1
                     group = captureCount
                     handled = true
-                })
+                }
                 // Look-around, atomic, inline-flag, conditional, recursive,
                 // branch-reset, comment, and callout groups are excluded.
                 handled.ifFalse(() => {
                     Error().signal()
                 })
-            }, () => {
+            } else {
                 captureCount = captureCount + 1
                 group = captureCount
-            })
+            }
             (name === null).ifFalse(() => {
-                captureNames.containsKey(name).ifTrue(() => {
+                if(captureNames.containsKey(name)) {
                     Error().signal()
-                })
+                }
                 captureNames[name] = group
             })
             frames[depth] = frame
@@ -1461,9 +1461,9 @@ compileWithFlags: ((unicode, transfer) => {
         }
 
         closeGroup: () => {
-            (depth == 0).ifTrue(() => {
+            if(depth == 0) {
                 Error().signal()
-            })
+            }
             inner: finishAlternation(frame)
             closed: frame
             depth = depth - 1
@@ -1502,48 +1502,48 @@ compileWithFlags: ((unicode, transfer) => {
             minimum: 0
             maximum: null
             position = position + 1
-            (first == 43).ifTrue(() => {
+            if(first == 43) {
                 minimum = 1
-            })
-            (first == 63).ifTrue(() => {
+            }
+            if(first == 63) {
                 maximum = 1
-            })
-            (first == 123).ifTrue(() => {
+            }
+            if(first == 123) {
                 minimum = parseDecimal()
-                (scalarAt(position) == 125).ifTrueIfFalse(() => {
+                if(scalarAt(position) == 125) {
                     maximum = minimum
-                }, () => {
+                } else {
                     (scalarAt(position) == 44).ifFalse(() => {
                         Error().signal()
                     })
                     position = position + 1
                     (scalarAt(position) == 125).ifFalse(() => {
                         maximum = parseDecimal()
-                        (maximum < minimum).ifTrue(() => {
+                        if(maximum < minimum) {
                             Error().signal()
-                        })
+                        }
                     })
                     (scalarAt(position) == 125).ifFalse(() => {
                         Error().signal()
                     })
-                })
+                }
                 position = position + 1
-            })
+            }
             greedy: true
-            (scalarAt(position) == 63).ifTrue(() => {
+            if(scalarAt(position) == 63) {
                 greedy = false
                 position = position + 1
-            })
+            }
             // Possessive quantifiers are excluded.
-            (scalarAt(position) == 43).ifTrue(() => {
+            if(scalarAt(position) == 43) {
                 Error().signal()
-            })
+            }
             index: frame.itemCount - 1
             item: frame.items[index]
             copies: maximum
-            (maximum === null).ifTrue(() => {
+            if(maximum === null) {
                 copies = minimum + 1
-            })
+            }
             weight: (nodes[item].weight + 1) * copies + 1
             frame.items[index] = addNode({
                 op: "repeat"
@@ -1568,13 +1568,13 @@ compileWithFlags: ((unicode, transfer) => {
                 digits = digits + 1
                 position = position + 1
             }
-            ((digits < 1) || (digits > 6) || (scalarAt(position) != 125)).ifTrue(() => {
+            if((digits < 1) || (digits > 6) || (scalarAt(position) != 125)) {
                 Error().signal()
-            })
+            }
             position = position + 1
-            ((value > maxScalar) || ((value >= 55296) && (value <= 57343))).ifTrue(() => {
+            if((value > maxScalar) || ((value >= 55296) && (value <= 57343))) {
                 Error().signal()
-            })
+            }
             value
         }
 
@@ -1590,34 +1590,34 @@ compileWithFlags: ((unicode, transfer) => {
             while(scalarAt(position) != 125) {
                 current: scalarAt(position)
                 // Every Unicode property and value alias is ASCII.
-                ((current < 0) || (current > 127)).ifTrue(() => {
+                if((current < 0) || (current > 127)) {
                     Error().signal()
-                })
-                (current == 61).ifTrueIfFalse(() => {
+                }
+                if(current == 61) {
                     (valueBytes === null).ifFalse(() => {
                         Error().signal()
                     })
                     valueBytes = Encoding.UTF8.encode("")
-                }, () => {
+                } else {
                     target: nameBytes
                     (valueBytes === null).ifFalse(() => {
                         target = valueBytes
                     })
                     target.add(current)
-                })
+                }
                 position = position + 1
             }
             position = position + 1
-            (nameBytes.size() == 0).ifTrue(() => {
+            if(nameBytes.size() == 0) {
                 Error().signal()
-            })
+            }
             name: Encoding.UTF8.decode(nameBytes)
             value: null
             key: "=" + name
             (valueBytes === null).ifFalse(() => {
-                (valueBytes.size() == 0).ifTrue(() => {
+                if(valueBytes.size() == 0) {
                     Error().signal()
-                })
+                }
                 value = Encoding.UTF8.decode(valueBytes)
                 key = name + "=" + value
             })
@@ -1633,9 +1633,9 @@ compileWithFlags: ((unicode, transfer) => {
         parseEscape: (inClass) => {
             position = position + 1
             escaped: scalarAt(position)
-            (escaped < 0).ifTrue(() => {
+            if(escaped < 0) {
                 Error().signal()
-            })
+            }
             position = position + 1
             result: null
             answerScalar: (value) => {
@@ -1645,63 +1645,63 @@ compileWithFlags: ((unicode, transfer) => {
                 result = { kind: "set"; ranges: ranges }
             }
             answerAssertion: (name) => {
-                inClass.ifTrue(() => {
+                if(inClass) {
                     Error().signal()
-                })
+                }
                 result = { kind: "assert"; name: name }
             }
-            (escaped == 116).ifTrue(() => {
+            if(escaped == 116) {
                 answerScalar(9)
-            })
-            (escaped == 110).ifTrue(() => {
+            }
+            if(escaped == 110) {
                 answerScalar(10)
-            })
-            (escaped == 114).ifTrue(() => {
+            }
+            if(escaped == 114) {
                 answerScalar(13)
-            })
-            (escaped == 102).ifTrue(() => {
+            }
+            if(escaped == 102) {
                 answerScalar(12)
-            })
-            (escaped == 117).ifTrue(() => {
+            }
+            if(escaped == 117) {
                 answerScalar(parseScalarEscape())
-            })
-            (escaped == 100).ifTrue(() => {
+            }
+            if(escaped == 100) {
                 answerSet(caseFold(digitSet))
-            })
-            (escaped == 68).ifTrue(() => {
+            }
+            if(escaped == 68) {
                 answerSet(complement(caseFold(digitSet)))
-            })
-            (escaped == 115).ifTrue(() => {
+            }
+            if(escaped == 115) {
                 answerSet(caseFold(spaceSet))
-            })
-            (escaped == 83).ifTrue(() => {
+            }
+            if(escaped == 83) {
                 answerSet(complement(caseFold(spaceSet)))
-            })
-            (escaped == 119).ifTrue(() => {
+            }
+            if(escaped == 119) {
                 answerSet(caseFold(wordSet))
-            })
-            (escaped == 87).ifTrue(() => {
+            }
+            if(escaped == 87) {
                 answerSet(complement(caseFold(wordSet)))
-            })
-            (escaped == 112).ifTrue(() => {
+            }
+            if(escaped == 112) {
                 answerSet(caseFold(parseProperty()))
-            })
-            (escaped == 80).ifTrue(() => {
+            }
+            if(escaped == 80) {
                 answerSet(complement(caseFold(parseProperty())))
-            })
-            (escaped == 65).ifTrue(() => {
+            }
+            if(escaped == 65) {
                 answerAssertion("textStart")
-            })
-            (escaped == 122).ifTrue(() => {
+            }
+            if(escaped == 122) {
                 answerAssertion("textEnd")
-            })
-            (escaped == 98).ifTrue(() => {
+            }
+            if(escaped == 98) {
                 answerAssertion("wordBoundary")
-            })
-            (escaped == 66).ifTrue(() => {
+            }
+            if(escaped == 66) {
                 answerAssertion("notWordBoundary")
-            })
-            (result === null).ifTrue(() => {
+            }
+            if(result === null) {
                 // Any other printable ASCII scalar that is neither a letter nor
                 // a digit escapes itself; every other escape is rejected.
                 ((escaped >= 32) && (escaped <= 126) && !isAsciiLetter(escaped) &&
@@ -1709,7 +1709,7 @@ compileWithFlags: ((unicode, transfer) => {
                     Error().signal()
                 })
                 answerScalar(escaped)
-            })
+            }
             result
         }
 
@@ -1739,9 +1739,9 @@ compileWithFlags: ((unicode, transfer) => {
         }
 
         finishOperand: (classFrame) => {
-            ((classFrame.pairCount + classFrame.nestedCount) == 0).ifTrue(() => {
+            if((classFrame.pairCount + classFrame.nestedCount) == 0) {
                 Error().signal()
-            })
+            }
             operand: caseFold(fromPairs(classFrame.pairs, classFrame.pairCount))
             index: 0
             while(index < classFrame.nestedCount) {
@@ -1752,41 +1752,41 @@ compileWithFlags: ((unicode, transfer) => {
             classFrame.pairCount = 0
             classFrame.nested = Map()
             classFrame.nestedCount = 0
-            (classFrame.operator === null).ifTrue(() => {
+            if(classFrame.operator === null) {
                 classFrame.left = operand
-            })
-            (classFrame.operator == "and").ifTrue(() => {
+            }
+            if(classFrame.operator == "and") {
                 classFrame.left = intersect(classFrame.left, operand)
-            })
-            (classFrame.operator == "minus").ifTrue(() => {
+            }
+            if(classFrame.operator == "minus") {
                 classFrame.left = subtract(classFrame.left, operand)
-            })
+            }
         }
 
         // Reads one class item and answers its scalar, or -1 when the item was a
         // set escape, which is added to `classFrame` directly.
         parseClassAtom: (classFrame) => {
             current: scalarAt(position)
-            ((current < 0) || (current == 91) || (current == 93) || (current == 45) ||
-                (current == 38)).ifTrue(() => {
+            if((current < 0) || (current == 91) || (current == 93) || (current == 45) ||
+                (current == 38)) {
                 Error().signal()
-            })
-            (extended && (isPatternWhiteSpace(current) || (current == 35))).ifTrue(() => {
+            }
+            if(extended && (isPatternWhiteSpace(current) || (current == 35))) {
                 Error().signal()
-            })
+            }
             result: -1
-            (current == 92).ifTrueIfFalse(() => {
+            if(current == 92) {
                 token: parseEscape(true)
-                (token.kind == "scalar").ifTrue(() => {
+                if(token.kind == "scalar") {
                     result = token.value
-                })
-                (token.kind == "set").ifTrue(() => {
+                }
+                if(token.kind == "set") {
                     addNested(classFrame, token.ranges)
-                })
-            }, () => {
+                }
+            } else {
                 result = current
                 position = position + 1
-            })
+            }
             result
         }
 
@@ -1799,14 +1799,14 @@ compileWithFlags: ((unicode, transfer) => {
                 // POSIX bracket expressions are excluded: `[:` and `[=` never
                 // open a class, and inside a class neither does `[.`. An
                 // outermost class may start with a literal `.`.
-                ((scalarAt(position) == 58) || (scalarAt(position) == 61) ||
-                    ((classDepth > 0) && (scalarAt(position) == 46))).ifTrue(() => {
+                if((scalarAt(position) == 58) || (scalarAt(position) == 61) ||
+                    ((classDepth > 0) && (scalarAt(position) == 46))) {
                     Error().signal()
-                })
+                }
                 inverted: scalarAt(position) == 94
-                inverted.ifTrue(() => {
+                if(inverted) {
                     position = position + 1
-                })
+                }
                 classFrames[classDepth] = newClassFrame(inverted)
                 classDepth = classDepth + 1
             }
@@ -1816,176 +1816,176 @@ compileWithFlags: ((unicode, transfer) => {
                 first: scalarAt(position)
                 second: scalarAt(position + 1)
                 kind: "atom"
-                (first == 93).ifTrue(() => {
+                if(first == 93) {
                     kind = "close"
-                })
-                (first == 91).ifTrue(() => {
+                }
+                if(first == 91) {
                     kind = "open"
-                })
-                ((first == 38) && (second == 38)).ifTrue(() => {
+                }
+                if((first == 38) && (second == 38)) {
                     kind = "and"
-                })
-                ((first == 45) && (second == 45)).ifTrue(() => {
+                }
+                if((first == 45) && (second == 45)) {
                     kind = "minus"
-                })
+                }
                 // `~~` is symmetric difference in other dialects; it is excluded.
-                ((first == 126) && (second == 126)).ifTrue(() => {
+                if((first == 126) && (second == 126)) {
                     Error().signal()
-                })
+                }
 
-                (kind == "close").ifTrue(() => {
+                if(kind == "close") {
                     finishOperand(current)
                     finished: current.left
-                    current.inverted.ifTrue(() => {
+                    if(current.inverted) {
                         finished = complement(finished)
-                    })
+                    }
                     position = position + 1
                     classDepth = classDepth - 1
-                    (classDepth == 0).ifTrueIfFalse(() => {
+                    if(classDepth == 0) {
                         result = finished
-                    }, () => {
+                    } else {
                         addNested(classFrames[classDepth - 1], finished)
-                    })
-                })
-                (kind == "open").ifTrue(() => {
+                    }
+                }
+                if(kind == "open") {
                     openClass()
-                })
-                ((kind == "and") || (kind == "minus")).ifTrue(() => {
+                }
+                if((kind == "and") || (kind == "minus")) {
                     finishOperand(current)
                     current.operator = kind
                     position = position + 2
-                })
-                (kind == "atom").ifTrue(() => {
+                }
+                if(kind == "atom") {
                     low: parseClassAtom(current)
-                    (low >= 0).ifTrue(() => {
+                    if(low >= 0) {
                         high: low
-                        ((scalarAt(position) == 45) && (scalarAt(position + 1) != 45)).ifTrue(() => {
+                        if((scalarAt(position) == 45) && (scalarAt(position + 1) != 45)) {
                             position = position + 1
                             high = parseClassAtom(current)
-                            ((high < 0) || (high < low)).ifTrue(() => {
+                            if((high < 0) || (high < low)) {
                                 Error().signal()
-                            })
-                        })
+                            }
+                        }
                         current.pairs[current.pairCount] = [low, high]
                         current.pairCount = current.pairCount + 1
-                    })
-                })
+                    }
+                }
             }
             result
         }
 
         skipIgnorable: () => {
-            extended.ifTrue(() => {
+            if(extended) {
                 while(isPatternWhiteSpace(scalarAt(position)) || (scalarAt(position) == 35)) {
-                    (scalarAt(position) == 35).ifTrueIfFalse(() => {
+                    if(scalarAt(position) == 35) {
                         while((position < length) && !isLineTerminator(scalars[position])) {
                             position = position + 1
                         }
-                    }, () => {
+                    } else {
                         position = position + 1
-                    })
+                    }
                 }
-            })
+            }
         }
 
         while(position < length) {
             skipIgnorable()
-            (position < length).ifTrue(() => {
+            if(position < length) {
                 current: scalars[position]
                 kind: "literal"
-                (current == 40).ifTrue(() => {
+                if(current == 40) {
                     kind = "open"
-                })
-                (current == 41).ifTrue(() => {
+                }
+                if(current == 41) {
                     kind = "close"
-                })
-                (current == 124).ifTrue(() => {
+                }
+                if(current == 124) {
                     kind = "alternate"
-                })
-                ((current == 42) || (current == 43) || (current == 63) || (current == 123)).ifTrue(() => {
+                }
+                if((current == 42) || (current == 43) || (current == 63) || (current == 123)) {
                     kind = "quantifier"
-                })
-                (current == 91).ifTrue(() => {
+                }
+                if(current == 91) {
                     kind = "class"
-                })
-                (current == 92).ifTrue(() => {
+                }
+                if(current == 92) {
                     kind = "escape"
-                })
-                (current == 46).ifTrue(() => {
+                }
+                if(current == 46) {
                     kind = "dot"
-                })
-                (current == 94).ifTrue(() => {
+                }
+                if(current == 94) {
                     kind = "caret"
-                })
-                (current == 36).ifTrue(() => {
+                }
+                if(current == 36) {
                     kind = "dollar"
-                })
+                }
                 // A literal `]` or `}` must be escaped.
-                ((current == 93) || (current == 125)).ifTrue(() => {
+                if((current == 93) || (current == 125)) {
                     Error().signal()
-                })
+                }
 
-                (kind == "open").ifTrue(() => {
+                if(kind == "open") {
                     openGroup()
-                })
-                (kind == "close").ifTrue(() => {
+                }
+                if(kind == "close") {
                     closeGroup()
-                })
-                (kind == "alternate").ifTrue(() => {
+                }
+                if(kind == "alternate") {
                     frame.alternatives[frame.alternativeCount] = finishSequence(frame)
                     frame.alternativeCount = frame.alternativeCount + 1
                     position = position + 1
-                })
-                (kind == "quantifier").ifTrue(() => {
+                }
+                if(kind == "quantifier") {
                     parseQuantifier()
-                })
-                (kind == "class").ifTrue(() => {
+                }
+                if(kind == "class") {
                     pushItem(setNode(parseClass()), "atom")
-                })
-                (kind == "escape").ifTrue(() => {
+                }
+                if(kind == "escape") {
                     token: parseEscape(false)
-                    (token.kind == "scalar").ifTrue(() => {
+                    if(token.kind == "scalar") {
                         pushItem(setNode(literalSet(token.value)), "atom")
-                    })
-                    (token.kind == "set").ifTrue(() => {
+                    }
+                    if(token.kind == "set") {
                         pushItem(setNode(token.ranges), "atom")
-                    })
-                    (token.kind == "assert").ifTrue(() => {
+                    }
+                    if(token.kind == "assert") {
                         pushAssertion(token.name)
-                    })
-                })
-                (kind == "dot").ifTrue(() => {
-                    dotAll.ifTrueIfFalse(() => {
+                    }
+                }
+                if(kind == "dot") {
+                    if(dotAll) {
                         pushItem(setNode(scalarSet), "atom")
-                    }, () => {
+                    } else {
                         pushItem(setNode(dotSet), "atom")
-                    })
+                    }
                     position = position + 1
-                })
-                (kind == "caret").ifTrue(() => {
-                    multiline.ifTrueIfFalse(() => {
+                }
+                if(kind == "caret") {
+                    if(multiline) {
                         pushAssertion("lineStart")
-                    }, () => {
+                    } else {
                         pushAssertion("textStart")
-                    })
+                    }
                     position = position + 1
-                })
+                }
                 // Outside multiline mode `$` is kept distinct from `\z` as kind
                 // "end", so the matcher applies its end-of-input rule without
                 // reparsing.
-                (kind == "dollar").ifTrue(() => {
-                    multiline.ifTrueIfFalse(() => {
+                if(kind == "dollar") {
+                    if(multiline) {
                         pushAssertion("lineEnd")
-                    }, () => {
+                    } else {
                         pushAssertion("end")
-                    })
+                    }
                     position = position + 1
-                })
-                (kind == "literal").ifTrue(() => {
+                }
+                if(kind == "literal") {
                     pushItem(setNode(literalSet(current)), "atom")
                     position = position + 1
-                })
-            })
+                }
+            }
         }
 
         (depth == 0).ifFalse(() => {
@@ -1999,16 +1999,16 @@ compileWithFlags: ((unicode, transfer) => {
         nameIndex: 0
         while(nameIndex < nodeCount) {
             node: nodes[nameIndex]
-            ((node.op == "capture") && (node.name !== null)).ifTrue(() => {
+            if((node.op == "capture") && (node.name !== null)) {
                 groupNames[node.group] = node.name
-            })
+            }
             nameIndex = nameIndex + 1
         }
         groupNames.freeze()
         boundaryWords: null
-        usesWordBoundary.ifTrue(() => {
+        if(usesWordBoundary) {
             boundaryWords = wordSet
-        })
+        }
         nodeTable: frozenArray(nodes, nodeCount)
         rootWeight: nodes[root].weight
 
@@ -2039,9 +2039,9 @@ compileWithFlags: ((unicode, transfer) => {
     // this module instance's private record; it is not module surface.
     transfer.installFactory((kind, first, second, third) => {
         built: null
-        (kind == "Pattern").ifTrueIfFalse(() => {
+        if(kind == "Pattern") {
             built = compileSource(first, second)
-        }, () => {
+        } else {
             names: Map()
             group: 0
             first.each((name) => {
@@ -2052,7 +2052,7 @@ compileWithFlags: ((unicode, transfer) => {
             })
             names.freeze()
             built = newMatch(names, first, second, third)
-        })
+        }
         built
     })
 
@@ -2102,69 +2102,69 @@ escape: (text) => {
     expected: 0
     scalar: 0
     Encoding.UTF8.encode(text).each((octet) => {
-        (expected == 0).ifTrueIfFalse(() => {
-            (octet < 128).ifTrueIfFalse(() => {
+        if(expected == 0) {
+            if(octet < 128) {
                 handled: false
-                (octet == 9).ifTrue(() => {
+                if(octet == 9) {
                     appendAscii("\\t")
                     handled = true
-                })
-                (octet == 10).ifTrue(() => {
+                }
+                if(octet == 10) {
                     appendAscii("\\n")
                     handled = true
-                })
-                (octet == 13).ifTrue(() => {
+                }
+                if(octet == 13) {
                     appendAscii("\\r")
                     handled = true
-                })
-                (octet == 12).ifTrue(() => {
+                }
+                if(octet == 12) {
                     appendAscii("\\f")
                     handled = true
-                })
-                (octet == 11).ifTrue(() => {
+                }
+                if(octet == 11) {
                     appendHexEscape(11)
                     handled = true
-                })
+                }
                 handled.ifFalse(() => {
                     special: (octet == 32) || (octet == 35) || (octet == 36) || (octet == 38) ||
                         (octet == 40) || (octet == 41) || (octet == 42) || (octet == 43) ||
                         (octet == 45) || (octet == 46) || (octet == 63) || (octet == 91) ||
                         (octet == 92) || (octet == 93) || (octet == 94) || (octet == 123) ||
                         (octet == 124) || (octet == 125)
-                    special.ifTrue(() => {
+                    if(special) {
                         output.add(92)
-                    })
+                    }
                     output.add(octet)
                 })
-            }, () => {
+            } else {
                 pending.add(octet)
                 scalar = octet - 192
                 expected = 1
-                (octet >= 224).ifTrue(() => {
+                if(octet >= 224) {
                     scalar = octet - 224
                     expected = 2
-                })
-                (octet >= 240).ifTrue(() => {
+                }
+                if(octet >= 240) {
                     scalar = octet - 240
                     expected = 3
-                })
-            })
-        }, () => {
+                }
+            }
+        } else {
             pending.add(octet)
             scalar = scalar * 64 + (octet - 128)
             expected = expected - 1
-            (expected == 0).ifTrue(() => {
-                ((scalar == 133) || (scalar == 8206) || (scalar == 8207) || (scalar == 8232) ||
-                    (scalar == 8233)).ifTrueIfFalse(() => {
+            if(expected == 0) {
+                if((scalar == 133) || (scalar == 8206) || (scalar == 8207) || (scalar == 8232) ||
+                    (scalar == 8233)) {
                     appendHexEscape(scalar)
-                }, () => {
+                } else {
                     pending.each((held) => {
                         output.add(held)
                     })
-                })
+                }
                 pending = Encoding.UTF8.encode("")
-            })
-        })
+            }
+        }
     })
     Encoding.UTF8.decode(output)
 }
@@ -2179,9 +2179,9 @@ escapeReplacement: (text) => {
     })
     output: Encoding.UTF8.encode("")
     Encoding.UTF8.encode(text).each((octet) => {
-        (octet == 36).ifTrue(() => {
+        if(octet == 36) {
             output.add(36)
-        })
+        }
         output.add(octet)
     })
     Encoding.UTF8.decode(output)

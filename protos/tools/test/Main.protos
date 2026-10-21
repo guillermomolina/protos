@@ -98,13 +98,13 @@ while(resolveIndex < leaves.size()) {
 
     planLoader: corpusBinding.planLoader
     supportedLoader: planLoader === "manifest"
-    (planLoader === "package-toml").ifTrue(() => {
+    if(planLoader === "package-toml") {
         supportedLoader = true
-    })
-    (planLoader === "repository-explicit").ifTrue(() => {
+    }
+    if(planLoader === "repository-explicit") {
         supportedLoader = true
-    })
-    (planLoader === "case-outcomes").ifTrue(() => {
+    }
+    if(planLoader === "case-outcomes") {
         supportedLoader = true
         // D132: the CorpusBinding supplies the explicit logical case
         // namespace; a case-outcomes binding without one fails closed
@@ -112,13 +112,13 @@ while(resolveIndex < leaves.size()) {
         corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
             Error().signal()
         })
-    })
-    (planLoader === "project-tree").ifTrue(() => {
+    }
+    if(planLoader === "project-tree") {
         supportedLoader = true
         corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
             Error().signal()
         })
-    })
+    }
     supportedLoader.ifFalse(() => {
         Error().signal()
     })
@@ -152,41 +152,41 @@ while(planIndex < resolvedSuites.size()) {
     planLoader: corpusBinding.planLoader
     suitePlan: null
 
-    (planLoader === "manifest").ifTrue(() => {
+    if(planLoader === "manifest") {
         suitePlan = Manifest.load(corpusBinding.filesystem)
-    })
-    (planLoader === "package-toml").ifTrue(() => {
+    }
+    if(planLoader === "package-toml") {
         suitePlan = Manifest.loadPackageToml(corpusBinding.filesystem)
-    })
-    (planLoader === "repository-explicit").ifTrue(() => {
+    }
+    if(planLoader === "repository-explicit") {
         suitePlan = RepositoryCorpusPlans.load(resolved.leaf.corpus)
-    })
-    (planLoader === "case-outcomes").ifTrue(() => {
+    }
+    if(planLoader === "case-outcomes") {
         suitePlan = Manifest.loadCaseOutcomes(
             corpusBinding.filesystem,
             corpusBinding.caseNamespace
         )
-    })
-    (planLoader === "project-tree").ifTrue(() => {
+    }
+    if(planLoader === "project-tree") {
         suitePlan = Manifest.loadProjectTreeCases(
             corpusBinding.filesystem,
             corpusBinding.caseNamespace
         )
-    })
-    (suitePlan === null).ifTrue(() => {
+    }
+    if(suitePlan === null) {
         Error().signal()
-    })
+    }
 
     resourceRequirementsApplies: planLoader === "manifest"
-    (planLoader === "package-toml").ifTrue(() => {
+    if(planLoader === "package-toml") {
         resourceRequirementsApplies = true
-    })
-    resourceRequirementsApplies.ifTrue(() => {
+    }
+    if(resourceRequirementsApplies) {
         suitePlan = ResourceRequirements.loadFromCorpus(
             corpusBinding.filesystem,
             suitePlan
         )
-    })
+    }
 
     planned: {
         leaf: resolved.leaf
@@ -210,14 +210,14 @@ selectorMatchesAnyPlan: (
     matched: false
 
     plannedSuites.each((planned) => {
-        FileSelection.planHasMatch(
+        if(FileSelection.planHasMatch(
             planned.leaf.corpus,
             planned.plan,
             selectedFileAssociations,
             selectedDirectoryAssociations
-        ).ifTrue(() => {
+        )) {
             matched = true
-        })
+        }
     })
 
     matched
@@ -267,7 +267,7 @@ selectorsActive:
 // Unfiltered execution retains the exact pre-selection TestPlan set.
 executionSuites: plannedSuites
 
-selectorsActive.ifTrue(() => {
+if(selectorsActive) {
     selectedSuites: []
 
     plannedSuites.each((planned) => {
@@ -279,7 +279,7 @@ selectorsActive.ifTrue(() => {
                 directoryAssociations
             )
 
-        (Manifest.planCases(selectedPlan).size() > 0).ifTrue(() => {
+        if(Manifest.planCases(selectedPlan).size() > 0) {
             selected: {
                 leaf: planned.leaf
                 corpusBinding: planned.corpusBinding
@@ -291,19 +291,19 @@ selectorsActive.ifTrue(() => {
                 ...selectedSuites,
                 selected
             ]
-        })
+        }
     })
 
     // Every explicit selector was already required to match independently.
     // Retain this as a fail-closed aggregate invariant before progress or
     // scheduling begins.
-    (selectedSuites.size() == 0).ifTrue(() => {
+    if(selectedSuites.size() == 0) {
         Error().signal()
-    })
+    }
 
     selectedSuites.freeze()
     executionSuites = selectedSuites
-})
+}
 
 // TOOL009-B: repository production is logical-only. Every corpus's TestPlan is
 // required to be suite-native; there is no legacy CaseSpec partition, no D108
@@ -393,9 +393,9 @@ executionSuites.each((planned) => {
 
         corpusSpecs: null
 
-        logicalSourceSpecs.containsKey(corpusId).ifTrue(() => {
+        if(logicalSourceSpecs.containsKey(corpusId)) {
             corpusSpecs = logicalSourceSpecs[corpusId]
-        })
+        }
 
         logicalSourceSpecs.containsKey(corpusId).ifFalse(() => {
             corpusSpecs = Map()
@@ -404,18 +404,18 @@ executionSuites.each((planned) => {
 
         sourceSpecs: null
 
-        corpusSpecs.containsKey(sourcePath).ifTrue(() => {
+        if(corpusSpecs.containsKey(sourcePath)) {
             sourceSpecs = corpusSpecs[sourcePath]
-        })
+        }
 
         corpusSpecs.containsKey(sourcePath).ifFalse(() => {
             sourceSpecs = Map()
             corpusSpecs[sourcePath] = sourceSpecs
         })
 
-        sourceSpecs.containsKey(fixtureKey).ifTrue(() => {
+        if(sourceSpecs.containsKey(fixtureKey)) {
             Error().signal()
-        })
+        }
         sourceSpecs[fixtureKey] = spec
 
         association:
@@ -442,9 +442,9 @@ executionSuites.each((planned) => {
             )
 
         // A suite-native Case must transfer at least one logical Case.
-        (projectionCases.size() == 0).ifTrue(() => {
+        if(projectionCases.size() == 0) {
             Error().signal()
-        })
+        }
 
         retainedCases:
             CaseSelection.retain(
@@ -453,20 +453,20 @@ executionSuites.each((planned) => {
             )
 
         selectedProjection: projection
-        caseSelection.active.ifTrue(() => {
+        if(caseSelection.active) {
             selectedProjection =
                 CaseSelection.projection(
                     projection,
                     retainedCases
                 )
-        })
+        }
 
-        (retainedCases.size() > 0).ifTrue(() => {
+        if(retainedCases.size() > 0) {
             ArrayAccumulator.append(
                 logicalProjectionsAccumulator,
                 selectedProjection
             )
-        })
+        }
 
         retainedCases.each((retainedCase) => {
             ArrayAccumulator.append(
@@ -510,7 +510,7 @@ executionSuites.each((planned) => {
         retainSuite = true
     })
 
-    retainSuite.ifTrue(() => {
+    if(retainSuite) {
         suite: {
             leaf: planned.leaf
             corpusBinding: planned.corpusBinding
@@ -536,7 +536,7 @@ executionSuites.each((planned) => {
 
         executionSuiteIndex =
             executionSuiteIndex + 1
-    })
+    }
 })
 
 CaseSelection.requireComplete(caseSelection)
@@ -557,7 +557,7 @@ finalOutcome: null
 // D185 --list-cases projects the final selected authoritative CasePlan as the
 // protos.test.cases/v1 document on stdout and stops before progress state,
 // LogicalCaseRunner scheduling, fresh Case Processes or Test body invocation.
-listCases.ifTrue(() => {
+if(listCases) {
     listingWriter: TextWriter(process.stdout(), process.stdoutEncoding())
     listingWriter.writeLine(CaseSelection.listing(logicalProjections)).value()
 
@@ -566,7 +566,7 @@ listCases.ifTrue(() => {
             null,
             0
         )
-})
+}
 
 listCases.ifFalse(() => {
     // TOOL011: progress groups are a presentation projection over the final
@@ -633,7 +633,7 @@ listCases.ifFalse(() => {
         while(localIndex < names.size()) {
             progressGroupIndex: null
 
-            (totals[localIndex] > 0).ifTrue(() => {
+            if(totals[localIndex] > 0) {
                 suiteProgress:
                     startProgress(
                         names[localIndex],
@@ -650,7 +650,7 @@ listCases.ifFalse(() => {
                     )
                 groupInfrastructureFailed =
                     Array(...groupInfrastructureFailed, false)
-            })
+            }
 
             progressGroupIndexes =
                 Array(...progressGroupIndexes, progressGroupIndex)
@@ -716,26 +716,26 @@ listCases.ifFalse(() => {
         evaluation: null
         resultInfrastructureFailed: false
 
-        (classification == "pass").ifTrue(() => {
+        if(classification == "pass") {
             evaluation =
                 Runner.resultTuple(
                     true,
                     null
                 )
-        })
+        }
 
-        (classification == "fail").ifTrue(() => {
+        if(classification == "fail") {
             evaluation =
                 Runner.resultTuple(
                     false,
                     null
                 )
-        })
+        }
 
-        (classification == "tool-error").ifTrue(() => {
+        if(classification == "tool-error") {
             resultInfrastructureFailed = true
             groupInfrastructureFailed[targetGroupIndex] = true
-        })
+        }
 
         groupObservers[targetGroupIndex](
             spec,
@@ -746,9 +746,9 @@ listCases.ifFalse(() => {
 
         (classification == "pass").ifFalse(() => {
             kind: "FAIL"
-            resultInfrastructureFailed.ifTrue(() => {
+            if(resultInfrastructureFailed) {
                 kind = "INFRA"
-            })
+            }
 
             failedCaseLines =
                 Array(
@@ -760,7 +760,7 @@ listCases.ifFalse(() => {
         null
     }
 
-    (logicalProjections.size() > 0).ifTrue(() => {
+    if(logicalProjections.size() > 0) {
         logicalCompletions:
             LogicalCaseRunner.run(
                 logicalProjections,
@@ -777,7 +777,7 @@ listCases.ifFalse(() => {
             LogicalCaseResult.projectAll(
                 logicalCompletions
             )
-    })
+    }
 
     (Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
         Error().signal()
@@ -809,7 +809,7 @@ listCases.ifFalse(() => {
     // failure => completed/1; otherwise completed/0.
     logicalExitCode: LogicalCaseResult.exitCode(logicalResults)
 
-    (logicalExitCode == 3).ifTrue(() => {
+    if(logicalExitCode == 3) {
         finalOutcome =
             Runner.testRunOutcome(
                 "infrastructure-aborted",
@@ -817,7 +817,7 @@ listCases.ifFalse(() => {
                 null,
                 3
             )
-    })
+    }
 
     (logicalExitCode == 3).ifFalse(() => {
         finalOutcome =

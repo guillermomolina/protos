@@ -33,13 +33,13 @@ declarationSignature: (tests) => {
         String.recognizes(name).ifFalse(() => {
             fail()
         })
-        (name == "").ifTrue(() => {
+        if(name == "") {
             fail()
-        })
+        }
 
-        Sets.contains(seen, name).ifTrue(() => {
+        if(Sets.contains(seen, name)) {
             fail()
-        })
+        }
         Sets.add(seen, name)
 
         name
@@ -89,9 +89,9 @@ resolveSelectedTest: (module, expectedSignature, selector) => {
     String.recognizes(selector).ifFalse(() => {
         fail()
     })
-    (selector == "").ifTrue(() => {
+    if(selector == "") {
         fail()
-    })
+    }
 
     signature:
         requireDeclarationSignature(
@@ -104,9 +104,9 @@ resolveSelectedTest: (module, expectedSignature, selector) => {
             name == selector
         })
 
-    (selectedIndex === null).ifTrue(() => {
+    if(selectedIndex === null) {
         fail()
-    })
+    }
 
     selected: module.slotValue("tests")[selectedIndex]
 

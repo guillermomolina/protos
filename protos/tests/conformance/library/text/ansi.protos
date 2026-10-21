@@ -38,9 +38,9 @@ hasEscape: (text) => {
     found: false
     index: 0
     while(index < text.size()) {
-        (text[index] == esc).ifTrue(() => {
+        if(text[index] == esc) {
             found = true
-        })
+        }
         index = index + 1
     }
     found

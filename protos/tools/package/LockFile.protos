@@ -63,9 +63,9 @@ isStale: (projectFilesystem, resolutionRoot) => {
     lock: load(projectFilesystem)
     stale: true
 
-    Input.matchesHeader(resolutionRoot, lock.header).ifTrue(() => {
+    if(Input.matchesHeader(resolutionRoot, lock.header)) {
         stale = false
-    })
+    }
 
     stale
 }

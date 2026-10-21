@@ -22,11 +22,11 @@ check: (value, expected) => {
     index: 0
 
     expected.each((octet) => {
-        ok.ifTrue(() => {
+        if(ok) {
             (actual[index] == octet).ifFalse(() => {
                 ok = false
             })
-        })
+        }
         index = index + 1
     })
 

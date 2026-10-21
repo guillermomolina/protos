@@ -31,9 +31,9 @@ workspaceRef: (packageId) => {
 
 workspaceRefMatches: (ref, packageId) => {
     matches: ref.kind == "workspace"
-    matches.ifTrue(() => {
+    if(matches) {
         matches = ref.packageId == packageId
-    })
+    }
     matches
 }
 
@@ -41,14 +41,14 @@ packageAt: (packages, location) => {
     found: null
 
     packages.each((package) => {
-        (package.location == location).ifTrue(() => {
+        if(package.location == location) {
             found = package
-        })
+        }
     })
 
-    (found === null).ifTrue(() => {
+    if(found === null) {
         fail()
-    })
+    }
 
     found
 }
@@ -69,9 +69,9 @@ lockMemberAt: (lock, declaration) => {
     found: null
 
     lock.workspaceMembers.each((member) => {
-        (member.declaration == declaration).ifTrue(() => {
+        if(member.declaration == declaration) {
             found = member
-        })
+        }
     })
 
     found
@@ -81,14 +81,14 @@ lockDependencyAt: (lock, declaringPackageId, alias) => {
     found: null
 
     lock.dependencies.each((dependency) => {
-        workspaceRefMatches(
+        if(workspaceRefMatches(
             dependency.declaring,
             declaringPackageId
-        ).ifTrue(() => {
-            (dependency.alias == alias).ifTrue(() => {
+        )) {
+            if(dependency.alias == alias) {
                 found = dependency
-            })
-        })
+            }
+        }
     })
 
     found
@@ -98,12 +98,12 @@ countLockDependencies: (lock, declaringPackageId) => {
     count: 0
 
     lock.dependencies.each((dependency) => {
-        workspaceRefMatches(
+        if(workspaceRefMatches(
             dependency.declaring,
             declaringPackageId
-        ).ifTrue(() => {
+        )) {
             count = count + 1
-        })
+        }
     })
 
     count
@@ -132,9 +132,9 @@ validatePackageDependencies: (lock, package) => {
                 dependency.alias
             )
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         workspaceRefMatches(
             locked.target,
@@ -175,12 +175,12 @@ copyContentIdentity: (content) => {
 
 sameContentIdentity: (left, right) => {
     same: left.method == right.method
-    same.ifTrue(() => {
+    if(same) {
         same = left.algorithm == right.algorithm
-    })
-    same.ifTrue(() => {
+    }
+    if(same) {
         same = left.hex == right.hex
-    })
+    }
     same
 }
 
@@ -201,15 +201,15 @@ lockedExternalNodeAt: (lock, ref) => {
     key: nodeRefKey(ref)
 
     lock.registryNodes.each((node) => {
-        (nodeRefKey(node.ref) == key).ifTrue(() => {
+        if(nodeRefKey(node.ref) == key) {
             found = node
-        })
+        }
     })
 
     lock.gitNodes.each((node) => {
-        (nodeRefKey(node.ref) == key).ifTrue(() => {
+        if(nodeRefKey(node.ref) == key) {
             found = node
-        })
+        }
     })
 
     found
@@ -234,13 +234,13 @@ validateV2WorkspaceDependencies: (lock, package) => {
                 dependency.alias
             )
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         known: false
 
-        (dependency.kind == "path").ifTrue(() => {
+        if(dependency.kind == "path") {
             known = true
             workspaceRefMatches(
                 locked.target,
@@ -248,9 +248,9 @@ validateV2WorkspaceDependencies: (lock, package) => {
             ).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
-        (dependency.kind == "registry").ifTrue(() => {
+        if(dependency.kind == "registry") {
             known = true
 
             (locked.target.kind == "registry").ifFalse(() => {
@@ -258,9 +258,9 @@ validateV2WorkspaceDependencies: (lock, package) => {
             })
 
             lockedNode: lockedExternalNodeAt(lock, locked.target)
-            (lockedNode === null).ifTrue(() => {
+            if(lockedNode === null) {
                 fail()
-            })
+            }
 
             (lockedNode.authority == dependency.authority).ifFalse(() => {
                 fail()
@@ -274,9 +274,9 @@ validateV2WorkspaceDependencies: (lock, package) => {
             ).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
-        (dependency.kind == "git").ifTrue(() => {
+        if(dependency.kind == "git") {
             known = true
 
             (locked.target.kind == "git").ifFalse(() => {
@@ -284,9 +284,9 @@ validateV2WorkspaceDependencies: (lock, package) => {
             })
 
             lockedNode: lockedExternalNodeAt(lock, locked.target)
-            (lockedNode === null).ifTrue(() => {
+            if(lockedNode === null) {
                 fail()
-            })
+            }
 
             (lockedNode.fetch == dependency.repository).ifFalse(() => {
                 fail()
@@ -294,7 +294,7 @@ validateV2WorkspaceDependencies: (lock, package) => {
             (locked.target.revision == dependency.revision).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
         known.ifFalse(() => {
             fail()
@@ -323,20 +323,20 @@ lockDependencyAtRef: (lock, declaringRef, alias) => {
     count: 0
 
     lock.dependencies.each((dependency) => {
-        sameNodeRef(
+        if(sameNodeRef(
             dependency.declaring,
             declaringRef
-        ).ifTrue(() => {
-            (dependency.alias == alias).ifTrue(() => {
+        )) {
+            if(dependency.alias == alias) {
                 found = dependency
                 count = count + 1
-            })
-        })
+            }
+        }
     })
 
-    (count > 1).ifTrue(() => {
+    if(count > 1) {
         fail()
-    })
+    }
 
     found
 }
@@ -345,12 +345,12 @@ countLockDependenciesAtRef: (lock, declaringRef) => {
     count: 0
 
     lock.dependencies.each((dependency) => {
-        sameNodeRef(
+        if(sameNodeRef(
             dependency.declaring,
             declaringRef
-        ).ifTrue(() => {
+        )) {
             count = count + 1
-        })
+        }
     })
 
     count
@@ -363,17 +363,17 @@ prepareVerifiedExternalPackage: (
 ) => {
     kind: verified.ref.kind
     external: kind == "registry"
-    (kind == "git").ifTrue(() => {
+    if(kind == "git") {
         external = true
-    })
+    }
     external.ifFalse(() => {
         fail()
     })
 
     lockedNode: lockedExternalNodeAt(lock, verified.ref)
-    (lockedNode === null).ifTrue(() => {
+    if(lockedNode === null) {
         fail()
-    })
+    }
 
     sameContentIdentity(
         verified.content,
@@ -399,14 +399,14 @@ prepareVerifiedExternalPackage: (
 
     manifestVersion: Version.parse(manifest.package.version)
 
-    (lockedNode.ref.kind == "registry").ifTrue(() => {
+    if(lockedNode.ref.kind == "registry") {
         (Version.compare(
             manifestVersion,
             lockedNode.ref.version
         ) == 0).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     // For exact-Git nodes the package release value remains validated metadata;
     // the locked exact revision, not package.version, is Git node identity.
@@ -442,10 +442,10 @@ validateV2ExternalDependencies: (lock, package) => {
         Names.requireAlias(alias)
         kind: Root.dependencyKind(declaration)
 
-        (kind == "path").ifTrue(() => {
+        if(kind == "path") {
             // D056: immutable registry/Git packages cannot operationalize path.
             fail()
-        })
+        }
 
         locked:
             lockDependencyAtRef(
@@ -454,13 +454,13 @@ validateV2ExternalDependencies: (lock, package) => {
                 alias
             )
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         known: false
 
-        (kind == "registry").ifTrue(() => {
+        if(kind == "registry") {
             known = true
 
             (locked.target.kind == "registry").ifFalse(() => {
@@ -468,9 +468,9 @@ validateV2ExternalDependencies: (lock, package) => {
             })
 
             lockedTarget: lockedExternalNodeAt(lock, locked.target)
-            (lockedTarget === null).ifTrue(() => {
+            if(lockedTarget === null) {
                 fail()
-            })
+            }
 
             (lockedTarget.authority == declaration.authority).ifFalse(() => {
                 fail()
@@ -484,9 +484,9 @@ validateV2ExternalDependencies: (lock, package) => {
             ).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
-        (kind == "git").ifTrue(() => {
+        if(kind == "git") {
             known = true
 
             (locked.target.kind == "git").ifFalse(() => {
@@ -494,9 +494,9 @@ validateV2ExternalDependencies: (lock, package) => {
             })
 
             lockedTarget: lockedExternalNodeAt(lock, locked.target)
-            (lockedTarget === null).ifTrue(() => {
+            if(lockedTarget === null) {
                 fail()
-            })
+            }
 
             (lockedTarget.fetch == declaration.git).ifFalse(() => {
                 fail()
@@ -504,7 +504,7 @@ validateV2ExternalDependencies: (lock, package) => {
             (locked.target.revision == declaration.rev).ifFalse(() => {
                 fail()
             })
-        })
+        }
 
         known.ifFalse(() => {
             fail()
@@ -551,9 +551,9 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
     resolutionRoot.members.each((member) => {
         locked: lockMemberAt(lock, member.location)
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         workspaceRefMatches(
             locked.ref,
@@ -575,17 +575,17 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
 
     lock.registryNodes.each((node) => {
         key: nodeRefKey(node.ref)
-        lockedExternal.containsKey(key).ifTrue(() => {
+        if(lockedExternal.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal[key] = node
     })
 
     lock.gitNodes.each((node) => {
         key: nodeRefKey(node.ref)
-        lockedExternal.containsKey(key).ifTrue(() => {
+        if(lockedExternal.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal[key] = node
     })
 
@@ -594,18 +594,18 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
     verifiedExternalPackages.each((verified) => {
         kind: verified.ref.kind
         external: kind == "registry"
-        (kind == "git").ifTrue(() => {
+        if(kind == "git") {
             external = true
-        })
+        }
         external.ifFalse(() => {
             fail()
         })
 
         key: nodeRefKey(verified.ref)
 
-        verifiedByRef.containsKey(key).ifTrue(() => {
+        if(verifiedByRef.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal.containsKey(key).ifFalse(() => {
             fail()
         })
@@ -738,9 +738,9 @@ loadCurrentV2Lock: (projectTreeFilesystem) => {
     resolutionRoot.members.each((member) => {
         locked: lockMemberAt(lock, member.location)
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         workspaceRefMatches(
             locked.ref,
@@ -762,17 +762,17 @@ indexLockedExternalNodes: (lock) => {
 
     lock.registryNodes.each((node) => {
         key: nodeRefKey(node.ref)
-        lockedExternal.containsKey(key).ifTrue(() => {
+        if(lockedExternal.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal[key] = node
     })
 
     lock.gitNodes.each((node) => {
         key: nodeRefKey(node.ref)
-        lockedExternal.containsKey(key).ifTrue(() => {
+        if(lockedExternal.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal[key] = node
     })
 
@@ -855,9 +855,9 @@ buildV2FromVerifiedCaptures: (
     verifiedExternalPackages.each((verified) => {
         key: nodeRefKey(verified.ref)
 
-        preparedByRef.containsKey(key).ifTrue(() => {
+        if(preparedByRef.containsKey(key)) {
             fail()
-        })
+        }
         lockedExternal.containsKey(key).ifFalse(() => {
             fail()
         })
@@ -1012,9 +1012,9 @@ build: (projectTreeFilesystem) => {
     resolutionRoot.members.each((member) => {
         locked: lockMemberAt(lock, member.location)
 
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         workspaceRefMatches(
             locked.ref,

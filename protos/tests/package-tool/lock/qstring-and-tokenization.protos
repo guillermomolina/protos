@@ -58,7 +58,7 @@ tests: [
         tokens: Syntax.lineTokens("dependency workspace \"root package\" alias \"json api\" target git \"pkg\" \"abc123\"")
         ok: tokens.size() == 9
         (tokens[0].text == "dependency").ifFalse(() => { ok = false })
-        tokens[0].quoted.ifTrue(() => { ok = false })
+        if(tokens[0].quoted) { ok = false }
         tokens[2].quoted.ifFalse(() => { ok = false })
         (tokens[2].text == "root package").ifFalse(() => { ok = false })
         (tokens[4].text == "json api").ifFalse(() => { ok = false })

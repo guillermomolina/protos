@@ -57,23 +57,23 @@ sourceLoader: (spec) => {
     id: Manifest.caseId(spec)
     source: null
 
-    (id === "h2b2/simple.protos").ifTrue(() => {
+    if(id === "h2b2/simple.protos") {
         source = "10"
-    })
-    (id === "h2b2/future-resolved.protos").ifTrue(() => {
+    }
+    if(id === "h2b2/future-resolved.protos") {
         source = "(() => { 20 }).future()"
-    })
-    (id === "h2b2/closure-fresh.protos").ifTrue(() => {
+    }
+    if(id === "h2b2/closure-fresh.protos") {
         source = closureFreshSource
-    })
-    (id === "h2b2/future-terminal.protos").ifTrue(() => {
+    }
+    if(id === "h2b2/future-terminal.protos") {
         source = "(() => { Error().signal() }).future()"
-    })
-    (id === "h2b2/future-observation.protos").ifTrue(() => {
+    }
+    if(id === "h2b2/future-observation.protos") {
         source = futureObservationSource
-    })
+    }
 
-    (source === null).ifTrue(() => { Error().signal() })
+    if(source === null) { Error().signal() }
     source
 }
 
@@ -91,20 +91,20 @@ passed = passed && (Runner.runPassedCount(run) == 5)
 passed = passed && (Runner.runSkippedCount(run) == 0)
 passed = passed && (results.size() == 5)
 
-passed.ifTrue(() => {
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[0])) === "h2b2/simple.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[1])) === "h2b2/future-resolved.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[2])) === "h2b2/closure-fresh.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[3])) === "h2b2/future-terminal.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[4])) === "h2b2/future-observation.protos"
-})
+}
 
 passed

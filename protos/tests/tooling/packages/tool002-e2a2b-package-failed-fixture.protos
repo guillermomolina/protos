@@ -35,26 +35,26 @@ passed:
     Manifest.caseId(spec) ==
     "package-tool/toml-syntax/invalid-key-error.protos"
 
-passed.ifTrue(() => {
+if(passed) {
     passed = observation.state === "failed"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.value === null
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = (observation.error === null) === false
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = (observation.error === Error) === false
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.error.parent() === Error
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.stdout.size() == 0
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.stderr.size() == 0
-})
+}
 
 passed

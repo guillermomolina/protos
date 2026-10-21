@@ -130,7 +130,7 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "selectorsActive.ifTrue(() => {"));
+                        "if(selectorsActive) {"));
 
         assertTrue(
                 source.contains(

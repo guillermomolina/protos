@@ -53,11 +53,11 @@ resolve: (mode, autoEnabled) => {
         Error().signal()
     })
     result: autoEnabled
-    (mode === "ALWAYS").ifTrue(() => {
+    if(mode === "ALWAYS") {
         result = true
-    })
-    (mode === "NEVER").ifTrue(() => {
+    }
+    if(mode === "NEVER") {
         result = false
-    })
+    }
     result
 }

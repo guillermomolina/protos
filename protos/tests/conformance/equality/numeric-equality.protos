@@ -29,9 +29,9 @@ tests: [
         tool009LegacyCase: () => {
             ok: true
             (9007199254740992 == 9007199254740992.0).ifFalse(() => { ok = false })
-            (9007199254740993 == 9007199254740993.0).ifTrue(() => { ok = false })
+            if(9007199254740993 == 9007199254740993.0) { ok = false }
             (99999999999999991611392 == 1e23).ifFalse(() => { ok = false })
-            (1 == 1.5).ifTrue(() => { ok = false })
+            if(1 == 1.5) { ok = false }
             ok
         }
         Assertions.require(tool009LegacyCase() === true)
@@ -55,12 +55,12 @@ tests: [
             negativeInfinity: -1.0 / 0.0
 
             ok: true
-            (nan == nan).ifTrue(() => { ok = false })
-            (nan == 0).ifTrue(() => { ok = false })
+            if(nan == nan) { ok = false }
+            if(nan == 0) { ok = false }
             (0.0 == -0.0).ifFalse(() => { ok = false })
             (0 == -0.0).ifFalse(() => { ok = false })
             (positiveInfinity == positiveInfinity).ifFalse(() => { ok = false })
-            (positiveInfinity == negativeInfinity).ifTrue(() => { ok = false })
+            if(positiveInfinity == negativeInfinity) { ok = false }
             ok
         }
         Assertions.require(tool009LegacyCase() === true)
@@ -70,10 +70,10 @@ tests: [
             ordinary: {}
 
             ok: true
-            (1 == ordinary).ifTrue(() => { ok = false })
-            (1.0 == ordinary).ifTrue(() => { ok = false })
-            (1 == null).ifTrue(() => { ok = false })
-            (1 == true).ifTrue(() => { ok = false })
+            if(1 == ordinary) { ok = false }
+            if(1.0 == ordinary) { ok = false }
+            if(1 == null) { ok = false }
+            if(1 == true) { ok = false }
             ok
         }
         Assertions.require(tool009LegacyCase() === true)

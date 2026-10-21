@@ -38,8 +38,8 @@ requireIncreasing: (...texts) => {
         j: 0
         while(j < versions.size()) {
             expected: 0
-            (i < j).ifTrue(() => { expected = -1 })
-            (i > j).ifTrue(() => { expected = 1 })
+            if(i < j) { expected = -1 }
+            if(i > j) { expected = 1 }
             Assertions.require(SemVer.comparePrecedence(versions[i], versions[j]) == expected)
             j = j + 1
         }

@@ -85,17 +85,17 @@ format: ((numeric) => (event) => {
     appendDigits: (magnitude, radix) => {
         reversed: Encoding.UTF8.encode("")
         remaining: magnitude
-        (remaining == 0).ifTrue(() => {
+        if(remaining == 0) {
             reversed.add(48)
-        })
+        }
         while(remaining > 0) {
             digit: remaining.mod(radix)
-            (digit < 10).ifTrue(() => {
+            if(digit < 10) {
                 reversed.add(48 + digit)
-            })
-            (digit >= 10).ifTrue(() => {
+            }
+            if(digit >= 10) {
                 reversed.add(55 + digit)
-            })
+            }
             remaining = remaining.div(radix)
         }
         index: reversed.size() - 1
@@ -106,13 +106,13 @@ format: ((numeric) => (event) => {
     }
 
     appendInteger: (value) => {
-        (value < 0).ifTrue(() => {
+        if(value < 0) {
             output.add(45)
             appendDigits(0 - value, 10)
-        })
-        (value >= 0).ifTrue(() => {
+        }
+        if(value >= 0) {
             appendDigits(value, 10)
-        })
+        }
     }
 
     appendZeros: (count) => {
@@ -132,26 +132,26 @@ format: ((numeric) => (event) => {
             appendAscii("NaN")
             handled = true
         })
-        ((handled == false) && (value == positiveInfinity)).ifTrue(() => {
+        if((handled == false) && (value == positiveInfinity)) {
             appendAscii("Infinity")
             handled = true
-        })
-        ((handled == false) && (value == negativeInfinity)).ifTrue(() => {
+        }
+        if((handled == false) && (value == negativeInfinity)) {
             appendAscii("-Infinity")
             handled = true
-        })
-        ((handled == false) && (value == 0.0)).ifTrue(() => {
-            ((1.0 / value) == negativeInfinity).ifTrue(() => {
+        }
+        if((handled == false) && (value == 0.0)) {
+            if((1.0 / value) == negativeInfinity) {
                 output.add(45)
-            })
+            }
             appendAscii("0.0")
             handled = true
-        })
+        }
 
         handled.ifFalse(() => {
-            (value < 0.0).ifTrue(() => {
+            if(value < 0.0) {
                 output.add(45)
-            })
+            }
             decimal: numeric.shortestDecimal(value)
             digits: Encoding.UTF8.encode("")
             reversed: Encoding.UTF8.encode("")
@@ -177,36 +177,36 @@ format: ((numeric) => (event) => {
             }
 
             fixed: (n <= 21) && (n > -6)
-            (fixed && (k <= n)).ifTrue(() => {
+            if(fixed && (k <= n)) {
                 appendRange(0, k)
                 appendZeros(n - k)
                 appendAscii(".0")
-            })
-            (fixed && (n > 0) && (n < k)).ifTrue(() => {
+            }
+            if(fixed && (n > 0) && (n < k)) {
                 appendRange(0, n)
                 output.add(46)
                 appendRange(n, k)
-            })
-            (fixed && (n <= 0)).ifTrue(() => {
+            }
+            if(fixed && (n <= 0)) {
                 appendAscii("0.")
                 appendZeros(0 - n)
                 appendRange(0, k)
-            })
+            }
             fixed.ifFalse(() => {
                 appendRange(0, 1)
-                (k > 1).ifTrue(() => {
+                if(k > 1) {
                     output.add(46)
                     appendRange(1, k)
-                })
+                }
                 output.add(101)
-                ((n - 1) < 0).ifTrue(() => {
+                if((n - 1) < 0) {
                     output.add(45)
                     appendDigits(1 - n, 10)
-                })
-                ((n - 1) >= 0).ifTrue(() => {
+                }
+                if((n - 1) >= 0) {
                     output.add(43)
                     appendDigits(n - 1, 10)
-                })
+                }
             })
         })
     }
@@ -222,18 +222,18 @@ format: ((numeric) => (event) => {
             lead: octets[index]
             length: 1
             scalar: lead
-            (lead >= 240).ifTrue(() => {
+            if(lead >= 240) {
                 length = 4
                 scalar = lead - 240
-            })
-            ((lead >= 224) && (lead < 240)).ifTrue(() => {
+            }
+            if((lead >= 224) && (lead < 240)) {
                 length = 3
                 scalar = lead - 224
-            })
-            ((lead >= 192) && (lead < 224)).ifTrue(() => {
+            }
+            if((lead >= 192) && (lead < 224)) {
                 length = 2
                 scalar = lead - 192
-            })
+            }
             offset: 1
             while(offset < length) {
                 scalar = scalar * 64 + (octets[index + offset] - 128)
@@ -241,30 +241,30 @@ format: ((numeric) => (event) => {
             }
 
             escaped: true
-            (scalar == 34).ifTrue(() => {
+            if(scalar == 34) {
                 appendAscii("\\\"")
-            })
-            (scalar == 92).ifTrue(() => {
+            }
+            if(scalar == 92) {
                 appendAscii("\\\\")
-            })
-            (scalar == 10).ifTrue(() => {
+            }
+            if(scalar == 10) {
                 appendAscii("\\n")
-            })
-            (scalar == 13).ifTrue(() => {
+            }
+            if(scalar == 13) {
                 appendAscii("\\r")
-            })
-            (scalar == 9).ifTrue(() => {
+            }
+            if(scalar == 9) {
                 appendAscii("\\t")
-            })
+            }
             short: (scalar == 34) || (scalar == 92) || (scalar == 10) ||
                 (scalar == 13) || (scalar == 9)
             control: (scalar < 32) || ((scalar >= 127) && (scalar <= 159)) ||
                 (scalar == 8232) || (scalar == 8233)
-            ((short == false) && control).ifTrue(() => {
+            if((short == false) && control) {
                 appendAscii("\\u{")
                 appendDigits(scalar, 16)
                 output.add(125)
-            })
+            }
             escaped = short || control
             escaped.ifFalse(() => {
                 offset = 0
@@ -302,31 +302,31 @@ format: ((numeric) => (event) => {
     appendValue: null
     appendValue = (value) => {
         handled: false
-        (value === null).ifTrue(() => {
+        if(value === null) {
             appendAscii("null")
             handled = true
-        })
-        (value === true).ifTrue(() => {
+        }
+        if(value === true) {
             appendAscii("true")
             handled = true
-        })
-        (value === false).ifTrue(() => {
+        }
+        if(value === false) {
             appendAscii("false")
             handled = true
-        })
-        ((handled == false) && String.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && String.recognizes(value)) {
             appendString(value)
             handled = true
-        })
-        ((handled == false) && Integer.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Integer.recognizes(value)) {
             appendInteger(value)
             handled = true
-        })
-        ((handled == false) && Float.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Float.recognizes(value)) {
             appendFloat(value)
             handled = true
-        })
-        ((handled == false) && Array.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Array.recognizes(value)) {
             output.add(91)
             first: true
             value.each((element) => {
@@ -338,7 +338,7 @@ format: ((numeric) => (event) => {
             })
             output.add(93)
             handled = true
-        })
+        }
         // A recognized event holds only Maps beyond this point.
         handled.ifFalse(() => {
             entries: []
@@ -368,10 +368,10 @@ format: ((numeric) => (event) => {
     appendAscii(event.level)
     output.add(32)
     appendString(event.message)
-    (event.fields.size() > 0).ifTrue(() => {
+    if(event.fields.size() > 0) {
         output.add(32)
         appendValue(event.fields)
-    })
+    }
     (event.error === null).ifFalse(() => {
         appendAscii(" error=true")
     })

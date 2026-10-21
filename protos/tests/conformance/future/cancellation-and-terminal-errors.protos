@@ -58,9 +58,9 @@ tests: [
                 )
 
                 passed: caught
-                passed.ifTrue(() => {
+                if(passed) {
                     passed = observed === original
-                })
+                }
                 passed
             }).future()
         }
@@ -103,9 +103,9 @@ tests: [
                 )
 
                 passed: firstCaught && secondCaught
-                passed.ifTrue(() => {
+                if(passed) {
                     passed = first === second
-                })
+                }
                 passed
             }).future()
         }

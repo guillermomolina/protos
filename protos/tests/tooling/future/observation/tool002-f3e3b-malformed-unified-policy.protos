@@ -45,20 +45,20 @@ rejectsBeforeInspection: (line) => {
 passed: rejectsBeforeInspection(
     "future/x.protos\tfuture-observation-error-identity\tstored"
 )
-passed.ifTrue(() => {
+if(passed) {
     passed = rejectsBeforeInspection(
         "future/x.protos\tfuture-observation-error-identity\tunknown:Error"
     )
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = rejectsBeforeInspection(
         "future/x.protos\tfuture-observation-error-identity\tfresh:NoSuchErrorPrototype"
     )
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = rejectsBeforeInspection(
         "future/x.protos\tboolean\tfresh:Cancelled"
     )
-})
+}
 
 passed

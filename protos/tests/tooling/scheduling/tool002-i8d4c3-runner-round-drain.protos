@@ -132,17 +132,17 @@ sourceLoader: (spec) => {
     id: Manifest.caseId(spec)
     source: null
 
-    (id === "i8d4c3/healthy-first.protos").ifTrue(() => { source = "10" })
-    (id === "i8d4c3/healthy-future.protos").ifTrue(() => { source = "20" })
-    (id === "i8d4c3/healthy-free.protos").ifTrue(() => { source = "30" })
+    if(id === "i8d4c3/healthy-first.protos") { source = "10" }
+    if(id === "i8d4c3/healthy-future.protos") { source = "20" }
+    if(id === "i8d4c3/healthy-free.protos") { source = "30" }
 
-    (id === "i8d4c3/failed-first.protos").ifTrue(() => { source = "10" })
-    (id === "i8d4c3/failed-blocked.protos").ifTrue(() => { source = "20" })
-    (id === "i8d4c3/failed-infrastructure.protos").ifTrue(() => { source = "30" })
-    (id === "i8d4c3/failed-later-free.protos").ifTrue(() => { source = "40" })
-    (id === "i8d4c3/authority.protos").ifTrue(() => { source = "50" })
+    if(id === "i8d4c3/failed-first.protos") { source = "10" }
+    if(id === "i8d4c3/failed-blocked.protos") { source = "20" }
+    if(id === "i8d4c3/failed-infrastructure.protos") { source = "30" }
+    if(id === "i8d4c3/failed-later-free.protos") { source = "40" }
+    if(id === "i8d4c3/authority.protos") { source = "50" }
 
-    (source === null).ifTrue(() => { Error().signal() })
+    if(source === null) { Error().signal() }
     source
 }
 
@@ -161,16 +161,16 @@ bindingRowMatches: (
 ) => {
     passed: bindings.size() == 1
 
-    passed.ifTrue(() => {
+    if(passed) {
         row: bindings[0]
         passed = row.size() == 6
-        passed.ifTrue(() => { passed = row[0] === key })
-        passed.ifTrue(() => { passed = row[1] === mode })
-        passed.ifTrue(() => { passed = row[2] === units })
-        passed.ifTrue(() => { passed = row[3] === scope })
-        passed.ifTrue(() => { passed = row[4] === provider })
-        passed.ifTrue(() => { passed = row[5] === profile })
-    })
+        if(passed) { passed = row[0] === key }
+        if(passed) { passed = row[1] === mode }
+        if(passed) { passed = row[2] === units }
+        if(passed) { passed = row[3] === scope }
+        if(passed) { passed = row[4] === provider }
+        if(passed) { passed = row[5] === profile }
+    }
 
     passed
 }
@@ -179,9 +179,9 @@ ordinaryExecutorAsync: (source) => {
     admissionOrder = Array(...admissionOrder, "ordinary:" + source)
 
     value: null
-    (source === "30").ifTrue(() => { value = 30 })
-    (source === "40").ifTrue(() => { value = 40 })
-    (value === null).ifTrue(() => { Error().signal() })
+    if(source === "30") { value = 30 }
+    if(source === "40") { value = 40 }
+    if(value === null) { Error().signal() }
 
     (() => { completedObservation(value) }).future()
 }
@@ -194,7 +194,7 @@ ordinaryInspectorAsync: (source, inspectorSource) => {
 resourceExecutorAsync: (source, bindings) => {
     admissionOrder = Array(...admissionOrder, "resource:" + source)
 
-    (source === "10").ifTrue(() => {
+    if(source === "10") {
         bindingProjectionPassed =
             bindingProjectionPassed &&
             bindingRowMatches(
@@ -206,9 +206,9 @@ resourceExecutorAsync: (source, bindings) => {
                 "device/gpu",
                 "primary"
             )
-    })
+    }
 
-    (source === "30").ifTrue(() => {
+    if(source === "30") {
         bindingProjectionPassed =
             bindingProjectionPassed &&
             bindingRowMatches(
@@ -220,39 +220,39 @@ resourceExecutorAsync: (source, bindings) => {
                 "service/db",
                 null
             )
-    })
+    }
 
     result: null
 
-    (source === "10").ifTrue(() => {
+    if(source === "10") {
         result = completion(
             completedObservation(10),
             false,
             true
         )
-    })
+    }
 
-    (source === "30").ifTrue(() => {
-        (failureMode === "safe").ifTrue(() => {
+    if(source === "30") {
+        if(failureMode === "safe") {
             result = completion(
                 null,
                 true,
                 true,
                 "provider-unavailable"
             )
-        })
+        }
 
-        (failureMode === "unsafe").ifTrue(() => {
+        if(failureMode === "unsafe") {
             result = completion(
                 completedObservation(30),
                 true,
                 false,
                 "provider-cleanup-failed"
             )
-        })
-    })
+        }
+    }
 
-    (result === null).ifTrue(() => { Error().signal() })
+    if(result === null) { Error().signal() }
     (() => { result }).future()
 }
 
@@ -278,16 +278,16 @@ caseAuthorityExecutorAsync: (source, descriptor) => {
     infrastructureFailed: false
     infrastructureFailures: Array()
 
-    (authorityFailureMode === "provision").ifTrue(() => {
+    if(authorityFailureMode === "provision") {
         guestObservation = null
         infrastructureFailed = true
         infrastructureFailures = Array("authority-provision-failed")
-    })
+    }
 
-    (authorityFailureMode === "teardown").ifTrue(() => {
+    if(authorityFailureMode === "teardown") {
         infrastructureFailed = true
         infrastructureFailures = Array("authority-teardown-failed")
-    })
+    }
 
     completion: {
         guestObservation: guestObservation
@@ -385,7 +385,7 @@ healthyPassed =
     healthyPassed &&
     (Runner.d108RunCutoverCases(healthyEnvelope).size() == 0)
 healthyPassed = healthyPassed && bindingProjectionPassed
-healthyPassed.ifTrue(() => {
+if(healthyPassed) {
     healthyRun: Runner.d108RunHealthyRun(healthyEnvelope)
     healthyPassed = Runner.runSelectedCount(healthyRun) == 3
     healthyPassed =
@@ -404,19 +404,19 @@ healthyPassed.ifTrue(() => {
                 "i8d4c3/healthy-free.protos"
             )
         )
-})
+}
 healthyPassed =
     healthyPassed &&
     (admissionOrder.size() == 3)
-healthyPassed.ifTrue(() => {
+if(healthyPassed) {
     healthyPassed = admissionOrder[0] === "resource:10"
-})
-healthyPassed.ifTrue(() => {
+}
+if(healthyPassed) {
     healthyPassed = admissionOrder[1] === "resource-inspect:20"
-})
-healthyPassed.ifTrue(() => {
+}
+if(healthyPassed) {
     healthyPassed = admissionOrder[2] === "ordinary:30"
-})
+}
 
 // SAFE infrastructure failure:
 // first(gpu) and third(db) admit in the first fixed H window;
@@ -464,14 +464,14 @@ safePassed =
     safePassed &&
     (Runner.d108RunInfrastructureAttempts(safeEnvelope).size() == 1)
 
-safePassed.ifTrue(() => {
+if(safePassed) {
     attempt:
         Runner.d108RunInfrastructureAttempts(safeEnvelope)[0]
     safePassed =
         Manifest.caseId(
             Runner.d108InfrastructureAttemptSpec(attempt)
         ) === "i8d4c3/failed-infrastructure.protos"
-    safePassed.ifTrue(() => {
+    if(safePassed) {
         completionValue:
             Runner.d108InfrastructureAttemptCompletion(attempt)
         safePassed = completionValue.infrastructureFailed
@@ -481,18 +481,18 @@ safePassed.ifTrue(() => {
         safePassed =
             safePassed &&
             (completionValue.guestObservation === null)
-    })
-})
+    }
+}
 
 safePassed =
     safePassed &&
     (admissionOrder.size() == 2)
-safePassed.ifTrue(() => {
+if(safePassed) {
     safePassed = admissionOrder[0] === "resource:10"
-})
-safePassed.ifTrue(() => {
+}
+if(safePassed) {
     safePassed = admissionOrder[1] === "resource:30"
-})
+}
 
 // UNSAFE cleanup failure:
 // same admission cutover, but third produced a guest success before cleanup failed.
@@ -540,7 +540,7 @@ unsafePassed =
     unsafePassed &&
     (Runner.d108RunInfrastructureAttempts(unsafeEnvelope).size() == 1)
 
-unsafePassed.ifTrue(() => {
+if(unsafePassed) {
     attempt:
         Runner.d108RunInfrastructureAttempts(unsafeEnvelope)[0]
     completionValue:
@@ -553,17 +553,17 @@ unsafePassed.ifTrue(() => {
     unsafePassed =
         unsafePassed &&
         (completionValue.guestObservation === null).not()
-})
+}
 
 unsafePassed =
     unsafePassed &&
     (admissionOrder.size() == 2)
-unsafePassed.ifTrue(() => {
+if(unsafePassed) {
     unsafePassed = admissionOrder[0] === "resource:10"
-})
-unsafePassed.ifTrue(() => {
+}
+if(unsafePassed) {
     unsafePassed = admissionOrder[1] === "resource:30"
-})
+}
 
 // D133 case authority route:
 // the ordinary callback deliberately cannot execute source "50", so success
@@ -586,7 +586,7 @@ authorityEnvelope: Runner.runD108WithResourcesWithLoader(
 authorityPassed:
     Runner.d108RunInfrastructureFailed(authorityEnvelope).not()
 
-authorityPassed.ifTrue(() => {
+if(authorityPassed) {
     authorityRun: Runner.d108RunHealthyRun(authorityEnvelope)
     authorityPassed =
         Runner.runSelectedCount(authorityRun) == 1
@@ -596,17 +596,17 @@ authorityPassed.ifTrue(() => {
     authorityPassed =
         authorityPassed &&
         (Runner.runSkippedCount(authorityRun) == 0)
-})
+}
 
 authorityPassed =
     authorityPassed &&
     (admissionOrder.size() == 1)
 
-authorityPassed.ifTrue(() => {
+if(authorityPassed) {
     authorityPassed =
         admissionOrder[0] ===
         "authority:50:workspace"
-})
+}
 
 // D134 provisioning failure before guest execution:
 // infrastructure evidence exists, but no guest CaseRun may be fabricated.
@@ -641,7 +641,7 @@ authorityProvisionPassed =
     authorityProvisionPassed &&
     (Runner.d108RunRetainedReservationCount(authorityProvisionEnvelope) == 0)
 
-authorityProvisionPassed.ifTrue(() => {
+if(authorityProvisionPassed) {
     attempt:
         Runner.d108RunInfrastructureAttempts(authorityProvisionEnvelope)[0]
     completionValue:
@@ -653,7 +653,7 @@ authorityProvisionPassed.ifTrue(() => {
     authorityProvisionPassed =
         authorityProvisionPassed &&
         (completionValue.guestObservation === null)
-})
+}
 
 
 // D134 teardown failure after guest execution:
@@ -689,7 +689,7 @@ authorityTeardownPassed =
     authorityTeardownPassed &&
     (Runner.d108RunRetainedReservationCount(authorityTeardownEnvelope) == 0)
 
-authorityTeardownPassed.ifTrue(() => {
+if(authorityTeardownPassed) {
     attempt:
         Runner.d108RunInfrastructureAttempts(authorityTeardownEnvelope)[0]
     completionValue:
@@ -701,7 +701,7 @@ authorityTeardownPassed.ifTrue(() => {
     authorityTeardownPassed =
         authorityTeardownPassed &&
         (completionValue.guestObservation === null).not()
-})
+}
 
 healthyPassed &&
 safePassed &&

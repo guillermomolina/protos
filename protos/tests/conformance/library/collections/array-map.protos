@@ -38,9 +38,9 @@ tests: Array(
             source: Array(1, 2)
             calls: 0
             mapped: Arrays.map(source, (element) => {
-                (calls == 0).ifTrue(() => {
+                if(calls == 0) {
                     source[1] = 99
-                })
+                }
                 calls = calls + 1
                 element * 10
             })

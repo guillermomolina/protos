@@ -30,16 +30,16 @@ appendBytes: (target, source) => {
 
 between: (value, lower, upper) => {
     result: value >= lower
-    result.ifTrue(() => {
+    if(result) {
         result = value <= upper
-    })
+    }
     result
 }
 
 varuint: (value) => {
-    (value < 0).ifTrue(() => {
+    if(value < 0) {
         fail()
-    })
+    }
 
     result: emptyBytes()
     remaining: value
@@ -61,21 +61,21 @@ bytesLess: (left, right) => {
 
     left.each((leftOctet) => {
         decided.ifFalse(() => {
-            (index < rightSize).ifTrue(() => {
+            if(index < rightSize) {
                 rightOctet: right[index]
 
-                (leftOctet < rightOctet).ifTrue(() => {
+                if(leftOctet < rightOctet) {
                     result = true
                     decided = true
-                })
+                }
 
                 decided.ifFalse(() => {
-                    (leftOctet > rightOctet).ifTrue(() => {
+                    if(leftOctet > rightOctet) {
                         result = false
                         decided = true
-                    })
+                    }
                 })
-            })
+            }
         })
 
         index = index + 1
@@ -116,9 +116,9 @@ reservedBase: (text) => {
         "lpt1", "lpt2", "lpt3", "lpt4", "lpt5",
         "lpt6", "lpt7", "lpt8", "lpt9"
     ).each((candidate) => {
-        (text == candidate).ifTrue(() => {
+        if(text == candidate) {
             reserved = true
-        })
+        }
     })
 
     reserved
@@ -127,9 +127,9 @@ reservedBase: (text) => {
 foldAndValidateSegment: (name) => {
     source: Encoding.UTF8.encode(name)
 
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     folded: emptyBytes()
     basename: emptyBytes()
@@ -145,19 +145,19 @@ foldAndValidateSegment: (name) => {
             allowed = between(octet, 48, 57)
         })
         allowed.ifFalse(() => {
-            (octet == 46).ifTrue(() => {
+            if(octet == 46) {
                 allowed = true
-            })
+            }
         })
         allowed.ifFalse(() => {
-            (octet == 95).ifTrue(() => {
+            if(octet == 95) {
                 allowed = true
-            })
+            }
         })
         allowed.ifFalse(() => {
-            (octet == 45).ifTrue(() => {
+            if(octet == 45) {
                 allowed = true
-            })
+            }
         })
 
         allowed.ifFalse(() => {
@@ -165,28 +165,28 @@ foldAndValidateSegment: (name) => {
         })
 
         foldedOctet: octet
-        between(octet, 65, 90).ifTrue(() => {
+        if(between(octet, 65, 90)) {
             foldedOctet = octet + 32
-        })
+        }
         folded.add(foldedOctet)
 
         suffixStarted.ifFalse(() => {
-            (octet == 46).ifTrue(() => {
+            if(octet == 46) {
                 suffixStarted = true
-            })
+            }
             (octet == 46).ifFalse(() => {
                 basename.add(foldedOctet)
             })
         })
     })
 
-    (source[source.size() - 1] == 46).ifTrue(() => {
+    if(source[source.size() - 1] == 46) {
         fail()
-    })
+    }
 
-    reservedBase(Encoding.UTF8.decode(basename)).ifTrue(() => {
+    if(reservedBase(Encoding.UTF8.decode(basename))) {
         fail()
-    })
+    }
 
     Encoding.UTF8.decode(folded)
 }
@@ -196,20 +196,20 @@ recordArray: (records, count) => {
         length: end - start
         result: null
 
-        (length == 0).ifTrue(() => {
+        if(length == 0) {
             result = Array()
-        })
+        }
 
-        (length == 1).ifTrue(() => {
+        if(length == 1) {
             result = Array(records[start])
-        })
+        }
 
-        (length > 1).ifTrue(() => {
+        if(length > 1) {
             middle: start + length.div(2)
             left: buildRange(start, middle)
             right: buildRange(middle, end)
             result = Array(...left, ...right)
-        })
+        }
 
         result
     }
@@ -242,9 +242,9 @@ collectRecords: (capturedFilesystem) => {
             kind: entry.kind
             foldedName: foldAndValidateSegment(name)
 
-            siblingFoldedNames.containsKey(foldedName).ifTrue(() => {
+            if(siblingFoldedNames.containsKey(foldedName)) {
                 fail()
-            })
+            }
             siblingFoldedNames[foldedName] = true
 
             childPath: frame.path.child(name)
@@ -253,24 +253,24 @@ collectRecords: (capturedFilesystem) => {
                 pathText = frame.prefix + "/" + name
             })
 
-            (frame.prefix == "").ifTrue(() => {
-                (name == "protos.toml").ifTrue(() => {
+            if(frame.prefix == "") {
+                if(name == "protos.toml") {
                     (kind == "regular").ifFalse(() => {
                         fail()
                     })
-                })
-            })
+                }
+            }
 
             recognized: false
 
-            (kind == "regular").ifTrue(() => {
+            if(kind == "regular") {
                 recognized = true
 
-                (frame.prefix == "").ifTrue(() => {
-                    (name == "protos.toml").ifTrue(() => {
+                if(frame.prefix == "") {
+                    if(name == "protos.toml") {
                         rootManifest = true
-                    })
-                })
+                    }
+                }
 
                 // Resolve both fields before constructing the record so the
                 // record construction itself is suspension-free.
@@ -285,24 +285,24 @@ collectRecords: (capturedFilesystem) => {
                         content: recordContent
                     }
                 recordCount = recordCount + 1
-            })
+            }
 
-            (kind == "directory").ifTrue(() => {
+            if(kind == "directory") {
                 recognized = true
                 pending[pendingCount] = {
                         path: childPath
                         prefix: pathText
                     }
                 pendingCount = pendingCount + 1
-            })
+            }
 
-            (kind == "link").ifTrue(() => {
+            if(kind == "link") {
                 fail()
-            })
+            }
 
-            (kind == "other").ifTrue(() => {
+            if(kind == "other") {
                 fail()
-            })
+            }
 
             recognized.ifFalse(() => {
                 fail()

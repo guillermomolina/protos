@@ -21,32 +21,32 @@ passed: cases.size() == 2
 
 (first, second): cases
 
-passed.ifTrue(() => {
+if(passed) {
     passed = Manifest.caseId(first) ==
         "package-tool/toml-syntax/key-bare-dotted.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.casePath(first) == "key-bare-dotted.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseExpectation(first) == "boolean"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseExpected(first) == "true"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(second) ==
         "package-tool/toml-syntax/invalid-key-error.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.casePath(second) == "invalid-key-error.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseExpectation(second) == "error"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseExpected(second) == "-"
-})
+}
 
 unknownRejected: false
 Error.handle(

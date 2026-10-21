@@ -36,11 +36,11 @@ tests: [
                 first: seen == 0
                 seen = seen * 10 + octet
 
-                first.ifTrue(() => {
+                if(first) {
                     bytes[1] = 99
                     bytes.removeAt(2)
                     bytes.add(4)
-                })
+                }
 
                 null
             }

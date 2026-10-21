@@ -80,10 +80,10 @@ tests: [
                     condition.whileTrue() {
                         bodyRuns = bodyRuns + 1
 
-                        (bodyRuns < 2).ifTrue(() => {
+                        if(bodyRuns < 2) {
                             future.cancel()
                             afterCancel = afterCancel + 1
-                        })
+                        }
 
                         (bodyRuns < 2).ifFalse(() => {
                             dependency.value()

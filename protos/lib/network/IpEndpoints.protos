@@ -26,31 +26,31 @@ parse: (text) => {
     })
 
     size: text.size()
-    (size == 0).ifTrue(() => {
+    if(size == 0) {
         fail()
-    })
+    }
 
     digitValue: (character) => {
         result: -1
 
-        (character == "0").ifTrue(() => { result = 0 })
-        (character == "1").ifTrue(() => { result = 1 })
-        (character == "2").ifTrue(() => { result = 2 })
-        (character == "3").ifTrue(() => { result = 3 })
-        (character == "4").ifTrue(() => { result = 4 })
-        (character == "5").ifTrue(() => { result = 5 })
-        (character == "6").ifTrue(() => { result = 6 })
-        (character == "7").ifTrue(() => { result = 7 })
-        (character == "8").ifTrue(() => { result = 8 })
-        (character == "9").ifTrue(() => { result = 9 })
+        if(character == "0") { result = 0 }
+        if(character == "1") { result = 1 }
+        if(character == "2") { result = 2 }
+        if(character == "3") { result = 3 }
+        if(character == "4") { result = 4 }
+        if(character == "5") { result = 5 }
+        if(character == "6") { result = 6 }
+        if(character == "7") { result = 7 }
+        if(character == "8") { result = 8 }
+        if(character == "9") { result = 9 }
 
         result
     }
 
     parsePortFrom: (start) => {
-        (start >= size).ifTrue(() => {
+        if(start >= size) {
             fail()
-        })
+        }
 
         index: start
         value: 0
@@ -58,27 +58,27 @@ parse: (text) => {
 
         while(index < size) {
             digit: digitValue(text[index])
-            (digit < 0).ifTrue(() => {
+            if(digit < 0) {
                 fail()
-            })
+            }
 
             digitCount = digitCount + 1
             value = value * 10 + digit
 
             // Leading zeros are accepted, but the mathematical port is bounded.
-            (value > 65535).ifTrue(() => {
+            if(value > 65535) {
                 fail()
-            })
+            }
 
             index = index + 1
         }
 
-        (digitCount == 0).ifTrue(() => {
+        if(digitCount == 0) {
             fail()
-        })
-        (value == 0).ifTrue(() => {
+        }
+        if(value == 0) {
             fail()
-        })
+        }
 
         value
     }
@@ -90,31 +90,31 @@ parse: (text) => {
     portStart: -1
     address: null
 
-    bracketed.ifTrue(() => {
+    if(bracketed) {
         index: 1
         closed: false
         addressLength: 0
 
         (() => {
             keepScanning: index < size
-            keepScanning.ifTrue(() => {
+            if(keepScanning) {
                 keepScanning = closed == false
-            })
+            }
             keepScanning
         }).whileTrue() {
             character: text[index]
 
-            (character == "]").ifTrue(() => {
+            if(character == "]") {
                 closed = true
-            })
+            }
 
             (character == "]").ifFalse(() => {
                 addressLength = addressLength + 1
                 // No valid numeric IPv6 address accepted by IpAddresses exceeds
                 // 45 Unicode scalar positions.
-                (addressLength > 45).ifTrue(() => {
+                if(addressLength > 45) {
                     fail()
-                })
+                }
                 addressText = addressText + character
             })
 
@@ -124,9 +124,9 @@ parse: (text) => {
         closed.ifFalse(() => {
             fail()
         })
-        (index >= size).ifTrue(() => {
+        if(index >= size) {
             fail()
-        })
+        }
         (text[index] == ":").ifFalse(() => {
             fail()
         })
@@ -138,7 +138,7 @@ parse: (text) => {
         (address.version == 6).ifFalse(() => {
             fail()
         })
-    })
+    }
 
     bracketed.ifFalse(() => {
         separatorIndex: -1
@@ -149,30 +149,30 @@ parse: (text) => {
             character: text[index]
             isSeparator: character == ":"
 
-            isSeparator.ifTrue(() => {
-                (separatorIndex >= 0).ifTrue(() => {
+            if(isSeparator) {
+                if(separatorIndex >= 0) {
                     fail()
-                })
+                }
                 separatorIndex = index
-            })
+            }
 
             isSeparator.ifFalse(() => {
-                (separatorIndex < 0).ifTrue(() => {
+                if(separatorIndex < 0) {
                     addressLength = addressLength + 1
                     // The unbracketed endpoint grammar admits IPv4 only.
-                    (addressLength > 15).ifTrue(() => {
+                    if(addressLength > 15) {
                         fail()
-                    })
+                    }
                     addressText = addressText + character
-                })
+                }
             })
 
             index = index + 1
         }
 
-        (separatorIndex < 0).ifTrue(() => {
+        if(separatorIndex < 0) {
             fail()
-        })
+        }
 
         portStart = separatorIndex + 1
         address = IpAddresses.parse(addressText)
@@ -200,20 +200,20 @@ format: (endpoint) => {
     digitText: (digit) => {
         result: null
 
-        (digit == 0).ifTrue(() => { result = "0" })
-        (digit == 1).ifTrue(() => { result = "1" })
-        (digit == 2).ifTrue(() => { result = "2" })
-        (digit == 3).ifTrue(() => { result = "3" })
-        (digit == 4).ifTrue(() => { result = "4" })
-        (digit == 5).ifTrue(() => { result = "5" })
-        (digit == 6).ifTrue(() => { result = "6" })
-        (digit == 7).ifTrue(() => { result = "7" })
-        (digit == 8).ifTrue(() => { result = "8" })
-        (digit == 9).ifTrue(() => { result = "9" })
+        if(digit == 0) { result = "0" }
+        if(digit == 1) { result = "1" }
+        if(digit == 2) { result = "2" }
+        if(digit == 3) { result = "3" }
+        if(digit == 4) { result = "4" }
+        if(digit == 5) { result = "5" }
+        if(digit == 6) { result = "6" }
+        if(digit == 7) { result = "7" }
+        if(digit == 8) { result = "8" }
+        if(digit == 9) { result = "9" }
 
-        (result === null).ifTrue(() => {
+        if(result === null) {
             fail()
-        })
+        }
 
         result
     }
@@ -229,35 +229,35 @@ format: (endpoint) => {
 
         emit: started
         emit.ifFalse(() => {
-            (digit > 0).ifTrue(() => {
+            if(digit > 0) {
                 emit = true
-            })
-            (divisor == 1).ifTrue(() => {
+            }
+            if(divisor == 1) {
                 emit = true
-            })
+            }
         })
 
-        emit.ifTrue(() => {
+        if(emit) {
             portText = portText + digitText(digit)
             started = true
-        })
+        }
 
         divisor = divisor.div(10)
     }
 
     result: null
 
-    (endpoint.address.version == 4).ifTrue(() => {
+    if(endpoint.address.version == 4) {
         result = addressText + ":" + portText
-    })
+    }
 
-    (endpoint.address.version == 6).ifTrue(() => {
+    if(endpoint.address.version == 6) {
         result = "[" + addressText + "]:" + portText
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }

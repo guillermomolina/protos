@@ -27,17 +27,17 @@ observation: packageExecution(
 
 passed: observation.state === "completed"
 
-passed.ifTrue(() => {
+if(passed) {
     passed = observation.error === null
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.value === true
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.stdout.size() == 0
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = observation.stderr.size() == 0
-})
+}
 
 passed

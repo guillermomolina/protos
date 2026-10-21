@@ -36,8 +36,8 @@ tests: [
         rootEdge: null
         memberEdge: null
         plan.dependencies.each((edge) => {
-            (edge.declaring.packageId == "root").ifTrue(() => { rootEdge = edge })
-            (edge.declaring.packageId == "a-pkg").ifTrue(() => { memberEdge = edge })
+            if(edge.declaring.packageId == "root") { rootEdge = edge }
+            if(edge.declaring.packageId == "a-pkg") { memberEdge = edge }
         })
 
         (rootEdge.alias == "local").ifFalse(() => { ok = false })

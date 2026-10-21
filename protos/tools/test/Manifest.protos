@@ -27,10 +27,10 @@ splitFields: (line) => {
     field: Encoding.UTF8.encode("")
 
     source.each((octet) => {
-        (octet == 9).ifTrue(() => {
+        if(octet == 9) {
             fields = Array(...fields, Encoding.UTF8.decode(field))
             field = Encoding.UTF8.encode("")
-        })
+        }
         (octet == 9).ifFalse(() => {
             field.add(octet)
         })
@@ -57,41 +57,41 @@ packageTomlFieldArray: (line) => {
 
 pathValue: (text) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     path: Path.relative()
     component: Encoding.UTF8.encode("")
 
     finishComponent: () => {
-        (component.size() == 0).ifTrue(() => {
+        if(component.size() == 0) {
             fail()
-        })
+        }
         name: Encoding.UTF8.decode(component)
         invalid: name == "."
-        (name == "..").ifTrue(() => {
+        if(name == "..") {
             invalid = true
-        })
-        invalid.ifTrue(() => {
+        }
+        if(invalid) {
             fail()
-        })
+        }
         path = path.child(name)
         component = Encoding.UTF8.encode("")
     }
 
     source.each((octet) => {
         invalid: octet == 0
-        (octet == 92).ifTrue(() => {
+        if(octet == 92) {
             invalid = true
-        })
-        invalid.ifTrue(() => {
+        }
+        if(invalid) {
             fail()
-        })
+        }
 
-        (octet == 47).ifTrue(() => {
+        if(octet == 47) {
             finishComponent()
-        })
+        }
         (octet == 47).ifFalse(() => {
             component.add(octet)
         })
@@ -108,9 +108,9 @@ caseSpec: (fields) => {
     expectation: fields[1]
     expected: fields[2]
 
-    (expectation.size() == 0).ifTrue(() => {
+    if(expectation.size() == 0) {
         fail()
-    })
+    }
 
     frozenTuple(path, path, expectation, expected, frozenTuple())
 }
@@ -124,21 +124,21 @@ packageTomlCaseSpec: (fields) => {
     expected: ""
     known: false
 
-    (retainedExpectation == "true").ifTrue(() => {
+    if(retainedExpectation == "true") {
         expectation = "boolean"
         expected = "true"
         known = true
-    })
-    (retainedExpectation == "error").ifTrue(() => {
+    }
+    if(retainedExpectation == "error") {
         expectation = "error"
         expected = "-"
         known = true
-    })
-    (retainedExpectation == "suite-native").ifTrue(() => {
+    }
+    if(retainedExpectation == "suite-native") {
         expectation = "suite-native"
         expected = "-"
         known = true
-    })
+    }
     known.ifFalse(() => {
         fail()
     })
@@ -193,9 +193,9 @@ caseAuthorityLifecycle: (descriptor) => {
 // CaseSpecs remain valid and expose no authority descriptor.
 caseAuthorityDescriptor: (spec) => {
     descriptor: null
-    (spec.size() > 5).ifTrue(() => {
+    if(spec.size() > 5) {
         descriptor = spec[5]
-    })
+    }
     descriptor
 }
 
@@ -244,27 +244,27 @@ isResourceKeyTailOctet: (octet) => {
 resourceKeyValue: (key) => {
     source: Encoding.UTF8.encode(key)
     size: source.size()
-    (size == 0).ifTrue(() => {
+    if(size == 0) {
         fail()
-    })
+    }
 
     segmentStart: true
     index: 0
     while(index < size) {
         octet: source[index]
 
-        (octet == 47).ifTrue(() => {
-            segmentStart.ifTrue(() => {
+        if(octet == 47) {
+            if(segmentStart) {
                 fail()
-            })
+            }
             segmentStart = true
-        })
+        }
 
         (octet == 47).ifFalse(() => {
             allowed: false
-            segmentStart.ifTrue(() => {
+            if(segmentStart) {
                 allowed = isResourceKeyStartOctet(octet)
-            })
+            }
             segmentStart.ifFalse(() => {
                 allowed = isResourceKeyTailOctet(octet)
             })
@@ -277,9 +277,9 @@ resourceKeyValue: (key) => {
         index = index + 1
     }
 
-    segmentStart.ifTrue(() => {
+    if(segmentStart) {
         fail()
-    })
+    }
     key
 }
 
@@ -290,24 +290,24 @@ validateRequirementModeUnits: (mode, units) => {
     })
     known: false
 
-    (mode == "shared").ifTrue(() => {
+    if(mode == "shared") {
         // Validate the exact ordinary-Integer family without conversion or
         // delegation.
         Integer.recognizes(units).ifFalse(() => {
             fail()
         })
-        (units <= 0).ifTrue(() => {
+        if(units <= 0) {
             fail()
-        })
+        }
         known = true
-    })
+    }
 
-    (mode == "exclusive").ifTrue(() => {
+    if(mode == "exclusive") {
         (units === null).ifFalse(() => {
             fail()
         })
         known = true
-    })
+    }
 
     known.ifFalse(() => {
         fail()
@@ -352,9 +352,9 @@ caseSpecWithRequirements: (spec, suppliedRequirements) => {
         )
         key: requirementKey(canonical)
 
-        seenKeys.containsKey(key).ifTrue(() => {
+        if(seenKeys.containsKey(key)) {
             fail()
-        })
+        }
         seenKeys[key] = true
         validated = Array(...validated, canonical)
     })
@@ -378,9 +378,9 @@ parseLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes[0] == 35).ifTrue(() => {
+        if(bytes[0] == 35) {
             ignore = true
-        })
+        }
     })
 
     result: null
@@ -394,9 +394,9 @@ parsePackageTomlLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes[0] == 35).ifTrue(() => {
+        if(bytes[0] == 35) {
             ignore = true
-        })
+        }
     })
 
     result: null
@@ -420,29 +420,29 @@ loadWithParser: (filesystem, parser) => {
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: chunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: chunks[level]
             chunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             chunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            chunks.containsKey(level).ifTrue(() => {
+            if(chunks.containsKey(level)) {
                 nextResult = Array(...result, ...chunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -475,9 +475,9 @@ loadWithParser: (filesystem, parser) => {
         lines: Future.all(...pending).value()
         lines.each((line) => {
             done.ifFalse(() => {
-                (line === null).ifTrue(() => {
+                if(line === null) {
                     done = true
-                })
+                }
                 (line === null).ifFalse(() => {
                     parsed: parser(line)
                     (parsed === null).ifFalse(() => {
@@ -520,21 +520,21 @@ projectTreeCaseSpec: (fields, caseNamespace) => {
     expectation: ""
     expected: ""
     known: false
-    (retainedOutcome == "true").ifTrue(() => {
+    if(retainedOutcome == "true") {
         expectation = "boolean"
         expected = "true"
         known = true
-    })
-    (retainedOutcome == "error").ifTrue(() => {
+    }
+    if(retainedOutcome == "error") {
         expectation = "error"
         expected = "-"
         known = true
-    })
-    (retainedOutcome == "suite-native").ifTrue(() => {
+    }
+    if(retainedOutcome == "suite-native") {
         expectation = "suite-native"
         expected = "-"
         known = true
-    })
+    }
     known.ifFalse(() => {
         fail()
     })
@@ -558,9 +558,9 @@ parseProjectTreeCaseLine: (line, caseNamespace) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes[0] == 35).ifTrue(() => {
+        if(bytes[0] == 35) {
             ignore = true
-        })
+        }
     })
 
     result: null
@@ -579,9 +579,9 @@ loadProjectTreeCases: (filesystem, caseNamespace) => {
     seenIds: Map()
     planCases(plan).each((spec) => {
         id: caseId(spec)
-        seenIds.containsKey(id).ifTrue(() => {
+        if(seenIds.containsKey(id)) {
             fail()
-        })
+        }
         seenIds[id] = true
     })
 
@@ -612,21 +612,21 @@ caseOutcomeSpec: (fields, caseNamespace) => {
     expected: ""
     known: false
 
-    (retainedOutcome == "true").ifTrue(() => {
+    if(retainedOutcome == "true") {
         expectation = "boolean"
         expected = "true"
         known = true
-    })
-    (retainedOutcome == "error").ifTrue(() => {
+    }
+    if(retainedOutcome == "error") {
         expectation = "error"
         expected = "-"
         known = true
-    })
-    (retainedOutcome == "suite-native").ifTrue(() => {
+    }
+    if(retainedOutcome == "suite-native") {
         expectation = "suite-native"
         expected = "-"
         known = true
-    })
+    }
     known.ifFalse(() => {
         fail()
     })
@@ -639,9 +639,9 @@ parseCaseOutcomeLine: (line, caseNamespace) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes[0] == 35).ifTrue(() => {
+        if(bytes[0] == 35) {
             ignore = true
-        })
+        }
     })
 
     result: null
@@ -661,9 +661,9 @@ loadCaseOutcomes: (filesystem, caseNamespace) => {
     seenIds: Map()
     planCases(plan).each((spec) => {
         id: caseId(spec)
-        seenIds.containsKey(id).ifTrue(() => {
+        if(seenIds.containsKey(id)) {
             fail()
-        })
+        }
         seenIds[id] = true
     })
 

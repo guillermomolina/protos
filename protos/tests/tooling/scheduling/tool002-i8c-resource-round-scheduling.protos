@@ -71,11 +71,11 @@ sourceLoader: (spec) => {
     id: Manifest.caseId(spec)
     source: null
 
-    (id === "i8c/first.protos").ifTrue(() => { source = "10" })
-    (id === "i8c/second.protos").ifTrue(() => { source = "20" })
-    (id === "i8c/third.protos").ifTrue(() => { source = "30" })
+    if(id === "i8c/first.protos") { source = "10" }
+    if(id === "i8c/second.protos") { source = "20" }
+    if(id === "i8c/third.protos") { source = "30" }
 
-    (source === null).ifTrue(() => { Error().signal() })
+    if(source === null) { Error().signal() }
     source
 }
 
@@ -85,10 +85,10 @@ executorAsync: (source) => {
     admissionOrder = Array(...admissionOrder, source)
 
     observedValue: null
-    (source === "10").ifTrue(() => { observedValue = 10 })
-    (source === "20").ifTrue(() => { observedValue = 20 })
-    (source === "30").ifTrue(() => { observedValue = 30 })
-    (observedValue === null).ifTrue(() => { Error().signal() })
+    if(source === "10") { observedValue = 10 }
+    if(source === "20") { observedValue = 20 }
+    if(source === "30") { observedValue = 30 }
+    if(observedValue === null) { Error().signal() }
 
     (() => {
         {
@@ -103,21 +103,21 @@ resultsInPlanOrder: (run) => {
     results: Runner.runCaseResults(run)
     ordered: results.size() == 3
 
-    ordered.ifTrue(() => {
+    if(ordered) {
         ordered =
             Manifest.caseId(Runner.caseRunSpec(results[0])) ===
             "i8c/first.protos"
-    })
-    ordered.ifTrue(() => {
+    }
+    if(ordered) {
         ordered =
             Manifest.caseId(Runner.caseRunSpec(results[1])) ===
             "i8c/second.protos"
-    })
-    ordered.ifTrue(() => {
+    }
+    if(ordered) {
         ordered =
             Manifest.caseId(Runner.caseRunSpec(results[2])) ===
             "i8c/third.protos"
-    })
+    }
 
     ordered
 }
@@ -142,15 +142,15 @@ sameWindowRun: Runner.runBoundedWithResourcesWithLoader(
 )
 sameWindowPassed: runPassed(sameWindowRun)
 sameWindowPassed = sameWindowPassed && (admissionOrder.size() == 3)
-sameWindowPassed.ifTrue(() => {
+if(sameWindowPassed) {
     sameWindowPassed = admissionOrder[0] === "10"
-})
-sameWindowPassed.ifTrue(() => {
+}
+if(sameWindowPassed) {
     sameWindowPassed = admissionOrder[1] === "30"
-})
-sameWindowPassed.ifTrue(() => {
+}
+if(sameWindowPassed) {
     sameWindowPassed = admissionOrder[2] === "20"
-})
+}
 
 // Cross-window prohibition with jobs=2: third belongs to next fixed H window.
 admissionOrder = Array()
@@ -164,15 +164,15 @@ crossWindowRun: Runner.runBoundedWithResourcesWithLoader(
 )
 crossWindowPassed: runPassed(crossWindowRun)
 crossWindowPassed = crossWindowPassed && (admissionOrder.size() == 3)
-crossWindowPassed.ifTrue(() => {
+if(crossWindowPassed) {
     crossWindowPassed = admissionOrder[0] === "10"
-})
-crossWindowPassed.ifTrue(() => {
+}
+if(crossWindowPassed) {
     crossWindowPassed = admissionOrder[1] === "20"
-})
-crossWindowPassed.ifTrue(() => {
+}
+if(crossWindowPassed) {
     crossWindowPassed = admissionOrder[2] === "30"
-})
+}
 
 // Resource-free compatibility: all members of jobs=3 window admit in one round.
 admissionOrder = Array()
@@ -186,14 +186,14 @@ resourceFreeRun: Runner.runBoundedWithResourcesWithLoader(
 )
 resourceFreePassed: runPassed(resourceFreeRun)
 resourceFreePassed = resourceFreePassed && (admissionOrder.size() == 3)
-resourceFreePassed.ifTrue(() => {
+if(resourceFreePassed) {
     resourceFreePassed = admissionOrder[0] === "10"
-})
-resourceFreePassed.ifTrue(() => {
+}
+if(resourceFreePassed) {
     resourceFreePassed = admissionOrder[1] === "20"
-})
-resourceFreePassed.ifTrue(() => {
+}
+if(resourceFreePassed) {
     resourceFreePassed = admissionOrder[2] === "30"
-})
+}
 
 sameWindowPassed && crossWindowPassed && resourceFreePassed

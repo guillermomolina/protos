@@ -41,9 +41,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -96,9 +96,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -150,9 +150,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -198,9 +198,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -248,9 +248,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -299,9 +299,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }

@@ -46,9 +46,9 @@ tests: Array(
             calls: 0
             filtered: Arrays.filter(source, (element) => {
                 seen[calls] = element
-                (calls == 0).ifTrue(() => {
+                if(calls == 0) {
                     source[1] = 99
-                })
+                }
                 calls = calls + 1
                 (element == 2) || (element == 4)
             })

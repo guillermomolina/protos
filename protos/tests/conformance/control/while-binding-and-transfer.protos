@@ -27,7 +27,7 @@ tests: [
                 conditionCalls <= 2
             }
             condition.whileTrue((required) => {
-                (required === null).ifTrue(() => { nullBodies = nullBodies + 1 })
+                if(required === null) { nullBodies = nullBodies + 1 }
             })
             (conditionCalls == 3) &&
                 (nullBodies == 2)
@@ -96,7 +96,7 @@ tests: [
             bodyCalls: 0
             nullConditions: 0
             condition: (required) => {
-                (required === null).ifTrue(() => { nullConditions = nullConditions + 1 })
+                if(required === null) { nullConditions = nullConditions + 1 }
                 false
             }
             result: condition.whileTrue(() => {

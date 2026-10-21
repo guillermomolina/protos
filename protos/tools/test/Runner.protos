@@ -44,9 +44,9 @@ readSource: (spec, filesystem) => {
         chunks: Future.all(...pending).value()
         chunks.each((chunk) => {
             done.ifFalse(() => {
-                (chunk === null).ifTrue(() => {
+                if(chunk === null) {
                     done = true
-                })
+                }
                 (chunk === null).ifFalse(() => {
                     chunk.each((octet) => {
                         bytes.add(octet)
@@ -83,12 +83,12 @@ resultObservation: (result) => {
 isSimpleExpectation: (spec) => {
     kind: Manifest.caseExpectation(spec)
     supported: kind === "boolean"
-    (kind === "null").ifTrue(() => { supported = true })
-    (kind === "integer").ifTrue(() => { supported = true })
-    (kind === "float-bits").ifTrue(() => { supported = true })
-    (kind === "float-nan").ifTrue(() => { supported = true })
-    (kind === "error-parent").ifTrue(() => { supported = true })
-    (kind === "error").ifTrue(() => { supported = true })
+    if(kind === "null") { supported = true }
+    if(kind === "integer") { supported = true }
+    if(kind === "float-bits") { supported = true }
+    if(kind === "float-nan") { supported = true }
+    if(kind === "error-parent") { supported = true }
+    if(kind === "error") { supported = true }
     supported
 }
 
@@ -99,17 +99,17 @@ isClosureErrorParentFreshExpectation: (spec) => {
 isFutureResolvedExpectation: (spec) => {
     kind: Manifest.caseExpectation(spec)
     supported: kind === "future-integer"
-    (kind === "future-integer-one-of").ifTrue(() => { supported = true })
-    (kind === "future-null").ifTrue(() => { supported = true })
-    (kind === "future-boolean").ifTrue(() => { supported = true })
+    if(kind === "future-integer-one-of") { supported = true }
+    if(kind === "future-null") { supported = true }
+    if(kind === "future-boolean") { supported = true }
     supported
 }
 
 isFutureTerminalExpectation: (spec) => {
     kind: Manifest.caseExpectation(spec)
     supported: kind === "future-error"
-    (kind === "future-error-parent").ifTrue(() => { supported = true })
-    (kind === "future-cancelled").ifTrue(() => { supported = true })
+    if(kind === "future-error-parent") { supported = true }
+    if(kind === "future-cancelled") { supported = true }
     supported
 }
 
@@ -137,14 +137,14 @@ parseFutureObservationPolicy: (text) => {
     separatorSeen: false
 
     source.each((octet) => {
-        (octet == 58).ifTrue(() => {
-            separatorSeen.ifTrue(() => { policyError() })
+        if(octet == 58) {
+            if(separatorSeen) { policyError() }
             separatorSeen = true
-        })
+        }
         (octet == 58).ifFalse(() => {
-            separatorSeen.ifTrue(() => {
+            if(separatorSeen) {
                 parentBytes.add(octet)
-            })
+            }
             separatorSeen.ifFalse(() => {
                 modeBytes.add(octet)
             })
@@ -152,14 +152,14 @@ parseFutureObservationPolicy: (text) => {
     })
 
     separatorSeen.ifFalse(() => { policyError() })
-    (modeBytes.size() == 0).ifTrue(() => { policyError() })
-    (parentBytes.size() == 0).ifTrue(() => { policyError() })
+    if(modeBytes.size() == 0) { policyError() }
+    if(parentBytes.size() == 0) { policyError() }
 
     mode: Encoding.UTF8.decode(modeBytes)
     supportedMode: mode === "stored"
-    (mode === "fresh").ifTrue(() => {
+    if(mode === "fresh") {
         supportedMode = true
-    })
+    }
     supportedMode.ifFalse(() => { policyError() })
 
     parentName: Encoding.UTF8.decode(parentBytes)
@@ -169,18 +169,18 @@ parseFutureObservationPolicy: (text) => {
 
 isDExpectation: (spec) => {
     supported: isSimpleExpectation(spec)
-    isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
+    if(isClosureErrorParentFreshExpectation(spec)) {
         supported = true
-    })
-    isFutureResolvedExpectation(spec).ifTrue(() => {
+    }
+    if(isFutureResolvedExpectation(spec)) {
         supported = true
-    })
-    isFutureTerminalExpectation(spec).ifTrue(() => {
+    }
+    if(isFutureTerminalExpectation(spec)) {
         supported = true
-    })
-    (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
+    }
+    if(Manifest.caseExpectation(spec) === "future-observation-error-identity") {
         supported = true
-    })
+    }
     supported
 }
 
@@ -218,12 +218,12 @@ evaluateFutureStoredObservation: (spec, source, inspectorExecutor) => {
     )
 
     passed: observation.state === "completed"
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.error === null
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.value === true
-    })
+    }
 
     resultTuple(passed, observation)
 }
@@ -288,12 +288,12 @@ evaluateFutureFreshObservation: (spec, source, inspectorExecutor) => {
     )
 
     passed: observation.state === "completed"
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.error === null
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.value === true
-    })
+    }
 
     resultTuple(passed, observation)
 }
@@ -307,30 +307,30 @@ evaluateFutureObservation: (spec, source, inspectorExecutor) => {
     mode: futureObservationPolicyMode(policy)
     evaluation: null
 
-    (mode === "stored").ifTrue(() => {
+    if(mode === "stored") {
         evaluation = evaluateFutureStoredObservation(
             spec,
             source,
             inspectorExecutor
         )
-    })
-    (mode === "fresh").ifTrue(() => {
+    }
+    if(mode === "fresh") {
         evaluation = evaluateFutureFreshObservation(
             spec,
             source,
             inspectorExecutor
         )
-    })
+    }
 
-    (evaluation === null).ifTrue(() => {
+    if(evaluation === null) {
         policyError()
-    })
+    }
     evaluation
 }
 
 parseExpectedInteger: (text) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => { policyError() })
+    if(source.size() == 0) { policyError() }
 
     value: 0
     negative: false
@@ -339,28 +339,28 @@ parseExpectedInteger: (text) => {
 
     source.each((octet) => {
         sign: false
-        first.ifTrue(() => {
-            (octet == 45).ifTrue(() => {
+        if(first) {
+            if(octet == 45) {
                 negative = true
                 sign = true
-            })
-            (octet == 43).ifTrue(() => {
+            }
+            if(octet == 43) {
                 sign = true
-            })
-        })
+            }
+        }
 
         sign.ifFalse(() => {
             invalid: octet < 48
-            (octet > 57).ifTrue(() => { invalid = true })
-            invalid.ifTrue(() => { policyError() })
+            if(octet > 57) { invalid = true }
+            if(invalid) { policyError() }
             value = value * 10 + (octet - 48)
             digits = digits + 1
         })
         first = false
     })
 
-    (digits == 0).ifTrue(() => { policyError() })
-    negative.ifTrue(() => { value = 0 - value })
+    if(digits == 0) { policyError() }
+    if(negative) { value = 0 - value }
     value
 }
 
@@ -373,21 +373,21 @@ parseExpectedFloatBits: (text) => {
         digit: -1
 
         decimal: (octet >= 48) && (octet <= 57)
-        decimal.ifTrue(() => {
+        if(decimal) {
             digit = octet - 48
-        })
+        }
 
         lower: (octet >= 97) && (octet <= 102)
-        lower.ifTrue(() => {
+        if(lower) {
             digit = octet - 87
-        })
+        }
 
         upper: (octet >= 65) && (octet <= 70)
-        upper.ifTrue(() => {
+        if(upper) {
             digit = octet - 55
-        })
+        }
 
-        (digit < 0).ifTrue(() => { policyError() })
+        if(digit < 0) { policyError() }
         value = value * 16 + digit
     })
 
@@ -396,32 +396,32 @@ parseExpectedFloatBits: (text) => {
 
 binary64PowerOfTwo: (exponent) => {
     invalid: exponent < -1074
-    (exponent > 971).ifTrue(() => { invalid = true })
-    invalid.ifTrue(() => { policyError() })
+    if(exponent > 971) { invalid = true }
+    if(invalid) { policyError() }
 
     remaining: exponent
     base: 2.0
-    (remaining < 0).ifTrue(() => {
+    if(remaining < 0) {
         remaining = 0 - remaining
         base = 0.5
-    })
+    }
 
     result: 1.0
     factor: base
 
     step: null
     step = () => {
-        (remaining > 0).ifTrue(() => {
-            (remaining.mod(2) == 1).ifTrue(() => {
+        if(remaining > 0) {
+            if(remaining.mod(2) == 1) {
                 result = result * factor
-            })
+            }
 
             remaining = remaining.div(2)
-            (remaining > 0).ifTrue(() => {
+            if(remaining > 0) {
                 factor = factor * factor
-            })
+            }
             step()
-        })
+        }
     }
 
     step()
@@ -433,17 +433,17 @@ floatFromExpectedBits: (rawBits) => {
     Integer.recognizes(rawBits).ifFalse(() => {
         policyError()
     })
-    (rawBits < 0).ifTrue(() => { policyError() })
-    (rawBits > 18446744073709551615).ifTrue(() => { policyError() })
+    if(rawBits < 0) { policyError() }
+    if(rawBits > 18446744073709551615) { policyError() }
 
     signBit: 9223372036854775808
     fractionUnit: 4503599627370496
 
     negative: rawBits >= signBit
     magnitude: rawBits
-    negative.ifTrue(() => {
+    if(negative) {
         magnitude = rawBits - signBit
-    })
+    }
 
     exponentBits: magnitude.div(fractionUnit)
     fractionBits: magnitude.mod(fractionUnit)
@@ -451,21 +451,21 @@ floatFromExpectedBits: (rawBits) => {
     special: exponentBits == 2047
     result: 0.0
 
-    special.ifTrue(() => {
+    if(special) {
         // NaN payload/sign bits are not portable Protos semantics. Retained
         // NaN expectations belong to float-nan, never float-bits.
         (fractionBits == 0).ifFalse(() => { policyError() })
         result = 1.0 / 0.0
-    })
+    }
 
     special.ifFalse(() => {
         significand: fractionBits
         binaryExponent: -1074
 
-        (exponentBits > 0).ifTrue(() => {
+        if(exponentBits > 0) {
             significand = fractionUnit + fractionBits
             binaryExponent = exponentBits - 1075
-        })
+        }
 
         // significand is <= 2^53-1, so Float(Integer) is exact. The final
         // product is the encoded binary64 value itself and therefore exact.
@@ -474,9 +474,9 @@ floatFromExpectedBits: (rawBits) => {
             binary64PowerOfTwo(binaryExponent)
     })
 
-    negative.ifTrue(() => {
+    if(negative) {
         result = -result
-    })
+    }
 
     result
 }
@@ -489,82 +489,82 @@ standardErrorPrototype: (name) => {
     result: null
     known: false
 
-    (name === "Error").ifTrue(() => {
+    if(name === "Error") {
         result = Error
         known = true
-    })
-    (name === "SlotNotFound").ifTrue(() => {
+    }
+    if(name === "SlotNotFound") {
         result = SlotNotFound
         known = true
-    })
-    (name === "InvalidSuper").ifTrue(() => {
+    }
+    if(name === "InvalidSuper") {
         result = InvalidSuper
         known = true
-    })
-    (name === "InvalidReturn").ifTrue(() => {
+    }
+    if(name === "InvalidReturn") {
         result = InvalidReturn
         known = true
-    })
-    (name === "Cancelled").ifTrue(() => {
+    }
+    if(name === "Cancelled") {
         result = Cancelled
         known = true
-    })
-    (name === "FutureResolutionCycle").ifTrue(() => {
+    }
+    if(name === "FutureResolutionCycle") {
         result = FutureResolutionCycle
         known = true
-    })
-    (name === "RequestOutcomeUncertain").ifTrue(() => {
+    }
+    if(name === "RequestOutcomeUncertain") {
         result = RequestOutcomeUncertain
         known = true
-    })
-    (name === "NonTransferableValue").ifTrue(() => {
+    }
+    if(name === "NonTransferableValue") {
         result = NonTransferableValue
         known = true
-    })
-    (name === "NonParallelValue").ifTrue(() => {
+    }
+    if(name === "NonParallelValue") {
         result = NonParallelValue
         known = true
-    })
-    (name === "ForeignError").ifTrue(() => {
+    }
+    if(name === "ForeignError") {
         result = ForeignError
         known = true
-    })
-    (name === "InvalidPredicateResult").ifTrue(() => {
+    }
+    if(name === "InvalidPredicateResult") {
         result = InvalidPredicateResult
         known = true
-    })
-    (name === "InvalidComparatorResult").ifTrue(() => {
+    }
+    if(name === "InvalidComparatorResult") {
         result = InvalidComparatorResult
         known = true
-    })
-    (name === "InvalidComparatorOrder").ifTrue(() => {
+    }
+    if(name === "InvalidComparatorOrder") {
         result = InvalidComparatorOrder
         known = true
-    })
-    (name === "IOError").ifTrue(() => {
+    }
+    if(name === "IOError") {
         result = IOError
         known = true
-    })
-    (name === "InvalidIOArgument").ifTrue(() => {
+    }
+    if(name === "InvalidIOArgument") {
         result = InvalidIOArgument
         known = true
-    })
-    (name === "IOLifecycleError").ifTrue(() => {
+    }
+    if(name === "IOLifecycleError") {
         result = IOLifecycleError
         known = true
-    })
-    (name === "IOCapacityExhausted").ifTrue(() => {
+    }
+    if(name === "IOCapacityExhausted") {
         result = IOCapacityExhausted
         known = true
-    })
-    (name === "EncodingError").ifTrue(() => {
+    }
+    if(name === "EncodingError") {
         result = EncodingError
         known = true
-    })
-    (name === "LineTooLong").ifTrue(() => {
+    }
+    if(name === "LineTooLong") {
         result = LineTooLong
         known = true
-    })
+    }
 
     known.ifFalse(() => { policyError() })
     result
@@ -572,14 +572,14 @@ standardErrorPrototype: (name) => {
 
 integerOneOfComparisonSource: (text) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => { policyError() })
+    if(source.size() == 0) { policyError() }
 
     token: Encoding.UTF8.encode("")
     comparison: ""
     count: 0
 
     flush: () => {
-        (token.size() == 0).ifTrue(() => { policyError() })
+        if(token.size() == 0) { policyError() }
         element: Encoding.UTF8.decode(token)
         parseExpectedInteger(element)
 
@@ -595,25 +595,25 @@ integerOneOfComparisonSource: (text) => {
         })
         literal: Encoding.UTF8.decode(literalBytes)
 
-        (count > 0).ifTrue(() => {
+        if(count > 0) {
             comparison = comparison + " || "
-        })
+        }
         comparison = comparison + "(value === " + literal + ")"
         count = count + 1
         token = Encoding.UTF8.encode("")
     }
 
     source.each((octet) => {
-        (octet == 44).ifTrue(() => {
+        if(octet == 44) {
             flush()
-        })
+        }
         (octet == 44).ifFalse(() => {
             token.add(octet)
         })
     })
     flush()
 
-    (count == 0).ifTrue(() => { policyError() })
+    if(count == 0) { policyError() }
     comparison
 }
 
@@ -622,34 +622,34 @@ futureResolvedInspectorSource: (kind, expected) => {
     comparisonExpression: "value === expectedValue"
     known: false
 
-    (kind === "future-integer").ifTrue(() => {
+    if(kind === "future-integer") {
         parseExpectedInteger(expected)
         expectedExpression = expected
         known = true
-    })
+    }
 
-    (kind === "future-integer-one-of").ifTrue(() => {
+    if(kind === "future-integer-one-of") {
         comparisonExpression = integerOneOfComparisonSource(expected)
         expectedExpression = "null"
         known = true
-    })
+    }
 
-    (kind === "future-null").ifTrue(() => {
+    if(kind === "future-null") {
         (expected === "-").ifFalse(() => { policyError() })
         expectedExpression = "null"
         known = true
-    })
+    }
 
-    (kind === "future-boolean").ifTrue(() => {
-        (expected === "true").ifTrue(() => {
+    if(kind === "future-boolean") {
+        if(expected === "true") {
             expectedExpression = "true"
             known = true
-        })
-        (expected === "false").ifTrue(() => {
+        }
+        if(expected === "false") {
             expectedExpression = "false"
             known = true
-        })
-    })
+        }
+    }
 
     known.ifFalse(() => { policyError() })
 
@@ -704,12 +704,12 @@ evaluateFutureResolved: (spec, source, inspectorExecutor) => {
     )
 
     passed: observation.state === "completed"
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.error === null
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.value === true
-    })
+    }
 
     resultTuple(passed, observation)
 }
@@ -719,24 +719,24 @@ futureTerminalInspectorSource: (kind, expected) => {
     modeText: ""
     expectedParentExpression: "Error"
 
-    (kind === "future-error").ifTrue(() => {
+    if(kind === "future-error") {
         (expected === "-").ifFalse(() => { policyError() })
         modeText = "0"
-    })
+    }
 
-    (kind === "future-error-parent").ifTrue(() => {
+    if(kind === "future-error-parent") {
         standardErrorPrototype(expected)
         expectedParentExpression = expected
         modeText = "1"
-    })
+    }
 
-    (kind === "future-cancelled").ifTrue(() => {
+    if(kind === "future-cancelled") {
         (expected === "-").ifFalse(() => { policyError() })
         expectedParentExpression = "Cancelled"
         modeText = "2"
-    })
+    }
 
-    (modeText == "").ifTrue(() => { policyError() })
+    if(modeText == "") { policyError() }
 
     "(candidate) => {\n" +
     "    mode: " + modeText + "\n" +
@@ -812,12 +812,12 @@ evaluateFutureTerminal: (spec, source, inspectorExecutor) => {
     )
 
     passed: observation.state === "completed"
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.error === null
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.value === true
-    })
+    }
 
     resultTuple(passed, observation)
 }
@@ -886,12 +886,12 @@ evaluateClosureErrorParentFresh: (spec, source, executor) => {
     observation: executor(wrappedSource)
 
     passed: observation.state === "completed"
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.error === null
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.value === true
-    })
+    }
 
     resultTuple(passed, observation)
 }
@@ -904,61 +904,61 @@ evaluateSimple: (spec, source, executor) => {
     observation: executor(source)
     passed: false
 
-    (kind === "boolean").ifTrue(() => {
+    if(kind === "boolean") {
         expectedKnown: expected === "true"
         expectedValue: true
-        (expected === "false").ifTrue(() => {
+        if(expected === "false") {
             expectedKnown = true
             expectedValue = false
-        })
+        }
         expectedKnown.ifFalse(() => { policyError() })
 
         passed = observation.state === "completed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.error === null
-        })
-        passed.ifTrue(() => {
+        }
+        if(passed) {
             passed = observation.value === expectedValue
-        })
-    })
+        }
+    }
 
-    (kind === "null").ifTrue(() => {
+    if(kind === "null") {
         (expected === "-").ifFalse(() => { policyError() })
 
         passed = observation.state === "completed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.error === null
-        })
-        passed.ifTrue(() => {
+        }
+        if(passed) {
             passed = observation.value === null
-        })
-    })
+        }
+    }
 
-    (kind === "integer").ifTrue(() => {
+    if(kind === "integer") {
         expectedValue: parseExpectedInteger(expected)
 
         passed = observation.state === "completed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.error === null
-        })
-        passed.ifTrue(() => {
+        }
+        if(passed) {
             passed = observation.value === expectedValue
-        })
-    })
+        }
+    }
 
-    (kind === "float-bits").ifTrue(() => {
+    if(kind === "float-bits") {
         rawBits: parseExpectedFloatBits(expected)
 
         passed = observation.state === "completed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.error === null
-        })
-        passed.ifTrue(() => {
+        }
+        if(passed) {
             passed = matchesExpectedFloatBits(rawBits, observation.value)
-        })
-    })
+        }
+    }
 
-    (kind === "float-nan").ifTrue(() => {
+    if(kind === "float-nan") {
         (expected === "-").ifFalse(() => { policyError() })
 
         // Core v0.1 has one semantic Float NaN value even when host payload/sign
@@ -967,44 +967,44 @@ evaluateSimple: (spec, source, executor) => {
         expectedNaN: 0.0 / 0.0
 
         passed = observation.state === "completed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.error === null
-        })
-        passed.ifTrue(() => {
+        }
+        if(passed) {
             passed = observation.value === expectedNaN
-        })
-    })
+        }
+    }
 
-    (kind === "error-parent").ifTrue(() => {
+    if(kind === "error-parent") {
         expectedParent: standardErrorPrototype(expected)
 
         passed = observation.state === "failed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.value === null
-        })
-        passed.ifTrue(() => {
-            (observation.error === null).ifTrue(() => {
+        }
+        if(passed) {
+            if(observation.error === null) {
                 passed = false
-            })
-        })
-        passed.ifTrue(() => {
+            }
+        }
+        if(passed) {
             passed = observation.error.parent() === expectedParent
-        })
-    })
+        }
+    }
 
-    (kind === "error").ifTrue(() => {
+    if(kind === "error") {
         (expected === "-").ifFalse(() => { policyError() })
 
         passed = observation.state === "failed"
-        passed.ifTrue(() => {
+        if(passed) {
             passed = observation.value === null
-        })
-        passed.ifTrue(() => {
-            (observation.error === null).ifTrue(() => {
+        }
+        if(passed) {
+            if(observation.error === null) {
                 passed = false
-            })
-        })
-    })
+            }
+        }
+    }
 
     resultTuple(passed, observation)
 }
@@ -1012,34 +1012,34 @@ evaluateSimple: (spec, source, executor) => {
 evaluateDCase: (spec, source, executor, inspectorExecutor) => {
     evaluation: null
 
-    isFutureResolvedExpectation(spec).ifTrue(() => {
-        (inspectorExecutor === null).ifTrue(() => { policyError() })
+    if(isFutureResolvedExpectation(spec)) {
+        if(inspectorExecutor === null) { policyError() }
         evaluation = evaluateFutureResolved(spec, source, inspectorExecutor)
-    })
+    }
 
-    (evaluation === null).ifTrue(() => {
-        isFutureTerminalExpectation(spec).ifTrue(() => {
-            (inspectorExecutor === null).ifTrue(() => { policyError() })
+    if(evaluation === null) {
+        if(isFutureTerminalExpectation(spec)) {
+            if(inspectorExecutor === null) { policyError() }
             evaluation = evaluateFutureTerminal(spec, source, inspectorExecutor)
-        })
-    })
+        }
+    }
 
-    (evaluation === null).ifTrue(() => {
-        (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
-            (inspectorExecutor === null).ifTrue(() => { policyError() })
+    if(evaluation === null) {
+        if(Manifest.caseExpectation(spec) === "future-observation-error-identity") {
+            if(inspectorExecutor === null) { policyError() }
             evaluation = evaluateFutureObservation(spec, source, inspectorExecutor)
-        })
-    })
+        }
+    }
 
-    (evaluation === null).ifTrue(() => {
+    if(evaluation === null) {
         closureFresh: isClosureErrorParentFreshExpectation(spec)
-        closureFresh.ifTrue(() => {
+        if(closureFresh) {
             evaluation = evaluateClosureErrorParentFresh(spec, source, executor)
-        })
+        }
         closureFresh.ifFalse(() => {
             evaluation = evaluateSimple(spec, source, executor)
         })
-    })
+    }
 
     evaluation
 }
@@ -1089,29 +1089,29 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             resultChunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            resultChunks.containsKey(level).ifTrue(() => {
+            if(resultChunks.containsKey(level)) {
                 nextResult = Array(...result, ...resultChunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -1123,7 +1123,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
 
     cases.each((spec) => {
         supported: isDExpectation(spec)
-        supported.ifTrue(() => {
+        if(supported) {
             previous: chain
             chain = previous.then((ignored) => {
                 source: sourceLoader(spec)
@@ -1131,7 +1131,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
                 carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
                 null
             })
-        })
+        }
     })
 
     chain.value()
@@ -1139,9 +1139,9 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor) => {
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
     caseResults.each((caseRun) => {
-        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+        if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
-        })
+        }
     })
 
     skippedCount: 0
@@ -1185,9 +1185,9 @@ runBoundedSimpleWithLoader: (
     cases: Manifest.planCases(plan)
     selectedCases: Array()
     cases.each((spec) => {
-        isSimpleExpectation(spec).ifTrue(() => {
+        if(isSimpleExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
-        })
+        }
     })
 
     resultChunks: Map()
@@ -1196,29 +1196,29 @@ runBoundedSimpleWithLoader: (
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             resultChunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            resultChunks.containsKey(level).ifTrue(() => {
+            if(resultChunks.containsKey(level)) {
                 nextResult = Array(...result, ...resultChunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -1264,9 +1264,9 @@ runBoundedSimpleWithLoader: (
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
     caseResults.each((caseRun) => {
-        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+        if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
-        })
+        }
     })
 
     runTuple(
@@ -1307,8 +1307,8 @@ scheduleDCaseAsync: (
 ) => {
     pending: null
 
-    isFutureResolvedExpectation(spec).ifTrue(() => {
-        (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+    if(isFutureResolvedExpectation(spec)) {
+        if(inspectorExecutorAsync === null) { policyError() }
         pending = inspectorExecutorAsync(
             source,
             futureResolvedInspectorSource(
@@ -1316,11 +1316,11 @@ scheduleDCaseAsync: (
                 Manifest.caseExpected(spec)
             )
         )
-    })
+    }
 
-    (pending === null).ifTrue(() => {
-        isFutureTerminalExpectation(spec).ifTrue(() => {
-            (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+    if(pending === null) {
+        if(isFutureTerminalExpectation(spec)) {
+            if(inspectorExecutorAsync === null) { policyError() }
             pending = inspectorExecutorAsync(
                 source,
                 futureTerminalInspectorSource(
@@ -1328,46 +1328,46 @@ scheduleDCaseAsync: (
                     Manifest.caseExpected(spec)
                 )
             )
-        })
-    })
+        }
+    }
 
-    (pending === null).ifTrue(() => {
-        (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
-            (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+    if(pending === null) {
+        if(Manifest.caseExpectation(spec) === "future-observation-error-identity") {
+            if(inspectorExecutorAsync === null) { policyError() }
             policy: parseFutureObservationPolicy(Manifest.caseExpected(spec))
             inspectorSource: null
 
-            (futureObservationPolicyMode(policy) === "stored").ifTrue(() => {
+            if(futureObservationPolicyMode(policy) === "stored") {
                 inspectorSource = futureStoredObservationInspectorSource()
-            })
-            (futureObservationPolicyMode(policy) === "fresh").ifTrue(() => {
+            }
+            if(futureObservationPolicyMode(policy) === "fresh") {
                 inspectorSource = futureFreshObservationInspectorSource(
                     futureObservationPolicyParentName(policy)
                 )
-            })
-            (inspectorSource === null).ifTrue(() => { policyError() })
+            }
+            if(inspectorSource === null) { policyError() }
             pending = inspectorExecutorAsync(source, inspectorSource)
-        })
-    })
+        }
+    }
 
-    (pending === null).ifTrue(() => {
-        isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
+    if(pending === null) {
+        if(isClosureErrorParentFreshExpectation(spec)) {
             pending = executorAsync(
                 closureErrorParentFreshWrapperSource(
                     source,
                     Manifest.caseExpected(spec)
                 )
             )
-        })
-    })
+        }
+    }
 
-    (pending === null).ifTrue(() => {
-        isSimpleExpectation(spec).ifTrue(() => {
+    if(pending === null) {
+        if(isSimpleExpectation(spec)) {
             pending = executorAsync(source)
-        })
-    })
+        }
+    }
 
-    (pending === null).ifTrue(() => { policyError() })
+    if(pending === null) { policyError() }
     pending
 }
 
@@ -1397,9 +1397,9 @@ runBoundedWithLoader: (
     cases: Manifest.planCases(plan)
     selectedCases: Array()
     cases.each((spec) => {
-        isDExpectation(spec).ifTrue(() => {
+        if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
-        })
+        }
     })
 
     resultChunks: Map()
@@ -1408,29 +1408,29 @@ runBoundedWithLoader: (
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             resultChunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            resultChunks.containsKey(level).ifTrue(() => {
+            if(resultChunks.containsKey(level)) {
                 nextResult = Array(...result, ...resultChunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -1480,9 +1480,9 @@ runBoundedWithLoader: (
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
     caseResults.each((caseRun) => {
-        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+        if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
-        })
+        }
     })
 
     runTuple(
@@ -1516,9 +1516,9 @@ runBoundedWithResourcesWithLoader: (
     cases: Manifest.planCases(plan)
     selectedCases: Array()
     cases.each((spec) => {
-        isDExpectation(spec).ifTrue(() => {
+        if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
-        })
+        }
     })
 
     resultChunks: Map()
@@ -1527,29 +1527,29 @@ runBoundedWithResourcesWithLoader: (
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             resultChunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            resultChunks.containsKey(level).ifTrue(() => {
+            if(resultChunks.containsKey(level)) {
                 nextResult = Array(...result, ...resultChunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -1591,7 +1591,7 @@ runBoundedWithResourcesWithLoader: (
             // Stable TestPlan-order scan with same-window backfill.
             windowIndex: 0
             while(windowIndex < windowCount) {
-                (windowResults[windowIndex] === null).ifTrue(() => {
+                if(windowResults[windowIndex] === null) {
                     reservation: ResourceReservation.tryReserve(
                         windowBindings[windowIndex],
                         reservationState
@@ -1616,16 +1616,16 @@ runBoundedWithResourcesWithLoader: (
                             )
                         )
                     })
-                })
+                }
 
                 windowIndex = windowIndex + 1
             }
 
             // I8A static feasibility plus an empty prior-round boundary must
             // make progress. Fail closed rather than spin if invariants regress.
-            (pending.size() == 0).ifTrue(() => {
+            if(pending.size() == 0) {
                 policyError()
-            })
+            }
 
             observations: Future.all(...pending).value()
 
@@ -1666,9 +1666,9 @@ runBoundedWithResourcesWithLoader: (
         resultWindowIndex: 0
         while(resultWindowIndex < windowCount) {
             caseRun: windowResults[resultWindowIndex]
-            (caseRun === null).ifTrue(() => {
+            if(caseRun === null) {
                 policyError()
-            })
+            }
             carryChunk(Array(caseRun), 0)
             resultWindowIndex = resultWindowIndex + 1
         }
@@ -1677,9 +1677,9 @@ runBoundedWithResourcesWithLoader: (
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
     caseResults.each((caseRun) => {
-        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+        if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
-        })
+        }
     })
 
     runTuple(
@@ -1773,9 +1773,9 @@ d108InfrastructureAttemptCompletion: (attempt) => {
 // ordinary runTuple. Infrastructure-aborted partial evidence is deliberately
 // not coerced into passed/failed/skipped guest semantics.
 d108RunHealthyRun: (run) => {
-    d108RunInfrastructureFailed(run).ifTrue(() => {
+    if(d108RunInfrastructureFailed(run)) {
         policyError()
-    })
+    }
     (d108RunCutoverCases(run).size() == 0).ifFalse(() => {
         policyError()
     })
@@ -1786,9 +1786,9 @@ d108RunHealthyRun: (run) => {
     caseResults: d108RunCaseResults(run)
     passedCount: 0
     caseResults.each((caseRun) => {
-        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+        if(resultPassed(caseRunEvaluation(caseRun))) {
             passedCount = passedCount + 1
-        })
+        }
     })
 
     runTuple(
@@ -1829,12 +1829,12 @@ scheduleD108CaseAsync: (
         // D133 generation 1 keeps per-case authority distinct from D077
         // resource/provider provisioning. TOOL005-B3B currently requires no
         // ResourceRequirement on project-tree cases.
-        resourceful.ifTrue(() => {
+        if(resourceful) {
             policyError()
-        })
-        (caseAuthorityExecutorAsync === null).ifTrue(() => {
+        }
+        if(caseAuthorityExecutorAsync === null) {
             policyError()
-        })
+        }
         (
             Manifest.caseAuthorityKind(descriptor) === "project-tree"
         ).ifFalse(() => {
@@ -1854,11 +1854,11 @@ scheduleD108CaseAsync: (
         )
     })
 
-    (descriptor === null).ifTrue(() => {
-        resourceful.ifTrue(() => {
-            (resourceExecutorAsync === null).ifTrue(() => {
+    if(descriptor === null) {
+        if(resourceful) {
+            if(resourceExecutorAsync === null) {
                 policyError()
-            })
+            }
 
             providerBindings:
                 ResourceBinding.providerRequestSnapshot(bindings)
@@ -1885,7 +1885,7 @@ scheduleD108CaseAsync: (
                 },
                 resourceInspector
             )
-        })
+        }
 
         resourceful.ifFalse(() => {
             pending = scheduleDCaseAsync(
@@ -1895,7 +1895,7 @@ scheduleD108CaseAsync: (
                 inspectorExecutorAsync
             )
         })
-    })
+    }
 
     d108Scheduled(pending, resourceful)
 }
@@ -1923,9 +1923,9 @@ runD108WithResourcesWithLoader: (
     cases: Manifest.planCases(plan)
     selectedCases: Array()
     cases.each((spec) => {
-        isDExpectation(spec).ifTrue(() => {
+        if(isDExpectation(spec)) {
             selectedCases = Array(...selectedCases, spec)
-        })
+        }
     })
 
     resultChunks: Map()
@@ -1934,29 +1934,29 @@ runD108WithResourcesWithLoader: (
     carryChunk: null
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
-        present.ifTrue(() => {
+        if(present) {
             left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
         present.ifFalse(() => {
             resultChunks[level] = chunk
-            (level > maxChunkLevel).ifTrue(() => {
+            if(level > maxChunkLevel) {
                 maxChunkLevel = level
-            })
+            }
         })
     }
 
     collectChunks: null
     collectChunks = (level, result) => {
         finalResult: result
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            resultChunks.containsKey(level).ifTrue(() => {
+            if(resultChunks.containsKey(level)) {
                 nextResult = Array(...result, ...resultChunks[level])
-            })
+            }
             finalResult = collectChunks(level - 1, nextResult)
-        })
+        }
         finalResult
     }
 
@@ -2013,7 +2013,7 @@ runD108WithResourcesWithLoader: (
             // Stable TestPlan-order scan with same-window backfill.
             windowIndex: 0
             while(windowIndex < windowCount) {
-                (windowResults[windowIndex] === null).ifTrue(() => {
+                if(windowResults[windowIndex] === null) {
                     reservation:
                         ResourceReservation.tryReserve(
                             windowBindings[windowIndex],
@@ -2060,16 +2060,16 @@ runD108WithResourcesWithLoader: (
                                 d108ScheduledFuture(scheduled)
                             )
                     })
-                })
+                }
 
                 windowIndex = windowIndex + 1
             }
 
             // I8A feasibility + D105 prior release must guarantee progress while
             // the invocation is still healthy.
-            (pending.size() == 0).ifTrue(() => {
+            if(pending.size() == 0) {
                 policyError()
-            })
+            }
 
             // D108 terminal barrier: C1/C2 resourceful Futures resolve only after
             // Process/host/provider lifecycle terminality. Future.all therefore
@@ -2101,27 +2101,27 @@ runD108WithResourcesWithLoader: (
                     infrastructureEnvelope = true
                 })
 
-                infrastructureEnvelope.ifTrue(() => {
+                if(infrastructureEnvelope) {
                     infrastructureFailed =
                         completionValue.infrastructureFailed
                     guestObservation =
                         completionValue.guestObservation
 
-                    resourceful.ifTrue(() => {
+                    if(resourceful) {
                         capacitySafe =
                             completionValue.capacitySafe
 
                         // UNSAFE without infrastructure evidence is not a valid
                         // D108 terminal disposition.
-                        (
+                        if(
                             capacitySafe.not() &&
                             infrastructureFailed.not()
-                        ).ifTrue(() => {
+                        ) {
                             policyError()
-                        })
-                    })
+                        }
+                    }
 
-                    infrastructureFailed.ifTrue(() => {
+                    if(infrastructureFailed) {
                         roundInfrastructureFailed = true
                         infrastructureAttempts =
                             Array(
@@ -2131,17 +2131,17 @@ runD108WithResourcesWithLoader: (
                                     completionValue
                                 )
                             )
-                    })
-                })
+                    }
+                }
 
                 // I8B release is permitted only after terminal completion proves
                 // reuse safety. Resource-free empty reservations remain no-op.
-                capacitySafe.ifTrue(() => {
+                if(capacitySafe) {
                     ResourceReservation.release(
                         reservation,
                         reservationState
                     )
-                })
+                }
 
                 // Preserve guest evidence if it exists, even if cleanup later
                 // produced infrastructure failure. Never fabricate a guest
@@ -2160,12 +2160,12 @@ runD108WithResourcesWithLoader: (
                     remainingInWindow = remainingInWindow - 1
                 })
 
-                (
+                if(
                     (guestObservation === null) &&
                     infrastructureFailed.not()
-                ).ifTrue(() => {
+                ) {
                     policyError()
-                })
+                }
 
                 // D174: lifecycle terminality is observable only after the
                 // existing D108 terminal/reconciliation boundary.
@@ -2191,13 +2191,13 @@ runD108WithResourcesWithLoader: (
                 resultIndex = resultIndex + 1
             }
 
-            roundInfrastructureFailed.ifTrue(() => {
+            if(roundInfrastructureFailed) {
                 invocationInfrastructureFailed = true
-            })
+            }
 
             // On a healthy round every reservation, including resourceful ones,
             // must have become safely reusable before the D105 rescan.
-            invocationInfrastructureFailed.not().ifTrue(() => {
+            if(invocationInfrastructureFailed.not()) {
                 (
                     ResourceReservation.activeReservationCount(
                         reservationState
@@ -2205,7 +2205,7 @@ runD108WithResourcesWithLoader: (
                 ).ifFalse(() => {
                     policyError()
                 })
-            })
+            }
         }
 
         // Preserve every guest CaseRun that really exists, always in logical
@@ -2214,11 +2214,11 @@ runD108WithResourcesWithLoader: (
         while(resultWindowIndex < windowCount) {
             caseRun: windowResults[resultWindowIndex]
 
-            (caseRun === null).ifTrue(() => {
-                invocationInfrastructureFailed.not().ifTrue(() => {
+            if(caseRun === null) {
+                if(invocationInfrastructureFailed.not()) {
                     policyError()
-                })
-            })
+                }
+            }
 
             (caseRun === null).ifFalse(() => {
                 carryChunk(Array(caseRun), 0)
@@ -2227,20 +2227,20 @@ runD108WithResourcesWithLoader: (
             resultWindowIndex = resultWindowIndex + 1
         }
 
-        invocationInfrastructureFailed.ifTrue(() => {
+        if(invocationInfrastructureFailed) {
             // Only cases never admitted in the affected H window belong to the
             // cutover set. An admitted provisioning failure is represented by
             // infrastructureAttempts, not fabricated as a skipped/not-admitted
             // guest result.
             cutoverIndex: 0
             while(cutoverIndex < windowCount) {
-                windowAttempted[cutoverIndex].not().ifTrue(() => {
+                if(windowAttempted[cutoverIndex].not()) {
                     cutoverCases =
                         Array(
                             ...cutoverCases,
                             windowSpecs[cutoverIndex]
                         )
-                })
+                }
                 cutoverIndex = cutoverIndex + 1
             }
 
@@ -2255,7 +2255,7 @@ runD108WithResourcesWithLoader: (
                     )
                 laterIndex = laterIndex + 1
             }
-        })
+        }
     }
 
     caseResults:
@@ -2266,11 +2266,11 @@ runD108WithResourcesWithLoader: (
             reservationState
         )
 
-    invocationInfrastructureFailed.not().ifTrue(() => {
+    if(invocationInfrastructureFailed.not()) {
         (retainedReservationCount == 0).ifFalse(() => {
             policyError()
         })
-    })
+    }
 
     d108RunEnvelope(
         caseResults,
@@ -2385,7 +2385,7 @@ testRunOutcomeInfrastructureAbort: (outcome) => {
 testRunOutcomeFromD108: (d108Run) => {
     projected: null
 
-    d108RunInfrastructureFailed(d108Run).ifTrue(() => {
+    if(d108RunInfrastructureFailed(d108Run)) {
         projected =
             testRunOutcomeInfrastructureAborted(
                 d108RunCaseResults(d108Run),
@@ -2394,7 +2394,7 @@ testRunOutcomeFromD108: (d108Run) => {
                 d108RunCutoverCases(d108Run),
                 d108RunRetainedReservationCount(d108Run)
             )
-    })
+    }
 
     d108RunInfrastructureFailed(d108Run).ifFalse(() => {
         projected =
@@ -2430,17 +2430,17 @@ testRunOutcomeCompletedAcrossRuns: (
     primaryRun,
     executedRuns
 ) => {
-    (executedRuns.size() == 0).ifTrue(() => {
+    if(executedRuns.size() == 0) {
         policyError()
-    })
+    }
 
     primarySeen: false
     allHealthy: true
 
     executedRuns.each((run) => {
-        (run === primaryRun).ifTrue(() => {
+        if(run === primaryRun) {
             primarySeen = true
-        })
+        }
         runAllPassed(run).ifFalse(() => {
             allHealthy = false
         })
@@ -2464,9 +2464,9 @@ testRunOutcomeCompletedAcrossRuns: (
 selectedDCaseSpecs: (plan) => {
     selected: Array()
     Manifest.planCases(plan).each((spec) => {
-        isDExpectation(spec).ifTrue(() => {
+        if(isDExpectation(spec)) {
             selected = Array(...selected, spec)
-        })
+        }
     })
     resultTuple(...selected)
 }

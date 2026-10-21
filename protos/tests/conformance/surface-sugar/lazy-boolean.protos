@@ -44,7 +44,7 @@ tests: [
         tool009LegacyCase: () => {
             count: 0
             value: true && ((count = count + 1) == 1)
-            value.ifTrue(() => { count = count + 10 })
+            if(value) { count = count + 10 }
             count
         }
         Assertions.require(tool009LegacyCase() == 11)
@@ -67,7 +67,7 @@ tests: [
         tool009LegacyCase: () => {
             count: 0
             value: true || (count = count + 1)
-            value.ifTrue(() => { count = count + 10 })
+            if(value) { count = count + 10 }
             count
         }
         Assertions.require(tool009LegacyCase() == 10)
@@ -76,7 +76,7 @@ tests: [
         tool009LegacyCase: () => {
             count: 0
             value: false || ((count = count + 1) == 1)
-            value.ifTrue(() => { count = count + 10 })
+            if(value) { count = count + 10 }
             count
         }
         Assertions.require(tool009LegacyCase() == 11)

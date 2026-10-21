@@ -26,14 +26,14 @@ appendBytes: (target, source) => {
 }
 
 decimalText: (value) => {
-    (value < 0).ifTrue(() => {
+    if(value < 0) {
         fail()
-    })
+    }
 
     result: ""
-    (value == 0).ifTrue(() => {
+    if(value == 0) {
         result = "0"
-    })
+    }
 
     remaining: value
     digits: Array("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")

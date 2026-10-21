@@ -38,33 +38,33 @@ filter: (array, predicate) => {
         length: end - start
         result: null
 
-        (length == 0).ifTrue(() => {
+        if(length == 0) {
             result = Array()
-        })
+        }
 
-        (length == 1).ifTrue(() => {
+        if(length == 1) {
             element: snapshot[start]
             decision: predicate(element)
 
-            (decision === true).ifTrue(() => {
+            if(decision === true) {
                 result = Array(element)
-            })
+            }
             (decision === true).ifFalse(() => {
-                (decision === false).ifTrue(() => {
+                if(decision === false) {
                     result = Array()
-                })
+                }
                 (decision === false).ifFalse(() => {
                     InvalidPredicateResult().signal()
                 })
             })
-        })
+        }
 
-        (length > 1).ifTrue(() => {
+        if(length > 1) {
             middle: start + length.div(2)
             left: filterRange(start, middle)
             right: filterRange(middle, end)
             result = Array(...left, ...right)
-        })
+        }
 
         result
     }
@@ -83,9 +83,9 @@ findIndex: (array, predicate) => {
     snapshot.each((element) => {
         decision: predicate(element)
 
-        (decision === true).ifTrue(() => {
+        if(decision === true) {
             ^index
-        })
+        }
         (decision === false).ifFalse(() => {
             InvalidPredicateResult().signal()
         })
@@ -104,36 +104,36 @@ reduce: (array, reducer, ...initial) => {
     snapshot: Array(...array)
     initialSize: initial.size()
 
-    (initialSize > 1).ifTrue(() => {
+    if(initialSize > 1) {
         Error().signal()
-    })
+    }
 
     snapshotSize: snapshot.size()
     accumulator: null
 
-    (initialSize == 1).ifTrue(() => {
+    if(initialSize == 1) {
         accumulator = initial[0]
-    })
+    }
 
-    (initialSize == 0).ifTrue(() => {
-        (snapshotSize == 0).ifTrue(() => {
+    if(initialSize == 0) {
+        if(snapshotSize == 0) {
             ^null
-        })
+        }
         accumulator = snapshot[0]
-    })
+    }
 
     foldRange: (start, end) => {
         length: end - start
 
-        (length == 1).ifTrue(() => {
+        if(length == 1) {
             accumulator = reducer(accumulator, snapshot[start])
-        })
+        }
 
-        (length > 1).ifTrue(() => {
+        if(length > 1) {
             middle: start + length.div(2)
             foldRange(start, middle)
             foldRange(middle, end)
-        })
+        }
     }
 
     foldRange(1 - initialSize, snapshotSize)
@@ -156,20 +156,20 @@ sort: (array, less) => {
         mergeRange: (start, end) => {
             length: end - start
 
-            (length == 1).ifTrue(() => {
+            if(length == 1) {
                 leftDone: leftIndex == leftSize
                 rightDone: rightIndex == rightSize
 
-                leftDone.ifTrue(() => {
+                if(leftDone) {
                     result[start] = right[rightIndex]
                     rightIndex = rightIndex + 1
-                })
+                }
 
                 leftDone.ifFalse(() => {
-                    rightDone.ifTrue(() => {
+                    if(rightDone) {
                         result[start] = left[leftIndex]
                         leftIndex = leftIndex + 1
-                    })
+                    }
 
                     rightDone.ifFalse(() => {
                         leftValue: left[leftIndex]
@@ -190,33 +190,33 @@ sort: (array, less) => {
                             })
                         })
 
-                        (lr === true).ifTrue(() => {
-                            (rl === true).ifTrue(() => {
+                        if(lr === true) {
+                            if(rl === true) {
                                 InvalidComparatorOrder().signal()
-                            })
+                            }
                             result[start] = leftValue
                             leftIndex = leftIndex + 1
-                        })
+                        }
 
-                        (lr === false).ifTrue(() => {
-                            (rl === true).ifTrue(() => {
+                        if(lr === false) {
+                            if(rl === true) {
                                 result[start] = rightValue
                                 rightIndex = rightIndex + 1
-                            })
-                            (rl === false).ifTrue(() => {
+                            }
+                            if(rl === false) {
                                 result[start] = leftValue
                                 leftIndex = leftIndex + 1
-                            })
-                        })
+                            }
+                        }
                     })
                 })
-            })
+            }
 
-            (length > 1).ifTrue(() => {
+            if(length > 1) {
                 middle: start + length.div(2)
                 mergeRange(start, middle)
                 mergeRange(middle, end)
-            })
+            }
 
             null
         }
@@ -229,20 +229,20 @@ sort: (array, less) => {
         length: end - start
         result: null
 
-        (length == 0).ifTrue(() => {
+        if(length == 0) {
             result = Array()
-        })
+        }
 
-        (length == 1).ifTrue(() => {
+        if(length == 1) {
             result = Array(snapshot[start])
-        })
+        }
 
-        (length > 1).ifTrue(() => {
+        if(length > 1) {
             middle: start + length.div(2)
             left: sortRange(start, middle)
             right: sortRange(middle, end)
             result = merge(left, right)
-        })
+        }
 
         result
     }
@@ -273,9 +273,9 @@ sort: (array, less) => {
 parallelMap: (array, worker, ...arguments) => {
     snapshot: Array(...array)
 
-    (snapshot.size() == 0).ifTrue(() => {
+    if(snapshot.size() == 0) {
         ^(() => { Array() }).future()
-    })
+    }
 
     input: ((bundle) => {
         bundle
@@ -312,9 +312,9 @@ parallelMap: (array, worker, ...arguments) => {
 parallelFilter: (array, predicate, ...arguments) => {
     snapshot: Array(...array)
 
-    (snapshot.size() == 0).ifTrue(() => {
+    if(snapshot.size() == 0) {
         ^(() => { Array() }).future()
-    })
+    }
 
     input: ((bundle) => {
         bundle
@@ -356,9 +356,9 @@ parallelFilter: (array, predicate, ...arguments) => {
 parallelFindIndex: (array, predicate, ...arguments) => {
     snapshot: Array(...array)
 
-    (snapshot.size() == 0).ifTrue(() => {
+    if(snapshot.size() == 0) {
         ^(() => { null }).future()
-    })
+    }
 
     input: ((bundle) => {
         bundle
@@ -398,9 +398,9 @@ parallelFindIndex: (array, predicate, ...arguments) => {
 parallelReduce: (array, reducer, ...arguments) => {
     snapshot: Array(...array)
 
-    (snapshot.size() == 0).ifTrue(() => {
+    if(snapshot.size() == 0) {
         ^(() => { null }).future()
-    })
+    }
 
     // Groups one round's values into adjacent pairs, ending with a singleton
     // when the round has an odd final value.
@@ -411,18 +411,18 @@ parallelReduce: (array, reducer, ...arguments) => {
             length: end - start
             result: null
 
-            (length == 1).ifTrue(() => {
+            if(length == 1) {
                 position: start * 2
                 result = Array(Array(values[position]))
-                (position + 1 < size).ifTrue(() => {
+                if(position + 1 < size) {
                     result = Array(Array(values[position], values[position + 1]))
-                })
-            })
+                }
+            }
 
-            (length > 1).ifTrue(() => {
+            if(length > 1) {
                 middle: start + length.div(2)
                 result = Array(...pairRange(start, middle), ...pairRange(middle, end))
-            })
+            }
 
             result
         }
@@ -433,9 +433,9 @@ parallelReduce: (array, reducer, ...arguments) => {
     combine: (pair, callback, ...extra) => {
         result: pair[0]
 
-        (pair.size() == 2).ifTrue(() => {
+        if(pair.size() == 2) {
             result = callback(pair[0], pair[1], ...extra)
-        })
+        }
 
         result
     }
@@ -467,9 +467,9 @@ parallelReduce: (array, reducer, ...arguments) => {
 parallelSort: (array, less, ...arguments) => {
     snapshot: Array(...array)
 
-    (snapshot.size() == 0).ifTrue(() => {
+    if(snapshot.size() == 0) {
         ^(() => { Array() }).future()
-    })
+    }
 
     input: ((bundle) => {
         bundle

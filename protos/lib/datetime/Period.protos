@@ -139,9 +139,9 @@ addToDate: (period, date) => {
     // a positive divisor.
     floorDiv: (dividend, divisor) => {
         quotient: dividend.div(divisor)
-        ((dividend - quotient * divisor) < 0).ifTrue(() => {
+        if((dividend - quotient * divisor) < 0) {
             quotient = quotient - 1
-        })
+        }
         quotient
     }
 
@@ -156,31 +156,31 @@ addToDate: (period, date) => {
 
     leap: ((year % 4) == 0) && (((year % 100) != 0) || ((year % 400) == 0))
     length: 31
-    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+    if((month == 4) || (month == 6) || (month == 9) || (month == 11)) {
         length = 30
-    })
-    (month == 2).ifTrue(() => {
+    }
+    if(month == 2) {
         length = 28
-        leap.ifTrue(() => {
+        if(leap) {
             length = 29
-        })
-    })
+        }
+    }
     // The single clamp of the ratified application order.
     day: date.day
-    (day > length).ifTrue(() => {
+    if(day > length) {
         day = length
-    })
+    }
 
     // Days are counted in 400-year eras of 146097 days, with years starting on
     // 1 March so that the leap day ends each year.
     shiftedYear: year
-    (month <= 2).ifTrue(() => {
+    if(month <= 2) {
         shiftedYear = year - 1
-    })
+    }
     shiftedMonth: month - 3
-    (month <= 2).ifTrue(() => {
+    if(month <= 2) {
         shiftedMonth = month + 9
-    })
+    }
     era: floorDiv(shiftedYear, 400)
     yearOfEra: shiftedYear - era * 400
     dayOfYear: (153 * shiftedMonth + 2).div(5) + day - 1
@@ -197,13 +197,13 @@ addToDate: (period, date) => {
     resultShiftedMonth: (5 * resultDayOfYear + 2).div(153)
     resultDay: resultDayOfYear - (153 * resultShiftedMonth + 2).div(5) + 1
     resultMonth: resultShiftedMonth + 3
-    (resultShiftedMonth >= 10).ifTrue(() => {
+    if(resultShiftedMonth >= 10) {
         resultMonth = resultShiftedMonth - 9
-    })
+    }
     resultYear: resultYearOfEra + resultEra * 400
-    (resultMonth <= 2).ifTrue(() => {
+    if(resultMonth <= 2) {
         resultYear = resultYear + 1
-    })
+    }
 
     // Date construction performs the final range check.
     Date(resultYear, resultMonth, resultDay)

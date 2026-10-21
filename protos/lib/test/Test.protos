@@ -21,9 +21,9 @@ call: (name, body) => {
         fail()
     })
 
-    (name == "").ifTrue(() => {
+    if(name == "") {
         fail()
-    })
+    }
 
     test: {
         name: name

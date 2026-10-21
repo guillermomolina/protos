@@ -33,10 +33,10 @@ tests: Array(
             (order[3] === 3).ifFalse(() => { ok = false })
             (IdentitySet.size(intersection) == 1).ifFalse(() => { ok = false })
             IdentitySet.contains(intersection, 2).ifFalse(() => { ok = false })
-            IdentitySet.contains(intersection, 1).ifTrue(() => { ok = false })
+            if(IdentitySet.contains(intersection, 1)) { ok = false }
             (IdentitySet.size(difference) == 1).ifFalse(() => { ok = false })
             IdentitySet.contains(difference, 1).ifFalse(() => { ok = false })
-            IdentitySet.sameMembers(IdentitySet(1), IdentitySet(1.0)).ifTrue(() => { ok = false })
+            if(IdentitySet.sameMembers(IdentitySet(1), IdentitySet(1.0))) { ok = false }
             IdentitySet.isDisjoint(IdentitySet(1), IdentitySet(1.0)).ifFalse(() => { ok = false })
             ok
         }

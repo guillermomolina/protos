@@ -47,9 +47,9 @@ tests: Array(
             calls: 0
 
             sorted: Arrays.sort(source, (left, right) => {
-                (calls == 0).ifTrue(() => {
+                if(calls == 0) {
                     source[0] = 99
-                })
+                }
                 trace[calls] = left * 10 + right
                 calls = calls + 1
                 left < right

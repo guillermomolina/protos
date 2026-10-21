@@ -33,24 +33,24 @@ tests: [
         (c.upper.inclusive === false).ifFalse(() => { ok = false })
         Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.4.2").ifFalse(() => { ok = false })
         Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.7.9").ifFalse(() => { ok = false })
-        Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.4.1").ifTrue(() => { ok = false })
-        Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.8.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.4.1")) { ok = false }
+        if(Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.8.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-interval-exclusive-inclusive", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
-        Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.4.2").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.4.2")) { ok = false }
         Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.4.3").ifFalse(() => { ok = false })
         Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.7.9").ifFalse(() => { ok = false })
-        Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.8.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">1.4.2 <=1.7.9", "1.8.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-interval-reversed-conjunction", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
         Constraint.satisfiesText("<2.0.0 >=1.0.0", "1.5.0").ifFalse(() => { ok = false })
-        Constraint.satisfiesText("<2.0.0 >=1.0.0", "2.0.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("<2.0.0 >=1.0.0", "2.0.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-interval-tab-separator", () => {
@@ -72,7 +72,7 @@ tests: [
     Test("constraint-interval-candidate-prerelease-deferred-error", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
-        Constraint.satisfiesText(">=1.0.0 <2.0.0", "1.5.0-beta.1").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">=1.0.0 <2.0.0", "1.5.0-beta.1")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-interval-open-lower-error", () => {

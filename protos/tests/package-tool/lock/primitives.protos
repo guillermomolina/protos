@@ -23,8 +23,8 @@ tests: [
         ok: tokens.size() == 2
         (tokens[0].text == "lock-format").ifFalse(() => { ok = false })
         (tokens[1].text == "1").ifFalse(() => { ok = false })
-        tokens[0].quoted.ifTrue(() => { ok = false })
-        tokens[1].quoted.ifTrue(() => { ok = false })
+        if(tokens[0].quoted) { ok = false }
+        if(tokens[1].quoted) { ok = false }
         Assertions.require(ok)
     }),
     Test("primitive-decimal", () => {

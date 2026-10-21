@@ -18,7 +18,7 @@
 absolute: (n) => {
     result: n
 
-    (n < 0).ifTrue() {
+    if(n < 0) {
         result = 0 - n
     }
 

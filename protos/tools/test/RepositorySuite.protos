@@ -306,17 +306,17 @@ pathDirectory: (casePath) => {
     index: 0
     while(index < casePath.size()) {
         character: casePath[index]
-        (character == "/").ifTrue(() => {
-            (pending.size() == 0).ifTrue(() => {
+        if(character == "/") {
+            if(pending.size() == 0) {
                 policyError()
-            })
-            separatorFound.ifTrue(() => {
+            }
+            if(separatorFound) {
                 directory = directory + "/"
-            })
+            }
             directory = directory + pending
             pending = ""
             separatorFound = true
-        })
+        }
         (character == "/").ifFalse(() => {
             pending = pending + character
         })
@@ -332,17 +332,17 @@ pathDirectory: (casePath) => {
 groupOwnsDirectory: (group, directory) => {
     owns: false
     group.subtrees.each((subtree) => {
-        (directory == subtree).ifTrue(() => {
+        if(directory == subtree) {
             owns = true
-        })
-        hasPrefix(directory, subtree + "/").ifTrue(() => {
+        }
+        if(hasPrefix(directory, subtree + "/")) {
             owns = true
-        })
+        }
     })
     group.directories.each((exact) => {
-        (directory == exact).ifTrue(() => {
+        if(directory == exact) {
             owns = true
-        })
+        }
     })
     owns
 }
@@ -353,9 +353,9 @@ selectorDirectory: (selector) => {
     (selector.size() > 0).ifFalse(() => {
         policyError()
     })
-    (selector[selector.size() - 1] == "/").ifTrue(() => {
+    if(selector[selector.size() - 1] == "/") {
         policyError()
-    })
+    }
     pathDirectory(selector)
 }
 
@@ -366,9 +366,9 @@ conformanceDescriptorIndex: (casePath) => {
     descriptorIndex: 0
 
     conformanceProgressGroups.each((group) => {
-        groupOwnsDirectory(group, directory).ifTrue(() => {
+        if(groupOwnsDirectory(group, directory)) {
             matches = Array(...matches, descriptorIndex)
-        })
+        }
         descriptorIndex = descriptorIndex + 1
     })
 
@@ -380,9 +380,9 @@ conformanceDescriptorIndex: (casePath) => {
 
 caseGroupName: (group, selector) => {
     name: group.name
-    group.subdivided.ifTrue(() => {
+    if(group.subdivided) {
         name = name + "/" + selectorDirectory(selector)
-    })
+    }
     name
 }
 
@@ -403,7 +403,7 @@ progressGroupAssignment: (leaf, caseKeys) => {
     names: null
     caseGroupIndexes: null
 
-    isConformanceLeaf(leaf).ifTrue(() => {
+    if(isConformanceLeaf(leaf)) {
         // Every casePath is validated against the descriptors before any
         // selector is examined.
         caseDescriptorIndexes: Arrays.map(caseKeys, (key) => {
@@ -422,14 +422,14 @@ progressGroupAssignment: (leaf, caseKeys) => {
             (ignoredPath, selector): key
             caseName: caseGroupName(caseGroup, selector)
             caseNames[caseIndex] = caseName
-            caseGroup.subdivided.ifTrue(() => {
+            if(caseGroup.subdivided) {
                 seen: descriptorSeen[caseDescriptorIndex]
                 seen.containsKey(caseName).ifFalse(() => {
                     seen[caseName] = true
                     descriptorSubgroups[caseDescriptorIndex] =
                         Array(...descriptorSubgroups[caseDescriptorIndex], caseName)
                 })
-            })
+            }
             caseIndex = caseIndex + 1
         })
 
@@ -446,14 +446,14 @@ progressGroupAssignment: (leaf, caseKeys) => {
                     known[group.name] = names.size() - 1
                 })
             })
-            group.subdivided.ifTrue(() => {
+            if(group.subdivided) {
                 descriptorSubgroups[descriptorIndex].each((name) => {
                     known.containsKey(name).ifFalse(() => {
                         names = Array(...names, name)
                         known[name] = names.size() - 1
                     })
                 })
-            })
+            }
             descriptorIndex = descriptorIndex + 1
         })
 
@@ -463,7 +463,7 @@ progressGroupAssignment: (leaf, caseKeys) => {
             })
             known[name]
         })
-    })
+    }
     isConformanceLeaf(leaf).ifFalse(() => {
         names = Array(ordinaryProgressGroupName(leaf))
         caseGroupIndexes = Arrays.map(caseKeys, (ignored) => 0)
@@ -490,13 +490,13 @@ progressGroupNames: (leaf, caseKeys) => {
 progressGroupName: (leaf, casePath, selector) => {
     name: null
 
-    isConformanceLeaf(leaf).ifTrue(() => {
+    if(isConformanceLeaf(leaf)) {
         name =
             caseGroupName(
                 conformanceProgressGroups[conformanceDescriptorIndex(casePath)],
                 selector
             )
-    })
+    }
     isConformanceLeaf(leaf).ifFalse(() => {
         name = ordinaryProgressGroupName(leaf)
     })
@@ -510,8 +510,8 @@ progressGroupName: (leaf, casePath, selector) => {
 progressGroupIndex: (leaf, names, casePath, selector) => {
     name: progressGroupName(leaf, casePath, selector)
     groupIndex: Arrays.findIndex(names, (candidate) => candidate == name)
-    (groupIndex === null).ifTrue(() => {
+    if(groupIndex === null) {
         policyError()
-    })
+    }
     groupIndex
 }

@@ -121,9 +121,9 @@ run: (
                         CasePlan.selector(entry)
                     ).value()
             }, (error) => {
-                (error.parent() === Cancelled).ifTrue(() => {
+                if(error.parent() === Cancelled) {
                     error.signal()
-                })
+                }
 
                 completion = executionErrorCompletion(error)
             })
@@ -150,9 +150,9 @@ run: (
     }
 
     laneCount: maxInFlight
-    (laneCount > workItems.size()).ifTrue(() => {
+    if(laneCount > workItems.size()) {
         laneCount = workItems.size()
-    })
+    }
 
     lanes: Array()
 

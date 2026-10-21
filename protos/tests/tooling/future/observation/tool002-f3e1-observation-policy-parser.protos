@@ -22,16 +22,16 @@ freshError: Runner.parseFutureObservationPolicy("fresh:Error")
 passed:
     (Runner.futureObservationPolicyMode(stored) === "stored") &&
     (Runner.futureObservationPolicyParent(stored) === Error)
-passed.ifTrue(() => {
+if(passed) {
     passed =
         (Runner.futureObservationPolicyMode(fresh) === "fresh") &&
         (Runner.futureObservationPolicyParent(fresh) === Cancelled)
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed =
         (Runner.futureObservationPolicyMode(freshError) === "fresh") &&
         (Runner.futureObservationPolicyParent(freshError) === Error)
-})
+}
 
 rejected: (payload) => {
     caughtPolicyError: false
@@ -48,11 +48,11 @@ rejected: (payload) => {
     caughtPolicyError
 }
 
-passed.ifTrue(() => { passed = rejected("stored") })
-passed.ifTrue(() => { passed = rejected(":Error") })
-passed.ifTrue(() => { passed = rejected("stored:") })
-passed.ifTrue(() => { passed = rejected("stored:Error:Cancelled") })
-passed.ifTrue(() => { passed = rejected("cached:Error") })
-passed.ifTrue(() => { passed = rejected("fresh:NotAStandardError") })
+if(passed) { passed = rejected("stored") }
+if(passed) { passed = rejected(":Error") }
+if(passed) { passed = rejected("stored:") }
+if(passed) { passed = rejected("stored:Error:Cancelled") }
+if(passed) { passed = rejected("cached:Error") }
+if(passed) { passed = rejected("fresh:NotAStandardError") }
 
 passed

@@ -59,9 +59,9 @@ newState: (catalog) => {
 
     catalog.each((entry) => {
         key: ResourceCatalog.entryKey(entry)
-        pools.containsKey(key).ifTrue(() => {
+        if(pools.containsKey(key)) {
             fail()
-        })
+        }
 
         capacity: ResourceCatalog.entryCapacity(entry)
         Integer.recognizes(capacity).ifFalse(() => {
@@ -123,22 +123,22 @@ canReserveBinding: (state, bindingValue) => {
     allowed: false
     knownMode: false
 
-    (mode == "shared").ifTrue(() => {
+    if(mode == "shared") {
         used: poolSharedUsed(poolValue)
         allowed = poolExclusiveHeld(poolValue).not()
-        allowed.ifTrue(() => {
+        if(allowed) {
             allowed = (used + units) <= capacity
-        })
+        }
         knownMode = true
-    })
+    }
 
-    (mode == "exclusive").ifTrue(() => {
+    if(mode == "exclusive") {
         allowed = poolExclusiveHeld(poolValue).not()
-        allowed.ifTrue(() => {
+        if(allowed) {
             allowed = poolSharedUsed(poolValue) == 0
-        })
+        }
         knownMode = true
-    })
+    }
 
     knownMode.ifFalse(() => {
         fail()
@@ -152,15 +152,15 @@ commitBinding: (state, bindingValue) => {
     poolValue: poolForBinding(state, bindingValue)
     mode: Manifest.requirementMode(requirementValue)
 
-    (mode == "shared").ifTrue(() => {
+    if(mode == "shared") {
         poolValue[1] =
             poolSharedUsed(poolValue) +
             Manifest.requirementUnits(requirementValue)
-    })
+    }
 
-    (mode == "exclusive").ifTrue(() => {
+    if(mode == "exclusive") {
         poolValue[2] = true
-    })
+    }
 
     true
 }
@@ -173,26 +173,26 @@ tryReserve: (bindings, state) => {
     available: true
 
     bindings.each((bindingValue) => {
-        available.ifTrue(() => {
+        if(available) {
             canReserveBinding(state, bindingValue).ifFalse(() => {
                 available = false
             })
-        })
+        }
     })
 
     result: null
-    available.ifTrue(() => {
+    if(available) {
         result = reservation(bindings)
 
         // Resource-free cases remain pay-for-use: there is no live occupancy
         // and no active-reservation registry entry for an empty reservation.
-        (bindings.size() > 0).ifTrue(() => {
+        if(bindings.size() > 0) {
             bindings.each((bindingValue) => {
                 commitBinding(state, bindingValue)
             })
             stateActiveReservations(state)[result] = true
-        })
-    })
+        }
+    }
 
     result
 }
@@ -203,20 +203,20 @@ validateReleaseBinding: (state, bindingValue) => {
     mode: Manifest.requirementMode(requirementValue)
     valid: false
 
-    (mode == "shared").ifTrue(() => {
+    if(mode == "shared") {
         units: Manifest.requirementUnits(requirementValue)
         valid = poolExclusiveHeld(poolValue).not()
-        valid.ifTrue(() => {
+        if(valid) {
             valid = poolSharedUsed(poolValue) >= units
-        })
-    })
+        }
+    }
 
-    (mode == "exclusive").ifTrue(() => {
+    if(mode == "exclusive") {
         valid = poolExclusiveHeld(poolValue)
-        valid.ifTrue(() => {
+        if(valid) {
             valid = poolSharedUsed(poolValue) == 0
-        })
-    })
+        }
+    }
 
     valid.ifFalse(() => {
         fail()
@@ -230,21 +230,21 @@ releaseBinding: (state, bindingValue) => {
     poolValue: poolForBinding(state, bindingValue)
     mode: Manifest.requirementMode(requirementValue)
 
-    (mode == "shared").ifTrue(() => {
+    if(mode == "shared") {
         poolValue[1] =
             poolSharedUsed(poolValue) -
             Manifest.requirementUnits(requirementValue)
-    })
+    }
 
-    (mode == "exclusive").ifTrue(() => {
+    if(mode == "exclusive") {
         poolValue[2] = false
-    })
+    }
 
     true
 }
 
 release: (reservationValue, state) => {
-    (reservationValue.size() > 0).ifTrue(() => {
+    if(reservationValue.size() > 0) {
         active: stateActiveReservations(state)
 
         // Identity ownership is checked before any pool mutation.
@@ -262,7 +262,7 @@ release: (reservationValue, state) => {
         })
 
         active.remove(reservationValue)
-    })
+    }
 
     true
 }

@@ -36,9 +36,9 @@ tests: [
     Test("constraint-exact-stable-mismatch", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
-        Constraint.satisfiesText("1.4.2", "1.4.3").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("1.4.2", "1.5.2").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("1.4.2", "2.4.2").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("1.4.2", "1.4.3")) { ok = false }
+        if(Constraint.satisfiesText("1.4.2", "1.5.2")) { ok = false }
+        if(Constraint.satisfiesText("1.4.2", "2.4.2")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-exact-prerelease-match", () => {
@@ -48,8 +48,8 @@ tests: [
     Test("constraint-exact-prerelease-distinct", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
-        Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.2").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("2.0.0-rc.1", "2.0.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.2")) { ok = false }
+        if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-partial-rejected-error", () => {

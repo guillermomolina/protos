@@ -42,27 +42,27 @@ validateNamespacedId: (value) => {
     validateString(value)
     source: Encoding.UTF8.encode(value)
     size: source.size()
-    (size == 0).ifTrue(() => {
+    if(size == 0) {
         fail()
-    })
+    }
 
     segmentStart: true
     index: 0
     while(index < size) {
         octet: source[index]
 
-        (octet == 47).ifTrue(() => {
-            segmentStart.ifTrue(() => {
+        if(octet == 47) {
+            if(segmentStart) {
                 fail()
-            })
+            }
             segmentStart = true
-        })
+        }
 
         (octet == 47).ifFalse(() => {
             allowed: false
-            segmentStart.ifTrue(() => {
+            if(segmentStart) {
                 allowed = isIdSegmentStartOctet(octet)
-            })
+            }
             segmentStart.ifFalse(() => {
                 allowed = isIdSegmentTailOctet(octet)
             })
@@ -75,9 +75,9 @@ validateNamespacedId: (value) => {
         index = index + 1
     }
 
-    segmentStart.ifTrue(() => {
+    if(segmentStart) {
         fail()
-    })
+    }
     value
 }
 
@@ -153,17 +153,17 @@ flatten: (root, leafProjection) => {
     carryChunk = (builder, chunk, level) => {
         present: builder.chunks.containsKey(level)
 
-        present.ifTrue(() => {
+        if(present) {
             left: builder.chunks[level]
             builder.chunks.remove(level)
             carryChunk(builder, Array(...left, ...chunk), level + 1)
-        })
+        }
 
         present.ifFalse(() => {
             builder.chunks[level] = chunk
-            (level > builder.maxLevel).ifTrue(() => {
+            if(level > builder.maxLevel) {
                 builder.maxLevel = level
-            })
+            }
         })
     }
 
@@ -175,13 +175,13 @@ flatten: (root, leafProjection) => {
     collectChunks = (builder, level, result) => {
         finalResult: result
 
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            builder.chunks.containsKey(level).ifTrue(() => {
+            if(builder.chunks.containsKey(level)) {
                 nextResult = Array(...result, ...builder.chunks[level])
-            })
+            }
             finalResult = collectChunks(builder, level - 1, nextResult)
-        })
+        }
 
         finalResult
     }
@@ -200,16 +200,16 @@ flatten: (root, leafProjection) => {
     builder: newBuilder()
     visit: null
     visit = (node) => {
-        visiting.containsKey(node).ifTrue(() => {
+        if(visiting.containsKey(node)) {
             fail()
-        })
+        }
 
         kindValue: validateString(required(node, "kind"))
         idValue: validateSuiteId(required(node, "id"))
 
-        ids.containsKey(idValue).ifTrue(() => {
+        if(ids.containsKey(idValue)) {
             fail()
-        })
+        }
         ids[idValue] = true
         visiting[node] = true
 
@@ -220,7 +220,7 @@ flatten: (root, leafProjection) => {
 
         childrenValue: validateArray(required(node, "children"))
 
-        (kindValue == "leaf").ifTrue(() => {
+        if(kindValue == "leaf") {
             (childrenValue.size() == 0).ifFalse(() => {
                 fail()
             })
@@ -229,15 +229,15 @@ flatten: (root, leafProjection) => {
                 required(node, "executionRequirement")
             )
             appendBuilt(builder, leafProjection(node))
-        })
+        }
 
-        (kindValue == "suite").ifTrue(() => {
+        if(kindValue == "suite") {
             index: 0
             while(index < childrenValue.size()) {
                 visit(childrenValue[index])
                 index = index + 1
             }
-        })
+        }
 
         visiting.remove(node)
     }

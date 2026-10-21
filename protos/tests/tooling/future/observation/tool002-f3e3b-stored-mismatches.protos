@@ -42,19 +42,19 @@ parentMismatchSource:
 inertFalse: (evaluation) => {
     observation: Runner.resultObservation(evaluation)
     passed: Runner.resultPassed(evaluation) === false
-    passed.ifTrue(() => { passed = observation.state === "completed" })
-    passed.ifTrue(() => { passed = observation.error === null })
-    passed.ifTrue(() => { passed = observation.value === false })
+    if(passed) { passed = observation.state === "completed" }
+    if(passed) { passed = observation.error === null }
+    if(passed) { passed = observation.value === false }
     passed
 }
 
 passed: inertFalse(
     Runner.evaluateFutureObservation(spec, identityMismatchSource, executionInspect)
 )
-passed.ifTrue(() => {
+if(passed) {
     passed = inertFalse(
         Runner.evaluateFutureObservation(spec, parentMismatchSource, executionInspect)
     )
-})
+}
 
 passed

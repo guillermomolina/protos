@@ -118,17 +118,17 @@ tests: [
 
         quiet: recorder()
         quietLogger: Logger(Level.INFO, quiet)
-        quietLogger.isEnabled(Level.DEBUG).ifTrue(() => {
+        if(quietLogger.isEnabled(Level.DEBUG)) {
             quietLogger.debug("expensive diagnostics", buildFields())
-        })
+        }
         Assertions.require(builds == 0)
         Assertions.require(quiet.events.size() == 0)
 
         verbose: recorder()
         verboseLogger: Logger(Level.DEBUG, verbose)
-        verboseLogger.isEnabled(Level.DEBUG).ifTrue(() => {
+        if(verboseLogger.isEnabled(Level.DEBUG)) {
             verboseLogger.debug("expensive diagnostics", buildFields())
-        })
+        }
         Assertions.require(builds == 1)
         Assertions.require(verbose.events.size() == 1)
         Assertions.require(verbose.events[0].fields["report"].size() == 3)

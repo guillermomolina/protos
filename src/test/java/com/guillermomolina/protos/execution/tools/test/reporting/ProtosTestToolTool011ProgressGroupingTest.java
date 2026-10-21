@@ -119,7 +119,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         // Grouping is a projection over the final retained Logical Cases and
         // never runs on the --list-cases path.
         int requireComplete = main.indexOf("CaseSelection.requireComplete(caseSelection)");
-        int listOnly = main.indexOf("listCases.ifTrue(");
+        int listOnly = main.indexOf("if(listCases) {");
         int executing = main.indexOf("listCases.ifFalse(");
         int grouping = main.indexOf("RepositorySuite.progressGroupAssignment(");
         int progressStart = main.indexOf("startProgress(", grouping);

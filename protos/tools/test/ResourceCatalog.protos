@@ -64,9 +64,9 @@ positiveIntegerValue: (node) => {
     Integer.recognizes(value).ifFalse(() => {
         fail()
     })
-    (value <= 0).ifTrue(() => {
+    if(value <= 0) {
         fail()
-    })
+    }
     value
 }
 
@@ -128,7 +128,7 @@ parse: (text) => {
     catalogEntries: Array()
     seenKeys: Map()
 
-    rootEntries.containsKey("resource").ifTrue(() => {
+    if(rootEntries.containsKey("resource")) {
         resourceNodes: rootEntries["resource"]
         (resourceNodes.kind == "array").ifFalse(() => {
             fail()
@@ -150,9 +150,9 @@ parse: (text) => {
             scope: stringValue(requiredNode(entries, "scope"))
 
             knownScope: scope == "placement"
-            (scope == "run").ifTrue(() => {
+            if(scope == "run") {
                 knownScope = true
-            })
+            }
             knownScope.ifFalse(() => {
                 fail()
             })
@@ -160,13 +160,13 @@ parse: (text) => {
             provider: logicalIdentityValue(requiredNode(entries, "provider"))
 
             profile: null
-            entries.containsKey("profile").ifTrue(() => {
+            if(entries.containsKey("profile")) {
                 profile = logicalIdentityValue(entries["profile"])
-            })
+            }
 
-            seenKeys.containsKey(key).ifTrue(() => {
+            if(seenKeys.containsKey(key)) {
                 fail()
-            })
+            }
             seenKeys[key] = true
 
             catalogEntries = Array(
@@ -174,7 +174,7 @@ parse: (text) => {
                 catalogEntry(key, capacity, scope, provider, profile)
             )
         })
-    })
+    }
 
     frozenTuple(...catalogEntries)
 }

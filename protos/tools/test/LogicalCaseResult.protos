@@ -45,32 +45,32 @@ classificationForCompletion: (completion) => {
 
     classification: null
 
-    (phase == "rematerialization-error").ifTrue(() => {
+    if(phase == "rematerialization-error") {
         classification = "tool-error"
-    })
+    }
 
     // BUG020: the logical Case's execution itself failed (LogicalCaseRunner).
-    (phase == "execution-error").ifTrue(() => {
+    if(phase == "execution-error") {
         classification = "tool-error"
-    })
+    }
 
-    (phase == "case-execution").ifTrue(() => {
-        (state == "completed").ifTrue(() => {
+    if(phase == "case-execution") {
+        if(state == "completed") {
             classification = "pass"
-        })
+        }
 
-        (state == "failed").ifTrue(() => {
+        if(state == "failed") {
             classification = "fail"
-        })
+        }
 
-        (state == "cancelled").ifTrue(() => {
+        if(state == "cancelled") {
             classification = "tool-error"
-        })
-    })
+        }
+    }
 
-    (classification === null).ifTrue(() => {
+    if(classification === null) {
         policyError()
-    })
+    }
 
     classification
 }
@@ -114,23 +114,23 @@ exitCode: (results) => {
     results.each((result) => {
         kind: classification(result)
 
-        (kind == "fail").ifTrue(() => {
-            (code == 0).ifTrue(() => {
+        if(kind == "fail") {
+            if(code == 0) {
                 code = 1
-            })
-        })
+            }
+        }
 
-        (kind == "tool-error").ifTrue(() => {
+        if(kind == "tool-error") {
             code = 3
-        })
+        }
 
-        (
+        if(
             !(kind == "pass") &&
             !(kind == "fail") &&
             !(kind == "tool-error")
-        ).ifTrue(() => {
+        ) {
             policyError()
-        })
+        }
     })
 
     code

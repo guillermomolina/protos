@@ -53,9 +53,9 @@ readAllBytes: (filesystem, path) => {
                 chunks: Future.all(...pending).value()
                 chunks.each((chunk) => {
                     done.ifFalse(() => {
-                        (chunk === null).ifTrue(() => {
+                        if(chunk === null) {
                             done = true
-                        })
+                        }
                         (chunk === null).ifFalse(() => {
                             chunk.each((octet) => {
                                 bytes.add(octet)
@@ -76,7 +76,7 @@ readAllBytes: (filesystem, path) => {
             // the successful File result may already have committed without
             // having been assigned to `file`. Observe that retained Future
             // under ensure cleanup and close any late successful acquisition.
-            (file === null).ifTrue(() => {
+            if(file === null) {
                 (openFuture === null).ifFalse(() => {
                     openFuture.cancel()
                     lateFile: Error.handle(
@@ -87,7 +87,7 @@ readAllBytes: (filesystem, path) => {
                         lateFile.close().value()
                     })
                 })
-            })
+            }
 
             (file === null).ifFalse(() => {
                 file.close().value()
@@ -127,9 +127,9 @@ writeAllBytes: (filesystem, path, bytes) => {
             while(offset < snapshotSize) {
                 remaining: snapshotSize - offset
                 chunkSize: 65536
-                (remaining < chunkSize).ifTrue(() => {
+                if(remaining < chunkSize) {
                     chunkSize = remaining
-                })
+                }
 
                 chunk: Encoding.UTF8.encode("")
                 chunkIndex: 0
@@ -150,7 +150,7 @@ writeAllBytes: (filesystem, path, bytes) => {
             // Reuse the strong acquisition-custody pattern closed by LIB004-A:
             // if cancellation/failure wins while open is pending, retain and
             // observe that exact Future so a post-commit File cannot be orphaned.
-            (file === null).ifTrue(() => {
+            if(file === null) {
                 (openFuture === null).ifFalse(() => {
                     openFuture.cancel()
                     lateFile: Error.handle(
@@ -161,7 +161,7 @@ writeAllBytes: (filesystem, path, bytes) => {
                         lateFile.close().value()
                     })
                 })
-            })
+            }
 
             (file === null).ifFalse(() => {
                 file.close().value()

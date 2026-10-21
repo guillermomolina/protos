@@ -31,7 +31,7 @@ tests: Array(
             (endpoint.address === address).ifFalse(() => { ok = false })
             (endpoint.port == 1).ifFalse(() => { ok = false })
             (maxPort.port == 65535).ifFalse(() => { ok = false })
-            (endpoint === fresh).ifTrue(() => { ok = false })
+            if(endpoint === fresh) { ok = false }
             IpEndpoint.recognizes(endpoint).ifFalse(() => { ok = false })
             IpEndpoint.recognizes(maxPort).ifFalse(() => { ok = false })
 
@@ -100,11 +100,11 @@ tests: Array(
             ok: true
 
             IpEndpoint.recognizes(canonical).ifFalse(() => { ok = false })
-            IpEndpoint.recognizes(openExactShape).ifTrue(() => { ok = false })
-            IpEndpoint.recognizes(wrongParent).ifTrue(() => { ok = false })
-            IpEndpoint.recognizes(derived).ifTrue(() => { ok = false })
-            IpEndpoint.recognizes(address).ifTrue(() => { ok = false })
-            IpEndpoint.recognizes(80).ifTrue(() => { ok = false })
+            if(IpEndpoint.recognizes(openExactShape)) { ok = false }
+            if(IpEndpoint.recognizes(wrongParent)) { ok = false }
+            if(IpEndpoint.recognizes(derived)) { ok = false }
+            if(IpEndpoint.recognizes(address)) { ok = false }
+            if(IpEndpoint.recognizes(80)) { ok = false }
 
             wrongReceiverRejected: Error.handle(
                 () => {
@@ -141,11 +141,11 @@ tests: Array(
             ok: true
 
             (left == same).ifFalse(() => { ok = false })
-            (left === same).ifTrue(() => { ok = false })
-            (left.address === same.address).ifTrue(() => { ok = false })
-            (left == differentPort).ifTrue(() => { ok = false })
-            (left == differentIp).ifTrue(() => { ok = false })
-            (left == {}).ifTrue(() => { ok = false })
+            if(left === same) { ok = false }
+            if(left.address === same.address) { ok = false }
+            if(left == differentPort) { ok = false }
+            if(left == differentIp) { ok = false }
+            if(left == {}) { ok = false }
             (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
             endpoints[left] = 91
@@ -196,7 +196,7 @@ tests: Array(
 
         derived: IpEndpoint {}
         reject(() => { derived(address, 80) }).ifFalse(() => { ok = false })
-        derived.hasSlot("port").ifTrue(() => { ok = false })
+        if(derived.hasSlot("port")) { ok = false }
 
         Assertions.require(ok)
     }),
@@ -272,7 +272,7 @@ tests: Array(
             zeroPort,
             derivedChild
         ).each((candidate) => {
-            IpEndpoint.recognizes(candidate).ifTrue(() => { ok = false })
+            if(IpEndpoint.recognizes(candidate)) { ok = false }
         })
 
         manual: IpEndpoint {
@@ -328,9 +328,9 @@ tests: Array(
         reject(() => { derived.hash() }).ifFalse(() => { ok = false })
         reject(() => { IpEndpoint.hash() }).ifFalse(() => { ok = false })
 
-        (endpoint == derived).ifTrue(() => { ok = false })
-        (endpoint == endpoint.address).ifTrue(() => { ok = false })
-        (endpoint == 80).ifTrue(() => { ok = false })
+        if(endpoint == derived) { ok = false }
+        if(endpoint == endpoint.address) { ok = false }
+        if(endpoint == 80) { ok = false }
 
         Assertions.require(ok)
     })

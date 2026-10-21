@@ -43,21 +43,21 @@ IpAddress: {
             Error().signal()
         })
 
-        (bits < 0).ifTrue(() => {
+        if(bits < 0) {
             Error().signal()
-        })
+        }
 
-        (version == 4).ifTrue(() => {
-            (bits > 4294967295).ifTrue(() => {
+        if(version == 4) {
+            if(bits > 4294967295) {
                 Error().signal()
-            })
-        })
+            }
+        }
 
-        (version == 6).ifTrue(() => {
-            (bits > 340282366920938463463374607431768211455).ifTrue(() => {
+        if(version == 6) {
+            if(bits > 340282366920938463463374607431768211455) {
                 Error().signal()
-            })
-        })
+            }
+        }
 
         address: (_coreIpAddressCanonical) {
             version: version
@@ -73,11 +73,11 @@ IpAddress: {
         })
 
         result: false
-        _coreIpAddressCanonical.recognizes(other).ifTrue(() => {
+        if(_coreIpAddressCanonical.recognizes(other)) {
             result =
                 (this.version == other.version) &&
                 (this.bits == other.bits)
-        })
+        }
         result
     }
 

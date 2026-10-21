@@ -22,14 +22,14 @@ emptyBytes: () => {
 }
 
 expectBare: (tokens, index, expected) => {
-    (index >= tokens.size()).ifTrue(() => {
+    if(index >= tokens.size()) {
         fail()
-    })
+    }
 
     token: tokens[index]
-    token.quoted.ifTrue(() => {
+    if(token.quoted) {
         fail()
-    })
+    }
     (token.text == expected).ifFalse(() => {
         fail()
     })
@@ -38,9 +38,9 @@ expectBare: (tokens, index, expected) => {
 }
 
 expectQuoted: (tokens, index) => {
-    (index >= tokens.size()).ifTrue(() => {
+    if(index >= tokens.size()) {
         fail()
-    })
+    }
 
     token: tokens[index]
     token.quoted.ifFalse(() => {
@@ -51,9 +51,9 @@ expectQuoted: (tokens, index) => {
 }
 
 parseContentAt: (tokens, start) => {
-    ((start + 1) >= tokens.size()).ifTrue(() => {
+    if((start + 1) >= tokens.size()) {
         fail()
-    })
+    }
 
     method: Syntax.parseMethodToken(tokens[start])
     digest: Syntax.parseDigestToken(tokens[start + 1])
@@ -194,36 +194,36 @@ parseDependencyTokens: (tokens) => {
 
 parseRecord: (line) => {
     tokens: Syntax.lineTokens(line)
-    (tokens.size() == 0).ifTrue(() => {
+    if(tokens.size() == 0) {
         fail()
-    })
+    }
 
     keyword: tokens[0]
-    keyword.quoted.ifTrue(() => {
+    if(keyword.quoted) {
         fail()
-    })
+    }
 
     result: null
 
-    (keyword.text == "root").ifTrue(() => {
+    if(keyword.text == "root") {
         result = parseRootTokens(tokens)
-    })
-    (keyword.text == "workspace-member").ifTrue(() => {
+    }
+    if(keyword.text == "workspace-member") {
         result = parseWorkspaceMemberTokens(tokens)
-    })
-    (keyword.text == "registry-node").ifTrue(() => {
+    }
+    if(keyword.text == "registry-node") {
         result = parseRegistryNodeTokens(tokens)
-    })
-    (keyword.text == "git-node").ifTrue(() => {
+    }
+    if(keyword.text == "git-node") {
         result = parseGitNodeTokens(tokens)
-    })
-    (keyword.text == "dependency").ifTrue(() => {
+    }
+    if(keyword.text == "dependency") {
         result = parseDependencyTokens(tokens)
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }
@@ -231,21 +231,21 @@ parseRecord: (line) => {
 refEquals: (left, right) => {
     equal: left.kind == right.kind
 
-    equal.ifTrue(() => {
+    if(equal) {
         equal = left.packageId == right.packageId
-    })
+    }
 
-    equal.ifTrue(() => {
-        (left.kind == "registry").ifTrue(() => {
+    if(equal) {
+        if(left.kind == "registry") {
             equal = Version.compare(left.version, right.version) == 0
-        })
-    })
+        }
+    }
 
-    equal.ifTrue(() => {
-        (left.kind == "git").ifTrue(() => {
+    if(equal) {
+        if(left.kind == "git") {
             equal = left.revision == right.revision
-        })
-    })
+        }
+    }
 
     equal
 }
@@ -259,19 +259,19 @@ documentLines: (text) => {
     current: emptyBytes()
 
     source.each((octet) => {
-        (octet == 10).ifTrue(() => {
+        if(octet == 10) {
             line: ""
-            (current.size() > 0).ifTrue(() => {
+            if(current.size() > 0) {
                 line = Encoding.UTF8.decode(current)
-            })
+            }
             lines = Array(...lines, line)
             current = emptyBytes()
-        })
+        }
 
         (octet == 10).ifFalse(() => {
-            (octet == 13).ifTrue(() => {
+            if(octet == 13) {
                 fail()
-            })
+            }
             current.add(octet)
         })
     })
@@ -279,9 +279,9 @@ documentLines: (text) => {
     (current.size() == 0).ifFalse(() => {
         fail()
     })
-    (lines.size() == 0).ifTrue(() => {
+    if(lines.size() == 0) {
         fail()
-    })
+    }
 
     lines
 }
@@ -289,33 +289,33 @@ documentLines: (text) => {
 nodeExists: (ref, root, workspaceMembers, registryNodes, gitNodes) => {
     found: false
 
-    (ref.kind == "workspace").ifTrue(() => {
-        refEquals(ref, root).ifTrue(() => {
+    if(ref.kind == "workspace") {
+        if(refEquals(ref, root)) {
             found = true
-        })
+        }
 
         workspaceMembers.each((member) => {
-            refEquals(ref, member.ref).ifTrue(() => {
+            if(refEquals(ref, member.ref)) {
                 found = true
-            })
+            }
         })
-    })
+    }
 
-    (ref.kind == "registry").ifTrue(() => {
+    if(ref.kind == "registry") {
         registryNodes.each((node) => {
-            refEquals(ref, node.ref).ifTrue(() => {
+            if(refEquals(ref, node.ref)) {
                 found = true
-            })
+            }
         })
-    })
+    }
 
-    (ref.kind == "git").ifTrue(() => {
+    if(ref.kind == "git") {
         gitNodes.each((node) => {
-            refEquals(ref, node.ref).ifTrue(() => {
+            if(refEquals(ref, node.ref)) {
                 found = true
-            })
+            }
         })
-    })
+    }
 
     found
 }
@@ -323,9 +323,9 @@ nodeExists: (ref, root, workspaceMembers, registryNodes, gitNodes) => {
 parseStructural: (text) => {
     lines: documentLines(text)
 
-    (lines.size() < 5).ifTrue(() => {
+    if(lines.size() < 5) {
         fail()
-    })
+    }
     (lines[3] == "").ifFalse(() => {
         fail()
     })
@@ -344,59 +344,59 @@ parseStructural: (text) => {
 
     index: 0
     lines.each((line) => {
-        (index >= 4).ifTrue(() => {
-            (line == "").ifTrue(() => {
+        if(index >= 4) {
+            if(line == "") {
                 fail()
-            })
+            }
 
             record: parseRecord(line)
 
-            (record.kind == "root").ifTrue(() => {
+            if(record.kind == "root") {
                 roots = Array(...roots, record)
-            })
+            }
 
-            (record.kind == "workspace-member").ifTrue(() => {
+            if(record.kind == "workspace-member") {
                 workspaceMembers.each((existing) => {
-                    (existing.declaration == record.declaration).ifTrue(() => {
+                    if(existing.declaration == record.declaration) {
                         fail()
-                    })
-                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                    }
+                    if(refEquals(existing.ref, record.ref)) {
                         fail()
-                    })
+                    }
                 })
                 workspaceMembers = Array(...workspaceMembers, record)
-            })
+            }
 
-            (record.kind == "registry-node").ifTrue(() => {
+            if(record.kind == "registry-node") {
                 registryNodes.each((existing) => {
-                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                    if(refEquals(existing.ref, record.ref)) {
                         fail()
-                    })
+                    }
                 })
                 registryNodes = Array(...registryNodes, record)
-            })
+            }
 
-            (record.kind == "git-node").ifTrue(() => {
+            if(record.kind == "git-node") {
                 gitNodes.each((existing) => {
-                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                    if(refEquals(existing.ref, record.ref)) {
                         fail()
-                    })
+                    }
                 })
                 gitNodes = Array(...gitNodes, record)
-            })
+            }
 
-            (record.kind == "dependency").ifTrue(() => {
+            if(record.kind == "dependency") {
                 dependencies.each((existing) => {
                     sameDeclaring: refEquals(existing.declaring, record.declaring)
-                    sameDeclaring.ifTrue(() => {
-                        (existing.alias == record.alias).ifTrue(() => {
+                    if(sameDeclaring) {
+                        if(existing.alias == record.alias) {
                             fail()
-                        })
-                    })
+                        }
+                    }
                 })
                 dependencies = Array(...dependencies, record)
-            })
-        })
+            }
+        }
 
         index = index + 1
     })
@@ -407,9 +407,9 @@ parseStructural: (text) => {
     root: roots[0].ref
 
     workspaceMembers.each((member) => {
-        refEquals(member.ref, root).ifTrue(() => {
+        if(refEquals(member.ref, root)) {
             fail()
-        })
+        }
     })
 
     dependencies.each((dependency) => {
@@ -452,21 +452,21 @@ bytesLess: (left, right) => {
 
     left.each((leftOctet) => {
         decided.ifFalse(() => {
-            (index < rightSize).ifTrue(() => {
+            if(index < rightSize) {
                 rightOctet: right[index]
 
-                (leftOctet < rightOctet).ifTrue(() => {
+                if(leftOctet < rightOctet) {
                     result = true
                     decided = true
-                })
+                }
 
                 decided.ifFalse(() => {
-                    (leftOctet > rightOctet).ifTrue(() => {
+                    if(leftOctet > rightOctet) {
                         result = false
                         decided = true
-                    })
+                    }
                 })
-            })
+            }
         })
 
         index = index + 1
@@ -488,19 +488,19 @@ qstringLess: (left, right) => {
 refKindRank: (ref) => {
     rank: -1
 
-    (ref.kind == "workspace").ifTrue(() => {
+    if(ref.kind == "workspace") {
         rank = 0
-    })
-    (ref.kind == "registry").ifTrue(() => {
+    }
+    if(ref.kind == "registry") {
         rank = 1
-    })
-    (ref.kind == "git").ifTrue(() => {
+    }
+    if(ref.kind == "git") {
         rank = 2
-    })
+    }
 
-    (rank < 0).ifTrue(() => {
+    if(rank < 0) {
         fail()
-    })
+    }
 
     rank
 }
@@ -511,16 +511,16 @@ refLess: (left, right) => {
     result: false
     decided: false
 
-    (leftRank < rightRank).ifTrue(() => {
+    if(leftRank < rightRank) {
         result = true
         decided = true
-    })
+    }
 
     decided.ifFalse(() => {
-        (leftRank > rightRank).ifTrue(() => {
+        if(leftRank > rightRank) {
             result = false
             decided = true
-        })
+        }
     })
 
     decided.ifFalse(() => {
@@ -533,19 +533,19 @@ refLess: (left, right) => {
     })
 
     decided.ifFalse(() => {
-        (left.kind == "registry").ifTrue(() => {
+        if(left.kind == "registry") {
             result = Version.compare(left.version, right.version) < 0
             decided = true
-        })
+        }
     })
 
     decided.ifFalse(() => {
-        (left.kind == "git").ifTrue(() => {
+        if(left.kind == "git") {
             (left.revision == right.revision).ifFalse(() => {
                 result = qstringLess(left.revision, right.revision)
             })
             decided = true
-        })
+        }
     })
 
     result

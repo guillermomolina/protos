@@ -21,28 +21,28 @@ emptyBytes: () => {
 
 isSeparator: (octet) => {
     result: octet == 32
-    (octet == 9).ifTrue(() => {
+    if(octet == 9) {
         result = true
-    })
+    }
     result
 }
 
 hasPrerelease: (version) => {
     result: true
-    (version.prerelease === null).ifTrue(() => {
+    if(version.prerelease === null) {
         result = false
-    })
+    }
     result
 }
 
 sameCore: (left, right) => {
     result: left.major == right.major
-    result.ifTrue(() => {
+    if(result) {
         result = left.minor == right.minor
-    })
-    result.ifTrue(() => {
+    }
+    if(result) {
         result = left.patch == right.patch
-    })
+    }
     result
 }
 
@@ -60,25 +60,25 @@ caretConstraint: (text, lower) => {
     upper: null
     exactZero: false
 
-    (lower.major > 0).ifTrue(() => {
+    if(lower.major > 0) {
         upper = coreVersion(lower.major + 1, 0, 0)
-    })
+    }
 
-    (lower.major == 0).ifTrue(() => {
-        (lower.minor > 0).ifTrue(() => {
+    if(lower.major == 0) {
+        if(lower.minor > 0) {
             upper = coreVersion(0, lower.minor + 1, 0)
-        })
+        }
 
-        (lower.minor == 0).ifTrue(() => {
-            (lower.patch > 0).ifTrue(() => {
+        if(lower.minor == 0) {
+            if(lower.patch > 0) {
                 upper = coreVersion(0, 0, lower.patch + 1)
-            })
+            }
 
-            (lower.patch == 0).ifTrue(() => {
+            if(lower.patch == 0) {
                 exactZero = true
-            })
-        })
-    })
+            }
+        }
+    }
 
     {
         kind: "caret"
@@ -93,27 +93,27 @@ bytesAfter: (source, start) => {
     result: emptyBytes()
     index: 0
     source.each((octet) => {
-        (index >= start).ifTrue(() => {
+        if(index >= start) {
             result.add(octet)
-        })
+        }
         index = index + 1
     })
     result
 }
 
 parseComparison: (token) => {
-    (token.size() < 2).ifTrue(() => {
+    if(token.size() < 2) {
         fail()
-    })
+    }
 
     first: token[0]
     lower: first == 62
     upper: first == 60
 
     validDirection: lower
-    upper.ifTrue(() => {
+    if(upper) {
         validDirection = true
-    })
+    }
     validDirection.ifFalse(() => {
         fail()
     })
@@ -121,16 +121,16 @@ parseComparison: (token) => {
     inclusive: false
     versionStart: 1
 
-    (token.size() > 1).ifTrue(() => {
-        (token[1] == 61).ifTrue(() => {
+    if(token.size() > 1) {
+        if(token[1] == 61) {
             inclusive = true
             versionStart = 2
-        })
-    })
+        }
+    }
 
-    (token.size() <= versionStart).ifTrue(() => {
+    if(token.size() <= versionStart) {
         fail()
-    })
+    }
 
     version: Version.parse(
         Encoding.UTF8.decode(bytesAfter(token, versionStart))
@@ -152,29 +152,29 @@ intervalConstraint: (text, source) => {
     source.each((octet) => {
         separator: isSeparator(octet)
 
-        separator.ifTrue(() => {
+        if(separator) {
             inSecond.ifFalse(() => {
-                (first.size() == 0).ifTrue(() => {
+                if(first.size() == 0) {
                     fail()
-                })
+                }
                 inSecond = true
             })
 
-            inSecond.ifTrue(() => {
-                (second.size() > 0).ifTrue(() => {
+            if(inSecond) {
+                if(second.size() > 0) {
                     afterSecond = true
-                })
-            })
-        })
+                }
+            }
+        }
 
         separator.ifFalse(() => {
-            afterSecond.ifTrue(() => {
+            if(afterSecond) {
                 fail()
-            })
+            }
 
-            inSecond.ifTrue(() => {
+            if(inSecond) {
                 second.add(octet)
-            })
+            }
             inSecond.ifFalse(() => {
                 first.add(octet)
             })
@@ -184,19 +184,19 @@ intervalConstraint: (text, source) => {
     inSecond.ifFalse(() => {
         fail()
     })
-    (second.size() == 0).ifTrue(() => {
+    if(second.size() == 0) {
         fail()
-    })
-    afterSecond.ifTrue(() => {
+    }
+    if(afterSecond) {
         fail()
-    })
+    }
 
     left: parseComparison(first)
     right: parseComparison(second)
 
-    (left.lower === right.lower).ifTrue(() => {
+    if(left.lower === right.lower) {
         fail()
-    })
+    }
 
     lower: left
     upper: right
@@ -219,31 +219,31 @@ parse: (text) => {
     caret: false
     interval: false
 
-    (source.size() > 0).ifTrue(() => {
-        (source[0] == 94).ifTrue(() => {
+    if(source.size() > 0) {
+        if(source[0] == 94) {
             caret = true
-        })
-        (source[0] == 62).ifTrue(() => {
+        }
+        if(source[0] == 62) {
             interval = true
-        })
-        (source[0] == 60).ifTrue(() => {
+        }
+        if(source[0] == 60) {
             interval = true
-        })
-    })
+        }
+    }
 
     result: null
 
-    caret.ifTrue(() => {
+    if(caret) {
         lower: Version.parse(
             Encoding.UTF8.decode(bytesAfter(source, 1))
         )
         result = caretConstraint(text, lower)
-    })
+    }
 
     caret.ifFalse(() => {
-        interval.ifTrue(() => {
+        if(interval) {
             result = intervalConstraint(text, source)
-        })
+        }
 
         interval.ifFalse(() => {
             result = {
@@ -261,22 +261,22 @@ comparisonSatisfied: (comparison, candidate) => {
     order: Version.compare(candidate, comparison.version)
     result: false
 
-    comparison.lower.ifTrue(() => {
+    if(comparison.lower) {
         result = order == 1
-        comparison.inclusive.ifTrue(() => {
-            (order == 0).ifTrue(() => {
+        if(comparison.inclusive) {
+            if(order == 0) {
                 result = true
-            })
-        })
-    })
+            }
+        }
+    }
 
     comparison.lower.ifFalse(() => {
         result = order == -1
-        comparison.inclusive.ifTrue(() => {
-            (order == 0).ifTrue(() => {
+        if(comparison.inclusive) {
+            if(order == 0) {
                 result = true
-            })
-        })
+            }
+        }
     })
 
     result
@@ -289,31 +289,31 @@ prereleaseAdmitted: (constraint, candidate) => {
         admitted = true
     })
 
-    hasPrerelease(candidate).ifTrue(() => {
-        (constraint.kind === "exact").ifTrue(() => {
-            hasPrerelease(constraint.version).ifTrue(() => {
+    if(hasPrerelease(candidate)) {
+        if(constraint.kind === "exact") {
+            if(hasPrerelease(constraint.version)) {
                 admitted = sameCore(constraint.version, candidate)
-            })
-        })
+            }
+        }
 
-        (constraint.kind === "caret").ifTrue(() => {
-            hasPrerelease(constraint.lower).ifTrue(() => {
+        if(constraint.kind === "caret") {
+            if(hasPrerelease(constraint.lower)) {
                 admitted = sameCore(constraint.lower, candidate)
-            })
-        })
+            }
+        }
 
-        (constraint.kind === "interval").ifTrue(() => {
-            hasPrerelease(constraint.lower.version).ifTrue(() => {
+        if(constraint.kind === "interval") {
+            if(hasPrerelease(constraint.lower.version)) {
                 admitted = sameCore(constraint.lower.version, candidate)
-            })
+            }
 
             admitted.ifFalse(() => {
-                hasPrerelease(constraint.upper.version).ifTrue(() => {
+                if(hasPrerelease(constraint.upper.version)) {
                     admitted = sameCore(constraint.upper.version, candidate)
-                })
+                }
             })
-        })
-    })
+        }
+    }
 
     admitted
 }
@@ -321,48 +321,48 @@ prereleaseAdmitted: (constraint, candidate) => {
 caretSatisfied: (constraint, candidate) => {
     result: false
 
-    prereleaseAdmitted(constraint, candidate).ifTrue(() => {
-        constraint.exactZero.ifTrue(() => {
+    if(prereleaseAdmitted(constraint, candidate)) {
+        if(constraint.exactZero) {
             hasPrerelease(constraint.lower).ifFalse(() => {
                 result = Version.compare(constraint.lower, candidate) == 0
             })
 
-            hasPrerelease(constraint.lower).ifTrue(() => {
+            if(hasPrerelease(constraint.lower)) {
                 lowerOrder: Version.compare(constraint.lower, candidate)
                 upperOrder: Version.compare(candidate, coreVersion(0, 0, 0))
 
                 lowerOk: lowerOrder == -1
-                (lowerOrder == 0).ifTrue(() => {
+                if(lowerOrder == 0) {
                     lowerOk = true
-                })
+                }
 
                 upperOk: upperOrder == -1
-                (upperOrder == 0).ifTrue(() => {
+                if(upperOrder == 0) {
                     upperOk = true
-                })
+                }
 
                 result = lowerOk
-                result.ifTrue(() => {
+                if(result) {
                     result = upperOk
-                })
-            })
-        })
+                }
+            }
+        }
 
         constraint.exactZero.ifFalse(() => {
             lowerOrder: Version.compare(constraint.lower, candidate)
             upperOrder: Version.compare(candidate, constraint.upper)
 
             lowerOk: lowerOrder == -1
-            (lowerOrder == 0).ifTrue(() => {
+            if(lowerOrder == 0) {
                 lowerOk = true
-            })
+            }
 
             result = lowerOk
-            result.ifTrue(() => {
+            if(result) {
                 result = upperOrder == -1
-            })
+            }
         })
-    })
+    }
 
     result
 }
@@ -370,12 +370,12 @@ caretSatisfied: (constraint, candidate) => {
 intervalSatisfied: (constraint, candidate) => {
     result: false
 
-    prereleaseAdmitted(constraint, candidate).ifTrue(() => {
+    if(prereleaseAdmitted(constraint, candidate)) {
         result = comparisonSatisfied(constraint.lower, candidate)
-        result.ifTrue(() => {
+        if(result) {
             result = comparisonSatisfied(constraint.upper, candidate)
-        })
-    })
+        }
+    }
 
     result
 }
@@ -384,20 +384,20 @@ satisfies: (constraint, candidate) => {
     result: false
     known: false
 
-    (constraint.kind === "exact").ifTrue(() => {
+    if(constraint.kind === "exact") {
         known = true
         result = Version.compare(constraint.version, candidate) == 0
-    })
+    }
 
-    (constraint.kind === "caret").ifTrue(() => {
+    if(constraint.kind === "caret") {
         known = true
         result = caretSatisfied(constraint, candidate)
-    })
+    }
 
-    (constraint.kind === "interval").ifTrue(() => {
+    if(constraint.kind === "interval") {
         known = true
         result = intervalSatisfied(constraint, candidate)
-    })
+    }
 
     known.ifFalse(() => {
         fail()

@@ -101,12 +101,12 @@ compare: (left, right) => {
     })
 
     result: 0
-    (left.nanoseconds < right.nanoseconds).ifTrue(() => {
+    if(left.nanoseconds < right.nanoseconds) {
         result = -1
-    })
-    (left.nanoseconds > right.nanoseconds).ifTrue(() => {
+    }
+    if(left.nanoseconds > right.nanoseconds) {
         result = 1
-    })
+    }
     result
 }
 

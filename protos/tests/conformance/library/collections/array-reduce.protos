@@ -58,9 +58,9 @@ tests: Array(
             source: Array(10, 3, 2, 1)
             calls: 0
             reduced: Arrays.reduce(source, (accumulator, element) => {
-                (calls == 0).ifTrue(() => {
+                if(calls == 0) {
                     source[2] = 99
-                })
+                }
                 calls = calls + 1
                 accumulator - element
             })

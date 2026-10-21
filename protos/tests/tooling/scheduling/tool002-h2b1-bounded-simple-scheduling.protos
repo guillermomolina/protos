@@ -28,11 +28,11 @@ sourceLoader: (spec) => {
     id: Manifest.caseId(spec)
     source: null
 
-    (id === "h2b1/first.protos").ifTrue(() => { source = "10" })
-    (id === "h2b1/second.protos").ifTrue(() => { source = "20" })
-    (id === "h2b1/third.protos").ifTrue(() => { source = "30" })
+    if(id === "h2b1/first.protos") { source = "10" }
+    if(id === "h2b1/second.protos") { source = "20" }
+    if(id === "h2b1/third.protos") { source = "30" }
 
-    (source === null).ifTrue(() => { Error().signal() })
+    if(source === null) { Error().signal() }
     source
 }
 
@@ -49,14 +49,14 @@ passed = passed && (Runner.runPassedCount(run) == 3)
 passed = passed && (Runner.runSkippedCount(run) == 0)
 passed = passed && (results.size() == 3)
 
-passed.ifTrue(() => {
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[0])) === "h2b1/first.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[1])) === "h2b1/second.protos"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Manifest.caseId(Runner.caseRunSpec(results[2])) === "h2b1/third.protos"
-})
+}
 
 passed

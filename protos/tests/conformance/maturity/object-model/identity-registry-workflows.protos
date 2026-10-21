@@ -41,9 +41,9 @@ tests: [
             metadata[second] = 3
 
             flags: 0
-            (first === alias).ifTrue(() => { flags = flags + 1 })
+            if(first === alias) { flags = flags + 1 }
             (first === second).ifFalse(() => { flags = flags + 1 })
-            (metadata.size() == 2).ifTrue(() => { flags = flags + 1 })
+            if(metadata.size() == 2) { flags = flags + 1 }
 
             invokeNamed: (name) => {
                 callable: byName[name]
@@ -70,15 +70,15 @@ tests: [
 
             (third === first).ifFalse(() => { flags = flags + 1 })
             (third === second).ifFalse(() => { flags = flags + 1 })
-            (metadata.size() == 3).ifTrue(() => { flags = flags + 1 })
+            if(metadata.size() == 3) { flags = flags + 1 }
 
             metadata.remove(second)
             byName.remove("secondary")
             metadata.containsKey(second).ifFalse(() => { flags = flags + 1 })
-            metadata.containsKey(first).ifTrue(() => { flags = flags + 1 })
-            metadata.containsKey(third).ifTrue(() => { flags = flags + 1 })
+            if(metadata.containsKey(first)) { flags = flags + 1 }
+            if(metadata.containsKey(third)) { flags = flags + 1 }
             byName.containsKey("secondary").ifFalse(() => { flags = flags + 1 })
-            byName.containsKey("primary").ifTrue(() => { flags = flags + 1 })
+            if(byName.containsKey("primary")) { flags = flags + 1 }
 
             aliasRead: alias()
             primaryRead: invokeNamed("primary")
@@ -148,9 +148,9 @@ tests: [
             exact[other] = other.makeReader()
 
             flags: 0
-            (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
-            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
-            (left == peer).ifTrue(() => { flags = flags + 1 })
+            if(logical.size() == 2) { flags = flags + 1 }
+            if(exact.size() == 3) { flags = flags + 1 }
+            if(left == peer) { flags = flags + 1 }
             (left === peer).ifFalse(() => { flags = flags + 1 })
 
             mutations: Array(
@@ -186,14 +186,14 @@ tests: [
             logical.remove(peer)
             logical.containsKey(left).ifFalse(() => { flags = flags + 1 })
             logical.containsKey(peer).ifFalse(() => { flags = flags + 1 })
-            exact.containsKey(left).ifTrue(() => { flags = flags + 1 })
-            exact.containsKey(peer).ifTrue(() => { flags = flags + 1 })
+            if(exact.containsKey(left)) { flags = flags + 1 }
+            if(exact.containsKey(peer)) { flags = flags + 1 }
 
             logical[peer] = peer.makeReader()
             peer.bump(1)
-            (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
-            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
-            logical.containsKey(left).ifTrue(() => { flags = flags + 1 })
+            if(logical.size() == 2) { flags = flags + 1 }
+            if(exact.size() == 3) { flags = flags + 1 }
+            if(logical.containsKey(left)) { flags = flags + 1 }
 
             finalLogicalLeft: invokeFrom(logical, left)
             finalExactPeer: invokeFrom(exact, peer)
@@ -264,8 +264,8 @@ tests: [
             exact[c] = c.makeReader()
 
             flags: 0
-            (logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
-            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            if(logical["shared"] === b) { flags = flags + 1 }
+            if(exact.size() == 3) { flags = flags + 1 }
 
             operations: Array(
                 () => { a.step(5) },
@@ -289,8 +289,8 @@ tests: [
             logical.containsKey("other").ifFalse(() => { flags = flags + 1 })
             logical["other"] = c
 
-            (logical["shared"] === a).ifTrue(() => { flags = flags + 1 })
-            (exact.containsKey(c)).ifTrue(() => { flags = flags + 1 })
+            if(logical["shared"] === a) { flags = flags + 1 }
+            if(exact.containsKey(c)) { flags = flags + 1 }
 
             readExact: (entity) => {
                 reader: exact[entity]
@@ -299,9 +299,9 @@ tests: [
             readerTotal: readExact(a) + readExact(b) + readExact(c)
 
             logical["shared"] = b
-            (logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
-            (logical["other"] === c).ifTrue(() => { flags = flags + 1 })
-            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            if(logical["shared"] === b) { flags = flags + 1 }
+            if(logical["other"] === c) { flags = flags + 1 }
+            if(exact.size() == 3) { flags = flags + 1 }
 
             transitionTotal: a.transitions + b.transitions + c.transitions
 
@@ -372,12 +372,12 @@ tests: [
                     2
                 },
                 () => {
-                    (logical.size() == 1).ifTrue(() => { flags = flags + 1 })
-                    (exact.size() == 2).ifTrue(() => { flags = flags + 1 })
-                    (logical[1] == 20).ifTrue(() => { flags = flags + 1 })
-                    (logical[1.0] == 20).ifTrue(() => { flags = flags + 1 })
-                    (exact[1] == 100).ifTrue(() => { flags = flags + 1 })
-                    (exact[1.0] == 200).ifTrue(() => { flags = flags + 1 })
+                    if(logical.size() == 1) { flags = flags + 1 }
+                    if(exact.size() == 2) { flags = flags + 1 }
+                    if(logical[1] == 20) { flags = flags + 1 }
+                    if(logical[1.0] == 20) { flags = flags + 1 }
+                    if(exact[1] == 100) { flags = flags + 1 }
+                    if(exact[1.0] == 200) { flags = flags + 1 }
                     logical.remove(1)
                     exact.remove(1)
                     3
@@ -385,7 +385,7 @@ tests: [
                 () => {
                     logical.containsKey(1.0).ifFalse(() => { flags = flags + 1 })
                     exact.containsKey(1).ifFalse(() => { flags = flags + 1 })
-                    exact.containsKey(1.0).ifTrue(() => { flags = flags + 1 })
+                    if(exact.containsKey(1.0)) { flags = flags + 1 }
                     logical[1.0] = 30
                     exact[1] = 300
                     4
@@ -400,14 +400,14 @@ tests: [
             actionResults: Arrays.map(actions, (action) => { action() })
             actionTotal: Arrays.reduce(actionResults, (sum, value) => { sum + value }, 0)
 
-            (1 == 1.0).ifTrue(() => { flags = flags + 1 })
+            if(1 == 1.0) { flags = flags + 1 }
             (1 === 1.0).ifFalse(() => { flags = flags + 1 })
-            (logical.size() == 1).ifTrue(() => { flags = flags + 1 })
-            (exact.size() == 2).ifTrue(() => { flags = flags + 1 })
-            (logical[1] == 40).ifTrue(() => { flags = flags + 1 })
-            (logical[1.0] == 40).ifTrue(() => { flags = flags + 1 })
-            (exact[1] == 300).ifTrue(() => { flags = flags + 1 })
-            (exact[1.0] == 250).ifTrue(() => { flags = flags + 1 })
+            if(logical.size() == 1) { flags = flags + 1 }
+            if(exact.size() == 2) { flags = flags + 1 }
+            if(logical[1] == 40) { flags = flags + 1 }
+            if(logical[1.0] == 40) { flags = flags + 1 }
+            if(exact[1] == 300) { flags = flags + 1 }
+            if(exact[1.0] == 250) { flags = flags + 1 }
 
             // Numeric Map keys follow cross-family numeric equality/hash coherence, while
             // IdentityMap keeps ordinary Integer 1 and Float 1.0 distinct because numeric

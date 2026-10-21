@@ -104,11 +104,11 @@ compare: (left, right) => {
     })
 
     result: 0
-    (left.seconds < right.seconds).ifTrue(() => {
+    if(left.seconds < right.seconds) {
         result = -1
-    })
-    (left.seconds > right.seconds).ifTrue(() => {
+    }
+    if(left.seconds > right.seconds) {
         result = 1
-    })
+    }
     result
 }

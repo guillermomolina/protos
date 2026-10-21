@@ -147,7 +147,7 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
         assertTrue(requirementRegistry.contains("\"groupExecutionAsync\""));
         assertTrue(requirementRegistry.contains("\"groupResourceExecutionAsync\""));
 
-        assertTrue(runner.contains("(kind === \"future-integer-one-of\").ifTrue"));
+        assertTrue(runner.contains("if(kind === \"future-integer-one-of\")"));
 
         assertFalse(Files.exists(G2_JAVA));
         assertFalse(Files.exists(G3_JAVA));

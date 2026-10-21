@@ -288,15 +288,15 @@ tests: [
 
         found: false
         start: 0
-        (text == (
+        if(text == (
             "protos-resolution-input-v1\n" +
             "language \"0.1\"\n" +
             "manifest root \"root\" \"1.0.0\" compatibility none\n" +
             expectedLine +
             "manifest member \"libs/a\" \"a-pkg\" \"1.0.0\" compatibility none\n"
-        )).ifTrue(() => {
+        )) {
             found = true
-        })
+        }
         Assertions.require(found)
     }),
     Test("matches-header", () => {
@@ -356,8 +356,8 @@ tests: [
             }
 
         ok: Input.matchesHeader(root, matching)
-        (Input.matchesHeader(root, wrongDigest)).ifTrue(() => { ok = false })
-        (Input.matchesHeader(root, wrongResolver)).ifTrue(() => { ok = false })
+        if(Input.matchesHeader(root, wrongDigest)) { ok = false }
+        if(Input.matchesHeader(root, wrongResolver)) { ok = false }
         Assertions.require(ok)
     })
 ]

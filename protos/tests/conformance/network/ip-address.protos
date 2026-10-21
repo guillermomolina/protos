@@ -31,7 +31,7 @@ tests: Array(
             (ipv4.bits == 4294967295).ifFalse(() => { ok = false })
             (ipv6.version == 6).ifFalse(() => { ok = false })
             (ipv6.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
-            (ipv4 === fresh).ifTrue(() => { ok = false })
+            if(ipv4 === fresh) { ok = false }
             IpAddress.recognizes(ipv4).ifFalse(() => { ok = false })
             IpAddress.recognizes(ipv6).ifFalse(() => { ok = false })
 
@@ -92,10 +92,10 @@ tests: Array(
             ok: true
 
             IpAddress.recognizes(canonical).ifFalse(() => { ok = false })
-            IpAddress.recognizes(openExactShape).ifTrue(() => { ok = false })
-            IpAddress.recognizes(wrongParent).ifTrue(() => { ok = false })
-            IpAddress.recognizes(derived).ifTrue(() => { ok = false })
-            IpAddress.recognizes(4).ifTrue(() => { ok = false })
+            if(IpAddress.recognizes(openExactShape)) { ok = false }
+            if(IpAddress.recognizes(wrongParent)) { ok = false }
+            if(IpAddress.recognizes(derived)) { ok = false }
+            if(IpAddress.recognizes(4)) { ok = false }
 
             wrongReceiverRejected: Error.handle(
                 () => {
@@ -129,10 +129,10 @@ tests: Array(
             ok: true
 
             (left == same).ifFalse(() => { ok = false })
-            (left === same).ifTrue(() => { ok = false })
-            (left == differentBits).ifTrue(() => { ok = false })
-            (left == differentVersion).ifTrue(() => { ok = false })
-            (left == {}).ifTrue(() => { ok = false })
+            if(left === same) { ok = false }
+            if(left == differentBits) { ok = false }
+            if(left == differentVersion) { ok = false }
+            if(left == {}) { ok = false }
             (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
             addresses[left] = 77
@@ -187,7 +187,7 @@ tests: Array(
 
         derived: IpAddress {}
         reject(() => { derived(4, 1) }).ifFalse(() => { ok = false })
-        derived.hasSlot("version").ifTrue(() => { ok = false })
+        if(derived.hasSlot("version")) { ok = false }
 
         Assertions.require(ok)
     }),
@@ -294,7 +294,7 @@ tests: Array(
             delegatedVersion,
             delegatedBits
         ).each((candidate) => {
-            IpAddress.recognizes(candidate).ifTrue(() => { ok = false })
+            if(IpAddress.recognizes(candidate)) { ok = false }
         })
 
         Assertions.require(ok)
@@ -356,9 +356,9 @@ tests: Array(
         reject(() => { IpAddress == address }).ifFalse(() => { ok = false })
         reject(() => { IpAddress.hash() }).ifFalse(() => { ok = false })
 
-        (address == derived).ifTrue(() => { ok = false })
-        (address == 4).ifTrue(() => { ok = false })
-        (address == null).ifTrue(() => { ok = false })
+        if(address == derived) { ok = false }
+        if(address == 4) { ok = false }
+        if(address == null) { ok = false }
 
         Assertions.require(ok)
     })

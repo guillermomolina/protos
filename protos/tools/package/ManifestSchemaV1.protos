@@ -33,9 +33,9 @@ baseFromTable: (root) => {
             fail()
         })
         value: node.value
-        (value == "").ifTrue(() => {
+        if(value == "") {
             fail()
-        })
+        }
         value
     }
 
@@ -77,9 +77,9 @@ baseFromTable: (root) => {
     packageId: nonEmptyString(requiredNode(packageEntries, "id"))
     packageVersion: nonEmptyString(requiredNode(packageEntries, "version"))
     packageLocator: null
-    packageEntries.containsKey("locator").ifTrue(() => {
+    if(packageEntries.containsKey("locator")) {
         packageLocator = nonEmptyString(packageEntries["locator"])
-    })
+    }
 
     {
         package: {
@@ -115,9 +115,9 @@ sectionsFromTable: (root) => {
             fail()
         })
         value: node.value
-        (value == "").ifTrue(() => {
+        if(value == "") {
             fail()
-        })
+        }
         value
     }
 
@@ -133,7 +133,7 @@ sectionsFromTable: (root) => {
     rootEntries: tableEntries(root)
 
     compatibility: null
-    rootEntries.containsKey("compatibility").ifTrue(() => {
+    if(rootEntries.containsKey("compatibility")) {
         compatibilityEntries: tableEntries(rootEntries["compatibility"])
         compatibilityAllowed: Map()
         compatibilityAllowed["language"] = true
@@ -142,18 +142,18 @@ sectionsFromTable: (root) => {
         compatibility = {
             language: language
         }
-    })
+    }
 
     exports: Map()
-    rootEntries.containsKey("exports").ifTrue(() => {
+    if(rootEntries.containsKey("exports")) {
         exportEntries: tableEntries(rootEntries["exports"])
         exportEntries.each((name, valueNode) => {
             exports[name] = nonEmptyString(valueNode)
         })
-    })
+    }
 
     workspace: null
-    rootEntries.containsKey("workspace").ifTrue(() => {
+    if(rootEntries.containsKey("workspace")) {
         workspaceEntries: tableEntries(rootEntries["workspace"])
         workspaceAllowed: Map()
         workspaceAllowed["members"] = true
@@ -168,9 +168,9 @@ sectionsFromTable: (root) => {
         seenMembers: Map()
         membersNode.value.each((memberNode) => {
             member: nonEmptyString(memberNode)
-            seenMembers.containsKey(member).ifTrue(() => {
+            if(seenMembers.containsKey(member)) {
                 fail()
-            })
+            }
             seenMembers[member] = true
             members = Array(...members, member)
         })
@@ -178,7 +178,7 @@ sectionsFromTable: (root) => {
         workspace = {
             members: members
         }
-    })
+    }
 
     {
         package: base.package
@@ -206,9 +206,9 @@ fromTable: (root) => {
             fail()
         })
         value: node.value
-        (value == "").ifTrue(() => {
+        if(value == "") {
             fail()
-        })
+        }
         value
     }
 
@@ -224,7 +224,7 @@ fromTable: (root) => {
     rootEntries: tableEntries(root)
     dependencies: Map()
 
-    rootEntries.containsKey("dependencies").ifTrue(() => {
+    if(rootEntries.containsKey("dependencies")) {
         dependencyEntries: tableEntries(rootEntries["dependencies"])
 
         dependencyEntries.each((alias, declarationNode) => {
@@ -246,57 +246,57 @@ fromTable: (root) => {
             hasPath: declarationEntries.containsKey("path")
 
             registryTouched: hasAuthority
-            hasPackage.ifTrue(() => { registryTouched = true })
-            hasVersion.ifTrue(() => { registryTouched = true })
+            if(hasPackage) { registryTouched = true }
+            if(hasVersion) { registryTouched = true }
 
             registryComplete: hasAuthority
             hasPackage.ifFalse(() => { registryComplete = false })
             hasVersion.ifFalse(() => { registryComplete = false })
 
             gitTouched: hasGit
-            hasRev.ifTrue(() => { gitTouched = true })
+            if(hasRev) { gitTouched = true }
 
             gitComplete: hasGit
             hasRev.ifFalse(() => { gitComplete = false })
 
             registryValid: registryComplete
-            gitTouched.ifTrue(() => { registryValid = false })
-            hasPath.ifTrue(() => { registryValid = false })
+            if(gitTouched) { registryValid = false }
+            if(hasPath) { registryValid = false }
 
             gitValid: gitComplete
-            registryTouched.ifTrue(() => { gitValid = false })
-            hasPath.ifTrue(() => { gitValid = false })
+            if(registryTouched) { gitValid = false }
+            if(hasPath) { gitValid = false }
 
             pathValid: hasPath
-            registryTouched.ifTrue(() => { pathValid = false })
-            gitTouched.ifTrue(() => { pathValid = false })
+            if(registryTouched) { pathValid = false }
+            if(gitTouched) { pathValid = false }
 
             dependency: null
             valid: false
 
-            registryValid.ifTrue(() => {
+            if(registryValid) {
                 dependency = {
                     authority: nonEmptyString(declarationEntries["authority"])
                     package: nonEmptyString(declarationEntries["package"])
                     version: nonEmptyString(declarationEntries["version"])
                 }
                 valid = true
-            })
+            }
 
-            gitValid.ifTrue(() => {
+            if(gitValid) {
                 dependency = {
                     git: nonEmptyString(declarationEntries["git"])
                     rev: nonEmptyString(declarationEntries["rev"])
                 }
                 valid = true
-            })
+            }
 
-            pathValid.ifTrue(() => {
+            if(pathValid) {
                 dependency = {
                     path: nonEmptyString(declarationEntries["path"])
                 }
                 valid = true
-            })
+            }
 
             valid.ifFalse(() => {
                 fail()
@@ -304,7 +304,7 @@ fromTable: (root) => {
 
             dependencies[alias] = dependency
         })
-    })
+    }
 
     {
         package: sections.package

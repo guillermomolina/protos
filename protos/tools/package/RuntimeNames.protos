@@ -16,18 +16,18 @@
 isAsciiLetter: (octet) => {
     result: false
 
-    (octet >= 65).ifTrue(() => {
-        (octet <= 90).ifTrue(() => {
+    if(octet >= 65) {
+        if(octet <= 90) {
             result = true
-        })
-    })
+        }
+    }
 
     result.ifFalse(() => {
-        (octet >= 97).ifTrue(() => {
-            (octet <= 122).ifTrue(() => {
+        if(octet >= 97) {
+            if(octet <= 122) {
                 result = true
-            })
-        })
+            }
+        }
     })
 
     result
@@ -35,21 +35,21 @@ isAsciiLetter: (octet) => {
 
 isAsciiDigit: (octet) => {
     result: false
-    (octet >= 48).ifTrue(() => {
-        (octet <= 57).ifTrue(() => {
+    if(octet >= 48) {
+        if(octet <= 57) {
             result = true
-        })
-    })
+        }
+    }
     result
 }
 
 asciiLower: (octet) => {
     result: octet
-    (octet >= 65).ifTrue(() => {
-        (octet <= 90).ifTrue(() => {
+    if(octet >= 65) {
+        if(octet <= 90) {
             result = octet + 32
-        })
-    })
+        }
+    }
     result
 }
 
@@ -60,11 +60,11 @@ equalsAsciiIgnoreCase: (left, right) => {
     index: 0
 
     leftBytes.each((octet) => {
-        equal.ifTrue(() => {
+        if(equal) {
             (asciiLower(octet) == asciiLower(rightBytes[index])).ifFalse(() => {
                 equal = false
             })
-        })
+        }
         index = index + 1
     })
 
@@ -82,9 +82,9 @@ isReserved: (segment) => {
     )
 
     reserved.each((name) => {
-        equalsAsciiIgnoreCase(segment, name).ifTrue(() => {
+        if(equalsAsciiIgnoreCase(segment, name)) {
             result = true
-        })
+        }
     })
 
     result
@@ -92,17 +92,17 @@ isReserved: (segment) => {
 
 requireSegment: (segment) => {
     bytes: Encoding.UTF8.encode(segment)
-    (bytes.size() == 0).ifTrue(() => {
+    if(bytes.size() == 0) {
         fail()
-    })
+    }
 
     first: true
     bytes.each((octet) => {
         valid: false
 
-        first.ifTrue(() => {
+        if(first) {
             valid = isAsciiLetter(octet)
-        })
+        }
 
         first.ifFalse(() => {
             valid = isAsciiLetter(octet)
@@ -121,25 +121,25 @@ requireSegment: (segment) => {
         first = false
     })
 
-    isReserved(segment).ifTrue(() => {
+    if(isReserved(segment)) {
         fail()
-    })
+    }
 
     segment
 }
 
 requireLogicalName: (name) => {
     source: Encoding.UTF8.encode(name)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     current: Encoding.UTF8.encode("")
     source.each((octet) => {
-        (octet == 47).ifTrue(() => {
+        if(octet == 47) {
             requireSegment(Encoding.UTF8.decode(current))
             current = Encoding.UTF8.encode("")
-        })
+        }
 
         (octet == 47).ifFalse(() => {
             current.add(octet)

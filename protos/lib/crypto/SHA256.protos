@@ -21,9 +21,9 @@ digest: (bytes) => {
     maxBytes: 2305843009213693951
 
     originalSize: bytes.size()
-    (originalSize > maxBytes).ifTrue(() => {
+    if(originalSize > maxBytes) {
         Error().signal()
-    })
+    }
 
     // Bytes is deliberately not a required public Prelude binding. Latin1
     // accepts every octet sequence, so this performs exact standard-Bytes
@@ -246,16 +246,16 @@ digest: (bytes) => {
 
     remainder: message.size().mod(64)
     zeroCount: 56 - remainder
-    (zeroCount < 0).ifTrue(() => {
+    if(zeroCount < 0) {
         zeroCount = zeroCount + 64
-    })
+    }
 
     appendZeros: null
     appendZeros = (remaining) => {
-        (remaining > 0).ifTrue(() => {
+        if(remaining > 0) {
             message.add(0)
             appendZeros(remaining - 1)
-        })
+        }
     }
     appendZeros(zeroCount)
 
@@ -279,7 +279,7 @@ digest: (bytes) => {
         scheduleIndex: 0
 
         roundConstants.each((ignoredConstant) => {
-            (scheduleIndex < 16).ifTrue(() => {
+            if(scheduleIndex < 16) {
                 offset: blockOffset + scheduleIndex * 4
                 value:
                     message[offset] * 16777216 +
@@ -288,9 +288,9 @@ digest: (bytes) => {
                     message[offset + 3]
 
                 schedule[scheduleIndex] = value
-            })
+            }
 
-            (scheduleIndex >= 16).ifTrue(() => {
+            if(scheduleIndex >= 16) {
                 value:
                     schedule[scheduleIndex - 16] +
                     lowerSigma0(schedule[scheduleIndex - 15]) +
@@ -298,7 +298,7 @@ digest: (bytes) => {
                     lowerSigma1(schedule[scheduleIndex - 2])
 
                 schedule[scheduleIndex] = word32(value)
-            })
+            }
 
             scheduleIndex = scheduleIndex + 1
         })
@@ -346,15 +346,15 @@ digest: (bytes) => {
     processBlocks = (start, end) => {
         length: end - start
 
-        (length == 1).ifTrue(() => {
+        if(length == 1) {
             processBlock(start * 64)
-        })
+        }
 
-        (length > 1).ifTrue(() => {
+        if(length > 1) {
             middle: start + length.div(2)
             processBlocks(start, middle)
             processBlocks(middle, end)
-        })
+        }
     }
 
     processBlocks(0, message.size().div(64))

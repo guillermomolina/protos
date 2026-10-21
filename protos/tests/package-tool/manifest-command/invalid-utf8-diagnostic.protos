@@ -36,8 +36,8 @@ Error.handle(() => {
     errLines: errWriter.state["lines"]
     ok: outLines.size() == 0
     (errLines.size() == 1).ifFalse(() => { ok = false })
-    (errLines.size() == 1).ifTrue(() => {
+    if(errLines.size() == 1) {
         (errLines[0] == "protos.toml: cannot read as UTF-8").ifFalse(() => { ok = false })
-    })
+    }
     ok
 })

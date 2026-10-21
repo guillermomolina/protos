@@ -28,12 +28,12 @@ gcd: (a, b) => {
     left: a
     right: b
 
-    (left < 0).ifTrue(() => {
+    if(left < 0) {
         left = 0 - left
-    })
-    (right < 0).ifTrue(() => {
+    }
+    if(right < 0) {
         right = 0 - right
-    })
+    }
 
     while(right != 0) {
         remainder: left.mod(right)
@@ -55,9 +55,9 @@ lcm: (a, b) => {
             // Divide first so the implementation does not construct the
             // avoidable full a*b intermediate before removing the gcd factor.
             value: a.div(divisor) * b
-            (value < 0).ifTrue(() => {
+            if(value < 0) {
                 value = 0 - value
-            })
+            }
             result = value
         })
     })
@@ -72,28 +72,25 @@ factorial: (n) => {
         Error().signal()
     })
 
-    (n < 0).ifTrue(() => {
+    if(n < 0) {
         Error().signal()
-    })
+    }
 
     // A balanced product tree keeps recursion depth logarithmic and avoids the
     // permanently sequential multiplication shape rejected by LIB007-0.
     productRange: (low, high) => {
         result: 1
 
-        (low <= high).ifTrue(() => {
-            (low == high).ifTrueIfFalse(
-                () => {
-                    result = low
-                },
-                () => {
-                    middle: low + (high - low).div(2)
-                    result =
-                        productRange(low, middle) *
-                        productRange(middle + 1, high)
-                }
-            )
-        })
+        if(low <= high) {
+            if(low == high) {
+                result = low
+            } else {
+                middle: low + (high - low).div(2)
+                result =
+                    productRange(low, middle) *
+                    productRange(middle + 1, high)
+            }
+        }
 
         result
     }
@@ -110,24 +107,24 @@ pow: (base, exponent) => {
         Error().signal()
     })
 
-    (exponent < 0).ifTrue(() => {
+    if(exponent < 0) {
         Error().signal()
-    })
+    }
 
     result: 1
     factor: base
     remaining: exponent
 
     while(remaining != 0) {
-        (remaining.mod(2) == 1).ifTrue(() => {
+        if(remaining.mod(2) == 1) {
             result = result * factor
-        })
+        }
 
         remaining = remaining.div(2)
 
-        (remaining != 0).ifTrue(() => {
+        if(remaining != 0) {
             factor = factor * factor
-        })
+        }
     }
 
     result
@@ -145,18 +142,18 @@ powMod: (base, exponent, modulus) => {
         Error().signal()
     })
 
-    (exponent < 0).ifTrue(() => {
+    if(exponent < 0) {
         Error().signal()
-    })
-    (modulus <= 0).ifTrue(() => {
+    }
+    if(modulus <= 0) {
         Error().signal()
-    })
+    }
 
     canonicalMod: (value) => {
         remainder: value.mod(modulus)
-        (remainder < 0).ifTrue(() => {
+        if(remainder < 0) {
             remainder = remainder + modulus
-        })
+        }
         remainder
     }
 
@@ -165,15 +162,15 @@ powMod: (base, exponent, modulus) => {
     remaining: exponent
 
     while(remaining != 0) {
-        (remaining.mod(2) == 1).ifTrue(() => {
+        if(remaining.mod(2) == 1) {
             result = canonicalMod(result * factor)
-        })
+        }
 
         remaining = remaining.div(2)
 
-        (remaining != 0).ifTrue(() => {
+        if(remaining != 0) {
             factor = canonicalMod(factor * factor)
-        })
+        }
     }
 
     result

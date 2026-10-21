@@ -39,9 +39,9 @@ IpEndpoint: {
             Error().signal()
         })
 
-        ((port < 1) || (port > 65535)).ifTrue(() => {
+        if((port < 1) || (port > 65535)) {
             Error().signal()
-        })
+        }
 
         endpoint: (_coreIpEndpointCanonical) {
             address: address
@@ -57,11 +57,11 @@ IpEndpoint: {
         })
 
         result: false
-        _coreIpEndpointCanonical.recognizes(other).ifTrue(() => {
+        if(_coreIpEndpointCanonical.recognizes(other)) {
             result =
                 (this.address == other.address) &&
                 (this.port == other.port)
-        })
+        }
         result
     }
 

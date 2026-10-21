@@ -33,9 +33,9 @@
 /// signalled by `emit`; a `std:logging/Logger` contains it, while a direct
 /// caller of `emit` observes it.
 call: (formatter, writer) => {
-    ((formatter === null) || (writer === null)).ifTrue(() => {
+    if((formatter === null) || (writer === null)) {
         Error().signal()
-    })
+    }
 
     sink: {
         emit: (event) => {

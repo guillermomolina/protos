@@ -21,7 +21,7 @@ tests: [
         tool009LegacyCase: () => {
             ok: true
             (1 < 2).ifFalse(() => { ok = false })
-            (2 < 1).ifTrue(() => { ok = false })
+            if(2 < 1) { ok = false }
             (2 <= 2).ifFalse(() => { ok = false })
             (3 > 2).ifFalse(() => { ok = false })
             (3 >= 3).ifFalse(() => { ok = false })
@@ -47,15 +47,15 @@ tests: [
             nan: 0.0 / 0.0
 
             ok: true
-            ((-0.0) < 0).ifTrue(() => { ok = false })
+            if((-0.0) < 0) { ok = false }
             ((-0.0) <= 0).ifFalse(() => { ok = false })
             (0 >= (-0.0)).ifFalse(() => { ok = false })
             (positiveInfinity > 999999999999999999999999999999).ifFalse(() => { ok = false })
             (negativeInfinity < -999999999999999999999999999999).ifFalse(() => { ok = false })
-            (nan < 1).ifTrue(() => { ok = false })
-            (nan <= 1).ifTrue(() => { ok = false })
-            (1 > nan).ifTrue(() => { ok = false })
-            (1 >= nan).ifTrue(() => { ok = false })
+            if(nan < 1) { ok = false }
+            if(nan <= 1) { ok = false }
+            if(1 > nan) { ok = false }
+            if(1 >= nan) { ok = false }
             ok
         }
         Assertions.require(tool009LegacyCase() === true)

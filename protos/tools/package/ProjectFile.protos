@@ -22,9 +22,9 @@ Root: import("self:ResolutionRoot")
 
 workspaceRefMatches: (ref, packageId) => {
     matches: ref.kind == "workspace"
-    matches.ifTrue(() => {
+    if(matches) {
         matches = ref.packageId == packageId
-    })
+    }
     matches
 }
 
@@ -33,15 +33,15 @@ lockMemberAt: (lock, location) => {
     count: 0
 
     lock.workspaceMembers.each((member) => {
-        (member.declaration == location).ifTrue(() => {
+        if(member.declaration == location) {
             found = member
             count = count + 1
-        })
+        }
     })
 
-    (count > 1).ifTrue(() => {
+    if(count > 1) {
         fail()
-    })
+    }
 
     found
 }
@@ -73,9 +73,9 @@ validateLockProjection: (lock, resolutionRoot) => {
 
     resolutionRoot.members.each((member) => {
         locked: lockMemberAt(lock, member.location)
-        (locked === null).ifTrue(() => {
+        if(locked === null) {
             fail()
-        })
+        }
 
         workspaceRefMatches(locked.ref, member.packageId).ifFalse(() => {
             fail()

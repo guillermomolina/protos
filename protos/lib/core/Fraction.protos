@@ -36,19 +36,19 @@ Fraction: Number {
         Fraction.recognizes(this).ifFalse(() => {
             Error().signal()
         })
-        Float.recognizes(other).ifTrueIfFalse(
-            () => { _coreFractionKernel.toFloat(this) + other },
-            () => {
-                Complex.recognizes(other).ifTrueIfFalse(
-                    () => { _coreComplexKernel.plus(this, other) },
-                    () => {
-                        a: _coreFractionKernel.numerator(this)
-                        b: _coreFractionKernel.denominator(this)
-                        c: _coreFractionKernel.numerator(other)
-                        d: _coreFractionKernel.denominator(other)
-                        _coreFractionKernel.normalize((a * d) + (c * b), b * d)
-                    })
-            })
+        if(Float.recognizes(other)) {
+            _coreFractionKernel.toFloat(this) + other
+        } else {
+            if(Complex.recognizes(other)) {
+                _coreComplexKernel.plus(this, other)
+            } else {
+                a: _coreFractionKernel.numerator(this)
+                b: _coreFractionKernel.denominator(this)
+                c: _coreFractionKernel.numerator(other)
+                d: _coreFractionKernel.denominator(other)
+                _coreFractionKernel.normalize((a * d) + (c * b), b * d)
+            }
+        }
     }
 
     // Installed by the runtime as `-`.
@@ -56,19 +56,19 @@ Fraction: Number {
         Fraction.recognizes(this).ifFalse(() => {
             Error().signal()
         })
-        Float.recognizes(other).ifTrueIfFalse(
-            () => { _coreFractionKernel.toFloat(this) - other },
-            () => {
-                Complex.recognizes(other).ifTrueIfFalse(
-                    () => { _coreComplexKernel.minus(this, other) },
-                    () => {
-                        a: _coreFractionKernel.numerator(this)
-                        b: _coreFractionKernel.denominator(this)
-                        c: _coreFractionKernel.numerator(other)
-                        d: _coreFractionKernel.denominator(other)
-                        _coreFractionKernel.normalize((a * d) - (c * b), b * d)
-                    })
-            })
+        if(Float.recognizes(other)) {
+            _coreFractionKernel.toFloat(this) - other
+        } else {
+            if(Complex.recognizes(other)) {
+                _coreComplexKernel.minus(this, other)
+            } else {
+                a: _coreFractionKernel.numerator(this)
+                b: _coreFractionKernel.denominator(this)
+                c: _coreFractionKernel.numerator(other)
+                d: _coreFractionKernel.denominator(other)
+                _coreFractionKernel.normalize((a * d) - (c * b), b * d)
+            }
+        }
     }
 
     // Installed by the runtime as `*`.
@@ -76,19 +76,19 @@ Fraction: Number {
         Fraction.recognizes(this).ifFalse(() => {
             Error().signal()
         })
-        Float.recognizes(other).ifTrueIfFalse(
-            () => { _coreFractionKernel.toFloat(this) * other },
-            () => {
-                Complex.recognizes(other).ifTrueIfFalse(
-                    () => { _coreComplexKernel.times(this, other) },
-                    () => {
-                        a: _coreFractionKernel.numerator(this)
-                        b: _coreFractionKernel.denominator(this)
-                        c: _coreFractionKernel.numerator(other)
-                        d: _coreFractionKernel.denominator(other)
-                        _coreFractionKernel.normalize(a * c, b * d)
-                    })
-            })
+        if(Float.recognizes(other)) {
+            _coreFractionKernel.toFloat(this) * other
+        } else {
+            if(Complex.recognizes(other)) {
+                _coreComplexKernel.times(this, other)
+            } else {
+                a: _coreFractionKernel.numerator(this)
+                b: _coreFractionKernel.denominator(this)
+                c: _coreFractionKernel.numerator(other)
+                d: _coreFractionKernel.denominator(other)
+                _coreFractionKernel.normalize(a * c, b * d)
+            }
+        }
     }
 
     // Installed by the runtime as `/`. An exact zero divisor signals the
@@ -97,19 +97,19 @@ Fraction: Number {
         Fraction.recognizes(this).ifFalse(() => {
             Error().signal()
         })
-        Float.recognizes(other).ifTrueIfFalse(
-            () => { _coreFractionKernel.toFloat(this) / other },
-            () => {
-                Complex.recognizes(other).ifTrueIfFalse(
-                    () => { _coreComplexKernel.divide(this, other) },
-                    () => {
-                        a: _coreFractionKernel.numerator(this)
-                        b: _coreFractionKernel.denominator(this)
-                        c: _coreFractionKernel.numerator(other)
-                        d: _coreFractionKernel.denominator(other)
-                        _coreFractionKernel.normalize(a * d, b * c)
-                    })
-            })
+        if(Float.recognizes(other)) {
+            _coreFractionKernel.toFloat(this) / other
+        } else {
+            if(Complex.recognizes(other)) {
+                _coreComplexKernel.divide(this, other)
+            } else {
+                a: _coreFractionKernel.numerator(this)
+                b: _coreFractionKernel.denominator(this)
+                c: _coreFractionKernel.numerator(other)
+                d: _coreFractionKernel.denominator(other)
+                _coreFractionKernel.normalize(a * d, b * c)
+            }
+        }
     }
 }
 

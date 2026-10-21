@@ -51,12 +51,12 @@ tests: [
             rightIndex: 0
             while(rightIndex < ordered.size()) {
                 expected: 0
-                (leftIndex < rightIndex).ifTrue(() => {
+                if(leftIndex < rightIndex) {
                     expected = -1
-                })
-                (leftIndex > rightIndex).ifTrue(() => {
+                }
+                if(leftIndex > rightIndex) {
                     expected = 1
-                })
+                }
                 Assertions.require(
                     Level.compare(ordered[leftIndex], ordered[rightIndex]) == expected
                 )

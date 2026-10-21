@@ -64,19 +64,19 @@ format: ((numeric) => (event) => {
         (value == value).ifFalse(() => {
             Error().signal()
         })
-        (value == positiveInfinity).ifTrue(() => {
+        if(value == positiveInfinity) {
             Error().signal()
-        })
-        (value == negativeInfinity).ifTrue(() => {
+        }
+        if(value == negativeInfinity) {
             Error().signal()
-        })
+        }
         node: JSON.number(0, 0)
         (value == 0.0).ifFalse(() => {
             decimal: numeric.shortestDecimal(value)
             coefficient: decimal[0]
-            (value < 0.0).ifTrue(() => {
+            if(value < 0.0) {
                 coefficient = 0 - coefficient
-            })
+            }
             node = JSON.number(coefficient, decimal[1])
         })
         node
@@ -120,30 +120,30 @@ format: ((numeric) => (event) => {
     project = (value) => {
         node: null
         handled: false
-        (value === null).ifTrue(() => {
+        if(value === null) {
             node = JSON.nullValue()
             handled = true
-        })
-        ((value === true) || (value === false)).ifTrue(() => {
+        }
+        if((value === true) || (value === false)) {
             node = JSON.boolean(value)
             handled = true
-        })
-        ((handled == false) && String.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && String.recognizes(value)) {
             node = JSON.string(value)
             handled = true
-        })
-        ((handled == false) && Integer.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Integer.recognizes(value)) {
             node = JSON.number(value, 0)
             handled = true
-        })
-        ((handled == false) && Float.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Float.recognizes(value)) {
             node = projectFloat(value)
             handled = true
-        })
-        ((handled == false) && Array.recognizes(value)).ifTrue(() => {
+        }
+        if((handled == false) && Array.recognizes(value)) {
             node = JSON.array(...Arrays.map(value, (element) => project(element)))
             handled = true
-        })
+        }
         // A recognized event holds only Maps beyond this point.
         handled.ifFalse(() => {
             node = projectMap(value)

@@ -552,7 +552,7 @@ For example:
 ```protos
 find: (items) => {
     items.each((item) => {
-        item.valid.ifTrue() {
+        if(item.valid) {
             ^item
         }
     })

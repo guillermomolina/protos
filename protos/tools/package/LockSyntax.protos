@@ -21,43 +21,43 @@ emptyBytes: () => {
 
 isDigit: (octet) => {
     result: octet >= 48
-    (octet > 57).ifTrue(() => {
+    if(octet > 57) {
         result = false
-    })
+    }
     result
 }
 
 isLowerAlpha: (octet) => {
     result: octet >= 97
-    (octet > 122).ifTrue(() => {
+    if(octet > 122) {
         result = false
-    })
+    }
     result
 }
 
 lowerHexValue: (octet) => {
     result: -1
 
-    isDigit(octet).ifTrue(() => {
+    if(isDigit(octet)) {
         result = octet - 48
-    })
+    }
 
-    (result < 0).ifTrue(() => {
-        (octet >= 97).ifTrue(() => {
-            (octet <= 102).ifTrue(() => {
+    if(result < 0) {
+        if(octet >= 97) {
+            if(octet <= 102) {
                 result = octet - 87
-            })
-        })
-    })
+            }
+        }
+    }
 
     result
 }
 
 hexOctet: (value) => {
     result: 48 + value
-    (value > 9).ifTrue(() => {
+    if(value > 9) {
         result = 87 + value
-    })
+    }
     result
 }
 
@@ -93,143 +93,143 @@ lineTokens: (text) => {
     source.each((octet) => {
         before: state
 
-        (before == 0).ifTrue(() => {
-            (octet == 32).ifTrue(() => {
+        if(before == 0) {
+            if(octet == 32) {
                 fail()
-            })
-            (octet < 33).ifTrue(() => {
+            }
+            if(octet < 33) {
                 fail()
-            })
+            }
 
-            (octet == 34).ifTrue(() => {
+            if(octet == 34) {
                 state = 2
-            })
+            }
             (octet == 34).ifFalse(() => {
-                (octet > 126).ifTrue(() => {
+                if(octet > 126) {
                     fail()
-                })
+                }
                 current.add(octet)
                 state = 1
             })
-        })
+        }
 
-        (before == 1).ifTrue(() => {
-            (octet == 32).ifTrue(() => {
+        if(before == 1) {
+            if(octet == 32) {
                 tokens = appendToken(tokens, current, false)
                 current = emptyBytes()
                 state = 0
-            })
+            }
 
             (octet == 32).ifFalse(() => {
-                (octet < 33).ifTrue(() => {
+                if(octet < 33) {
                     fail()
-                })
-                (octet > 126).ifTrue(() => {
+                }
+                if(octet > 126) {
                     fail()
-                })
-                (octet == 34).ifTrue(() => {
+                }
+                if(octet == 34) {
                     fail()
-                })
+                }
                 current.add(octet)
             })
-        })
+        }
 
-        (before == 2).ifTrue(() => {
-            (octet == 34).ifTrue(() => {
+        if(before == 2) {
+            if(octet == 34) {
                 tokens = appendToken(tokens, current, true)
                 current = emptyBytes()
                 state = 5
-            })
+            }
 
             (octet == 34).ifFalse(() => {
-                (octet == 92).ifTrue(() => {
+                if(octet == 92) {
                     state = 3
-                })
+                }
 
                 (octet == 92).ifFalse(() => {
                     invalidControl: octet < 32
-                    (octet == 127).ifTrue(() => {
+                    if(octet == 127) {
                         invalidControl = true
-                    })
-                    invalidControl.ifTrue(() => {
+                    }
+                    if(invalidControl) {
                         fail()
-                    })
+                    }
                     current.add(octet)
                 })
             })
-        })
+        }
 
-        (before == 3).ifTrue(() => {
-            (octet == 34).ifTrue(() => {
+        if(before == 3) {
+            if(octet == 34) {
                 current.add(34)
                 state = 2
-            })
+            }
 
             (octet == 34).ifFalse(() => {
-                (octet == 92).ifTrue(() => {
+                if(octet == 92) {
                     current.add(92)
                     state = 2
-                })
+                }
 
                 (octet == 92).ifFalse(() => {
-                    (octet == 117).ifTrue(() => {
+                    if(octet == 117) {
                         unicodeRemaining = 4
                         unicodeValue = 0
                         state = 4
-                    })
+                    }
 
                     (octet == 117).ifFalse(() => {
                         fail()
                     })
                 })
             })
-        })
+        }
 
-        (before == 4).ifTrue(() => {
+        if(before == 4) {
             digit: lowerHexValue(octet)
-            (digit < 0).ifTrue(() => {
+            if(digit < 0) {
                 fail()
-            })
+            }
 
             unicodeValue = unicodeValue * 16 + digit
             unicodeRemaining = unicodeRemaining - 1
 
-            (unicodeRemaining == 0).ifTrue(() => {
+            if(unicodeRemaining == 0) {
                 canonicalControl: unicodeValue < 32
-                (unicodeValue == 127).ifTrue(() => {
+                if(unicodeValue == 127) {
                     canonicalControl = true
-                })
+                }
                 canonicalControl.ifFalse(() => {
                     fail()
                 })
                 current.add(unicodeValue)
                 state = 2
-            })
-        })
+            }
+        }
 
-        (before == 5).ifTrue(() => {
+        if(before == 5) {
             (octet == 32).ifFalse(() => {
                 fail()
             })
             state = 0
-        })
+        }
     })
 
-    (state == 1).ifTrue(() => {
+    if(state == 1) {
         tokens = appendToken(tokens, current, false)
         state = 6
-    })
+    }
 
-    (state == 5).ifTrue(() => {
+    if(state == 5) {
         state = 6
-    })
+    }
 
-    (state == 0).ifTrue(() => {
-        (source.size() > 0).ifTrue(() => {
+    if(state == 0) {
+        if(source.size() > 0) {
             fail()
-        })
+        }
         state = 6
-    })
+    }
 
     (state == 6).ifFalse(() => {
         fail()
@@ -258,31 +258,31 @@ renderQstring: (text) => {
     result.add(34)
 
     source.each((octet) => {
-        (octet == 34).ifTrue(() => {
+        if(octet == 34) {
             result.add(92)
             result.add(34)
-        })
+        }
 
         (octet == 34).ifFalse(() => {
-            (octet == 92).ifTrue(() => {
+            if(octet == 92) {
                 result.add(92)
                 result.add(92)
-            })
+            }
 
             (octet == 92).ifFalse(() => {
                 control: octet < 32
-                (octet == 127).ifTrue(() => {
+                if(octet == 127) {
                     control = true
-                })
+                }
 
-                control.ifTrue(() => {
+                if(control) {
                     result.add(92)
                     result.add(117)
                     result.add(48)
                     result.add(48)
                     result.add(hexOctet(octet.div(16)))
                     result.add(hexOctet(octet.mod(16)))
-                })
+                }
 
                 control.ifFalse(() => {
                     result.add(octet)
@@ -296,20 +296,20 @@ renderQstring: (text) => {
 }
 
 parseDecimalToken: (token) => {
-    token.quoted.ifTrue(() => {
+    if(token.quoted) {
         fail()
-    })
+    }
 
     source: Encoding.UTF8.encode(token.text)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
-    (source.size() > 1).ifTrue(() => {
-        (source[0] == 48).ifTrue(() => {
+    if(source.size() > 1) {
+        if(source[0] == 48) {
             fail()
-        })
-    })
+        }
+    }
 
     value: 0
     source.each((octet) => {
@@ -327,22 +327,22 @@ parseDecimalToken: (token) => {
 
 validateMethodText: (text) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     index: 0
     source.each((octet) => {
         valid: isLowerAlpha(octet)
 
-        (index > 0).ifTrue(() => {
-            isDigit(octet).ifTrue(() => {
+        if(index > 0) {
+            if(isDigit(octet)) {
                 valid = true
-            })
-            (octet == 45).ifTrue(() => {
+            }
+            if(octet == 45) {
                 valid = true
-            })
-        })
+            }
+        }
 
         valid.ifFalse(() => {
             fail()
@@ -355,16 +355,16 @@ validateMethodText: (text) => {
 }
 
 parseMethodToken: (token) => {
-    token.quoted.ifTrue(() => {
+    if(token.quoted) {
         fail()
-    })
+    }
     validateMethodText(token.text)
 }
 
 parseDigestToken: (token) => {
-    token.quoted.ifTrue(() => {
+    if(token.quoted) {
         fail()
-    })
+    }
 
     source: Encoding.UTF8.encode(token.text)
     algorithmBytes: emptyBytes()
@@ -372,20 +372,20 @@ parseDigestToken: (token) => {
     inHex: false
 
     source.each((octet) => {
-        (octet == 58).ifTrue(() => {
-            inHex.ifTrue(() => {
+        if(octet == 58) {
+            if(inHex) {
                 fail()
-            })
+            }
             inHex = true
-        })
+        }
 
         (octet == 58).ifFalse(() => {
-            inHex.ifTrue(() => {
-                (lowerHexValue(octet) < 0).ifTrue(() => {
+            if(inHex) {
+                if(lowerHexValue(octet) < 0) {
                     fail()
-                })
+                }
                 hexBytes.add(octet)
-            })
+            }
 
             inHex.ifFalse(() => {
                 algorithmBytes.add(octet)
@@ -396,12 +396,12 @@ parseDigestToken: (token) => {
     inHex.ifFalse(() => {
         fail()
     })
-    (algorithmBytes.size() == 0).ifTrue(() => {
+    if(algorithmBytes.size() == 0) {
         fail()
-    })
-    (hexBytes.size() == 0).ifTrue(() => {
+    }
+    if(hexBytes.size() == 0) {
         fail()
-    })
+    }
 
     algorithm: Encoding.UTF8.decode(algorithmBytes)
     validateMethodText(algorithm)
@@ -427,19 +427,19 @@ headerLines: (text) => {
     current: emptyBytes()
 
     source.each((octet) => {
-        (octet == 10).ifTrue(() => {
+        if(octet == 10) {
             line: ""
-            (current.size() > 0).ifTrue(() => {
+            if(current.size() > 0) {
                 line = Encoding.UTF8.decode(current)
-            })
+            }
             lines = Array(...lines, line)
             current = emptyBytes()
-        })
+        }
 
         (octet == 10).ifFalse(() => {
-            (octet == 13).ifTrue(() => {
+            if(octet == 13) {
                 fail()
-            })
+            }
             current.add(octet)
         })
     })
@@ -467,9 +467,9 @@ parseLockFormatLine: (text) => {
     })
 
     keyword: tokens[0]
-    keyword.quoted.ifTrue(() => {
+    if(keyword.quoted) {
         fail()
-    })
+    }
     (keyword.text == "lock-format").ifFalse(() => {
         fail()
     })
@@ -490,9 +490,9 @@ parseResolverVersionLine: (text) => {
     })
 
     keyword: tokens[0]
-    keyword.quoted.ifTrue(() => {
+    if(keyword.quoted) {
         fail()
-    })
+    }
     (keyword.text == "resolver-version").ifFalse(() => {
         fail()
     })
@@ -508,9 +508,9 @@ parseResolutionInputLine: (text) => {
     })
 
     keyword: tokens[0]
-    keyword.quoted.ifTrue(() => {
+    if(keyword.quoted) {
         fail()
-    })
+    }
     (keyword.text == "resolution-input").ifFalse(() => {
         fail()
     })
@@ -559,21 +559,21 @@ renderHeader: (header) => {
 }
 
 nodeRefAt: (tokens, start) => {
-    (start >= tokens.size()).ifTrue(() => {
+    if(start >= tokens.size()) {
         fail()
-    })
+    }
 
     kindToken: tokens[start]
-    kindToken.quoted.ifTrue(() => {
+    if(kindToken.quoted) {
         fail()
-    })
+    }
 
     result: null
 
-    (kindToken.text == "workspace").ifTrue(() => {
-        ((start + 1) >= tokens.size()).ifTrue(() => {
+    if(kindToken.text == "workspace") {
+        if((start + 1) >= tokens.size()) {
             fail()
-        })
+        }
 
         packageToken: tokens[start + 1]
         packageToken.quoted.ifFalse(() => {
@@ -587,12 +587,12 @@ nodeRefAt: (tokens, start) => {
             }
             next: start + 2
         }
-    })
+    }
 
-    (kindToken.text == "registry").ifTrue(() => {
-        ((start + 2) >= tokens.size()).ifTrue(() => {
+    if(kindToken.text == "registry") {
+        if((start + 2) >= tokens.size()) {
             fail()
-        })
+        }
 
         packageToken: tokens[start + 1]
         versionToken: tokens[start + 2]
@@ -614,12 +614,12 @@ nodeRefAt: (tokens, start) => {
             }
             next: start + 3
         }
-    })
+    }
 
-    (kindToken.text == "git").ifTrue(() => {
-        ((start + 2) >= tokens.size()).ifTrue(() => {
+    if(kindToken.text == "git") {
+        if((start + 2) >= tokens.size()) {
             fail()
-        })
+        }
 
         packageToken: tokens[start + 1]
         revisionToken: tokens[start + 2]
@@ -639,11 +639,11 @@ nodeRefAt: (tokens, start) => {
             }
             next: start + 3
         }
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }
@@ -662,27 +662,27 @@ parseNodeRef: (text) => {
 renderNodeRef: (ref) => {
     result: null
 
-    (ref.kind == "workspace").ifTrue(() => {
+    if(ref.kind == "workspace") {
         result = "workspace " + renderQstring(ref.packageId)
-    })
+    }
 
-    (ref.kind == "registry").ifTrue(() => {
+    if(ref.kind == "registry") {
         result =
             "registry " +
             renderQstring(ref.packageId) + " " +
             renderQstring(ref.version.text)
-    })
+    }
 
-    (ref.kind == "git").ifTrue(() => {
+    if(ref.kind == "git") {
         result =
             "git " +
             renderQstring(ref.packageId) + " " +
             renderQstring(ref.revision)
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }

@@ -55,9 +55,9 @@ singleLine: (text) => {
     while(index < text.size()) {
         scalar: text[index]
         forbidden.each((control) => {
-            (scalar == control).ifTrue(() => {
+            if(scalar == control) {
                 clean = false
-            })
+            }
         })
         index = index + 1
     }

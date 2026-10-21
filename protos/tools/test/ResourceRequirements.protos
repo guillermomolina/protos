@@ -87,7 +87,7 @@ parse: (text) => {
     declarations: Array()
     seenByCase: Map()
 
-    rootEntries.containsKey("requirement").ifTrue(() => {
+    if(rootEntries.containsKey("requirement")) {
         requirementNodes: rootEntries["requirement"]
         (requirementNodes.kind == "array").ifFalse(() => {
             fail()
@@ -108,27 +108,27 @@ parse: (text) => {
             mode: stringValue(requiredNode(entries, "mode"))
 
             units: null
-            entries.containsKey("units").ifTrue(() => {
+            if(entries.containsKey("units")) {
                 unitsNode: entries["units"]
                 (unitsNode.kind == "integer").ifFalse(() => {
                     fail()
                 })
                 units = unitsNode.value
-            })
+            }
 
             requirementValue: Manifest.requirement(key, mode, units)
 
             seenKeys: null
-            seenByCase.containsKey(caseName).ifTrue(() => {
+            if(seenByCase.containsKey(caseName)) {
                 seenKeys = seenByCase[caseName]
-            })
+            }
             seenByCase.containsKey(caseName).ifFalse(() => {
                 seenKeys = Map()
                 seenByCase[caseName] = seenKeys
             })
-            seenKeys.containsKey(key).ifTrue(() => {
+            if(seenKeys.containsKey(key)) {
                 fail()
-            })
+            }
             seenKeys[key] = true
 
             declarations = Array(
@@ -136,7 +136,7 @@ parse: (text) => {
                 declaration(caseName, requirementValue)
             )
         })
-    })
+    }
 
     frozenTuple(...declarations)
 }
@@ -153,9 +153,9 @@ attachToPlan: (plan, declarations) => {
 
     cases.each((spec) => {
         id: Manifest.caseId(spec)
-        caseById.containsKey(id).ifTrue(() => {
+        if(caseById.containsKey(id)) {
             ambiguousCaseIds[id] = true
-        })
+        }
         caseById.containsKey(id).ifFalse(() => {
             caseById[id] = spec
         })
@@ -168,9 +168,9 @@ attachToPlan: (plan, declarations) => {
         caseById.containsKey(id).ifFalse(() => {
             fail()
         })
-        ambiguousCaseIds.containsKey(id).ifTrue(() => {
+        if(ambiguousCaseIds.containsKey(id)) {
             fail()
-        })
+        }
 
         attached: requirementsByCase.atIfAbsent(id, () => { Array() })
         attached = Array(...attached, declarationRequirement(declarationValue))
@@ -231,17 +231,17 @@ loadFromCorpus: (filesystem, plan) => {
     presentKind: null
 
     entries.each((entry) => {
-        (entry.name == "resource-requirements.toml").ifTrue(() => {
-            present.ifTrue(() => {
+        if(entry.name == "resource-requirements.toml") {
+            if(present) {
                 fail()
-            })
+            }
             present = true
             presentKind = entry.kind
-        })
+        }
     })
 
     result: plan
-    present.ifTrue(() => {
+    if(present) {
         (presentKind == "regular").ifFalse(() => {
             fail()
         })
@@ -249,6 +249,6 @@ loadFromCorpus: (filesystem, plan) => {
         text: readCorpusRequirementsText(filesystem)
         declarations: parse(text)
         result = attachToPlan(plan, declarations)
-    })
+    }
     result
 }

@@ -21,7 +21,7 @@ b: { run: () => { 2 } }
 runAlternating: (count, receiver, other) => {
     result: 0
 
-    (count > 0).ifTrue() {
+    if(count > 0) {
         result = receiver.run() + runAlternating(count - 1, other, receiver)
     }
 

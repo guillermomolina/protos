@@ -18,13 +18,13 @@
 capturedFor: (packageId) => {
     found: null
     externalCaptures.each((capture) => {
-        (capture.packageId == packageId).ifTrue(() => {
+        if(capture.packageId == packageId) {
             found = capture.filesystem
-        })
+        }
     })
-    (found === null).ifTrue(() => {
+    if(found === null) {
         Error().signal()
-    })
+    }
     found
 }
 
@@ -83,20 +83,20 @@ foundB: false
 foundC: false
 
 plan.packages.each((package) => {
-    (package.ref.kind == "registry").ifTrue(() => {
-        (package.ref.packageId == "external-a").ifTrue(() => {
+    if(package.ref.kind == "registry") {
+        if(package.ref.packageId == "external-a") {
             foundA = package.exports["PublicA"] == "ThingA"
-        })
-        (package.ref.packageId == "external-b").ifTrue(() => {
+        }
+        if(package.ref.packageId == "external-b") {
             foundB = package.exports["PublicB"] == "ThingB"
-        })
-    })
+        }
+    }
 
-    (package.ref.kind == "git").ifTrue(() => {
-        (package.ref.packageId == "external-c").ifTrue(() => {
+    if(package.ref.kind == "git") {
+        if(package.ref.packageId == "external-c") {
             foundC = package.exports["PublicC"] == "ThingC"
-        })
-    })
+        }
+    }
 })
 
 foundA.ifFalse(() => { ok = false })
@@ -108,22 +108,22 @@ registryEdge: false
 gitEdge: false
 
 plan.dependencies.each((edge) => {
-    (edge.declaring.kind == "workspace").ifTrue(() => {
-        (edge.alias == "reg").ifTrue(() => {
+    if(edge.declaring.kind == "workspace") {
+        if(edge.alias == "reg") {
             rootEdge = edge.target.kind == "registry"
-        })
-    })
+        }
+    }
 
-    (edge.declaring.kind == "registry").ifTrue(() => {
-        (edge.declaring.packageId == "external-a").ifTrue(() => {
-            (edge.alias == "depreg").ifTrue(() => {
+    if(edge.declaring.kind == "registry") {
+        if(edge.declaring.packageId == "external-a") {
+            if(edge.alias == "depreg") {
                 registryEdge = edge.target.kind == "registry"
-            })
-            (edge.alias == "depgit").ifTrue(() => {
+            }
+            if(edge.alias == "depgit") {
                 gitEdge = edge.target.kind == "git"
-            })
-        })
-    })
+            }
+        }
+    }
 })
 
 rootEdge.ifFalse(() => { ok = false })

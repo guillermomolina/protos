@@ -49,8 +49,8 @@ tests: Array(
     Test("array parallel reduce leftmost failing pair wins", () => {
         Assertions.signals(SlotNotFound, () => {
             Arrays.parallelReduce(Array(0, 1, 2, 3), (left, right) => {
-                (left == 0).ifTrue(() => { SlotNotFound().signal() })
-                (left == 2).ifTrue(() => { InvalidSuper().signal() })
+                if(left == 0) { SlotNotFound().signal() }
+                if(left == 2) { InvalidSuper().signal() }
                 left + right
             }).value()
         })

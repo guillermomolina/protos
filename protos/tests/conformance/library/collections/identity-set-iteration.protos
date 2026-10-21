@@ -23,7 +23,7 @@ tests: Array(
         IdentitySet: import("std:collections/IdentitySet")
         nullMarkers: 0
         IdentitySet.each(IdentitySet(1), (element, marker) => {
-            (marker === null).ifTrue(() => { nullMarkers = nullMarkers + 1 })
+            if(marker === null) { nullMarkers = nullMarkers + 1 }
         })
         Assertions.require(nullMarkers == 1)
     }),

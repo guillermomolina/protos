@@ -21,13 +21,13 @@ Arrays: import("std:collections/Array")
 
 sameElements: (actual, expected) => {
     ok: actual.size() == expected.size()
-    ok.ifTrue(() => {
+    if(ok) {
         index: 0
         expected.each((element) => {
             (actual[index] == element).ifFalse(() => { ok = false })
             index = index + 1
         })
-    })
+    }
     ok
 }
 
@@ -68,8 +68,8 @@ tests: Array(
     Test("array parallel map lowest failing index wins", () => {
         Assertions.signals(SlotNotFound, () => {
             Arrays.parallelMap(Array(0, 1, 2, 3), (value) => {
-                (value == 1).ifTrue(() => { SlotNotFound().signal() })
-                (value == 3).ifTrue(() => { InvalidSuper().signal() })
+                if(value == 1) { SlotNotFound().signal() }
+                if(value == 3) { InvalidSuper().signal() }
                 value
             }).value()
         })

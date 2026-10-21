@@ -22,9 +22,9 @@ retainedAvailable: (retained, candidates) => {
 
     candidates.each((candidate) => {
         available.ifFalse(() => {
-            (Version.compare(retained, candidate) == 0).ifTrue(() => {
+            if(Version.compare(retained, candidate) == 0) {
                 available = true
-            })
+            }
         })
     })
 
@@ -35,11 +35,11 @@ select: (constraint, retained, candidates) => {
     keep: false
 
     (retained === null).ifFalse(() => {
-        retainedAvailable(retained, candidates).ifTrue(() => {
-            Constraint.satisfies(constraint, retained).ifTrue(() => {
+        if(retainedAvailable(retained, candidates)) {
+            if(Constraint.satisfies(constraint, retained)) {
                 keep = true
-            })
-        })
+            }
+        }
     })
 
     result: retained

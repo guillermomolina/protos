@@ -60,9 +60,9 @@ parseOffsetDateTime: (text) => {
     })
     // A signed year is never RFC 3339 text; ISO8601 then requires the
     // remaining year to be exactly four digits.
-    ((text[0] == "-") || (text[0] == "+")).ifTrue(() => {
+    if((text[0] == "-") || (text[0] == "+")) {
         Error().signal()
-    })
+    }
     // The offset is exactly `Z` or the six scalars `±HH:MM`. ISO8601 parses
     // the offset from the first sign after `T`, so a longer offset spelling
     // that would place a sign six scalars from the end is rejected there.

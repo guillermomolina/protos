@@ -109,20 +109,20 @@ tests: Array(
         ow1: Latin1.owningWriter(target)
 
         ok: true
-        (r8 === r16le).ifTrue(() => { ok = false })
-        (r16le === r16be).ifTrue(() => { ok = false })
-        (r16be === r1).ifTrue(() => { ok = false })
-        (or8 === r8).ifTrue(() => { ok = false })
-        (or16le === r16le).ifTrue(() => { ok = false })
-        (or16be === r16be).ifTrue(() => { ok = false })
-        (or1 === r1).ifTrue(() => { ok = false })
-        (w8 === w16le).ifTrue(() => { ok = false })
-        (w16le === w16be).ifTrue(() => { ok = false })
-        (w16be === w1).ifTrue(() => { ok = false })
-        (ow8 === w8).ifTrue(() => { ok = false })
-        (ow16le === w16le).ifTrue(() => { ok = false })
-        (ow16be === w16be).ifTrue(() => { ok = false })
-        (ow1 === w1).ifTrue(() => { ok = false })
+        if(r8 === r16le) { ok = false }
+        if(r16le === r16be) { ok = false }
+        if(r16be === r1) { ok = false }
+        if(or8 === r8) { ok = false }
+        if(or16le === r16le) { ok = false }
+        if(or16be === r16be) { ok = false }
+        if(or1 === r1) { ok = false }
+        if(w8 === w16le) { ok = false }
+        if(w16le === w16be) { ok = false }
+        if(w16be === w1) { ok = false }
+        if(ow8 === w8) { ok = false }
+        if(ow16le === w16le) { ok = false }
+        if(ow16be === w16be) { ok = false }
+        if(ow1 === w1) { ok = false }
 
         Assertions.require(ok)
     }),

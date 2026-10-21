@@ -16,7 +16,7 @@
  */
 
 repeat: (count, operation) => {
-    (count > 0).ifTrue() {
+    if(count > 0) {
         operation()
         repeat(count - 1, operation)
     }

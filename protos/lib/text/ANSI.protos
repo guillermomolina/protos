@@ -44,7 +44,7 @@ render: ((styledTextFacility, styleFacility) => (styledText, stylingEnabled) => 
 
     runs: styledTextFacility.state(styledText)
     result: ""
-    stylingEnabled.ifTrueIfFalse(() => {
+    if(stylingEnabled) {
         escape: "\u{1B}["
         codes: Map()
         codes["black"] = "30"
@@ -60,25 +60,25 @@ render: ((styledTextFacility, styleFacility) => (styledText, stylingEnabled) => 
         active: "default"
         runs.each((run) => {
             foreground: styleFacility.state(run[1])
-            (foreground != active).ifTrue(() => {
-                (active != "default").ifTrue(() => {
+            if(foreground != active) {
+                if(active != "default") {
                     result = result.concat(reset)
-                })
-                (foreground != "default").ifTrue(() => {
+                }
+                if(foreground != "default") {
                     result = result.concat(escape, codes[foreground], "m")
-                })
+                }
                 active = foreground
-            })
+            }
             result = result.concat(run[0])
         })
-        (active != "default").ifTrue(() => {
+        if(active != "default") {
             result = result.concat(reset)
-        })
-    }, () => {
+        }
+    } else {
         runs.each((run) => {
             result = result.concat(run[0])
         })
-    })
+    }
     result
 })(_styledTextFacility, _styleFacility)
 

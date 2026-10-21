@@ -37,9 +37,9 @@ sourceAssociation: (corpusId, spec) => {
     String.recognizes(corpusId).ifFalse(() => {
         dispatchError()
     })
-    (corpusId == "").ifTrue(() => {
+    if(corpusId == "") {
         dispatchError()
-    })
+    }
 
     descriptor: Manifest.caseAuthorityDescriptor(spec)
 

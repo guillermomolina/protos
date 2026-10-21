@@ -32,18 +32,12 @@ _coreObjectMatch: (subject) => {
 ifNull: (...args) => {
     (args.size() == 1).ifFalse(() => { _coreArgumentCountError() })
     block: args[0]
-    (this === null).ifTrueIfFalse(
-        () => { block() },
-        () => { this }
-    )
+    if(this === null) { block() } else { this }
 }
 
 /// Invokes `block(this)` exactly when the receiver is not canonical `null`.
 ifNotNull: (...args) => {
     (args.size() == 1).ifFalse(() => { _coreArgumentCountError() })
     block: args[0]
-    (this === null).ifTrueIfFalse(
-        () => { null },
-        () => { block(this) }
-    )
+    if(this === null) { null } else { block(this) }
 }

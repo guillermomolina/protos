@@ -150,9 +150,9 @@ tests: [
         conditionCalls: 0
         condition: () => {
             conditionCalls = conditionCalls + 1
-            (conditionCalls > 1).ifTrue(() => {
+            if(conditionCalls > 1) {
                 box.state = "condition"
-            })
+            }
             conditionCalls < 3
         }
         result: condition.whileTrue() {
@@ -169,9 +169,9 @@ tests: [
         saved: "unset"
         condition: () => {
             conditionCalls = conditionCalls + 1
-            (conditionCalls == 2).ifTrue(() => {
+            if(conditionCalls == 2) {
                 expected.signal()
-            })
+            }
             true
         }
         caught: Error.handle(
@@ -193,9 +193,9 @@ tests: [
         outer: () => {
             condition: () => {
                 conditionCalls = conditionCalls + 1
-                (conditionCalls == 2).ifTrue(() => {
+                if(conditionCalls == 2) {
                     ^marker
-                })
+                }
                 true
             }
             saved = condition.whileTrue() { "body" }
@@ -248,7 +248,7 @@ tests: [
         remaining: 2
         nullBodies: 0
         Assertions.require((() => remaining > 0).whileTrue((required) => {
-            (required === null).ifTrue(() => { nullBodies = nullBodies + 1 })
+            if(required === null) { nullBodies = nullBodies + 1 }
             remaining = remaining - 1
             required
         }) === null)
@@ -292,12 +292,12 @@ tests: [
                 (() => {
                     saved = (() => { bodyRuns < 3 }).whileTrue() {
                         bodyRuns = bodyRuns + 1
-                        (bodyRuns == 1).ifTrue(() => {
+                        if(bodyRuns == 1) {
                             future.cancel()
-                        })
-                        (bodyRuns > 1).ifTrue(() => {
+                        }
+                        if(bodyRuns > 1) {
                             dependency.value()
-                        })
+                        }
                         "body"
                     }
                 }).ensure(() => {

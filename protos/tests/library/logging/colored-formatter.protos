@@ -47,9 +47,9 @@ escapes: (text) => {
     count: 0
     index: 0
     while(index < text.size()) {
-        (text[index] == esc).ifTrue(() => {
+        if(text[index] == esc) {
             count = count + 1
-        })
+        }
         index = index + 1
     }
     count
@@ -75,10 +75,10 @@ withoutGenerated: (text, code) => {
     while(index < text.size()) {
         skipped: false
         known.each((sequence) => {
-            ((skipped == false) && occursAt(text, index, sequence)).ifTrue(() => {
+            if((skipped == false) && occursAt(text, index, sequence)) {
                 index = index + sequence.size()
                 skipped = true
-            })
+            }
         })
         skipped.ifFalse(() => {
             result = result + text[index]
@@ -223,13 +223,13 @@ tests: [
         corpus().each((event) => {
             expected: TextFormatter.format(event)
             line: formatter.format(event)
-            (event.level == Level.INFO).ifTrueIfFalse(() => {
+            if(event.level == Level.INFO) {
                 Assertions.require(line == expected)
-            }, () => {
+            } else {
                 Assertions.require(line != expected)
                 Assertions.require(withoutGenerated(line, codeOf(event.level)) == expected)
                 Assertions.require(escapes(line) == 2)
-            })
+            }
         })
         null
     }),

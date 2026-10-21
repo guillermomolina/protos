@@ -76,9 +76,9 @@ call: (minimumLevel, sink, timeSource) => {
     Instant: import("std:datetime/Instant")
 
     Level.compare(minimumLevel, minimumLevel)
-    (sink === null).ifTrue(() => {
+    if(sink === null) {
         Error().signal()
-    })
+    }
 
     // An empty matcher Map recognizes exactly normal standard Maps without
     // invoking any behavior of the candidate.
@@ -101,19 +101,19 @@ call: (minimumLevel, sink, timeSource) => {
             }
 
             log: (level, message, ...details) => {
-                (details.size() > 2).ifTrue(() => {
+                if(details.size() > 2) {
                     Error().signal()
-                })
+                }
 
-                (Level.compare(level, minimumLevel) >= 0).ifTrue(() => {
+                if(Level.compare(level, minimumLevel) >= 0) {
                     callFields: null
                     attached: null
-                    (details.size() > 0).ifTrue(() => {
+                    if(details.size() > 0) {
                         callFields = details[0]
-                    })
-                    (details.size() > 1).ifTrue(() => {
+                    }
+                    if(details.size() > 1) {
                         attached = details[1]
-                    })
+                    }
 
                     // Only top-level references are merged here; the event
                     // snapshots every nested value.
@@ -147,7 +147,7 @@ call: (minimumLevel, sink, timeSource) => {
                     }, (failure) => {
                         null
                     })
-                })
+                }
                 null
             }
 

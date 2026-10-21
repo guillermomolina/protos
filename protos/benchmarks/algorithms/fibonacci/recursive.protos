@@ -18,7 +18,7 @@
 fibonacci: (n) => {
     result: n
 
-    (n >= 2).ifTrue() {
+    if(n >= 2) {
         result = fibonacci(n - 1) + fibonacci(n - 2)
     }
 

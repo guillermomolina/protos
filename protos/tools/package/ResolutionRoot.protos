@@ -44,27 +44,27 @@ readTextAt: (projectTreeFilesystem, path) => {
 
 splitPath: (text, allowNavigation) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     result: Array()
     current: Encoding.UTF8.encode("")
 
     appendCurrent: () => {
-        (current.size() == 0).ifTrue(() => {
+        if(current.size() == 0) {
             fail()
-        })
+        }
 
         component: Encoding.UTF8.decode(current)
 
         allowNavigation.ifFalse(() => {
-            (component == ".").ifTrue(() => {
+            if(component == ".") {
                 fail()
-            })
-            (component == "..").ifTrue(() => {
+            }
+            if(component == "..") {
                 fail()
-            })
+            }
         })
 
         result = Array(...result, component)
@@ -72,9 +72,9 @@ splitPath: (text, allowNavigation) => {
     }
 
     source.each((octet) => {
-        (octet == 47).ifTrue(() => {
+        if(octet == 47) {
             appendCurrent()
-        })
+        }
 
         (octet == 47).ifFalse(() => {
             current.add(octet)
@@ -90,9 +90,9 @@ joinComponents: (components) => {
     index: 0
 
     components.each((component) => {
-        (index > 0).ifTrue(() => {
+        if(index > 0) {
             result = result + "/"
-        })
+        }
         result = result + component
         index = index + 1
     })
@@ -101,18 +101,18 @@ joinComponents: (components) => {
 }
 
 popComponent: (components) => {
-    (components.size() == 0).ifTrue(() => {
+    if(components.size() == 0) {
         fail()
-    })
+    }
 
     result: Array()
     index: 0
     limit: components.size() - 1
 
     components.each((component) => {
-        (index < limit).ifTrue(() => {
+        if(index < limit) {
             result = Array(...result, component)
-        })
+        }
         index = index + 1
     })
 
@@ -157,9 +157,9 @@ resolvePathDependency: (
 
     splitPath(sourceText, true).each((component) => {
         (component == ".").ifFalse(() => {
-            (component == "..").ifTrue(() => {
+            if(component == "..") {
                 components = popComponent(components)
-            })
+            }
 
             (component == "..").ifFalse(() => {
                 components = Array(...components, component)
@@ -170,9 +170,9 @@ resolvePathDependency: (
     targetLocation: joinComponents(components)
     targetPackageId: null
 
-    (targetLocation == "").ifTrue(() => {
+    if(targetLocation == "") {
         targetPackageId = rootPackageId
-    })
+    }
 
     (targetLocation == "").ifFalse(() => {
         memberPackageIds.containsKey(targetLocation).ifFalse(() => {
@@ -200,7 +200,7 @@ dependencyKind: (declaration) => {
         null
     })
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         Error.handle(() => {
             ignoredGit: declaration.git
             ignoredRevision: declaration.rev
@@ -208,20 +208,20 @@ dependencyKind: (declaration) => {
         }, (error) => {
             null
         })
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         Error.handle(() => {
             ignoredPath: declaration.path
             result = "path"
         }, (error) => {
             null
         })
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }
@@ -238,7 +238,7 @@ projectDependencies: (
         kind: dependencyKind(declaration)
         projected: null
 
-        (kind == "registry").ifTrue(() => {
+        if(kind == "registry") {
             projected = {
                 alias: alias
                 kind: "registry"
@@ -246,18 +246,18 @@ projectDependencies: (
                 packageId: declaration.package
                 constraint: Constraint.parse(declaration.version)
             }
-        })
+        }
 
-        (kind == "git").ifTrue(() => {
+        if(kind == "git") {
             projected = {
                 alias: alias
                 kind: "git"
                 repository: declaration.git
                 revision: declaration.rev
             }
-        })
+        }
 
-        (kind == "path").ifTrue(() => {
+        if(kind == "path") {
             pathTarget:
                 resolvePathDependency(
                     declaringLocation,
@@ -272,11 +272,11 @@ projectDependencies: (
                 targetLocation: pathTarget.targetLocation
                 targetPackageId: pathTarget.targetPackageId
             }
-        })
+        }
 
-        (projected === null).ifTrue(() => {
+        if(projected === null) {
             fail()
-        })
+        }
 
         result = Array(...result, projected)
     })
@@ -332,9 +332,9 @@ assembleState: (projectTreeFilesystem) => {
                 fail()
             })
 
-            seenLocations.containsKey(location).ifTrue(() => {
+            if(seenLocations.containsKey(location)) {
                 fail()
-            })
+            }
             seenLocations[location] = true
 
             memberManifest:
@@ -346,9 +346,9 @@ assembleState: (projectTreeFilesystem) => {
                 )
 
             packageId: memberManifest.package.id
-            seenPackageIds.containsKey(packageId).ifTrue(() => {
+            if(seenPackageIds.containsKey(packageId)) {
                 fail()
-            })
+            }
             seenPackageIds[packageId] = true
             memberPackageIds[location] = packageId
 
@@ -410,14 +410,14 @@ assembleState: (projectTreeFilesystem) => {
     rawMembers.each((member) => {
         projected: null
         projectedMembers.each((candidate) => {
-            (candidate.location == member.location).ifTrue(() => {
+            if(candidate.location == member.location) {
                 projected = candidate.manifest
-            })
+            }
         })
 
-        (projected === null).ifTrue(() => {
+        if(projected === null) {
             fail()
-        })
+        }
 
         packages =
             Array(

@@ -47,14 +47,14 @@ tests: Array(
     Test("array parallel find index lower failure defeats later match", () => {
         Assertions.signals(SlotNotFound, () => {
             Arrays.parallelFindIndex(Array(0, 1, 2), (value) => {
-                (value == 1).ifTrue(() => { SlotNotFound().signal() })
+                if(value == 1) { SlotNotFound().signal() }
                 value == 2
             }).value()
         })
     }),
     Test("array parallel find index later failure is irrelevant after match", () => {
         found: Arrays.parallelFindIndex(Array(0, 1, 2), (value) => {
-            (value == 2).ifTrue(() => { SlotNotFound().signal() })
+            if(value == 2) { SlotNotFound().signal() }
             value == 1
         }).value()
         Assertions.require(found == 1)

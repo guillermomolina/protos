@@ -44,9 +44,9 @@ tests: Array(
             source: Array(1, 2, 2, 3)
             calls: 0
             found: Arrays.findIndex(source, (element) => {
-                (calls == 0).ifTrue(() => {
+                if(calls == 0) {
                     source[1] = 99
-                })
+                }
                 calls = calls + 1
                 element == 2
             })

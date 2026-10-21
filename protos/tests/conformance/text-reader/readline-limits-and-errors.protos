@@ -94,9 +94,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -142,9 +142,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -190,9 +190,9 @@ tests: [
                         state.reads = state.reads + 1
 
                         value: null
-                        (current < steps.size()).ifTrue(() => {
+                        if(current < steps.size()) {
                             value = steps[current]
-                        })
+                        }
 
                         (() => { value }).future()
                     }
@@ -235,9 +235,9 @@ tests: [
                     state.reads = current + 1
 
                     result: (() => { makeBytes(97) }).future()
-                    (current == 1).ifTrue(() => {
+                    if(current == 1) {
                         result = (() => { IOError().signal() }).future()
-                    })
+                    }
                     result
                 }
             }

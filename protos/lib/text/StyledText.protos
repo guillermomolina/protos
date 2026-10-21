@@ -41,11 +41,11 @@ call: ((facility) => (text, ...rest) => {
         Error().signal()
     })
     style: null
-    (rest.size() == 0).ifTrueIfFalse(() => {
+    if(rest.size() == 0) {
         style = Style("default")
-    }, () => {
+    } else {
         style = rest[0]
-    })
+    }
     Style.recognizes(style).ifFalse(() => {
         Error().signal()
     })
@@ -53,11 +53,11 @@ call: ((facility) => (text, ...rest) => {
     // Runs are runtime-private family state, never slots; empty runs are
     // dropped.
     runs: []
-    (text.size() > 0).ifTrue(() => {
+    if(text.size() > 0) {
         run: [text, style]
         run.freeze()
         runs = [run]
-    })
+    }
     runs.freeze()
 
     template: (StyledText) {}
@@ -76,36 +76,36 @@ concat: ((facility) => (...fragments) => {
     // Empty runs are dropped and adjacent runs with equal styles coalesce.
     runs: []
     append: (text, style) => {
-        (text.size() > 0).ifTrue(() => {
+        if(text.size() > 0) {
             merged: false
-            (runs.size() > 0).ifTrue(() => {
+            if(runs.size() > 0) {
                 last: runs[runs.size() - 1]
-                (last[1] == style).ifTrue(() => {
+                if(last[1] == style) {
                     run: [last[0].concat(text), style]
                     run.freeze()
                     runs[runs.size() - 1] = run
                     merged = true
-                })
-            })
+                }
+            }
             merged.ifFalse(() => {
                 run: [text, style]
                 run.freeze()
                 runs = Array(...runs, run)
             })
-        })
+        }
     }
 
     fragments.each((fragment) => {
-        String.recognizes(fragment).ifTrueIfFalse(() => {
+        if(String.recognizes(fragment)) {
             append(fragment, Style("default"))
-        }, () => {
+        } else {
             StyledText.recognizes(fragment).ifFalse(() => {
                 Error().signal()
             })
             facility.state(fragment).each((run) => {
                 append(run[0], run[1])
             })
-        })
+        }
     })
 
     result: Array(...runs)

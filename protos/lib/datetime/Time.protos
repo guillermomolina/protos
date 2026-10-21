@@ -121,24 +121,24 @@ compare: (left, right) => {
 
     compareIntegers: (first, second) => {
         result: 0
-        (first < second).ifTrue(() => {
+        if(first < second) {
             result = -1
-        })
-        (first > second).ifTrue(() => {
+        }
+        if(first > second) {
             result = 1
-        })
+        }
         result
     }
 
     result: compareIntegers(left.hour, right.hour)
-    (result == 0).ifTrue(() => {
+    if(result == 0) {
         result = compareIntegers(left.minute, right.minute)
-    })
-    (result == 0).ifTrue(() => {
+    }
+    if(result == 0) {
         result = compareIntegers(left.second, right.second)
-    })
-    (result == 0).ifTrue(() => {
+    }
+    if(result == 0) {
         result = compareIntegers(left.nanosecond, right.nanosecond)
-    })
+    }
     result
 }

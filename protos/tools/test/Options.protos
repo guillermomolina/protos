@@ -21,7 +21,7 @@ optionError: () => {
 
 parsePositiveInteger: (text) => {
     source: Encoding.UTF8.encode(text)
-    (source.size() == 0).ifTrue(() => { optionError() })
+    if(source.size() == 0) { optionError() }
 
     value: 0
     source.each((octet) => {
@@ -146,17 +146,17 @@ projectArguments: (arguments) => {
     carryChunk = (builder, chunk, level) => {
         present: builder.chunks.containsKey(level)
 
-        present.ifTrue(() => {
+        if(present) {
             left: builder.chunks[level]
             builder.chunks.remove(level)
             carryChunk(builder, Array(...left, ...chunk), level + 1)
-        })
+        }
 
         present.ifFalse(() => {
             builder.chunks[level] = chunk
-            (level > builder.maxLevel).ifTrue(() => {
+            if(level > builder.maxLevel) {
                 builder.maxLevel = level
-            })
+            }
         })
     }
 
@@ -168,13 +168,13 @@ projectArguments: (arguments) => {
     collectChunks = (builder, level, result) => {
         finalResult: result
 
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            builder.chunks.containsKey(level).ifTrue(() => {
+            if(builder.chunks.containsKey(level)) {
                 nextResult = Array(...result, ...builder.chunks[level])
-            })
+            }
             finalResult = collectChunks(builder, level - 1, nextResult)
-        })
+        }
 
         finalResult
     }
@@ -185,10 +185,10 @@ projectArguments: (arguments) => {
     arguments.each((argument) => {
         wasExpectingSelectedValue: expectingSelectedValue
 
-        wasExpectingSelectedValue.ifTrue(() => {
+        if(wasExpectingSelectedValue) {
             appendBuilt(builder, argument)
             expectingSelectedValue = false
-        })
+        }
 
         wasExpectingSelectedValue.ifFalse(() => {
             selected:
@@ -198,14 +198,14 @@ projectArguments: (arguments) => {
                 (argument === "--directory") ||
                 (argument === "--case")
 
-            selected.ifTrue(() => {
+            if(selected) {
                 appendBuilt(builder, argument)
                 expectingSelectedValue = true
-            })
+            }
 
-            (argument === "--list-cases").ifTrue(() => {
+            if(argument === "--list-cases") {
                 appendBuilt(builder, argument)
-            })
+            }
         })
     })
 
@@ -231,38 +231,38 @@ parse: (arguments) => {
     caseRefValues: []
 
     parsed.command.options.each((occurrence) => {
-        (occurrence.key == "jobs").ifTrue(() => {
+        if(occurrence.key == "jobs") {
             jobsValue = parsePositiveInteger(occurrence.value)
-        })
+        }
 
-        (occurrence.key == "resourceCatalog").ifTrue(() => {
+        if(occurrence.key == "resourceCatalog") {
             resourceCatalogPathValue = occurrence.value
-        })
+        }
 
-        (occurrence.key == "file").ifTrue(() => {
+        if(occurrence.key == "file") {
             filePathValues = [
                 ...filePathValues,
                 occurrence.value
             ]
-        })
+        }
 
-        (occurrence.key == "directory").ifTrue(() => {
+        if(occurrence.key == "directory") {
             directoryPathValues = [
                 ...directoryPathValues,
                 occurrence.value
             ]
-        })
+        }
 
-        (occurrence.key == "listCases").ifTrue(() => {
+        if(occurrence.key == "listCases") {
             listCasesValue = true
-        })
+        }
 
-        (occurrence.key == "case").ifTrue(() => {
+        if(occurrence.key == "case") {
             caseRefValues = [
                 ...caseRefValues,
                 occurrence.value
             ]
-        })
+        }
     })
 
     filePathValues.freeze()

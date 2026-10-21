@@ -23,7 +23,7 @@ tests: Array(
             (same === values).ifFalse(() => { ok = false })
             (Set.size(values) == 1).ifFalse(() => { ok = false })
             (representative === 1).ifFalse(() => { ok = false })
-            (representative === 1.0).ifTrue(() => { ok = false })
+            if(representative === 1.0) { ok = false }
             (marker === true).ifFalse(() => { ok = false })
             ok
         }
@@ -47,7 +47,7 @@ tests: Array(
             (removed === values).ifFalse(() => { ok = false })
             (Set.size(values) == 2).ifFalse(() => { ok = false })
             Set.contains(values, 1).ifFalse(() => { ok = false })
-            Set.contains(values, 2).ifTrue(() => { ok = false })
+            if(Set.contains(values, 2)) { ok = false }
             Set.contains(values, 3).ifFalse(() => { ok = false })
             (values.at(1) === true).ifFalse(() => { ok = false })
             (values.at(3) === true).ifFalse(() => { ok = false })
@@ -56,7 +56,7 @@ tests: Array(
             (identityRemoved === identities).ifFalse(() => { ok = false })
             (IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
             IdentitySet.contains(identities, 1).ifFalse(() => { ok = false })
-            IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
+            if(IdentitySet.contains(identities, 2)) { ok = false }
             IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
             ok
         }
@@ -73,7 +73,7 @@ tests: Array(
             (emptyA !== emptyB).ifFalse(() => { ok = false })
             (Set.size(values) == 2).ifFalse(() => { ok = false })
             Set.contains(values, "Ada").ifFalse(() => { ok = false })
-            Set.contains(values, "Linus").ifTrue(() => { ok = false })
+            if(Set.contains(values, "Linus")) { ok = false }
             (values.at("Ada") === true).ifFalse(() => { ok = false })
             ok
         }
@@ -93,7 +93,7 @@ tests: Array(
             (Set.size(values) == 1).ifFalse(() => { ok = false })
             Set.contains(values, 1.0).ifFalse(() => { ok = false })
             (representative === 1).ifFalse(() => { ok = false })
-            (representative === 1.0).ifTrue(() => { ok = false })
+            if(representative === 1.0) { ok = false }
             (marker === true).ifFalse(() => { ok = false })
             ok
         }

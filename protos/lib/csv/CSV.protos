@@ -38,17 +38,17 @@ rowParser: (emit) => {
     carryFieldChunk = (chunk, level) => {
         present: fieldChunks.containsKey(level)
 
-        present.ifTrue(() => {
+        if(present) {
             left: fieldChunks[level]
             fieldChunks.remove(level)
             carryFieldChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
 
         present.ifFalse(() => {
             fieldChunks[level] = chunk
-            (level > fieldMaxLevel).ifTrue(() => {
+            if(level > fieldMaxLevel) {
                 fieldMaxLevel = level
-            })
+            }
         })
     }
 
@@ -56,13 +56,13 @@ rowParser: (emit) => {
     collectFieldChunks = (level, result) => {
         finalResult: result
 
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            fieldChunks.containsKey(level).ifTrue(() => {
+            if(fieldChunks.containsKey(level)) {
                 nextResult = Array(...result, ...fieldChunks[level])
-            })
+            }
             finalResult = collectFieldChunks(level - 1, nextResult)
-        })
+        }
 
         finalResult
     }
@@ -97,50 +97,50 @@ rowParser: (emit) => {
     consumeOctet: (octet) => {
         skipped: false
 
-        skipLfAfterCr.ifTrue(() => {
+        if(skipLfAfterCr) {
             skipLfAfterCr = false
-            (octet == 10).ifTrue(() => {
+            if(octet == 10) {
                 skipped = true
-            })
-        })
+            }
+        }
 
         skipped.ifFalse(() => {
             previousMode: mode
 
-            (previousMode == "fieldStart").ifTrue(() => {
+            if(previousMode == "fieldStart") {
                 handled: false
 
-                (octet == 44).ifTrue(() => {
+                if(octet == 44) {
                     finishField()
                     rowActive = true
                     handled = true
-                })
+                }
 
                 handled.ifFalse(() => {
-                    (octet == 34).ifTrue(() => {
+                    if(octet == 34) {
                         mode = "quoted"
                         rowActive = true
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 13).ifTrue(() => {
+                    if(octet == 13) {
                         finishField()
                         finishRow()
                         rowActive = false
                         skipLfAfterCr = true
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 10).ifTrue(() => {
+                    if(octet == 10) {
                         finishField()
                         finishRow()
                         rowActive = false
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
@@ -148,111 +148,111 @@ rowParser: (emit) => {
                     mode = "unquoted"
                     rowActive = true
                 })
-            })
+            }
 
-            (previousMode == "unquoted").ifTrue(() => {
+            if(previousMode == "unquoted") {
                 handled: false
 
-                (octet == 44).ifTrue(() => {
+                if(octet == 44) {
                     finishField()
                     mode = "fieldStart"
                     handled = true
-                })
+                }
 
                 handled.ifFalse(() => {
-                    (octet == 34).ifTrue(() => {
+                    if(octet == 34) {
                         fail()
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 13).ifTrue(() => {
+                    if(octet == 13) {
                         finishField()
                         finishRow()
                         mode = "fieldStart"
                         rowActive = false
                         skipLfAfterCr = true
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 10).ifTrue(() => {
+                    if(octet == 10) {
                         finishField()
                         finishRow()
                         mode = "fieldStart"
                         rowActive = false
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
                     fieldBuffer.add(octet)
                 })
-            })
+            }
 
-            (previousMode == "quoted").ifTrue(() => {
-                (octet == 34).ifTrue(() => {
+            if(previousMode == "quoted") {
+                if(octet == 34) {
                     mode = "afterQuote"
-                })
+                }
                 (octet == 34).ifFalse(() => {
                     fieldBuffer.add(octet)
                 })
-            })
+            }
 
-            (previousMode == "afterQuote").ifTrue(() => {
+            if(previousMode == "afterQuote") {
                 handled: false
 
-                (octet == 34).ifTrue(() => {
+                if(octet == 34) {
                     fieldBuffer.add(34)
                     mode = "quoted"
                     handled = true
-                })
+                }
 
                 handled.ifFalse(() => {
-                    (octet == 44).ifTrue(() => {
+                    if(octet == 44) {
                         finishField()
                         mode = "fieldStart"
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 13).ifTrue(() => {
+                    if(octet == 13) {
                         finishField()
                         finishRow()
                         mode = "fieldStart"
                         rowActive = false
                         skipLfAfterCr = true
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
-                    (octet == 10).ifTrue(() => {
+                    if(octet == 10) {
                         finishField()
                         finishRow()
                         mode = "fieldStart"
                         rowActive = false
                         handled = true
-                    })
+                    }
                 })
 
                 handled.ifFalse(() => {
                     fail()
                 })
-            })
+            }
         })
     }
 
     parser = {
         feed: (text) => {
-            failed.ifTrue(() => {
+            if(failed) {
                 Error().signal()
-            })
-            finished.ifTrue(() => {
+            }
+            if(finished) {
                 fail()
-            })
+            }
 
             Encoding.UTF8.encode(text).each((octet) => {
                 consumeOctet(octet)
@@ -262,36 +262,36 @@ rowParser: (emit) => {
         }
 
         finish: () => {
-            failed.ifTrue(() => {
+            if(failed) {
                 Error().signal()
-            })
-            finished.ifTrue(() => {
+            }
+            if(finished) {
                 fail()
-            })
+            }
 
-            (mode == "quoted").ifTrue(() => {
+            if(mode == "quoted") {
                 fail()
-            })
+            }
 
-            (mode == "afterQuote").ifTrue(() => {
+            if(mode == "afterQuote") {
                 finishField()
                 finishRow()
                 rowActive = false
-            })
+            }
 
-            (mode == "unquoted").ifTrue(() => {
+            if(mode == "unquoted") {
                 finishField()
                 finishRow()
                 rowActive = false
-            })
+            }
 
-            (mode == "fieldStart").ifTrue(() => {
-                rowActive.ifTrue(() => {
+            if(mode == "fieldStart") {
+                if(rowActive) {
                     finishField()
                     finishRow()
                     rowActive = false
-                })
-            })
+                }
+            }
 
             finished = true
             parser
@@ -310,17 +310,17 @@ parse: (text) => {
     carryTableChunk = (chunk, level) => {
         present: tableChunks.containsKey(level)
 
-        present.ifTrue(() => {
+        if(present) {
             left: tableChunks[level]
             tableChunks.remove(level)
             carryTableChunk(Array(...left, ...chunk), level + 1)
-        })
+        }
 
         present.ifFalse(() => {
             tableChunks[level] = chunk
-            (level > tableMaxLevel).ifTrue(() => {
+            if(level > tableMaxLevel) {
                 tableMaxLevel = level
-            })
+            }
         })
     }
 
@@ -328,13 +328,13 @@ parse: (text) => {
     collectTableChunks = (level, result) => {
         finalResult: result
 
-        (level >= 0).ifTrue(() => {
+        if(level >= 0) {
             nextResult: result
-            tableChunks.containsKey(level).ifTrue(() => {
+            if(tableChunks.containsKey(level)) {
                 nextResult = Array(...result, ...tableChunks[level])
-            })
+            }
             finalResult = collectTableChunks(level - 1, nextResult)
-        })
+        }
 
         finalResult
     }
@@ -361,40 +361,40 @@ encode: (rows) => {
     table.each((row) => {
         fields: Array(...row)
 
-        (fields.size() == 0).ifTrue(() => {
+        if(fields.size() == 0) {
             Error().signal()
-        })
+        }
 
         index: 0
 
         fields.each((field) => {
-            (index > 0).ifTrue(() => {
+            if(index > 0) {
                 appendByte(44)
-            })
+            }
 
             bytes: Encoding.UTF8.encode(field)
             quoteNeeded: false
 
             bytes.each((octet) => {
-                ((octet == 44) || (octet == 34) || (octet == 13) || (octet == 10)).ifTrue(() => {
+                if((octet == 44) || (octet == 34) || (octet == 13) || (octet == 10)) {
                     quoteNeeded = true
-                })
+                }
             })
 
-            quoteNeeded.ifTrue(() => {
+            if(quoteNeeded) {
                 appendByte(34)
-            })
+            }
 
             bytes.each((octet) => {
-                (quoteNeeded && (octet == 34)).ifTrue(() => {
+                if(quoteNeeded && (octet == 34)) {
                     appendByte(34)
-                })
+                }
                 appendByte(octet)
             })
 
-            quoteNeeded.ifTrue(() => {
+            if(quoteNeeded) {
                 appendByte(34)
-            })
+            }
 
             index = index + 1
         })
@@ -417,12 +417,12 @@ readRows: (textReader, emit) => {
     adapter: null
 
     ensureReady: () => {
-        busy.ifTrue(() => {
+        if(busy) {
             Error().signal()
-        })
-        finished.ifTrue(() => {
+        }
+        if(finished) {
             Error().signal()
-        })
+        }
     }
 
     adapter = {
@@ -436,11 +436,11 @@ readRows: (textReader, emit) => {
             completion: readFuture.then((chunk) => {
                 more: true
 
-                (chunk === null).ifTrue(() => {
+                if(chunk === null) {
                     parser.finish()
                     finished = true
                     more = false
-                })
+                }
 
                 (chunk === null).ifFalse(() => {
                     parser.feed(chunk)
@@ -467,12 +467,12 @@ writeRows: (textWriter) => {
     adapter: null
 
     ensureReady: () => {
-        busy.ifTrue(() => {
+        if(busy) {
             Error().signal()
-        })
-        finished.ifTrue(() => {
+        }
+        if(finished) {
             Error().signal()
-        })
+        }
     }
 
     adapter = {

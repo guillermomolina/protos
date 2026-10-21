@@ -46,17 +46,17 @@ identityNode: null
 identityNode = (value) => {
     node: null
 
-    String.recognizes(value).ifTrue(() => {
+    if(String.recognizes(value)) {
         node = JSON.string(value)
-    })
+    }
 
-    Array.recognizes(value).ifTrue(() => {
+    if(Array.recognizes(value)) {
         node = JSON.array(...Arrays.map(value, identityNode))
-    })
+    }
 
-    (node === null).ifTrue(() => {
+    if(node === null) {
         caseRefError()
-    })
+    }
 
     node
 }
@@ -65,9 +65,9 @@ identityNode = (value) => {
 // nibble mapping is the only local encoding step of the V1 spelling.
 hexDigit: (digit) => {
     octet: 48 + digit
-    (digit >= 10).ifTrue(() => {
+    if(digit >= 10) {
         octet = 87 + digit
-    })
+    }
     octet
 }
 
@@ -78,9 +78,9 @@ derive: (sourceAssociation, selector) => {
     String.recognizes(selector).ifFalse(() => {
         caseRefError()
     })
-    (selector == "").ifTrue(() => {
+    if(selector == "") {
         caseRefError()
-    })
+    }
 
     payload:
         JSON.encode(
@@ -126,9 +126,9 @@ requireSupported: (text) => {
     })
 
     octets: Encoding.UTF8.encode(text)
-    (octets.size() < 4).ifTrue(() => {
+    if(octets.size() < 4) {
         caseRefError()
-    })
+    }
     (octets[0] == 118).ifFalse(() => {
         caseRefError()
     })
@@ -138,9 +138,9 @@ requireSupported: (text) => {
         index = index + 1
     }
 
-    (index == 1).ifTrue(() => {
+    if(index == 1) {
         caseRefError()
-    })
+    }
     (index < octets.size()).ifFalse(() => {
         caseRefError()
     })
@@ -149,9 +149,9 @@ requireSupported: (text) => {
     })
 
     payloadSize: octets.size() - index - 1
-    (payloadSize == 0).ifTrue(() => {
+    if(payloadSize == 0) {
         caseRefError()
-    })
+    }
     (payloadSize.mod(2) == 0).ifFalse(() => {
         caseRefError()
     })

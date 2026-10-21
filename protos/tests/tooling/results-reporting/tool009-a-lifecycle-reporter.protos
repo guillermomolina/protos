@@ -41,9 +41,9 @@ matches: (observation, kind, token, display) => {
         (observation[0] === kind) &&
         (observation[1] == token)
 
-    (display === null).ifTrue(() => {
+    if(display === null) {
         result = result && (observation[2] === null)
-    })
+    }
 
     (display === null).ifFalse(() => {
         result = result && (observation[2] === display)

@@ -18,13 +18,13 @@
 capturedFor: (packageId) => {
     found: null
     externalCaptures.each((capture) => {
-        (capture.packageId == packageId).ifTrue(() => {
+        if(capture.packageId == packageId) {
             found = capture.filesystem
-        })
+        }
     })
-    (found === null).ifTrue(() => {
+    if(found === null) {
         Error().signal()
-    })
+    }
     found
 }
 

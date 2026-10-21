@@ -28,11 +28,11 @@ tests: [
             second: source.without("drop")
 
             flags: 0
-            first.hasSlot("keep").ifTrue(() => { flags = flags + 1 })
+            if(first.hasSlot("keep")) { flags = flags + 1 }
             first.hasSlot("drop").ifFalse(() => { flags = flags + 1 })
-            (source.hasSlot("drop")).ifTrue(() => { flags = flags + 1 })
-            (first.slotValue("keep") === shared).ifTrue(() => { flags = flags + 1 })
-            (first.parent() === Object).ifTrue(() => { flags = flags + 1 })
+            if(source.hasSlot("drop")) { flags = flags + 1 }
+            if(first.slotValue("keep") === shared) { flags = flags + 1 }
+            if(first.parent() === Object) { flags = flags + 1 }
             (first === second).ifFalse(() => { flags = flags + 1 })
             result: flags
             result

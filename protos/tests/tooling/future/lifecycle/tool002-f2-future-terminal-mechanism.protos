@@ -22,12 +22,12 @@ evaluate: (line, source, expectedPassed) => {
     observation: Runner.resultObservation(result)
 
     passed: Runner.resultPassed(result) === expectedPassed
-    passed.ifTrue(() => {
+    if(passed) {
         passed = observation.state === "completed"
-    })
-    passed.ifTrue(() => {
+    }
+    if(passed) {
         passed = observation.error === null
-    })
+    }
     passed
 }
 
@@ -54,63 +54,63 @@ passed:
     Runner.isDExpectation(parentSpec) &&
     Runner.isDExpectation(cancelledSpec)
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-failed-plain.protos\tfuture-error\t-",
         failedSource,
         true
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-failed-invalid-io-argument.protos\tfuture-error-parent\tInvalidIOArgument",
         parentSource,
         true
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-cancelled.protos\tfuture-cancelled\t-",
         cancelledSource,
         true
     )
-})
+}
 
 // FAILED and CANCELLED are not collapsed merely because both value() calls signal.
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-cancelled.protos\tfuture-error\t-",
         cancelledSource,
         false
     )
-})
+}
 
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-failed-plain.protos\tfuture-cancelled\t-",
         failedSource,
         false
     )
-})
+}
 
 // Immediate parent matching remains exact, not ancestry-based.
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "tool002-f2-source-failed-invalid-io-argument.protos\tfuture-error-parent\tIOError",
         parentSource,
         false
     )
-})
+}
 
 // A resolved Future is neither FAILED nor CANCELLED.
-passed.ifTrue(() => {
+if(passed) {
     passed = evaluate(
         "future/tool002-f2-inline.protos\tfuture-error\t-",
         "(() => { 42 }).future()",
         false
     )
-})
+}
 
 passed

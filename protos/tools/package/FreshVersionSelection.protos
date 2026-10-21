@@ -21,18 +21,18 @@ select: (constraint, candidates) => {
     selected: null
 
     candidates.each((candidate) => {
-        Constraint.satisfies(constraint, candidate).ifTrue(() => {
+        if(Constraint.satisfies(constraint, candidate)) {
             found.ifFalse(() => {
                 selected = candidate
                 found = true
             })
 
-            found.ifTrue(() => {
-                (Version.compare(selected, candidate) == -1).ifTrue(() => {
+            if(found) {
+                if(Version.compare(selected, candidate) == -1) {
                     selected = candidate
-                })
-            })
-        })
+                }
+            }
+        }
     })
 
     found.ifFalse(() => {

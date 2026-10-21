@@ -24,9 +24,9 @@ tests: [
             service: {
                 run: (value) => {
                     visits = visits + 1
-                    (value > limit).ifTrue(() => {
+                    if(value > limit) {
                         problem.signal()
-                    })
+                    }
                     completed = completed + 1
                     value * factor
                 }
@@ -55,9 +55,9 @@ tests: [
                 },
                 (caught) => {
                     handlerCalls = handlerCalls + 1
-                    (caught === worker.problem).ifTrue(() => {
+                    if(caught === worker.problem) {
                         identityHits = identityHits + 1
-                    })
+                    }
                     worker.recoveries = worker.recoveries + 1
                     77
                 }

@@ -253,7 +253,7 @@ tests: [
         while(n < limit) {
             n = n + 1
             holder.total = holder.total + n
-            (n == 1).ifTrue(() => { limit = 4 })
+            if(n == 1) { limit = 4 }
         }
         Assertions.require(n == 4)
         Assertions.require(holder.total == 10)

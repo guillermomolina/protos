@@ -37,7 +37,7 @@ tests: [
             returned: m.each((key, value) => {
                 visits = visits + 1
 
-                (visits == 1).ifTrue(() => {
+                if(visits == 1) {
                     valid = valid && (key == "a") && (value === aValue)
 
                     m["b"] = newB
@@ -45,18 +45,18 @@ tests: [
                     m["c"] = newC
                     m["d"] = lateValue
                     bValue.tag = 22
-                })
+                }
 
-                (visits == 2).ifTrue(() => {
+                if(visits == 2) {
                     valid = valid &&
                         (key == "b") &&
                         (value === bValue) &&
                         (value.tag == 22)
-                })
+                }
 
-                (visits == 3).ifTrue(() => {
+                if(visits == 3) {
                     valid = valid && (key == "c") && (value === cValue)
-                })
+                }
             })
 
             valid &&
@@ -80,7 +80,7 @@ tests: [
             outerReturned: m.each((key, value) => {
                 outerVisits = outerVisits + 1
 
-                (outerVisits == 1).ifTrue(() => {
+                if(outerVisits == 1) {
                     m["c"] = 3
 
                     innerReturned: m.each((innerKey, innerValue) => {
@@ -88,7 +88,7 @@ tests: [
                     })
 
                     innerReturned === m
-                })
+                }
             })
 
             (outerVisits == 2) &&

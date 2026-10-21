@@ -29,14 +29,14 @@ tests: [
         git: null
         path: null
         root.dependencies.each((dependency) => {
-            (dependency.kind == "registry").ifTrue(() => { registry = dependency })
-            (dependency.kind == "git").ifTrue(() => { git = dependency })
-            (dependency.kind == "path").ifTrue(() => { path = dependency })
+            if(dependency.kind == "registry") { registry = dependency }
+            if(dependency.kind == "git") { git = dependency }
+            if(dependency.kind == "path") { path = dependency }
         })
 
-        (registry === null).ifTrue(() => { ok = false })
-        (git === null).ifTrue(() => { ok = false })
-        (path === null).ifTrue(() => { ok = false })
+        if(registry === null) { ok = false }
+        if(git === null) { ok = false }
+        if(path === null) { ok = false }
 
         (registry.alias == "registry").ifFalse(() => { ok = false })
         (registry.constraint.kind == "interval").ifFalse(() => { ok = false })

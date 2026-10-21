@@ -21,13 +21,13 @@ Arrays: import("std:collections/Array")
 
 sameElements: (actual, expected) => {
     ok: actual.size() == expected.size()
-    ok.ifTrue(() => {
+    if(ok) {
         index: 0
         expected.each((element) => {
             (actual[index] == element).ifFalse(() => { ok = false })
             index = index + 1
         })
-    })
+    }
     ok
 }
 

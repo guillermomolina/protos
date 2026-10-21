@@ -20,9 +20,9 @@ tests: [
     Test("constraint-prerelease-stable-requirements-reject", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
-        Constraint.satisfiesText("1.5.0", "1.5.0-beta.1").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("^1.4.2", "1.5.0-beta.1").ifTrue(() => { ok = false })
-        Constraint.satisfiesText(">=1.0.0 <2.0.0", "1.5.0-beta.1").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("1.5.0", "1.5.0-beta.1")) { ok = false }
+        if(Constraint.satisfiesText("^1.4.2", "1.5.0-beta.1")) { ok = false }
+        if(Constraint.satisfiesText(">=1.0.0 <2.0.0", "1.5.0-beta.1")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-caret-same-tuple", () => {
@@ -32,9 +32,9 @@ tests: [
         Constraint.satisfiesText("^2.0.0-rc.1", "2.0.0-rc.2").ifFalse(() => { ok = false })
         Constraint.satisfiesText("^2.0.0-rc.1", "2.0.0").ifFalse(() => { ok = false })
         Constraint.satisfiesText("^2.0.0-rc.1", "2.5.0").ifFalse(() => { ok = false })
-        Constraint.satisfiesText("^2.0.0-rc.1", "2.0.0-rc.0").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("^2.0.0-rc.1", "2.1.0-beta.1").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("^2.0.0-rc.1", "3.0.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("^2.0.0-rc.1", "2.0.0-rc.0")) { ok = false }
+        if(Constraint.satisfiesText("^2.0.0-rc.1", "2.1.0-beta.1")) { ok = false }
+        if(Constraint.satisfiesText("^2.0.0-rc.1", "3.0.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-caret-zero-zero", () => {
@@ -43,7 +43,7 @@ tests: [
         Constraint.satisfiesText("^0.0.0-rc.1", "0.0.0-rc.1").ifFalse(() => { ok = false })
         Constraint.satisfiesText("^0.0.0-rc.1", "0.0.0-rc.2").ifFalse(() => { ok = false })
         Constraint.satisfiesText("^0.0.0-rc.1", "0.0.0").ifFalse(() => { ok = false })
-        Constraint.satisfiesText("^0.0.0-rc.1", "0.0.1").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("^0.0.0-rc.1", "0.0.1")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-interval-lower", () => {
@@ -51,16 +51,16 @@ tests: [
         ok: true
         Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.1").ifFalse(() => { ok = false })
         Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.2").ifFalse(() => { ok = false })
-        Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.0").ifTrue(() => { ok = false })
-        Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.0")) { ok = false }
+        if(Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-interval-upper", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
         Constraint.satisfiesText(">=1.0.0 <2.0.0-beta.3", "2.0.0-beta.2").ifFalse(() => { ok = false })
-        Constraint.satisfiesText(">=1.0.0 <2.0.0-beta.3", "2.0.0-beta.3").ifTrue(() => { ok = false })
-        Constraint.satisfiesText(">=1.0.0 <2.0.0-beta.3", "1.5.0-beta.1").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">=1.0.0 <2.0.0-beta.3", "2.0.0-beta.3")) { ok = false }
+        if(Constraint.satisfiesText(">=1.0.0 <2.0.0-beta.3", "1.5.0-beta.1")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-interval-stable-after-lower", () => {
@@ -68,15 +68,15 @@ tests: [
         ok: true
         Constraint.satisfiesText(">=2.0.0-rc.1 <3.0.0", "2.0.0").ifFalse(() => { ok = false })
         Constraint.satisfiesText(">=2.0.0-rc.1 <3.0.0", "2.9.9").ifFalse(() => { ok = false })
-        Constraint.satisfiesText(">=2.0.0-rc.1 <3.0.0", "2.1.0-beta.1").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText(">=2.0.0-rc.1 <3.0.0", "2.1.0-beta.1")) { ok = false }
         Assertions.require(ok)
     }),
     Test("constraint-prerelease-exact-remains-exact", () => {
         Constraint: import("self:DependencyConstraint")
         ok: true
         Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.1").ifFalse(() => { ok = false })
-        Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.2").ifTrue(() => { ok = false })
-        Constraint.satisfiesText("2.0.0-rc.1", "2.0.0").ifTrue(() => { ok = false })
+        if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0-rc.2")) { ok = false }
+        if(Constraint.satisfiesText("2.0.0-rc.1", "2.0.0")) { ok = false }
         Assertions.require(ok)
     })
 ]

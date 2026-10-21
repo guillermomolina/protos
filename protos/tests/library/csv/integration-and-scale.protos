@@ -24,7 +24,7 @@ tests: [
             sameTable: (left, right) => {
                 same: left.size() == right.size()
 
-                same.ifTrue(() => {
+                if(same) {
                     rowIndex: 0
                     left.each((leftRow) => {
                         rightRow: right[rowIndex]
@@ -32,7 +32,7 @@ tests: [
                             same = false
                         })
 
-                        same.ifTrue(() => {
+                        if(same) {
                             fieldIndex: 0
                             leftRow.each((leftField) => {
                                 (leftField == rightRow[fieldIndex]).ifFalse(() => {
@@ -40,11 +40,11 @@ tests: [
                                 })
                                 fieldIndex = fieldIndex + 1
                             })
-                        })
+                        }
 
                         rowIndex = rowIndex + 1
                     })
-                })
+                }
 
                 same
             }

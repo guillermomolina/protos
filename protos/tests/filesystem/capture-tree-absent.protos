@@ -15,7 +15,7 @@
 
 // D171: Filesystem.captureTree is not a standard Filesystem selector; entries remains.
 ok: filesystem.hasSlot("entries")
-filesystem.hasSlot("captureTree").ifTrue(() => {
+if(filesystem.hasSlot("captureTree")) {
     ok = false
-})
+}
 ok

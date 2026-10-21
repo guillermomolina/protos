@@ -44,9 +44,9 @@ append: (accumulator, value) => {
     }
 
     accumulator.chunks[level] = chunk
-    (level > accumulator.maxLevel).ifTrue(() => {
+    if(level > accumulator.maxLevel) {
         accumulator.maxLevel = level
-    })
+    }
 
     null
 }
@@ -58,9 +58,9 @@ finish: (accumulator) => {
     level: accumulator.maxLevel
 
     while(level >= 0) {
-        accumulator.chunks.containsKey(level).ifTrue(() => {
+        if(accumulator.chunks.containsKey(level)) {
             result = Array(...result, ...accumulator.chunks[level])
-        })
+        }
         level = level - 1
     }
 

@@ -55,9 +55,9 @@ float: (value) => {
 /// Answers a fresh TOML boolean node; `value` must be canonical `true` or `false`.
 boolean: (value) => {
     valid: value === true
-    (value === false).ifTrue(() => {
+    if(value === false) {
         valid = true
-    })
+    }
     valid.ifFalse(() => {
         Error().signal()
     })
@@ -75,37 +75,37 @@ localDate: (year, month, day) => {
     ignoredMonthValidation: 0 + month
     ignoredDayValidation: 0 + day
 
-    ((year < 1) || (year > 9999)).ifTrue(() => {
+    if((year < 1) || (year > 9999)) {
         Error().signal()
-    })
-    ((month < 1) || (month > 12)).ifTrue(() => {
+    }
+    if((month < 1) || (month > 12)) {
         Error().signal()
-    })
+    }
 
     maxDay: 31
-    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+    if((month == 4) || (month == 6) || (month == 9) || (month == 11)) {
         maxDay = 30
-    })
-    (month == 2).ifTrue(() => {
+    }
+    if(month == 2) {
         leap: false
-        (year.mod(4) == 0).ifTrue(() => {
+        if(year.mod(4) == 0) {
             leap = true
-        })
-        (year.mod(100) == 0).ifTrue(() => {
+        }
+        if(year.mod(100) == 0) {
             leap = false
-        })
-        (year.mod(400) == 0).ifTrue(() => {
+        }
+        if(year.mod(400) == 0) {
             leap = true
-        })
+        }
         maxDay = 28
-        leap.ifTrue(() => {
+        if(leap) {
             maxDay = 29
-        })
-    })
+        }
+    }
 
-    ((day < 1) || (day > maxDay)).ifTrue(() => {
+    if((day < 1) || (day > maxDay)) {
         Error().signal()
-    })
+    }
 
     date: {
         year: year
@@ -129,38 +129,38 @@ localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     ignoredFractionCoefficientValidation: 0 + fractionCoefficient
     ignoredFractionDigitsValidation: 0 + fractionDigits
 
-    ((hour < 0) || (hour > 23)).ifTrue(() => {
+    if((hour < 0) || (hour > 23)) {
         Error().signal()
-    })
-    ((minute < 0) || (minute > 59)).ifTrue(() => {
+    }
+    if((minute < 0) || (minute > 59)) {
         Error().signal()
-    })
-    ((second < 0) || (second > 60)).ifTrue(() => {
+    }
+    if((second < 0) || (second > 60)) {
         Error().signal()
-    })
-    (fractionCoefficient < 0).ifTrue(() => {
+    }
+    if(fractionCoefficient < 0) {
         Error().signal()
-    })
-    (fractionDigits < 0).ifTrue(() => {
+    }
+    if(fractionDigits < 0) {
         Error().signal()
-    })
+    }
 
-    (fractionDigits == 0).ifTrue(() => {
-        (fractionCoefficient != 0).ifTrue(() => {
+    if(fractionDigits == 0) {
+        if(fractionCoefficient != 0) {
             Error().signal()
-        })
-    })
-    (fractionDigits > 0).ifTrue(() => {
+        }
+    }
+    if(fractionDigits > 0) {
         limit: 1
         index: 0
         while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
         }
-        (fractionCoefficient >= limit).ifTrue(() => {
+        if(fractionCoefficient >= limit) {
             Error().signal()
-        })
-    })
+        }
+    }
 
     fraction: {
         coefficient: fractionCoefficient
@@ -203,69 +203,69 @@ localDateTime: (
     ignoredFractionCoefficientValidation: 0 + fractionCoefficient
     ignoredFractionDigitsValidation: 0 + fractionDigits
 
-    ((year < 1) || (year > 9999)).ifTrue(() => {
+    if((year < 1) || (year > 9999)) {
         Error().signal()
-    })
-    ((month < 1) || (month > 12)).ifTrue(() => {
+    }
+    if((month < 1) || (month > 12)) {
         Error().signal()
-    })
+    }
 
     maxDay: 31
-    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+    if((month == 4) || (month == 6) || (month == 9) || (month == 11)) {
         maxDay = 30
-    })
-    (month == 2).ifTrue(() => {
+    }
+    if(month == 2) {
         leap: false
-        (year.mod(4) == 0).ifTrue(() => {
+        if(year.mod(4) == 0) {
             leap = true
-        })
-        (year.mod(100) == 0).ifTrue(() => {
+        }
+        if(year.mod(100) == 0) {
             leap = false
-        })
-        (year.mod(400) == 0).ifTrue(() => {
+        }
+        if(year.mod(400) == 0) {
             leap = true
-        })
+        }
         maxDay = 28
-        leap.ifTrue(() => {
+        if(leap) {
             maxDay = 29
-        })
-    })
-    ((day < 1) || (day > maxDay)).ifTrue(() => {
+        }
+    }
+    if((day < 1) || (day > maxDay)) {
         Error().signal()
-    })
+    }
 
-    ((hour < 0) || (hour > 23)).ifTrue(() => {
+    if((hour < 0) || (hour > 23)) {
         Error().signal()
-    })
-    ((minute < 0) || (minute > 59)).ifTrue(() => {
+    }
+    if((minute < 0) || (minute > 59)) {
         Error().signal()
-    })
-    ((second < 0) || (second > 60)).ifTrue(() => {
+    }
+    if((second < 0) || (second > 60)) {
         Error().signal()
-    })
-    (fractionCoefficient < 0).ifTrue(() => {
+    }
+    if(fractionCoefficient < 0) {
         Error().signal()
-    })
-    (fractionDigits < 0).ifTrue(() => {
+    }
+    if(fractionDigits < 0) {
         Error().signal()
-    })
+    }
 
-    (fractionDigits == 0).ifTrue(() => {
-        (fractionCoefficient != 0).ifTrue(() => {
+    if(fractionDigits == 0) {
+        if(fractionCoefficient != 0) {
             Error().signal()
-        })
-    })
-    (fractionDigits > 0).ifTrue(() => {
+        }
+    }
+    if(fractionDigits > 0) {
         limit: 1
         index: 0
         while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
         }
-        (fractionCoefficient >= limit).ifTrue(() => {
+        if(fractionCoefficient >= limit) {
             Error().signal()
-        })
-    })
+        }
+    }
 
     fraction: {
         coefficient: fractionCoefficient
@@ -314,73 +314,73 @@ offsetDateTime: (
     ignoredFractionDigitsValidation: 0 + fractionDigits
     ignoredOffsetValidation: 0 + offsetMinutes
 
-    ((year < 1) || (year > 9999)).ifTrue(() => {
+    if((year < 1) || (year > 9999)) {
         Error().signal()
-    })
-    ((month < 1) || (month > 12)).ifTrue(() => {
+    }
+    if((month < 1) || (month > 12)) {
         Error().signal()
-    })
+    }
 
     maxDay: 31
-    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+    if((month == 4) || (month == 6) || (month == 9) || (month == 11)) {
         maxDay = 30
-    })
-    (month == 2).ifTrue(() => {
+    }
+    if(month == 2) {
         leap: false
-        (year.mod(4) == 0).ifTrue(() => {
+        if(year.mod(4) == 0) {
             leap = true
-        })
-        (year.mod(100) == 0).ifTrue(() => {
+        }
+        if(year.mod(100) == 0) {
             leap = false
-        })
-        (year.mod(400) == 0).ifTrue(() => {
+        }
+        if(year.mod(400) == 0) {
             leap = true
-        })
+        }
         maxDay = 28
-        leap.ifTrue(() => {
+        if(leap) {
             maxDay = 29
-        })
-    })
-    ((day < 1) || (day > maxDay)).ifTrue(() => {
+        }
+    }
+    if((day < 1) || (day > maxDay)) {
         Error().signal()
-    })
+    }
 
-    ((hour < 0) || (hour > 23)).ifTrue(() => {
+    if((hour < 0) || (hour > 23)) {
         Error().signal()
-    })
-    ((minute < 0) || (minute > 59)).ifTrue(() => {
+    }
+    if((minute < 0) || (minute > 59)) {
         Error().signal()
-    })
-    ((second < 0) || (second > 60)).ifTrue(() => {
+    }
+    if((second < 0) || (second > 60)) {
         Error().signal()
-    })
-    (fractionCoefficient < 0).ifTrue(() => {
+    }
+    if(fractionCoefficient < 0) {
         Error().signal()
-    })
-    (fractionDigits < 0).ifTrue(() => {
+    }
+    if(fractionDigits < 0) {
         Error().signal()
-    })
+    }
 
-    (fractionDigits == 0).ifTrue(() => {
-        (fractionCoefficient != 0).ifTrue(() => {
+    if(fractionDigits == 0) {
+        if(fractionCoefficient != 0) {
             Error().signal()
-        })
-    })
-    (fractionDigits > 0).ifTrue(() => {
+        }
+    }
+    if(fractionDigits > 0) {
         limit: 1
         index: 0
         while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
         }
-        (fractionCoefficient >= limit).ifTrue(() => {
+        if(fractionCoefficient >= limit) {
             Error().signal()
-        })
-    })
+        }
+    }
 
-    ((offsetMinutes < -1439) || (offsetMinutes > 1439)).ifTrue(() => {
+    if((offsetMinutes < -1439) || (offsetMinutes > 1439)) {
         Error().signal()
-    })
+    }
 
     fraction: {
         coefficient: fractionCoefficient
@@ -413,15 +413,15 @@ array: (...nodes) => {
     validateNode: (node) => {
         kind: node.kind
         valid: kind === "string"
-        (kind === "integer").ifTrue(() => { valid = true })
-        (kind === "float").ifTrue(() => { valid = true })
-        (kind === "boolean").ifTrue(() => { valid = true })
-        (kind === "offsetDateTime").ifTrue(() => { valid = true })
-        (kind === "localDateTime").ifTrue(() => { valid = true })
-        (kind === "localDate").ifTrue(() => { valid = true })
-        (kind === "localTime").ifTrue(() => { valid = true })
-        (kind === "array").ifTrue(() => { valid = true })
-        (kind === "table").ifTrue(() => { valid = true })
+        if(kind === "integer") { valid = true }
+        if(kind === "float") { valid = true }
+        if(kind === "boolean") { valid = true }
+        if(kind === "offsetDateTime") { valid = true }
+        if(kind === "localDateTime") { valid = true }
+        if(kind === "localDate") { valid = true }
+        if(kind === "localTime") { valid = true }
+        if(kind === "array") { valid = true }
+        if(kind === "table") { valid = true }
         valid.ifFalse(() => {
             Error().signal()
         })
@@ -449,15 +449,15 @@ table: (...nameNodePairs) => {
     validateNode: (node) => {
         kind: node.kind
         valid: kind === "string"
-        (kind === "integer").ifTrue(() => { valid = true })
-        (kind === "float").ifTrue(() => { valid = true })
-        (kind === "boolean").ifTrue(() => { valid = true })
-        (kind === "offsetDateTime").ifTrue(() => { valid = true })
-        (kind === "localDateTime").ifTrue(() => { valid = true })
-        (kind === "localDate").ifTrue(() => { valid = true })
-        (kind === "localTime").ifTrue(() => { valid = true })
-        (kind === "array").ifTrue(() => { valid = true })
-        (kind === "table").ifTrue(() => { valid = true })
+        if(kind === "integer") { valid = true }
+        if(kind === "float") { valid = true }
+        if(kind === "boolean") { valid = true }
+        if(kind === "offsetDateTime") { valid = true }
+        if(kind === "localDateTime") { valid = true }
+        if(kind === "localDate") { valid = true }
+        if(kind === "localTime") { valid = true }
+        if(kind === "array") { valid = true }
+        if(kind === "table") { valid = true }
         valid.ifFalse(() => {
             Error().signal()
         })
@@ -471,19 +471,19 @@ table: (...nameNodePairs) => {
     nameNodePairs.each((entry) => {
         wasExpectingName: expectingName
 
-        wasExpectingName.ifTrue(() => {
+        if(wasExpectingName) {
             String.recognizes(entry).ifFalse(() => {
                 Error().signal()
             })
             pendingName = entry
             expectingName = false
-        })
+        }
 
         wasExpectingName.ifFalse(() => {
             validateNode(entry)
-            result.containsKey(pendingName).ifTrue(() => {
+            if(result.containsKey(pendingName)) {
                 Error().signal()
-            })
+            }
             result[pendingName] = entry
             pendingName = null
             expectingName = true
@@ -515,12 +515,12 @@ encode: (rootTable) => {
     }
 
     emitHexNibble: (digit) => {
-        (digit < 10).ifTrue(() => {
+        if(digit < 10) {
             output.add(48 + digit)
-        })
-        (digit >= 10).ifTrue(() => {
+        }
+        if(digit >= 10) {
             output.add(55 + digit)
-        })
+        }
     }
 
     emitBasicString: (text) => {
@@ -532,23 +532,23 @@ encode: (rootTable) => {
         Encoding.UTF8.encode(text).each((octet) => {
             handled: false
 
-            (octet == 34).ifTrue(() => {
+            if(octet == 34) {
                 output.add(92)
                 output.add(34)
                 handled = true
-            })
-            (octet == 92).ifTrue(() => {
+            }
+            if(octet == 92) {
                 output.add(92)
                 output.add(92)
                 handled = true
-            })
+            }
 
             handled.ifFalse(() => {
                 control: octet < 32
-                (octet == 127).ifTrue(() => {
+                if(octet == 127) {
                     control = true
-                })
-                control.ifTrue(() => {
+                }
+                if(control) {
                     output.add(92)
                     output.add(117)
                     output.add(48)
@@ -556,7 +556,7 @@ encode: (rootTable) => {
                     emitHexNibble(octet.div(16))
                     emitHexNibble(octet.mod(16))
                     handled = true
-                })
+                }
             })
 
             handled.ifFalse(() => {
@@ -573,23 +573,23 @@ encode: (rootTable) => {
 
         negative: value < 0
         magnitude: value
-        negative.ifTrue(() => {
+        if(negative) {
             magnitude = 0 - value
-        })
+        }
 
         reversed: Encoding.UTF8.encode("")
-        (magnitude == 0).ifTrue(() => {
+        if(magnitude == 0) {
             reversed.add(48)
-        })
+        }
         while(magnitude > 0) {
             reversed.add(48 + magnitude.mod(10))
             magnitude = magnitude.div(10)
         }
 
         result: Encoding.UTF8.encode("")
-        negative.ifTrue(() => {
+        if(negative) {
             result.add(45)
-        })
+        }
 
         index: reversed.size() - 1
         while(index >= 0) {
@@ -611,22 +611,22 @@ encode: (rootTable) => {
     }
 
     powerInteger: (base, exponent) => {
-        (exponent < 0).ifTrue(() => {
+        if(exponent < 0) {
             fail()
-        })
+        }
 
         result: 1
         factor: base
         remaining: exponent
 
         while(remaining > 0) {
-            (remaining.mod(2) == 1).ifTrue(() => {
+            if(remaining.mod(2) == 1) {
                 result = result * factor
-            })
+            }
             remaining = remaining.div(2)
-            (remaining > 0).ifTrue(() => {
+            if(remaining > 0) {
                 factor = factor * factor
-            })
+            }
         }
 
         result
@@ -634,9 +634,9 @@ encode: (rootTable) => {
 
     absoluteInteger: (value) => {
         result: value
-        (result < 0).ifTrue(() => {
+        if(result < 0) {
             result = 0 - result
-        })
+        }
         result
     }
 
@@ -645,49 +645,49 @@ encode: (rootTable) => {
         digitCount: digits.size()
 
         fixed: ""
-        (decimalExponent >= 0).ifTrue(() => {
+        if(decimalExponent >= 0) {
             fixed = digits + repeatZero(decimalExponent) + ".0"
-        })
+        }
 
-        (decimalExponent < 0).ifTrue(() => {
+        if(decimalExponent < 0) {
             point: digitCount + decimalExponent
 
-            (point <= 0).ifTrue(() => {
+            if(point <= 0) {
                 fixed = "0." + repeatZero(0 - point) + digits
-            })
+            }
 
-            (point > 0).ifTrue(() => {
+            if(point > 0) {
                 result: ""
                 index: 0
                 while(index < digitCount) {
-                    (index == point).ifTrue(() => {
+                    if(index == point) {
                         result = result + "."
-                    })
+                    }
                     result = result + digits[index]
                     index = index + 1
                 }
                 fixed = result
-            })
-        })
+            }
+        }
 
         scientificExponent: decimalExponent + digitCount - 1
         scientific: digits[0]
 
-        (digitCount > 1).ifTrue(() => {
+        if(digitCount > 1) {
             scientific = scientific + "."
             index: 1
             while(index < digitCount) {
                 scientific = scientific + digits[index]
                 index = index + 1
             }
-        })
+        }
 
         scientific = scientific + "e" + integerText(scientificExponent)
 
         result: fixed
-        (scientific.size() < fixed.size()).ifTrue(() => {
+        if(scientific.size() < fixed.size()) {
             result = scientific
-        })
+        }
         result
     }
 
@@ -708,35 +708,35 @@ encode: (rootTable) => {
         })
 
         handled.ifFalse(() => {
-            (value == positiveInfinity).ifTrue(() => {
+            if(value == positiveInfinity) {
                 result = "inf"
                 handled = true
-            })
+            }
         })
 
         handled.ifFalse(() => {
-            (value == negativeInfinity).ifTrue(() => {
+            if(value == negativeInfinity) {
                 result = "-inf"
                 handled = true
-            })
+            }
         })
 
         handled.ifFalse(() => {
-            (value == 0.0).ifTrue(() => {
+            if(value == 0.0) {
                 result = "0.0"
-                ((1.0 / value) == negativeInfinity).ifTrue(() => {
+                if((1.0 / value) == negativeInfinity) {
                     result = "-0.0"
-                })
+                }
                 handled = true
-            })
+            }
         })
 
         handled.ifFalse(() => {
             negative: value < 0.0
             magnitude: value
-            negative.ifTrue(() => {
+            if(negative) {
                 magnitude = 0.0 - value
-            })
+            }
 
             normalized: magnitude
             binaryExponent: 0
@@ -757,32 +757,32 @@ encode: (rootTable) => {
             numerator: significand
             denominator: 1
 
-            (binaryShift >= 0).ifTrue(() => {
+            if(binaryShift >= 0) {
                 numerator = numerator * powerInteger(2, binaryShift)
-            })
+            }
 
-            (binaryShift < 0).ifTrue(() => {
+            if(binaryShift < 0) {
                 denominator = powerInteger(2, 0 - binaryShift)
-            })
+            }
 
             decimalExponent: 0
 
-            (numerator >= denominator).ifTrue(() => {
+            if(numerator >= denominator) {
                 threshold: denominator * 10
                 while(numerator >= threshold) {
                     decimalExponent = decimalExponent + 1
                     threshold = threshold * 10
                 }
-            })
+            }
 
-            (numerator < denominator).ifTrue(() => {
+            if(numerator < denominator) {
                 decimalExponent = -1
                 scaledNumerator: numerator * 10
                 while(scaledNumerator < denominator) {
                     decimalExponent = decimalExponent - 1
                     scaledNumerator = scaledNumerator * 10
                 }
-            })
+            }
 
             coefficient: null
             coefficientExponent: 0
@@ -793,30 +793,30 @@ encode: (rootTable) => {
                 scaledNumerator: numerator
                 scaledDenominator: denominator
 
-                (candidateExponent >= 0).ifTrue(() => {
+                if(candidateExponent >= 0) {
                     scaledDenominator =
                         scaledDenominator * powerInteger(10, candidateExponent)
-                })
+                }
 
-                (candidateExponent < 0).ifTrue(() => {
+                if(candidateExponent < 0) {
                     scaledNumerator =
                         scaledNumerator * powerInteger(10, 0 - candidateExponent)
-                })
+                }
 
                 quotient: scaledNumerator.div(scaledDenominator)
                 remainder: scaledNumerator.mod(scaledDenominator)
                 rounded: quotient
                 twiceRemainder: remainder * 2
 
-                (twiceRemainder > scaledDenominator).ifTrue(() => {
+                if(twiceRemainder > scaledDenominator) {
                     rounded = rounded + 1
-                })
+                }
 
-                (twiceRemainder == scaledDenominator).ifTrue(() => {
-                    (rounded.mod(2) == 1).ifTrue(() => {
+                if(twiceRemainder == scaledDenominator) {
+                    if(rounded.mod(2) == 1) {
                         rounded = rounded + 1
-                    })
-                })
+                    }
+                }
 
                 bestCandidate: null
                 bestDistance: null
@@ -824,22 +824,22 @@ encode: (rootTable) => {
                 roundTrips: (candidate) => {
                     candidateFloat: null
 
-                    (candidateExponent >= 0).ifTrue(() => {
+                    if(candidateExponent >= 0) {
                         candidateFloat =
                             Float(candidate * powerInteger(10, candidateExponent))
-                    })
+                    }
 
-                    (candidateExponent < 0).ifTrue(() => {
+                    if(candidateExponent < 0) {
                         candidateFloat =
                             Float(candidate / powerInteger(10, 0 - candidateExponent))
-                    })
+                    }
 
                     candidateFloat == magnitude
                 }
 
                 consider: (candidate) => {
-                    (candidate > 0).ifTrue(() => {
-                        roundTrips(candidate).ifTrue(() => {
+                    if(candidate > 0) {
+                        if(roundTrips(candidate)) {
                             distance:
                                 absoluteInteger(
                                     scaledNumerator - candidate * scaledDenominator
@@ -848,25 +848,25 @@ encode: (rootTable) => {
                             better: bestCandidate === null
 
                             (bestCandidate === null).ifFalse(() => {
-                                (distance < bestDistance).ifTrue(() => {
+                                if(distance < bestDistance) {
                                     better = true
-                                })
+                                }
 
-                                (distance == bestDistance).ifTrue(() => {
+                                if(distance == bestDistance) {
                                     candidateEven: candidate.mod(2) == 0
                                     bestOdd: bestCandidate.mod(2) == 1
-                                    (candidateEven && bestOdd).ifTrue(() => {
+                                    if(candidateEven && bestOdd) {
                                         better = true
-                                    })
-                                })
+                                    }
+                                }
                             })
 
-                            better.ifTrue(() => {
+                            if(better) {
                                 bestCandidate = candidate
                                 bestDistance = distance
-                            })
-                        })
-                    })
+                            }
+                        }
+                    }
                 }
 
                 consider(rounded)
@@ -881,9 +881,9 @@ encode: (rootTable) => {
                 significantDigits = significantDigits + 1
             }
 
-            (coefficient === null).ifTrue(() => {
+            if(coefficient === null) {
                 fail()
-            })
+            }
 
             while(coefficient.mod(10) == 0) {
                 coefficient = coefficient.div(10)
@@ -891,9 +891,9 @@ encode: (rootTable) => {
             }
 
             result = decimalToken(coefficient, coefficientExponent)
-            negative.ifTrue(() => {
+            if(negative) {
                 result = "-" + result
-            })
+            }
         })
 
         result
@@ -920,7 +920,7 @@ encode: (rootTable) => {
         })
 
         result: ""
-        (digits > 0).ifTrue(() => {
+        if(digits > 0) {
             raw: Encoding.UTF8.encode(integerText(coefficient))
             buffer: Encoding.UTF8.encode(".")
             padding: digits - raw.size()
@@ -932,7 +932,7 @@ encode: (rootTable) => {
                 buffer.add(octet)
             })
             result = Encoding.UTF8.decode(buffer)
-        })
+        }
         result
     }
 
@@ -1023,10 +1023,10 @@ encode: (rootTable) => {
         (value.offsetMinutes == 0).ifFalse(() => {
             sign: "+"
             magnitude: value.offsetMinutes
-            (magnitude < 0).ifTrue(() => {
+            if(magnitude < 0) {
                 sign = "-"
                 magnitude = 0 - magnitude
-            })
+            }
 
             offsetText =
                 sign +
@@ -1067,59 +1067,59 @@ encode: (rootTable) => {
         value: node.value
         handled: false
 
-        (kind === "string").ifTrue(() => {
+        if(kind === "string") {
             ignoredValidation: string(value)
             emitBasicString(value)
             handled = true
-        })
+        }
 
-        (kind === "integer").ifTrue(() => {
+        if(kind === "integer") {
             ignoredValidation: integer(value)
             emitText(integerText(value))
             handled = true
-        })
+        }
 
-        (kind === "float").ifTrue(() => {
+        if(kind === "float") {
             ignoredValidation: float(value)
             emitText(floatText(value))
             handled = true
-        })
+        }
 
-        (kind === "boolean").ifTrue(() => {
+        if(kind === "boolean") {
             ignoredValidation: boolean(value)
-            (value === true).ifTrue(() => {
+            if(value === true) {
                 emitText("true")
-            })
-            (value === false).ifTrue(() => {
+            }
+            if(value === false) {
                 emitText("false")
-            })
+            }
             handled = true
-        })
+        }
 
-        (kind === "localDate").ifTrue(() => {
+        if(kind === "localDate") {
             emitText(dateText(value))
             handled = true
-        })
+        }
 
-        (kind === "localTime").ifTrue(() => {
+        if(kind === "localTime") {
             emitText(timeText(value))
             handled = true
-        })
+        }
 
-        (kind === "localDateTime").ifTrue(() => {
+        if(kind === "localDateTime") {
             emitText(localDateTimeText(value))
             handled = true
-        })
+        }
 
-        (kind === "offsetDateTime").ifTrue(() => {
+        if(kind === "offsetDateTime") {
             emitText(offsetDateTimeText(value))
             handled = true
-        })
+        }
 
-        (kind === "array").ifTrue(() => {
-            active.containsKey(node).ifTrue(() => {
+        if(kind === "array") {
+            if(active.containsKey(node)) {
                 fail()
-            })
+            }
             active[node] = true
 
             output.add(91)
@@ -1132,12 +1132,12 @@ encode: (rootTable) => {
                 index: 0
             }
             handled = true
-        })
+        }
 
-        (kind === "table").ifTrue(() => {
-            active.containsKey(node).ifTrue(() => {
+        if(kind === "table") {
+            if(active.containsKey(node)) {
                 fail()
-            })
+            }
             active[node] = true
 
             snapshot: snapshotTableEntries(value)
@@ -1151,7 +1151,7 @@ encode: (rootTable) => {
                 index: 0
             }
             handled = true
-        })
+        }
 
         handled.ifFalse(() => {
             fail()
@@ -1178,19 +1178,19 @@ encode: (rootTable) => {
         frame: topFrame
         frameKind: frame.frameKind
 
-        (frameKind == "root").ifTrue(() => {
-            (frame.index >= frame.count).ifTrue(() => {
-                (frame.count > 0).ifTrue(() => {
+        if(frameKind == "root") {
+            if(frame.index >= frame.count) {
+                if(frame.count > 0) {
                     output.add(10)
-                })
+                }
                 active.remove(frame.node)
                 running = false
-            })
+            }
 
-            (frame.index < frame.count).ifTrue(() => {
-                (frame.index > 0).ifTrue(() => {
+            if(frame.index < frame.count) {
+                if(frame.index > 0) {
                     output.add(10)
-                })
+                }
 
                 entry: frame.entries[frame.index]
                 frame.index = frame.index + 1
@@ -1198,38 +1198,38 @@ encode: (rootTable) => {
                 emitBasicString(entry.name)
                 emitText(" = ")
                 pushValue(entry.child, frame)
-            })
-        })
+            }
+        }
 
-        (frameKind == "array").ifTrue(() => {
-            (frame.index >= frame.count).ifTrue(() => {
+        if(frameKind == "array") {
+            if(frame.index >= frame.count) {
                 output.add(93)
                 active.remove(frame.node)
                 topFrame = frame.parent
-            })
+            }
 
-            (frame.index < frame.count).ifTrue(() => {
-                (frame.index > 0).ifTrue(() => {
+            if(frame.index < frame.count) {
+                if(frame.index > 0) {
                     emitText(", ")
-                })
+                }
 
                 child: frame.values[frame.index]
                 frame.index = frame.index + 1
                 pushValue(child, frame)
-            })
-        })
+            }
+        }
 
-        (frameKind == "table").ifTrue(() => {
-            (frame.index >= frame.count).ifTrue(() => {
+        if(frameKind == "table") {
+            if(frame.index >= frame.count) {
                 output.add(125)
                 active.remove(frame.node)
                 topFrame = frame.parent
-            })
+            }
 
-            (frame.index < frame.count).ifTrue(() => {
-                (frame.index > 0).ifTrue(() => {
+            if(frame.index < frame.count) {
+                if(frame.index > 0) {
                     emitText(", ")
-                })
+                }
 
                 entry: frame.entries[frame.index]
                 frame.index = frame.index + 1
@@ -1237,8 +1237,8 @@ encode: (rootTable) => {
                 emitBasicString(entry.name)
                 emitText(" = ")
                 pushValue(entry.child, frame)
-            })
-        })
+            }
+        }
     }
 
     Encoding.UTF8.decode(output)
@@ -1285,16 +1285,16 @@ parseDialect: (text, version) => {
 
         peek: () => {
             result: -1
-            (index < length).ifTrue(() => {
+            if(index < length) {
                 result = source[index]
-            })
+            }
             result
         }
 
         take: () => {
-            (index >= length).ifTrue(() => {
+            if(index >= length) {
                 fail()
-            })
+            }
             result: source[index]
             index = index + 1
             result
@@ -1305,12 +1305,12 @@ parseDialect: (text, version) => {
             while(scanning && (index < length)) {
                 octet: source[index]
                 whitespace: octet == 32
-                (octet == 9).ifTrue(() => {
+                if(octet == 9) {
                     whitespace = true
-                })
-                whitespace.ifTrue(() => {
+                }
+                if(whitespace) {
                     index = index + 1
-                })
+                }
                 whitespace.ifFalse(() => {
                     scanning = false
                 })
@@ -1319,61 +1319,61 @@ parseDialect: (text, version) => {
 
         hexDigit: (octet) => {
             result: -1
-            (octet >= 48).ifTrue(() => {
-                (octet <= 57).ifTrue(() => {
+            if(octet >= 48) {
+                if(octet <= 57) {
                     result = octet - 48
-                })
-            })
-            (result < 0).ifTrue(() => {
-                (octet >= 65).ifTrue(() => {
-                    (octet <= 70).ifTrue(() => {
+                }
+            }
+            if(result < 0) {
+                if(octet >= 65) {
+                    if(octet <= 70) {
                         result = octet - 55
-                    })
-                })
-            })
-            (result < 0).ifTrue(() => {
-                (octet >= 97).ifTrue(() => {
-                    (octet <= 102).ifTrue(() => {
+                    }
+                }
+            }
+            if(result < 0) {
+                if(octet >= 97) {
+                    if(octet <= 102) {
                         result = octet - 87
-                    })
-                })
-            })
+                    }
+                }
+            }
             result
         }
 
         appendScalarUtf8: (buffer, scalar) => {
             invalid: scalar < 0
-            (scalar > 1114111).ifTrue(() => {
+            if(scalar > 1114111) {
                 invalid = true
-            })
-            (scalar >= 55296).ifTrue(() => {
-                (scalar <= 57343).ifTrue(() => {
+            }
+            if(scalar >= 55296) {
+                if(scalar <= 57343) {
                     invalid = true
-                })
-            })
-            invalid.ifTrue(() => {
+                }
+            }
+            if(invalid) {
                 fail()
-            })
+            }
 
             handled: false
-            (scalar <= 127).ifTrue(() => {
+            if(scalar <= 127) {
                 buffer.add(scalar)
                 handled = true
-            })
+            }
             handled.ifFalse(() => {
-                (scalar <= 2047).ifTrue(() => {
+                if(scalar <= 2047) {
                     buffer.add(192 + scalar.div(64))
                     buffer.add(128 + scalar.mod(64))
                     handled = true
-                })
+                }
             })
             handled.ifFalse(() => {
-                (scalar <= 65535).ifTrue(() => {
+                if(scalar <= 65535) {
                     buffer.add(224 + scalar.div(4096))
                     buffer.add(128 + scalar.div(64).mod(64))
                     buffer.add(128 + scalar.mod(64))
                     handled = true
-                })
+                }
             })
             handled.ifFalse(() => {
                 buffer.add(240 + scalar.div(262144))
@@ -1389,15 +1389,15 @@ parseDialect: (text, version) => {
 
             consume: null
             consume = () => {
-                (remaining > 0).ifTrue(() => {
+                if(remaining > 0) {
                     digit: hexDigit(take())
-                    (digit < 0).ifTrue(() => {
+                    if(digit < 0) {
                         fail()
-                    })
+                    }
                     scalar = scalar * 16 + digit
                     remaining = remaining - 1
                     consume()
-                })
+                }
             }
 
             consume()
@@ -1413,74 +1413,74 @@ parseDialect: (text, version) => {
 
             while(done === false) {
                 octet: take()
-                    (octet == 34).ifTrue(() => {
+                    if(octet == 34) {
                         done = true
-                    })
+                    }
 
                     done.ifFalse(() => {
-                        (octet == 92).ifTrue(() => {
+                        if(octet == 92) {
                             escape: take()
                             handled: false
-                            (escape == 98).ifTrue(() => {
+                            if(escape == 98) {
                                 buffer.add(8)
                                 handled = true
-                            })
-                            (escape == 116).ifTrue(() => {
+                            }
+                            if(escape == 116) {
                                 buffer.add(9)
                                 handled = true
-                            })
-                            (escape == 110).ifTrue(() => {
+                            }
+                            if(escape == 110) {
                                 buffer.add(10)
                                 handled = true
-                            })
-                            (escape == 102).ifTrue(() => {
+                            }
+                            if(escape == 102) {
                                 buffer.add(12)
                                 handled = true
-                            })
-                            (escape == 114).ifTrue(() => {
+                            }
+                            if(escape == 114) {
                                 buffer.add(13)
                                 handled = true
-                            })
-                            (toml11 && (escape == 101)).ifTrue(() => {
+                            }
+                            if(toml11 && (escape == 101)) {
                                 buffer.add(27)
                                 handled = true
-                            })
-                            (toml11 && (escape == 120)).ifTrue(() => {
+                            }
+                            if(toml11 && (escape == 120)) {
                                 parseUnicodeEscape(2, buffer)
                                 handled = true
-                            })
-                            (escape == 34).ifTrue(() => {
+                            }
+                            if(escape == 34) {
                                 buffer.add(34)
                                 handled = true
-                            })
-                            (escape == 92).ifTrue(() => {
+                            }
+                            if(escape == 92) {
                                 buffer.add(92)
                                 handled = true
-                            })
-                            (escape == 117).ifTrue(() => {
+                            }
+                            if(escape == 117) {
                                 parseUnicodeEscape(4, buffer)
                                 handled = true
-                            })
-                            (escape == 85).ifTrue(() => {
+                            }
+                            if(escape == 85) {
                                 parseUnicodeEscape(8, buffer)
                                 handled = true
-                            })
+                            }
                             handled.ifFalse(() => {
                                 fail()
                             })
-                        })
+                        }
 
                         (octet == 92).ifFalse(() => {
                             invalidControl: octet < 32
-                            (octet == 127).ifTrue(() => {
+                            if(octet == 127) {
                                 invalidControl = true
-                            })
-                            (octet == 9).ifTrue(() => {
+                            }
+                            if(octet == 9) {
                                 invalidControl = false
-                            })
-                            invalidControl.ifTrue(() => {
+                            }
+                            if(invalidControl) {
                                 fail()
-                            })
+                            }
                             buffer.add(octet)
                         })
                     })
@@ -1497,20 +1497,20 @@ parseDialect: (text, version) => {
 
             while(done === false) {
                 octet: take()
-                    (octet == 39).ifTrue(() => {
+                    if(octet == 39) {
                         done = true
-                    })
+                    }
                     done.ifFalse(() => {
                         invalidControl: octet < 32
-                        (octet == 127).ifTrue(() => {
+                        if(octet == 127) {
                             invalidControl = true
-                        })
-                        (octet == 9).ifTrue(() => {
+                        }
+                        if(octet == 9) {
                             invalidControl = false
-                        })
-                        invalidControl.ifTrue(() => {
+                        }
+                        if(invalidControl) {
                             fail()
-                        })
+                        }
                         buffer.add(octet)
                     })
             }
@@ -1519,17 +1519,17 @@ parseDialect: (text, version) => {
 
         isBareKeyOctet: (octet) => {
             result: false
-            (octet >= 48).ifTrue(() => {
-                (octet <= 57).ifTrue(() => { result = true })
-            })
-            (octet >= 65).ifTrue(() => {
-                (octet <= 90).ifTrue(() => { result = true })
-            })
-            (octet >= 97).ifTrue(() => {
-                (octet <= 122).ifTrue(() => { result = true })
-            })
-            (octet == 95).ifTrue(() => { result = true })
-            (octet == 45).ifTrue(() => { result = true })
+            if(octet >= 48) {
+                if(octet <= 57) { result = true }
+            }
+            if(octet >= 65) {
+                if(octet <= 90) { result = true }
+            }
+            if(octet >= 97) {
+                if(octet <= 122) { result = true }
+            }
+            if(octet == 95) { result = true }
+            if(octet == 45) { result = true }
             result
         }
 
@@ -1540,18 +1540,18 @@ parseDialect: (text, version) => {
             while(scanning && (index < length)) {
                 octet: source[index]
                 validBare: isBareKeyOctet(octet)
-                validBare.ifTrue(() => {
+                if(validBare) {
                     buffer.add(octet)
                     index = index + 1
-                })
+                }
                 validBare.ifFalse(() => {
                     scanning = false
                 })
             }
 
-            (buffer.size() == 0).ifTrue(() => {
+            if(buffer.size() == 0) {
                 fail()
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -1560,12 +1560,12 @@ parseDialect: (text, version) => {
             first: peek()
             result: null
 
-            (first == 34).ifTrue(() => {
+            if(first == 34) {
                 result = parseBasicKey()
-            })
-            (first == 39).ifTrue(() => {
+            }
+            if(first == 39) {
                 result = parseLiteralKey()
-            })
+            }
             (first == 34).ifFalse(() => {
                 (first == 39).ifFalse(() => {
                     result = parseBareKey()
@@ -1589,17 +1589,17 @@ parseDialect: (text, version) => {
         while(more) {
             skipSpaces()
 
-            (index < length).ifTrue(() => {
+            if(index < length) {
                 (source[index] == 46).ifFalse(() => {
                     fail()
                 })
                 index = index + 1
                 appendPathPart(parsePart())
-            })
+            }
 
-            (index >= length).ifTrue(() => {
+            if(index >= length) {
                 more = false
-            })
+            }
         }
 
         skipSpaces()
@@ -1623,16 +1623,16 @@ parseDialect: (text, version) => {
 
         peek: () => {
             result: -1
-            (index < length).ifTrue(() => {
+            if(index < length) {
                 result = source[index]
-            })
+            }
             result
         }
 
         take: () => {
-            (index >= length).ifTrue(() => {
+            if(index >= length) {
                 fail()
-            })
+            }
             result: source[index]
             index = index + 1
             result
@@ -1640,30 +1640,30 @@ parseDialect: (text, version) => {
 
         isSpace: (octet) => {
             result: octet == 32
-            (octet == 9).ifTrue(() => {
+            if(octet == 9) {
                 result = true
-            })
+            }
             result
         }
 
         isNewlineStart: (octet) => {
             result: octet == 10
-            (octet == 13).ifTrue(() => {
+            if(octet == 13) {
                 result = true
-            })
+            }
             result
         }
 
         consumeNewline: () => {
             octet: take()
             valid: octet == 10
-            (octet == 13).ifTrue(() => {
+            if(octet == 13) {
                 valid = true
                 (peek() == 10).ifFalse(() => {
                     fail()
                 })
                 take()
-            })
+            }
             valid.ifFalse(() => {
                 fail()
             })
@@ -1673,9 +1673,9 @@ parseDialect: (text, version) => {
             scanning: true
             while(scanning && (index < length)) {
                 whitespace: isSpace(source[index])
-                whitespace.ifTrue(() => {
+                if(whitespace) {
                     index = index + 1
-                })
+                }
                 whitespace.ifFalse(() => {
                     scanning = false
                 })
@@ -1687,20 +1687,20 @@ parseDialect: (text, version) => {
             while(scanning && (index < length)) {
                 octet: source[index]
                 newline: isNewlineStart(octet)
-                newline.ifTrue(() => {
+                if(newline) {
                     scanning = false
-                })
+                }
                 newline.ifFalse(() => {
                     invalidControl: octet < 32
-                    (octet == 127).ifTrue(() => {
+                    if(octet == 127) {
                         invalidControl = true
-                    })
-                    (octet == 9).ifTrue(() => {
+                    }
+                    if(octet == 9) {
                         invalidControl = false
-                    })
-                    invalidControl.ifTrue(() => {
+                    }
+                    if(invalidControl) {
                         fail()
-                    })
+                    }
                     index = index + 1
                 })
             }
@@ -1710,31 +1710,31 @@ parseDialect: (text, version) => {
             progressed: true
             while(progressed) {
                 progressed = false
-                (index < length).ifTrue(() => {
+                if(index < length) {
                     octet: source[index]
-                    isSpace(octet).ifTrue(() => {
+                    if(isSpace(octet)) {
                         index = index + 1
                         progressed = true
-                    })
-                    isNewlineStart(octet).ifTrue(() => {
+                    }
+                    if(isNewlineStart(octet)) {
                         consumeNewline()
                         progressed = true
-                    })
-                    (octet == 35).ifTrue(() => {
+                    }
+                    if(octet == 35) {
                         index = index + 1
                         skipComment()
                         progressed = true
-                    })
-                })
+                    }
+                }
             }
         }
 
         // TOML 1.0 inline tables are single-line, so only spaces and tabs may
         // separate their tokens; TOML 1.1 also admits newlines and comments.
         skipInlineTableTrivia: () => {
-            toml11.ifTrue(() => {
+            if(toml11) {
                 skipArrayTrivia()
-            })
+            }
             toml11.ifFalse(() => {
                 skipSpaces()
             })
@@ -1742,61 +1742,61 @@ parseDialect: (text, version) => {
 
         hexDigit: (octet) => {
             result: -1
-            (octet >= 48).ifTrue(() => {
-                (octet <= 57).ifTrue(() => {
+            if(octet >= 48) {
+                if(octet <= 57) {
                     result = octet - 48
-                })
-            })
-            (result < 0).ifTrue(() => {
-                (octet >= 65).ifTrue(() => {
-                    (octet <= 70).ifTrue(() => {
+                }
+            }
+            if(result < 0) {
+                if(octet >= 65) {
+                    if(octet <= 70) {
                         result = octet - 55
-                    })
-                })
-            })
-            (result < 0).ifTrue(() => {
-                (octet >= 97).ifTrue(() => {
-                    (octet <= 102).ifTrue(() => {
+                    }
+                }
+            }
+            if(result < 0) {
+                if(octet >= 97) {
+                    if(octet <= 102) {
                         result = octet - 87
-                    })
-                })
-            })
+                    }
+                }
+            }
             result
         }
 
         appendScalarUtf8: (buffer, scalar) => {
             invalid: scalar < 0
-            (scalar > 1114111).ifTrue(() => {
+            if(scalar > 1114111) {
                 invalid = true
-            })
-            (scalar >= 55296).ifTrue(() => {
-                (scalar <= 57343).ifTrue(() => {
+            }
+            if(scalar >= 55296) {
+                if(scalar <= 57343) {
                     invalid = true
-                })
-            })
-            invalid.ifTrue(() => {
+                }
+            }
+            if(invalid) {
                 fail()
-            })
+            }
 
             handled: false
-            (scalar <= 127).ifTrue(() => {
+            if(scalar <= 127) {
                 buffer.add(scalar)
                 handled = true
-            })
+            }
             handled.ifFalse(() => {
-                (scalar <= 2047).ifTrue(() => {
+                if(scalar <= 2047) {
                     buffer.add(192 + scalar.div(64))
                     buffer.add(128 + scalar.mod(64))
                     handled = true
-                })
+                }
             })
             handled.ifFalse(() => {
-                (scalar <= 65535).ifTrue(() => {
+                if(scalar <= 65535) {
                     buffer.add(224 + scalar.div(4096))
                     buffer.add(128 + scalar.div(64).mod(64))
                     buffer.add(128 + scalar.mod(64))
                     handled = true
-                })
+                }
             })
             handled.ifFalse(() => {
                 buffer.add(240 + scalar.div(262144))
@@ -1812,15 +1812,15 @@ parseDialect: (text, version) => {
 
             consume: null
             consume = () => {
-                (remaining > 0).ifTrue(() => {
+                if(remaining > 0) {
                     digit: hexDigit(take())
-                    (digit < 0).ifTrue(() => {
+                    if(digit < 0) {
                         fail()
-                    })
+                    }
                     scalar = scalar * 16 + digit
                     remaining = remaining - 1
                     consume()
-                })
+                }
             }
 
             consume()
@@ -1834,14 +1834,14 @@ parseDialect: (text, version) => {
                 })
             })
 
-            multiline.ifTrue(() => {
+            if(multiline) {
                 (take() == 34).ifFalse(() => { fail() })
                 (take() == 34).ifFalse(() => { fail() })
                 (take() == 34).ifFalse(() => { fail() })
-                isNewlineStart(peek()).ifTrue(() => {
+                if(isNewlineStart(peek())) {
                     consumeNewline()
-                })
-            })
+                }
+            }
 
             buffer: Encoding.UTF8.encode("")
             done: false
@@ -1860,18 +1860,18 @@ parseDialect: (text, version) => {
                 while(scanning && (index < length)) {
                     octet: source[index]
                     whitespace: isSpace(octet)
-                    isNewlineStart(octet).ifTrue(() => {
+                    if(isNewlineStart(octet)) {
                         whitespace = true
-                    })
+                    }
 
-                    whitespace.ifTrue(() => {
-                        isNewlineStart(octet).ifTrue(() => {
+                    if(whitespace) {
+                        if(isNewlineStart(octet)) {
                             consumeNewline()
-                        })
+                        }
                         isNewlineStart(octet).ifFalse(() => {
                             index = index + 1
                         })
-                    })
+                    }
                     whitespace.ifFalse(() => {
                         scanning = false
                     })
@@ -1883,45 +1883,45 @@ parseDialect: (text, version) => {
                 ordinaryOctet: true
 
                     multiline.ifFalse(() => {
-                        (octet == 34).ifTrue(() => {
+                        if(octet == 34) {
                             done = true
-                        })
+                        }
                     })
 
-                    multiline.ifTrue(() => {
-                        (octet == 34).ifTrue(() => {
+                    if(multiline) {
+                        if(octet == 34) {
                             ordinaryOctet = false
                             quoteCount: countQuotes(1)
 
-                            (quoteCount >= 3).ifTrue(() => {
-                                (quoteCount > 5).ifTrue(() => {
+                            if(quoteCount >= 3) {
+                                if(quoteCount > 5) {
                                     fail()
-                                })
+                                }
                                 extra: quoteCount - 3
-                                (extra > 0).ifTrue(() => {
+                                if(extra > 0) {
                                     buffer.add(34)
-                                })
-                                (extra > 1).ifTrue(() => {
+                                }
+                                if(extra > 1) {
                                     buffer.add(34)
-                                })
+                                }
                                 done = true
-                            })
+                            }
 
-                            (quoteCount < 3).ifTrue(() => {
+                            if(quoteCount < 3) {
                                 buffer.add(34)
-                                (quoteCount == 2).ifTrue(() => {
+                                if(quoteCount == 2) {
                                     buffer.add(34)
-                                })
-                            })
-                        })
-                    })
+                                }
+                            }
+                        }
+                    }
 
                     done.ifFalse(() => {
-                        ordinaryOctet.ifTrue(() => {
-                            (octet == 92).ifTrue(() => {
+                        if(ordinaryOctet) {
+                            if(octet == 92) {
                                 continuation: false
 
-                                multiline.ifTrue(() => {
+                                if(multiline) {
                                     look: index
                                     seeking: true
                                     sawNewline: false
@@ -1931,26 +1931,26 @@ parseDialect: (text, version) => {
                                         candidateSpace: isSpace(candidate)
                                         candidateNewline: isNewlineStart(candidate)
 
-                                        candidateSpace.ifTrue(() => {
+                                        if(candidateSpace) {
                                             look = look + 1
-                                        })
-                                        candidateNewline.ifTrue(() => {
+                                        }
+                                        if(candidateNewline) {
                                             sawNewline = true
                                             seeking = false
-                                        })
+                                        }
                                         (candidateSpace || candidateNewline).ifFalse(() => {
                                             seeking = false
                                         })
                                     }
-                                    (look >= length).ifTrue(() => {
+                                    if(look >= length) {
                                         seeking = false
-                                    })
-                                    sawNewline.ifTrue(() => {
+                                    }
+                                    if(sawNewline) {
                                         continuation = true
-                                    })
-                                })
+                                    }
+                                }
 
-                                continuation.ifTrue(() => {
+                                if(continuation) {
                                     while(isSpace(peek())) {
                                         index = index + 1
                                     }
@@ -1959,90 +1959,90 @@ parseDialect: (text, version) => {
                                     })
                                     consumeNewline()
                                     skipContinuationWhitespace()
-                                })
+                                }
 
                                 continuation.ifFalse(() => {
                                     escape: take()
                                     handled: false
 
-                                    (escape == 98).ifTrue(() => {
+                                    if(escape == 98) {
                                         buffer.add(8)
                                         handled = true
-                                    })
-                                    (escape == 116).ifTrue(() => {
+                                    }
+                                    if(escape == 116) {
                                         buffer.add(9)
                                         handled = true
-                                    })
-                                    (escape == 110).ifTrue(() => {
+                                    }
+                                    if(escape == 110) {
                                         buffer.add(10)
                                         handled = true
-                                    })
-                                    (escape == 102).ifTrue(() => {
+                                    }
+                                    if(escape == 102) {
                                         buffer.add(12)
                                         handled = true
-                                    })
-                                    (escape == 114).ifTrue(() => {
+                                    }
+                                    if(escape == 114) {
                                         buffer.add(13)
                                         handled = true
-                                    })
-                                    (toml11 && (escape == 101)).ifTrue(() => {
+                                    }
+                                    if(toml11 && (escape == 101)) {
                                         buffer.add(27)
                                         handled = true
-                                    })
-                                    (toml11 && (escape == 120)).ifTrue(() => {
+                                    }
+                                    if(toml11 && (escape == 120)) {
                                         parseUnicodeEscape(2, buffer)
                                         handled = true
-                                    })
-                                    (escape == 34).ifTrue(() => {
+                                    }
+                                    if(escape == 34) {
                                         buffer.add(34)
                                         handled = true
-                                    })
-                                    (escape == 92).ifTrue(() => {
+                                    }
+                                    if(escape == 92) {
                                         buffer.add(92)
                                         handled = true
-                                    })
-                                    (escape == 117).ifTrue(() => {
+                                    }
+                                    if(escape == 117) {
                                         parseUnicodeEscape(4, buffer)
                                         handled = true
-                                    })
-                                    (escape == 85).ifTrue(() => {
+                                    }
+                                    if(escape == 85) {
                                         parseUnicodeEscape(8, buffer)
                                         handled = true
-                                    })
+                                    }
 
                                     handled.ifFalse(() => {
                                         fail()
                                     })
                                 })
-                            })
+                            }
 
                             (octet == 92).ifFalse(() => {
                                 newline: isNewlineStart(octet)
 
-                                newline.ifTrue(() => {
+                                if(newline) {
                                     multiline.ifFalse(() => {
                                         fail()
                                     })
                                     index = index - 1
                                     consumeNewline()
                                     buffer.add(10)
-                                })
+                                }
 
                                 newline.ifFalse(() => {
                                     invalidControl: octet < 32
-                                    (octet == 127).ifTrue(() => {
+                                    if(octet == 127) {
                                         invalidControl = true
-                                    })
-                                    (octet == 9).ifTrue(() => {
+                                    }
+                                    if(octet == 9) {
                                         invalidControl = false
-                                    })
-                                    invalidControl.ifTrue(() => {
+                                    }
+                                    if(invalidControl) {
                                         fail()
-                                    })
+                                    }
                                     buffer.add(octet)
                                 })
                             })
-                        })
+                        }
 
                     })
             }
@@ -2056,14 +2056,14 @@ parseDialect: (text, version) => {
                 })
             })
 
-            multiline.ifTrue(() => {
+            if(multiline) {
                 (take() == 39).ifFalse(() => { fail() })
                 (take() == 39).ifFalse(() => { fail() })
                 (take() == 39).ifFalse(() => { fail() })
-                isNewlineStart(peek()).ifTrue(() => {
+                if(isNewlineStart(peek())) {
                     consumeNewline()
-                })
-            })
+                }
+            }
 
             buffer: Encoding.UTF8.encode("")
             done: false
@@ -2082,66 +2082,66 @@ parseDialect: (text, version) => {
                 ordinaryOctet: true
 
                     multiline.ifFalse(() => {
-                        (octet == 39).ifTrue(() => {
+                        if(octet == 39) {
                             done = true
-                        })
+                        }
                     })
 
-                    multiline.ifTrue(() => {
-                        (octet == 39).ifTrue(() => {
+                    if(multiline) {
+                        if(octet == 39) {
                             ordinaryOctet = false
                             quoteCount: countQuotes(1)
 
-                            (quoteCount >= 3).ifTrue(() => {
-                                (quoteCount > 5).ifTrue(() => {
+                            if(quoteCount >= 3) {
+                                if(quoteCount > 5) {
                                     fail()
-                                })
+                                }
                                 extra: quoteCount - 3
-                                (extra > 0).ifTrue(() => {
+                                if(extra > 0) {
                                     buffer.add(39)
-                                })
-                                (extra > 1).ifTrue(() => {
+                                }
+                                if(extra > 1) {
                                     buffer.add(39)
-                                })
+                                }
                                 done = true
-                            })
+                            }
 
-                            (quoteCount < 3).ifTrue(() => {
+                            if(quoteCount < 3) {
                                 buffer.add(39)
-                                (quoteCount == 2).ifTrue(() => {
+                                if(quoteCount == 2) {
                                     buffer.add(39)
-                                })
-                            })
-                        })
-                    })
+                                }
+                            }
+                        }
+                    }
 
                     done.ifFalse(() => {
-                        ordinaryOctet.ifTrue(() => {
+                        if(ordinaryOctet) {
                             newline: isNewlineStart(octet)
 
-                            newline.ifTrue(() => {
+                            if(newline) {
                                 multiline.ifFalse(() => {
                                     fail()
                                 })
                                 index = index - 1
                                 consumeNewline()
                                 buffer.add(10)
-                            })
+                            }
 
                             newline.ifFalse(() => {
                                 invalidControl: octet < 32
-                                (octet == 127).ifTrue(() => {
+                                if(octet == 127) {
                                     invalidControl = true
-                                })
-                                (octet == 9).ifTrue(() => {
+                                }
+                                if(octet == 9) {
                                     invalidControl = false
-                                })
-                                invalidControl.ifTrue(() => {
+                                }
+                                if(invalidControl) {
                                     fail()
-                                })
+                                }
                                 buffer.add(octet)
                             })
-                        })
+                        }
 
                     })
             }
@@ -2150,17 +2150,17 @@ parseDialect: (text, version) => {
 
         isBareKeyOctet: (octet) => {
             result: false
-            (octet >= 48).ifTrue(() => {
-                (octet <= 57).ifTrue(() => { result = true })
-            })
-            (octet >= 65).ifTrue(() => {
-                (octet <= 90).ifTrue(() => { result = true })
-            })
-            (octet >= 97).ifTrue(() => {
-                (octet <= 122).ifTrue(() => { result = true })
-            })
-            (octet == 95).ifTrue(() => { result = true })
-            (octet == 45).ifTrue(() => { result = true })
+            if(octet >= 48) {
+                if(octet <= 57) { result = true }
+            }
+            if(octet >= 65) {
+                if(octet <= 90) { result = true }
+            }
+            if(octet >= 97) {
+                if(octet <= 122) { result = true }
+            }
+            if(octet == 95) { result = true }
+            if(octet == 45) { result = true }
             result
         }
 
@@ -2169,12 +2169,12 @@ parseDialect: (text, version) => {
             first: peek()
             result: null
 
-            (first == 34).ifTrue(() => {
+            if(first == 34) {
                 result = parseBasicString(false)
-            })
-            (first == 39).ifTrue(() => {
+            }
+            if(first == 39) {
                 result = parseLiteralString(false)
-            })
+            }
 
             (first == 34).ifFalse(() => {
                 (first == 39).ifFalse(() => {
@@ -2184,17 +2184,17 @@ parseDialect: (text, version) => {
                     while(gathering && (index < length)) {
                         octet: source[index]
                         bare: isBareKeyOctet(octet)
-                        bare.ifTrue(() => {
+                        if(bare) {
                             buffer.add(octet)
                             index = index + 1
-                        })
+                        }
                         bare.ifFalse(() => {
                             gathering = false
                         })
                     }
-                    (buffer.size() == 0).ifTrue(() => {
+                    if(buffer.size() == 0) {
                         fail()
-                    })
+                    }
                     result = Encoding.UTF8.decode(buffer)
                 })
             })
@@ -2213,17 +2213,17 @@ parseDialect: (text, version) => {
 
                 while(carrying) {
                     present: chunks.containsKey(level)
-                    present.ifTrue(() => {
+                    if(present) {
                         left: chunks[level]
                         chunks.remove(level)
                         chunk = Array(...left, ...chunk)
                         level = level + 1
-                    })
+                    }
                     present.ifFalse(() => {
                         chunks[level] = chunk
-                        (level > maxLevel).ifTrue(() => {
+                        if(level > maxLevel) {
                             maxLevel = level
-                        })
+                        }
                         carrying = false
                     })
                 }
@@ -2235,10 +2235,10 @@ parseDialect: (text, version) => {
             while(more) {
                 skipSpaces()
                 hasDot: peek() == 46
-                hasDot.ifTrue(() => {
+                if(hasDot) {
                     index = index + 1
                     appendPart(parseKeyPart())
-                })
+                }
                 hasDot.ifFalse(() => {
                     more = false
                 })
@@ -2247,9 +2247,9 @@ parseDialect: (text, version) => {
             parts: Array()
             level: maxLevel
             while(level >= 0) {
-                chunks.containsKey(level).ifTrue(() => {
+                if(chunks.containsKey(level)) {
                     parts = Array(...parts, ...chunks[level])
-                })
+                }
                 level = level - 1
             }
             parts
@@ -2265,17 +2265,17 @@ parseDialect: (text, version) => {
                 name: parts[position]
                 last: position == parts.size() - 1
 
-                last.ifTrue(() => {
-                    current.containsKey(name).ifTrue(() => {
+                if(last) {
+                    if(current.containsKey(name)) {
                         fail()
-                    })
+                    }
                     current[name] = valueNode
                     position = parts.size()
-                })
+                }
 
                 last.ifFalse(() => {
                     child: null
-                    current.containsKey(name).ifTrue(() => {
+                    if(current.containsKey(name)) {
                         child = current[name]
                         (child.kind == "table").ifFalse(() => {
                             fail()
@@ -2283,7 +2283,7 @@ parseDialect: (text, version) => {
                         dottedTables.containsKey(child).ifFalse(() => {
                             fail()
                         })
-                    })
+                    }
                     current.containsKey(name).ifFalse(() => {
                         child = syntaxNode("table", Map())
                         current[name] = child
@@ -2301,17 +2301,17 @@ parseDialect: (text, version) => {
             carrying: true
             while(carrying) {
                 present: frame.chunks.containsKey(level)
-                present.ifTrue(() => {
+                if(present) {
                     left: frame.chunks[level]
                     frame.chunks.remove(level)
                     chunk = Array(...left, ...chunk)
                     level = level + 1
-                })
+                }
                 present.ifFalse(() => {
                     frame.chunks[level] = chunk
-                    (level > frame.maxLevel).ifTrue(() => {
+                    if(level > frame.maxLevel) {
                         frame.maxLevel = level
-                    })
+                    }
                     carrying = false
                 })
             }
@@ -2321,9 +2321,9 @@ parseDialect: (text, version) => {
             level: initialLevel
             result: initialResult
             while(level >= 0) {
-                frame.chunks.containsKey(level).ifTrue(() => {
+                if(frame.chunks.containsKey(level)) {
                     result = Array(...result, ...frame.chunks[level])
-                })
+                }
                 level = level - 1
             }
             result
@@ -2331,34 +2331,34 @@ parseDialect: (text, version) => {
 
         decimalDigit: (octet) => {
             result: -1
-            (octet >= 48).ifTrue(() => {
-                (octet <= 57).ifTrue(() => {
+            if(octet >= 48) {
+                if(octet <= 57) {
                     result = octet - 48
-                })
-            })
+                }
+            }
             result
         }
 
         radixDigit: (octet, base) => {
             result: -1
-            (base == 16).ifTrue(() => {
+            if(base == 16) {
                 result = hexDigit(octet)
-            })
-            (base == 10).ifTrue(() => {
+            }
+            if(base == 10) {
                 result = decimalDigit(octet)
-            })
-            (base == 8).ifTrue(() => {
+            }
+            if(base == 8) {
                 digit: decimalDigit(octet)
-                (digit >= 0).ifTrue(() => {
-                    (digit <= 7).ifTrue(() => {
+                if(digit >= 0) {
+                    if(digit <= 7) {
                         result = digit
-                    })
-                })
-            })
-            (base == 2).ifTrue(() => {
-                (octet == 48).ifTrue(() => { result = 0 })
-                (octet == 49).ifTrue(() => { result = 1 })
-            })
+                    }
+                }
+            }
+            if(base == 2) {
+                if(octet == 48) { result = 0 }
+                if(octet == 49) { result = 1 }
+            }
             result
         }
 
@@ -2370,111 +2370,111 @@ parseDialect: (text, version) => {
             valid: true
             base: 10
 
-            (position < tokenLength).ifTrue(() => {
+            if(position < tokenLength) {
                 first: token[position]
-                (first == 43).ifTrue(() => {
+                if(first == 43) {
                     signed = true
                     position = position + 1
-                })
-                (first == 45).ifTrue(() => {
+                }
+                if(first == 45) {
                     signed = true
                     negative = true
                     position = position + 1
-                })
-            })
+                }
+            }
 
-            (position >= tokenLength).ifTrue(() => {
+            if(position >= tokenLength) {
                 valid = false
-            })
+            }
 
-            valid.ifTrue(() => {
-                (position + 1 < tokenLength).ifTrue(() => {
-                    (token[position] == 48).ifTrue(() => {
+            if(valid) {
+                if(position + 1 < tokenLength) {
+                    if(token[position] == 48) {
                         prefix: token[position + 1]
-                        (prefix == 120).ifTrue(() => {
+                        if(prefix == 120) {
                             base = 16
                             position = position + 2
-                        })
-                        (prefix == 111).ifTrue(() => {
+                        }
+                        if(prefix == 111) {
                             base = 8
                             position = position + 2
-                        })
-                        (prefix == 98).ifTrue(() => {
+                        }
+                        if(prefix == 98) {
                             base = 2
                             position = position + 2
-                        })
-                    })
-                })
-            })
+                        }
+                    }
+                }
+            }
 
-            (base != 10).ifTrue(() => {
-                signed.ifTrue(() => {
+            if(base != 10) {
+                if(signed) {
                     valid = false
-                })
-            })
+                }
+            }
 
-            (position >= tokenLength).ifTrue(() => {
+            if(position >= tokenLength) {
                 valid = false
-            })
+            }
 
             resultValue: 0
             digits: 0
             previousUnderscore: false
             leadingZero: false
 
-            valid.ifTrue(() => {
+            if(valid) {
                 while(position < tokenLength) {
                     octet: token[position]
 
-                    (octet == 95).ifTrue(() => {
+                    if(octet == 95) {
                         invalidUnderscore: digits == 0
-                        previousUnderscore.ifTrue(() => {
+                        if(previousUnderscore) {
                             invalidUnderscore = true
-                        })
-                        invalidUnderscore.ifTrue(() => {
+                        }
+                        if(invalidUnderscore) {
                             valid = false
-                        })
+                        }
                         previousUnderscore = true
-                    })
+                    }
 
                     (octet == 95).ifFalse(() => {
                         digit: radixDigit(octet, base)
-                        (digit < 0).ifTrue(() => {
+                        if(digit < 0) {
                             valid = false
-                        })
-                        (digit >= 0).ifTrue(() => {
-                            (digits == 0).ifTrue(() => {
-                                (digit == 0).ifTrue(() => {
+                        }
+                        if(digit >= 0) {
+                            if(digits == 0) {
+                                if(digit == 0) {
                                     leadingZero = true
-                                })
-                            })
-                            (base == 10).ifTrue(() => {
-                                leadingZero.ifTrue(() => {
-                                    (digits > 0).ifTrue(() => {
+                                }
+                            }
+                            if(base == 10) {
+                                if(leadingZero) {
+                                    if(digits > 0) {
                                         valid = false
-                                    })
-                                })
-                            })
+                                    }
+                                }
+                            }
                             resultValue = resultValue * base + digit
                             digits = digits + 1
                             previousUnderscore = false
-                        })
+                        }
                     })
 
                     position = position + 1
                 }
-            })
+            }
 
-            (digits == 0).ifTrue(() => {
+            if(digits == 0) {
                 valid = false
-            })
-            previousUnderscore.ifTrue(() => {
+            }
+            if(previousUnderscore) {
                 valid = false
-            })
+            }
 
-            negative.ifTrue(() => {
+            if(negative) {
                 resultValue = 0 - resultValue
-            })
+            }
 
 
             result: {
@@ -2487,22 +2487,22 @@ parseDialect: (text, version) => {
 
         powerOfTen: (power) => {
             ignoredPowerValidation: 0 + power
-            (power < 0).ifTrue(() => {
+            if(power < 0) {
                 fail()
-            })
+            }
 
             resultValue: 1
             factor: 10
             remaining: power
 
             while(remaining > 0) {
-                (remaining.mod(2) == 1).ifTrue(() => {
+                if(remaining.mod(2) == 1) {
                     resultValue = resultValue * factor
-                })
+                }
                 remaining = remaining.div(2)
-                (remaining > 0).ifTrue(() => {
+                if(remaining > 0) {
                     factor = factor * factor
-                })
+                }
             }
 
             resultValue
@@ -2512,40 +2512,40 @@ parseDialect: (text, version) => {
             decoded: Encoding.UTF8.decode(token)
             special: null
 
-            ((decoded == "inf") || (decoded == "+inf")).ifTrue(() => {
+            if((decoded == "inf") || (decoded == "+inf")) {
                 special = 1.0 / 0.0
-            })
-            (decoded == "-inf").ifTrue(() => {
+            }
+            if(decoded == "-inf") {
                 special = -1.0 / 0.0
-            })
-            ((decoded == "nan") || (decoded == "+nan") || (decoded == "-nan")).ifTrue(() => {
+            }
+            if((decoded == "nan") || (decoded == "+nan") || (decoded == "-nan")) {
                 special = 0.0 / 0.0
-            })
+            }
 
             result: {
                 valid: special !== null
                 value: special
             }
 
-            (special === null).ifTrue(() => {
+            if(special === null) {
                 tokenLength: token.size()
                 position: 0
                 negative: false
                 valid: true
 
-                (position < tokenLength).ifTrue(() => {
+                if(position < tokenLength) {
                     first: token[position]
-                    (first == 43).ifTrue(() => {
+                    if(first == 43) {
                         position = position + 1
-                    })
-                    (first == 45).ifTrue(() => {
+                    }
+                    if(first == 45) {
                         negative = true
                         position = position + 1
-                    })
-                })
-                (position >= tokenLength).ifTrue(() => {
+                    }
+                }
+                if(position >= tokenLength) {
                     valid = false
-                })
+                }
 
                 coefficient: 0
                 integerDigits: 0
@@ -2556,68 +2556,68 @@ parseDialect: (text, version) => {
                 firstIntegerZero: false
                 previousDigit: false
 
-                valid.ifTrue(() => {
+                if(valid) {
                     scanningInteger: true
                     while(scanningInteger && (position < tokenLength)) {
                         octet: token[position]
                         digit: decimalDigit(octet)
 
-                        (digit >= 0).ifTrue(() => {
-                            (integerDigits == 0).ifTrue(() => {
-                                (digit == 0).ifTrue(() => {
+                        if(digit >= 0) {
+                            if(integerDigits == 0) {
+                                if(digit == 0) {
                                     firstIntegerZero = true
-                                })
-                            })
-                            ((integerDigits > 0) && firstIntegerZero).ifTrue(() => {
+                                }
+                            }
+                            if((integerDigits > 0) && firstIntegerZero) {
                                 valid = false
-                            })
+                            }
                             coefficient = coefficient * 10 + digit
                             integerDigits = integerDigits + 1
                             totalDigits = totalDigits + 1
                             significant.ifFalse(() => {
-                                (digit == 0).ifTrue(() => {
+                                if(digit == 0) {
                                     leadingZeros = leadingZeros + 1
-                                })
-                                (digit != 0).ifTrue(() => {
+                                }
+                                if(digit != 0) {
                                     significant = true
-                                })
+                                }
                             })
                             previousDigit = true
                             position = position + 1
-                        })
+                        }
 
-                        (digit < 0).ifTrue(() => {
+                        if(digit < 0) {
                             underscore: octet == 95
-                            underscore.ifTrue(() => {
+                            if(underscore) {
                                 nextValid: false
-                                (position + 1 < tokenLength).ifTrue(() => {
-                                    (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                if(position + 1 < tokenLength) {
+                                    if(decimalDigit(token[position + 1]) >= 0) {
                                         nextValid = true
-                                    })
-                                })
+                                    }
+                                }
                                 (previousDigit && nextValid).ifFalse(() => {
                                     valid = false
                                 })
                                 previousDigit = false
                                 position = position + 1
-                            })
+                            }
                             underscore.ifFalse(() => {
                                 scanningInteger = false
                             })
-                        })
+                        }
                     }
-                })
-                (integerDigits == 0).ifTrue(() => {
+                }
+                if(integerDigits == 0) {
                     valid = false
-                })
+                }
                 previousDigit.ifFalse(() => {
                     valid = false
                 })
 
                 hasFraction: false
-                valid.ifTrue(() => {
-                    (position < tokenLength).ifTrue(() => {
-                        (token[position] == 46).ifTrue(() => {
+                if(valid) {
+                    if(position < tokenLength) {
+                        if(token[position] == 46) {
                             hasFraction = true
                             position = position + 1
                             previousDigit = false
@@ -2627,79 +2627,79 @@ parseDialect: (text, version) => {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
-                                (digit >= 0).ifTrue(() => {
+                                if(digit >= 0) {
                                     coefficient = coefficient * 10 + digit
                                     fractionDigits = fractionDigits + 1
                                     totalDigits = totalDigits + 1
                                     significant.ifFalse(() => {
-                                        (digit == 0).ifTrue(() => {
+                                        if(digit == 0) {
                                             leadingZeros = leadingZeros + 1
-                                        })
-                                        (digit != 0).ifTrue(() => {
+                                        }
+                                        if(digit != 0) {
                                             significant = true
-                                        })
+                                        }
                                     })
                                     previousDigit = true
                                     position = position + 1
-                                })
+                                }
 
-                                (digit < 0).ifTrue(() => {
+                                if(digit < 0) {
                                     underscore: octet == 95
-                                    underscore.ifTrue(() => {
+                                    if(underscore) {
                                         nextValid: false
-                                        (position + 1 < tokenLength).ifTrue(() => {
-                                            (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                        if(position + 1 < tokenLength) {
+                                            if(decimalDigit(token[position + 1]) >= 0) {
                                                 nextValid = true
-                                            })
-                                        })
+                                            }
+                                        }
                                         (previousDigit && nextValid).ifFalse(() => {
                                             valid = false
                                         })
                                         previousDigit = false
                                         position = position + 1
-                                    })
+                                    }
                                     underscore.ifFalse(() => {
                                         scanningFraction = false
                                     })
-                                })
+                                }
                             }
-                            (fractionDigits == 0).ifTrue(() => {
+                            if(fractionDigits == 0) {
                                 valid = false
-                            })
+                            }
                             previousDigit.ifFalse(() => {
                                 valid = false
                             })
-                        })
-                    })
-                })
+                        }
+                    }
+                }
 
                 exponentValue: 0
                 exponentNegative: false
                 exponentDigits: 0
                 hasExponent: false
 
-                valid.ifTrue(() => {
-                    (position < tokenLength).ifTrue(() => {
+                if(valid) {
+                    if(position < tokenLength) {
                         exponentMarker: token[position] == 101
-                        (token[position] == 69).ifTrue(() => {
+                        if(token[position] == 69) {
                             exponentMarker = true
-                        })
+                        }
 
-                        exponentMarker.ifTrue(() => {
+                        if(exponentMarker) {
                             hasExponent = true
                             position = position + 1
 
-                            (position < tokenLength).ifTrue(() => {
-                                (token[position] == 43).ifTrue(() => {
+                            if(position < tokenLength) {
+                                if(token[position] == 43) {
                                     position = position + 1
-                                })
-                                (position < tokenLength).ifTrue(() => {
-                                    (token[position] == 45).ifTrue(() => {
+                                }
+                                if(position < tokenLength) {
+                                    if(token[position] == 45) {
                                         exponentNegative = true
                                         position = position + 1
-                                    })
-                                })
-                            })
+                                    }
+                                }
+                            }
 
                             previousDigit = false
                             scanningExponent: true
@@ -2707,110 +2707,110 @@ parseDialect: (text, version) => {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
-                                (digit >= 0).ifTrue(() => {
+                                if(digit >= 0) {
                                     exponentValue = exponentValue * 10 + digit
                                     exponentDigits = exponentDigits + 1
                                     previousDigit = true
                                     position = position + 1
-                                })
+                                }
 
-                                (digit < 0).ifTrue(() => {
+                                if(digit < 0) {
                                     underscore: octet == 95
-                                    underscore.ifTrue(() => {
+                                    if(underscore) {
                                         nextValid: false
-                                        (position + 1 < tokenLength).ifTrue(() => {
-                                            (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                        if(position + 1 < tokenLength) {
+                                            if(decimalDigit(token[position + 1]) >= 0) {
                                                 nextValid = true
-                                            })
-                                        })
+                                            }
+                                        }
                                         (previousDigit && nextValid).ifFalse(() => {
                                             valid = false
                                         })
                                         previousDigit = false
                                         position = position + 1
-                                    })
+                                    }
                                     underscore.ifFalse(() => {
                                         scanningExponent = false
                                     })
-                                })
+                                }
                             }
-                            (exponentDigits == 0).ifTrue(() => {
+                            if(exponentDigits == 0) {
                                 valid = false
-                            })
+                            }
                             previousDigit.ifFalse(() => {
                                 valid = false
                             })
-                        })
-                    })
-                })
+                        }
+                    }
+                }
 
-                ((hasFraction || hasExponent) === false).ifTrue(() => {
+                if((hasFraction || hasExponent) === false) {
                     valid = false
-                })
-                (position != tokenLength).ifTrue(() => {
+                }
+                if(position != tokenLength) {
                     valid = false
-                })
+                }
 
-                valid.ifTrue(() => {
+                if(valid) {
                     decimalExponent: exponentValue
-                    exponentNegative.ifTrue(() => {
+                    if(exponentNegative) {
                         decimalExponent = 0 - exponentValue
-                    })
+                    }
                     decimalExponent = decimalExponent - fractionDigits
 
-                    negative.ifTrue(() => {
+                    if(negative) {
                         coefficient = 0 - coefficient
-                    })
+                    }
 
                     floating: null
 
-                    (coefficient == 0).ifTrue(() => {
-                        negative.ifTrue(() => {
+                    if(coefficient == 0) {
+                        if(negative) {
                             floating = -0.0
-                        })
+                        }
                         negative.ifFalse(() => {
                             floating = 0.0
                         })
-                    })
+                    }
 
-                    (coefficient != 0).ifTrue(() => {
+                    if(coefficient != 0) {
                         significantDigits: totalDigits - leadingZeros
                         adjustedExponent: decimalExponent + significantDigits - 1
 
-                        (adjustedExponent > 400).ifTrue(() => {
-                            negative.ifTrue(() => {
+                        if(adjustedExponent > 400) {
+                            if(negative) {
                                 floating = -1.0 / 0.0
-                            })
+                            }
                             negative.ifFalse(() => {
                                 floating = 1.0 / 0.0
                             })
-                        })
+                        }
 
-                        (adjustedExponent < -400).ifTrue(() => {
-                            negative.ifTrue(() => {
+                        if(adjustedExponent < -400) {
+                            if(negative) {
                                 floating = -0.0
-                            })
+                            }
                             negative.ifFalse(() => {
                                 floating = 0.0
                             })
-                        })
+                        }
 
-                        (floating === null).ifTrue(() => {
-                            (decimalExponent >= 0).ifTrue(() => {
+                        if(floating === null) {
+                            if(decimalExponent >= 0) {
                                 numerator: coefficient * powerOfTen(decimalExponent)
                                 floating = Float(numerator)
-                            })
-                            (decimalExponent < 0).ifTrue(() => {
+                            }
+                            if(decimalExponent < 0) {
                                 denominator: powerOfTen(0 - decimalExponent)
                                 floating = Float(coefficient / denominator)
-                            })
-                        })
-                    })
+                            }
+                        }
+                    }
 
                     result.valid = true
                     result.value = floating
-                })
-            })
+                }
+            }
 
             result
         }
@@ -2819,16 +2819,16 @@ parseDialect: (text, version) => {
             valid: position + 1 < token.size()
             value: 0
 
-            valid.ifTrue(() => {
+            if(valid) {
                 first: decimalDigit(token[position])
                 second: decimalDigit(token[position + 1])
-                ((first < 0) || (second < 0)).ifTrue(() => {
+                if((first < 0) || (second < 0)) {
                     valid = false
-                })
-                valid.ifTrue(() => {
+                }
+                if(valid) {
                     value = first * 10 + second
-                })
-            })
+                }
+            }
 
             {
                 valid: valid
@@ -2843,24 +2843,24 @@ parseDialect: (text, version) => {
 
             scan: null
             scan = () => {
-                (offset < 4).ifTrue(() => {
-                    valid.ifTrue(() => {
+                if(offset < 4) {
+                    if(valid) {
                         digit: decimalDigit(token[position + offset])
-                        (digit < 0).ifTrue(() => {
+                        if(digit < 0) {
                             valid = false
-                        })
-                        (digit >= 0).ifTrue(() => {
+                        }
+                        if(digit >= 0) {
                             value = value * 10 + digit
-                        })
-                    })
+                        }
+                    }
                     offset = offset + 1
                     scan()
-                })
+                }
             }
 
-            valid.ifTrue(() => {
+            if(valid) {
                 scan()
-            })
+            }
 
             {
                 valid: valid
@@ -2879,7 +2879,7 @@ parseDialect: (text, version) => {
             fractionDigits: 0
             position: start
 
-            valid.ifTrue(() => {
+            if(valid) {
                 hourPart: twoDigitsAt(token, start)
                 minutePart: twoDigitsAt(token, start + 3)
 
@@ -2890,64 +2890,64 @@ parseDialect: (text, version) => {
                     valid = false
                 })
 
-                valid.ifTrue(() => {
+                if(valid) {
                     hour = hourPart.value
                     minute = minutePart.value
                     position = start + 5
-                })
-            })
+                }
+            }
 
             // TOML 1.0 requires the seconds field; TOML 1.1 lets it be omitted.
-            valid.ifTrue(() => {
+            if(valid) {
                 toml11.ifFalse(() => {
                     secondsPresent: false
-                    (position < tokenLength).ifTrue(() => {
+                    if(position < tokenLength) {
                         secondsPresent = token[position] == 58
-                    })
+                    }
                     secondsPresent.ifFalse(() => {
                         valid = false
                     })
                 })
-            })
+            }
 
-            valid.ifTrue(() => {
-                (position < tokenLength).ifTrue(() => {
-                    (token[position] == 58).ifTrue(() => {
+            if(valid) {
+                if(position < tokenLength) {
+                    if(token[position] == 58) {
                         secondPart: twoDigitsAt(token, position + 1)
                         secondPart.valid.ifFalse(() => {
                             valid = false
                         })
-                        secondPart.valid.ifTrue(() => {
+                        if(secondPart.valid) {
                             second = secondPart.value
                             position = position + 3
 
-                            (position < tokenLength).ifTrue(() => {
-                                (token[position] == 46).ifTrue(() => {
+                            if(position < tokenLength) {
+                                if(token[position] == 46) {
                                     position = position + 1
                                     fractionStart: position
 
                                     scanningFraction: true
                                     while(scanningFraction && (position < tokenLength)) {
                                         digit: decimalDigit(token[position])
-                                        (digit >= 0).ifTrue(() => {
+                                        if(digit >= 0) {
                                             fractionCoefficient =
                                                 fractionCoefficient * 10 + digit
                                             fractionDigits = fractionDigits + 1
                                             position = position + 1
-                                        })
-                                        (digit < 0).ifTrue(() => {
+                                        }
+                                        if(digit < 0) {
                                             scanningFraction = false
-                                        })
+                                        }
                                     }
-                                    (position == fractionStart).ifTrue(() => {
+                                    if(position == fractionStart) {
                                         valid = false
-                                    })
-                                })
-                            })
-                        })
-                    })
-                })
-            })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             {
                 valid: valid
@@ -2968,13 +2968,13 @@ parseDialect: (text, version) => {
             }
 
             dateShape: tokenLength >= 10
-            dateShape.ifTrue(() => {
+            if(dateShape) {
                 ((token[4] == 45) && (token[7] == 45)).ifFalse(() => {
                     dateShape = false
                 })
-            })
+            }
 
-            dateShape.ifTrue(() => {
+            if(dateShape) {
                 yearPart: fourDigitsAt(token, 0)
                 monthPart: twoDigitsAt(token, 5)
                 dayPart: twoDigitsAt(token, 8)
@@ -2982,25 +2982,25 @@ parseDialect: (text, version) => {
                     dateShape = false
                 })
 
-                dateShape.ifTrue(() => {
-                    (tokenLength == 10).ifTrue(() => {
+                if(dateShape) {
+                    if(tokenLength == 10) {
                         result.value =
                             publicLocalDate(yearPart.value, monthPart.value, dayPart.value)
                         result.valid = true
-                    })
+                    }
 
-                    (tokenLength > 10).ifTrue(() => {
+                    if(tokenLength > 10) {
                         delimiter: token[10]
                         validDelimiter: delimiter == 84
-                        (delimiter == 116).ifTrue(() => { validDelimiter = true })
-                        (delimiter == 32).ifTrue(() => { validDelimiter = true })
+                        if(delimiter == 116) { validDelimiter = true }
+                        if(delimiter == 32) { validDelimiter = true }
 
-                        validDelimiter.ifTrue(() => {
+                        if(validDelimiter) {
                             parsedTime: timeAt(token, 11)
-                            parsedTime.valid.ifTrue(() => {
+                            if(parsedTime.valid) {
                                 position: parsedTime.position
 
-                                (position == tokenLength).ifTrue(() => {
+                                if(position == tokenLength) {
                                     result.value =
                                         publicLocalDateTime(
                                             yearPart.value,
@@ -3013,45 +3013,45 @@ parseDialect: (text, version) => {
                                             parsedTime.fractionDigits
                                         )
                                     result.valid = true
-                                })
+                                }
 
-                                (position < tokenLength).ifTrue(() => {
+                                if(position < tokenLength) {
                                     offsetMinutes: 0
                                     offsetValid: false
                                     offsetEnd: position
 
-                                    ((token[position] == 90) ||
-                                        (token[position] == 122)).ifTrue(() => {
+                                    if((token[position] == 90) ||
+                                        (token[position] == 122)) {
                                         offsetValid = true
                                         offsetEnd = position + 1
-                                    })
+                                    }
 
-                                    ((token[position] == 43) ||
-                                        (token[position] == 45)).ifTrue(() => {
-                                        (position + 5 < tokenLength).ifTrue(() => {
-                                            (token[position + 3] == 58).ifTrue(() => {
+                                    if((token[position] == 43) ||
+                                        (token[position] == 45)) {
+                                        if(position + 5 < tokenLength) {
+                                            if(token[position + 3] == 58) {
                                                 offsetHour: twoDigitsAt(token, position + 1)
                                                 offsetMinute: twoDigitsAt(token, position + 4)
 
-                                                (offsetHour.valid && offsetMinute.valid).ifTrue(() => {
-                                                    ((offsetHour.value <= 23) &&
-                                                        (offsetMinute.value <= 59)).ifTrue(() => {
+                                                if(offsetHour.valid && offsetMinute.valid) {
+                                                    if((offsetHour.value <= 23) &&
+                                                        (offsetMinute.value <= 59)) {
                                                         offsetMinutes =
                                                             offsetHour.value * 60 +
                                                             offsetMinute.value
-                                                        (token[position] == 45).ifTrue(() => {
+                                                        if(token[position] == 45) {
                                                             offsetMinutes =
                                                                 0 - offsetMinutes
-                                                        })
+                                                        }
                                                         offsetEnd = position + 6
                                                         offsetValid = true
-                                                    })
-                                                })
-                                            })
-                                        })
-                                    })
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
 
-                                    (offsetValid && (offsetEnd == tokenLength)).ifTrue(() => {
+                                    if(offsetValid && (offsetEnd == tokenLength)) {
                                         result.value =
                                             publicOffsetDateTime(
                                                 yearPart.value,
@@ -3065,17 +3065,17 @@ parseDialect: (text, version) => {
                                                 offsetMinutes
                                             )
                                         result.valid = true
-                                    })
-                                })
-                            })
-                        })
-                    })
-                })
-            })
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             dateShape.ifFalse(() => {
                 parsedTime: timeAt(token, 0)
-                (parsedTime.valid && (parsedTime.position == tokenLength)).ifTrue(() => {
+                if(parsedTime.valid && (parsedTime.position == tokenLength)) {
                     result.value =
                         publicLocalTime(
                             parsedTime.hour,
@@ -3085,7 +3085,7 @@ parseDialect: (text, version) => {
                             parsedTime.fractionDigits
                         )
                     result.valid = true
-                })
+                }
             })
 
             result
@@ -3093,12 +3093,12 @@ parseDialect: (text, version) => {
 
         isBareTerminator: (octet) => {
             result: octet < 0
-            isSpace(octet).ifTrue(() => { result = true })
-            isNewlineStart(octet).ifTrue(() => { result = true })
-            (octet == 35).ifTrue(() => { result = true })
-            (octet == 44).ifTrue(() => { result = true })
-            (octet == 93).ifTrue(() => { result = true })
-            (octet == 125).ifTrue(() => { result = true })
+            if(isSpace(octet)) { result = true }
+            if(isNewlineStart(octet)) { result = true }
+            if(octet == 35) { result = true }
+            if(octet == 44) { result = true }
+            if(octet == 93) { result = true }
+            if(octet == 125) { result = true }
             result
         }
 
@@ -3109,40 +3109,40 @@ parseDialect: (text, version) => {
             while(gathering) {
                 octet: peek()
                 terminator: octet < 0
-                isNewlineStart(octet).ifTrue(() => { terminator = true })
-                (octet == 35).ifTrue(() => { terminator = true })
-                (octet == 44).ifTrue(() => { terminator = true })
-                (octet == 93).ifTrue(() => { terminator = true })
-                (octet == 125).ifTrue(() => { terminator = true })
+                if(isNewlineStart(octet)) { terminator = true }
+                if(octet == 35) { terminator = true }
+                if(octet == 44) { terminator = true }
+                if(octet == 93) { terminator = true }
+                if(octet == 125) { terminator = true }
 
-                terminator.ifTrue(() => {
+                if(terminator) {
                     gathering = false
-                })
+                }
                 terminator.ifFalse(() => {
                     invalidControl: octet < 32
-                    (octet == 9).ifTrue(() => {
+                    if(octet == 9) {
                         invalidControl = false
-                    })
-                    (octet == 127).ifTrue(() => {
+                    }
+                    if(octet == 127) {
                         invalidControl = true
-                    })
-                    invalidControl.ifTrue(() => {
+                    }
+                    if(invalidControl) {
                         fail()
-                    })
+                    }
                     token.add(take())
                 })
             }
-            (token.size() == 0).ifTrue(() => {
+            if(token.size() == 0) {
                 fail()
-            })
+            }
 
             right: token.size()
             trimming: true
             while(trimming && (right > 0)) {
                 whitespace: isSpace(token[right - 1])
-                whitespace.ifTrue(() => {
+                if(whitespace) {
                     right = right - 1
-                })
+                }
                 whitespace.ifFalse(() => {
                     trimming = false
                 })
@@ -3155,44 +3155,44 @@ parseDialect: (text, version) => {
                 copyIndex = copyIndex + 1
             }
 
-            (trimmed.size() == 0).ifTrue(() => {
+            if(trimmed.size() == 0) {
                 fail()
-            })
+            }
 
             decoded: Encoding.UTF8.decode(trimmed)
             result: null
 
-            (decoded == "true").ifTrue(() => {
+            if(decoded == "true") {
                 result = syntaxNode("boolean", true)
-            })
-            (decoded == "false").ifTrue(() => {
+            }
+            if(decoded == "false") {
                 result = syntaxNode("boolean", false)
-            })
+            }
 
-            (result === null).ifTrue(() => {
+            if(result === null) {
                 integer: integerFromToken(trimmed)
-                integer.valid.ifTrue(() => {
+                if(integer.valid) {
                     result = syntaxNode("integer", integer.value)
-                })
-            })
+                }
+            }
 
-            (result === null).ifTrue(() => {
+            if(result === null) {
                 temporal: temporalFromToken(trimmed)
-                temporal.valid.ifTrue(() => {
+                if(temporal.valid) {
                     result = temporal.value
-                })
-            })
+                }
+            }
 
-            (result === null).ifTrue(() => {
+            if(result === null) {
                 floating: floatFromToken(trimmed)
-                floating.valid.ifTrue(() => {
+                if(floating.valid) {
                     result = syntaxNode("float", floating.value)
-                })
-            })
+                }
+            }
 
-            (result === null).ifTrue(() => {
+            if(result === null) {
                 fail()
-            })
+            }
 
             result
         }
@@ -3233,21 +3233,21 @@ parseDialect: (text, version) => {
         }
 
         acceptValue: (valueNode) => {
-            (depth == 0).ifTrue(() => {
-                rootDone.ifTrue(() => { fail() })
+            if(depth == 0) {
+                if(rootDone) { fail() }
                 rootValue = valueNode
                 rootDone = true
-            })
+            }
 
-            (depth > 0).ifTrue(() => {
+            if(depth > 0) {
                 frame: topFrame
 
-                (frame.kind == "array").ifTrue(() => {
+                if(frame.kind == "array") {
                     (frame.phase == "awaitValue").ifFalse(() => { fail() })
                     appendArrayValue(frame, valueNode)
-                })
+                }
 
-                (frame.kind == "inlineTable").ifTrue(() => {
+                if(frame.kind == "inlineTable") {
                     (frame.phase == "awaitValue").ifFalse(() => { fail() })
                     putPath(
                         frame.entries,
@@ -3257,15 +3257,15 @@ parseDialect: (text, version) => {
                     )
                     frame.pendingPath = null
                     frame.phase = "commaOrEnd"
-                })
-            })
+                }
+            }
         }
 
         closeArrayFrame: () => {
             frame: topFrame
             (frame.kind == "array").ifFalse(() => { fail() })
             validPhase: frame.phase == "valueOrEnd"
-            (frame.phase == "commaOrEnd").ifTrue(() => { validPhase = true })
+            if(frame.phase == "commaOrEnd") { validPhase = true }
             validPhase.ifFalse(() => { fail() })
 
             materialized: collectFrameChunks(frame, frame.maxLevel, Array())
@@ -3279,7 +3279,7 @@ parseDialect: (text, version) => {
             frame: topFrame
             (frame.kind == "inlineTable").ifFalse(() => { fail() })
             validPhase: frame.phase == "keyOrEnd"
-            (frame.phase == "commaOrEnd").ifTrue(() => { validPhase = true })
+            if(frame.phase == "commaOrEnd") { validPhase = true }
             validPhase.ifFalse(() => { fail() })
 
             valueNode: syntaxNode("table", frame.entries)
@@ -3291,45 +3291,45 @@ parseDialect: (text, version) => {
         startValue: () => {
             skipSpaces()
             first: peek()
-            (first < 0).ifTrue(() => { fail() })
+            if(first < 0) { fail() }
             handled: false
 
-            (first == 91).ifTrue(() => {
+            if(first == 91) {
                 index = index + 1
                 pushArrayFrame()
                 handled = true
-            })
-            (first == 123).ifTrue(() => {
+            }
+            if(first == 123) {
                 index = index + 1
                 pushInlineTableFrame()
                 handled = true
-            })
+            }
 
             handled.ifFalse(() => {
                 result: null
-                (first == 34).ifTrue(() => {
+                if(first == 34) {
                     multiline: false
-                    (index + 2 < length).ifTrue(() => {
-                        ((source[index + 1] == 34) &&
-                            (source[index + 2] == 34)).ifTrue(() => {
+                    if(index + 2 < length) {
+                        if((source[index + 1] == 34) &&
+                            (source[index + 2] == 34)) {
                             multiline = true
-                        })
-                    })
+                        }
+                    }
                     result = syntaxNode("string", parseBasicString(multiline))
-                })
-                (first == 39).ifTrue(() => {
+                }
+                if(first == 39) {
                     multiline: false
-                    (index + 2 < length).ifTrue(() => {
-                        ((source[index + 1] == 39) &&
-                            (source[index + 2] == 39)).ifTrue(() => {
+                    if(index + 2 < length) {
+                        if((source[index + 1] == 39) &&
+                            (source[index + 2] == 39)) {
                             multiline = true
-                        })
-                    })
+                        }
+                    }
                     result = syntaxNode("string", parseLiteralString(multiline))
-                })
-                (result === null).ifTrue(() => {
+                }
+                if(result === null) {
                     result = parseBareValue()
-                })
+                }
                 acceptValue(result)
             })
         }
@@ -3338,73 +3338,73 @@ parseDialect: (text, version) => {
         while(running) {
             wasTopLevel: depth == 0
 
-            wasTopLevel.ifTrue(() => {
-                rootDone.ifTrue(() => {
+            if(wasTopLevel) {
+                if(rootDone) {
                     running = false
-                })
+                }
                 rootDone.ifFalse(() => {
                     startValue()
                 })
-            })
+            }
 
             wasTopLevel.ifFalse(() => {
                 frame: topFrame
                 phase: frame.phase
 
-                (frame.kind == "array").ifTrue(() => {
+                if(frame.kind == "array") {
                     skipArrayTrivia()
 
-                    (phase == "valueOrEnd").ifTrue(() => {
+                    if(phase == "valueOrEnd") {
                         closing: peek() == 93
-                        closing.ifTrue(() => {
+                        if(closing) {
                             index = index + 1
                             closeArrayFrame()
-                        })
+                        }
                         closing.ifFalse(() => {
                             frame.phase = "awaitValue"
                             startValue()
                         })
-                    })
+                    }
 
-                    (phase == "value").ifTrue(() => {
+                    if(phase == "value") {
                         frame.phase = "awaitValue"
                         startValue()
-                    })
+                    }
 
-                    (phase == "commaOrEnd").ifTrue(() => {
+                    if(phase == "commaOrEnd") {
                         comma: peek() == 44
                         closing: peek() == 93
-                        comma.ifTrue(() => {
+                        if(comma) {
                             index = index + 1
                             skipArrayTrivia()
                             trailing: peek() == 93
-                            trailing.ifTrue(() => {
+                            if(trailing) {
                                 index = index + 1
                                 closeArrayFrame()
-                            })
+                            }
                             trailing.ifFalse(() => {
                                 frame.phase = "value"
                             })
-                        })
+                        }
                         comma.ifFalse(() => {
-                            closing.ifTrue(() => {
+                            if(closing) {
                                 index = index + 1
                                 closeArrayFrame()
-                            })
+                            }
                             closing.ifFalse(() => { fail() })
                         })
-                    })
-                })
+                    }
+                }
 
-                (frame.kind == "inlineTable").ifTrue(() => {
+                if(frame.kind == "inlineTable") {
                     skipInlineTableTrivia()
 
-                    (phase == "keyOrEnd").ifTrue(() => {
+                    if(phase == "keyOrEnd") {
                         closing: peek() == 125
-                        closing.ifTrue(() => {
+                        if(closing) {
                             index = index + 1
                             closeInlineTableFrame()
-                        })
+                        }
                         closing.ifFalse(() => {
                             frame.pendingPath = parseKeyPath()
                             skipSpaces()
@@ -3412,51 +3412,51 @@ parseDialect: (text, version) => {
                             skipSpaces()
                             frame.phase = "value"
                         })
-                    })
+                    }
 
-                    (phase == "value").ifTrue(() => {
+                    if(phase == "value") {
                         frame.phase = "awaitValue"
                         startValue()
-                    })
+                    }
 
-                    (phase == "commaOrEnd").ifTrue(() => {
+                    if(phase == "commaOrEnd") {
                         comma: peek() == 44
                         closing: peek() == 125
-                        comma.ifTrue(() => {
+                        if(comma) {
                             index = index + 1
                             skipInlineTableTrivia()
                             trailing: peek() == 125
-                            trailing.ifTrue(() => {
+                            if(trailing) {
                                 // TOML 1.0 forbids a trailing comma in an inline table.
                                 toml11.ifFalse(() => { fail() })
                                 index = index + 1
                                 closeInlineTableFrame()
-                            })
+                            }
                             trailing.ifFalse(() => {
                                 frame.phase = "keyOrEnd"
                             })
-                        })
+                        }
                         comma.ifFalse(() => {
-                            closing.ifTrue(() => {
+                            if(closing) {
                                 index = index + 1
                                 closeInlineTableFrame()
-                            })
+                            }
                             closing.ifFalse(() => { fail() })
                         })
-                    })
-                })
+                    }
+                }
             })
         }
 
         result: rootValue
         skipSpaces()
-        (peek() == 35).ifTrue(() => {
+        if(peek() == 35) {
             index = index + 1
             skipComment()
-        })
-        (index < length).ifTrue(() => {
-            isNewlineStart(peek()).ifTrue(() => { consumeNewline() })
-        })
+        }
+        if(index < length) {
+            if(isNewlineStart(peek())) { consumeNewline() }
+        }
         skipSpaces()
         (index == length).ifFalse(() => { fail() })
         result
@@ -3482,17 +3482,17 @@ parseDialect: (text, version) => {
             carrying: true
             while(carrying) {
                 present: statementChunks.containsKey(level)
-                present.ifTrue(() => {
+                if(present) {
                     left: statementChunks[level]
                     statementChunks.remove(level)
                     chunk = Array(...left, ...chunk)
                     level = level + 1
-                })
+                }
                 present.ifFalse(() => {
                     statementChunks[level] = chunk
-                    (level > statementMaxLevel).ifTrue(() => {
+                    if(level > statementMaxLevel) {
                         statementMaxLevel = level
-                    })
+                    }
                     carrying = false
                 })
             }
@@ -3502,9 +3502,9 @@ parseDialect: (text, version) => {
             level: initialLevel
             result: initialResult
             while(level >= 0) {
-                statementChunks.containsKey(level).ifTrue(() => {
+                if(statementChunks.containsKey(level)) {
                     result = Array(...result, ...statementChunks[level])
-                })
+                }
                 level = level - 1
             }
             result
@@ -3517,16 +3517,16 @@ parseDialect: (text, version) => {
 
         peek: () => {
             value: -1
-            (index < length).ifTrue(() => {
+            if(index < length) {
                 value = source[index]
-            })
+            }
             value
         }
 
         take: () => {
-            (index >= length).ifTrue(() => {
+            if(index >= length) {
                 fail()
-            })
+            }
             value: source[index]
             index = index + 1
             value
@@ -3556,10 +3556,10 @@ parseDialect: (text, version) => {
 
             while(scanning && (look < length)) {
                 matches: source[look] == quote
-                matches.ifTrue(() => {
+                if(matches) {
                     count = count + 1
                     look = look + 1
-                })
+                }
                 matches.ifFalse(() => {
                     scanning = false
                 })
@@ -3569,28 +3569,28 @@ parseDialect: (text, version) => {
         }
 
         finish: () => {
-            significant.ifTrue(() => {
+            if(significant) {
                 carryStatementChunk(Array(Encoding.UTF8.decode(buffer)), 0)
-            })
+            }
             buffer = Encoding.UTF8.encode("")
             significant = false
         }
 
         appendNewline: (include) => {
             first: take()
-            (first == 10).ifTrue(() => {
-                include.ifTrue(() => { append(10) })
-            })
-            (first == 13).ifTrue(() => {
+            if(first == 10) {
+                if(include) { append(10) }
+            }
+            if(first == 13) {
                 (peek() == 10).ifFalse(() => {
                     fail()
                 })
                 second: take()
-                include.ifTrue(() => {
+                if(include) {
                     append(13)
                     append(second)
-                })
-            })
+                }
+            }
             (first == 10).ifFalse(() => {
                 (first == 13).ifFalse(() => {
                     fail()
@@ -3602,60 +3602,60 @@ parseDialect: (text, version) => {
             octet: peek()
 
             wasComment: comment
-            wasComment.ifTrue(() => {
+            if(wasComment) {
                 isNewline: octet == 10
-                (octet == 13).ifTrue(() => { isNewline = true })
+                if(octet == 13) { isNewline = true }
 
-                isNewline.ifTrue(() => {
+                if(isNewline) {
                     comment = false
                     nested: squareDepth > 0
-                    (braceDepth > 0).ifTrue(() => { nested = true })
-                    nested.ifTrue(() => {
+                    if(braceDepth > 0) { nested = true }
+                    if(nested) {
                         appendNewline(true)
-                    })
+                    }
                     nested.ifFalse(() => {
                         appendNewline(false)
                         finish()
                     })
-                })
+                }
 
                 isNewline.ifFalse(() => {
                     forbiddenControl: octet < 32
-                    (octet == 9).ifTrue(() => {
+                    if(octet == 9) {
                         forbiddenControl = false
-                    })
-                    (octet == 127).ifTrue(() => {
+                    }
+                    if(octet == 127) {
                         forbiddenControl = true
-                    })
-                    forbiddenControl.ifTrue(() => {
+                    }
+                    if(forbiddenControl) {
                         fail()
-                    })
+                    }
                     index = index + 1
                 })
-            })
+            }
 
             wasComment.ifFalse(() => {
                 wasString: stringQuote >= 0
-                wasString.ifTrue(() => {
+                if(wasString) {
                     wasMultiline: multiline
-                    wasMultiline.ifTrue(() => {
+                    if(wasMultiline) {
                         // Snapshot this before closing mutates stringQuote.
                         quoteOctet: octet == stringQuote
-                        quoteOctet.ifTrue(() => {
+                        if(quoteOctet) {
                             run: quoteRun(stringQuote)
-                            (run >= 3).ifTrue(() => {
-                                (run > 5).ifTrue(() => {
+                            if(run >= 3) {
+                                if(run > 5) {
                                     fail()
-                                })
+                                }
                                 appendQuotes(stringQuote, run)
                                 index = index + run
                                 stringQuote = -1
                                 multiline = false
-                            })
-                            (run < 3).ifTrue(() => {
+                            }
+                            if(run < 3) {
                                 append(take())
-                            })
-                        })
+                            }
+                        }
 
                         quoteOctet.ifFalse(() => {
                             escapedBasic: stringQuote == 34
@@ -3663,118 +3663,118 @@ parseDialect: (text, version) => {
                                 escapedBasic = false
                             })
 
-                            escapedBasic.ifTrue(() => {
+                            if(escapedBasic) {
                                 append(take())
-                                (index >= length).ifTrue(() => {
+                                if(index >= length) {
                                     fail()
-                                })
+                                }
                                 append(take())
-                            })
+                            }
 
                             escapedBasic.ifFalse(() => {
                                 append(take())
                             })
                         })
-                    })
+                    }
 
                     wasMultiline.ifFalse(() => {
                         isNewline: octet == 10
-                        (octet == 13).ifTrue(() => { isNewline = true })
-                        isNewline.ifTrue(() => {
+                        if(octet == 13) { isNewline = true }
+                        if(isNewline) {
                             fail()
-                        })
+                        }
 
                         escapedBasic: stringQuote == 34
                         (octet == 92).ifFalse(() => {
                             escapedBasic = false
                         })
 
-                        escapedBasic.ifTrue(() => {
+                        if(escapedBasic) {
                             append(take())
-                            (index >= length).ifTrue(() => {
+                            if(index >= length) {
                                 fail()
-                            })
+                            }
                             append(take())
-                        })
+                        }
 
                         escapedBasic.ifFalse(() => {
                             append(take())
-                            (octet == stringQuote).ifTrue(() => {
+                            if(octet == stringQuote) {
                                 stringQuote = -1
-                            })
+                            }
                         })
                     })
-                })
+                }
 
                 wasString.ifFalse(() => {
-                    (octet == 35).ifTrue(() => {
+                    if(octet == 35) {
                         comment = true
                         index = index + 1
-                    })
+                    }
 
                     (octet == 35).ifFalse(() => {
                         isQuote: octet == 34
-                        (octet == 39).ifTrue(() => { isQuote = true })
+                        if(octet == 39) { isQuote = true }
 
-                        isQuote.ifTrue(() => {
+                        if(isQuote) {
                             run: quoteRun(octet)
-                            (run >= 3).ifTrue(() => {
+                            if(run >= 3) {
                                 appendQuotes(octet, 3)
                                 index = index + 3
                                 stringQuote = octet
                                 multiline = true
-                            })
-                            (run < 3).ifTrue(() => {
+                            }
+                            if(run < 3) {
                                 append(take())
                                 stringQuote = octet
                                 multiline = false
-                            })
-                        })
+                            }
+                        }
 
                         isQuote.ifFalse(() => {
-                            (octet == 91).ifTrue(() => {
+                            if(octet == 91) {
                                 squareDepth = squareDepth + 1
                                 append(take())
-                            })
-                            (octet == 93).ifTrue(() => {
-                                (squareDepth == 0).ifTrue(() => {
+                            }
+                            if(octet == 93) {
+                                if(squareDepth == 0) {
                                     fail()
-                                })
+                                }
                                 squareDepth = squareDepth - 1
                                 append(take())
-                            })
-                            (octet == 123).ifTrue(() => {
+                            }
+                            if(octet == 123) {
                                 braceDepth = braceDepth + 1
                                 append(take())
-                            })
-                            (octet == 125).ifTrue(() => {
-                                (braceDepth == 0).ifTrue(() => {
+                            }
+                            if(octet == 125) {
+                                if(braceDepth == 0) {
                                     fail()
-                                })
+                                }
                                 braceDepth = braceDepth - 1
                                 append(take())
-                            })
+                            }
 
                             structural: octet == 91
-                            (octet == 93).ifTrue(() => { structural = true })
-                            (octet == 123).ifTrue(() => { structural = true })
-                            (octet == 125).ifTrue(() => { structural = true })
+                            if(octet == 93) { structural = true }
+                            if(octet == 123) { structural = true }
+                            if(octet == 125) { structural = true }
 
                             structural.ifFalse(() => {
                                 isNewline: octet == 10
-                                (octet == 13).ifTrue(() => { isNewline = true })
+                                if(octet == 13) { isNewline = true }
 
-                                isNewline.ifTrue(() => {
+                                if(isNewline) {
                                     nested: squareDepth > 0
-                                    (braceDepth > 0).ifTrue(() => { nested = true })
-                                    nested.ifTrue(() => {
+                                    if(braceDepth > 0) { nested = true }
+                                    if(nested) {
                                         appendNewline(true)
-                                    })
+                                    }
                                     nested.ifFalse(() => {
                                         appendNewline(false)
                                         finish()
                                     })
-                                })
+                                }
 
                                 isNewline.ifFalse(() => {
                                     append(take())
@@ -3789,9 +3789,9 @@ parseDialect: (text, version) => {
 
         visitIndex: 0
         source.each((ignoredOctet) => {
-            (visitIndex == index).ifTrue(() => {
+            if(visitIndex == index) {
                 step()
-            })
+            }
             visitIndex = visitIndex + 1
         })
 
@@ -3799,15 +3799,15 @@ parseDialect: (text, version) => {
             fail()
         })
 
-        (stringQuote >= 0).ifTrue(() => {
+        if(stringQuote >= 0) {
             fail()
-        })
-        (squareDepth != 0).ifTrue(() => {
+        }
+        if(squareDepth != 0) {
             fail()
-        })
-        (braceDepth != 0).ifTrue(() => {
+        }
+        if(braceDepth != 0) {
             fail()
-        })
+        }
 
         finish()
         collectStatementChunks(statementMaxLevel, Array())
@@ -3835,9 +3835,9 @@ parseDialect: (text, version) => {
 
         appendArrayTableElement: (arrayNode, element) => {
             builder: null
-            arrayTableBuilders.containsKey(arrayNode).ifTrue(() => {
+            if(arrayTableBuilders.containsKey(arrayNode)) {
                 builder = arrayTableBuilders[arrayNode]
-            })
+            }
             arrayTableBuilders.containsKey(arrayNode).ifFalse(() => {
                 builder = {
                     arrayNode: arrayNode
@@ -3855,17 +3855,17 @@ parseDialect: (text, version) => {
             carrying: true
             while(carrying) {
                 present: builder.chunks.containsKey(level)
-                present.ifTrue(() => {
+                if(present) {
                     left: builder.chunks[level]
                     builder.chunks.remove(level)
                     chunk = Array(...left, ...chunk)
                     level = level + 1
-                })
+                }
                 present.ifFalse(() => {
                     builder.chunks[level] = chunk
-                    (level > builder.maxLevel).ifTrue(() => {
+                    if(level > builder.maxLevel) {
                         builder.maxLevel = level
-                    })
+                    }
                     carrying = false
                 })
             }
@@ -3876,9 +3876,9 @@ parseDialect: (text, version) => {
             result: Array()
             level: builder.maxLevel
             while(level >= 0) {
-                builder.chunks.containsKey(level).ifTrue(() => {
+                if(builder.chunks.containsKey(level)) {
                     result = Array(...result, ...builder.chunks[level])
-                })
+                }
                 level = level - 1
             }
             result
@@ -3886,9 +3886,9 @@ parseDialect: (text, version) => {
 
         isSpace: (octet) => {
             result: octet == 32
-            (octet == 9).ifTrue(() => {
+            if(octet == 9) {
                 result = true
-            })
+            }
             result
         }
 
@@ -3909,9 +3909,9 @@ parseDialect: (text, version) => {
             trimmingLeft: true
             while(trimmingLeft && (left < right)) {
                 whitespace: isSpace(source[left])
-                whitespace.ifTrue(() => {
+                if(whitespace) {
                     left = left + 1
-                })
+                }
                 whitespace.ifFalse(() => {
                     trimmingLeft = false
                 })
@@ -3920,9 +3920,9 @@ parseDialect: (text, version) => {
             trimmingRight: true
             while(trimmingRight && (right > left)) {
                 whitespace: isSpace(source[right - 1])
-                whitespace.ifTrue(() => {
+                if(whitespace) {
                     right = right - 1
-                })
+                }
                 whitespace.ifFalse(() => {
                     trimmingRight = false
                 })
@@ -3935,9 +3935,9 @@ parseDialect: (text, version) => {
         }
 
         markInlineTable: (valueNode) => {
-            (valueNode.kind == "table").ifTrue(() => {
+            if(valueNode.kind == "table") {
                 states[valueNode] = "inline"
-            })
+            }
         }
 
         putDotted: (tableNode, parts, ignoredPosition, valueNode) => {
@@ -3949,18 +3949,18 @@ parseDialect: (text, version) => {
                 last: position == parts.count - 1
                 entries: selected.value
 
-                last.ifTrue(() => {
-                    entries.containsKey(name).ifTrue(() => {
+                if(last) {
+                    if(entries.containsKey(name)) {
                         fail()
-                    })
+                    }
                     entries[name] = valueNode
                     markInlineTable(valueNode)
                     position = parts.count
-                })
+                }
 
                 last.ifFalse(() => {
                     child: null
-                    entries.containsKey(name).ifTrue(() => {
+                    if(entries.containsKey(name)) {
                         child = entries[name]
                         (child.kind == "table").ifFalse(() => {
                             fail()
@@ -3969,16 +3969,16 @@ parseDialect: (text, version) => {
                             fail()
                         })
                         state: states[child]
-                        (state == "header").ifTrue(() => {
+                        if(state == "header") {
                             fail()
-                        })
-                        (state == "inline").ifTrue(() => {
+                        }
+                        if(state == "inline") {
                             fail()
-                        })
-                        (state == "implicit").ifTrue(() => {
+                        }
+                        if(state == "implicit") {
                             states[child] = "dotted"
-                        })
-                    })
+                        }
+                    }
 
                     entries.containsKey(name).ifFalse(() => {
                         child = node("table", Map())
@@ -4007,9 +4007,9 @@ parseDialect: (text, version) => {
             })
             builder: arrayTableBuilders[arrayNode]
             selected: builder.last
-            (selected === null).ifTrue(() => {
+            if(selected === null) {
                 fail()
-            })
+            }
             (selected.kind == "table").ifFalse(() => {
                 fail()
             })
@@ -4019,23 +4019,23 @@ parseDialect: (text, version) => {
         existingParent: (child) => {
             selected: null
 
-            (child.kind == "table").ifTrue(() => {
+            if(child.kind == "table") {
                 states.containsKey(child).ifFalse(() => {
                     fail()
                 })
-                (states[child] == "inline").ifTrue(() => {
+                if(states[child] == "inline") {
                     fail()
-                })
+                }
                 selected = child
-            })
+            }
 
-            (child.kind == "array").ifTrue(() => {
+            if(child.kind == "array") {
                 selected = latestArrayTable(child)
-            })
+            }
 
-            (selected === null).ifTrue(() => {
+            if(selected === null) {
                 fail()
-            })
+            }
             selected
         }
 
@@ -4049,10 +4049,10 @@ parseDialect: (text, version) => {
                 entries: selected.value
                 child: null
 
-                entries.containsKey(name).ifTrue(() => {
+                if(entries.containsKey(name)) {
                     child = entries[name]
 
-                    last.ifTrue(() => {
+                    if(last) {
                         (child.kind == "table").ifFalse(() => {
                             fail()
                         })
@@ -4060,26 +4060,26 @@ parseDialect: (text, version) => {
                             fail()
                         })
                         state: states[child]
-                        (state == "implicit").ifTrue(() => {
+                        if(state == "implicit") {
                             states[child] = "header"
-                        })
+                        }
                         (state == "implicit").ifFalse(() => {
                             fail()
                         })
                         selected = child
-                    })
+                    }
 
                     last.ifFalse(() => {
                         selected = existingParent(child)
                     })
-                })
+                }
 
                 entries.containsKey(name).ifFalse(() => {
                     child = node("table", Map())
                     entries[name] = child
-                    last.ifTrue(() => {
+                    if(last) {
                         states[child] = "header"
-                    })
+                    }
                     last.ifFalse(() => {
                         states[child] = "implicit"
                     })
@@ -4103,11 +4103,11 @@ parseDialect: (text, version) => {
                 entries: selected.value
                 child: null
 
-                last.ifTrue(() => {
+                if(last) {
                     element: node("table", Map())
                     states[element] = "array-element"
 
-                    entries.containsKey(name).ifTrue(() => {
+                    if(entries.containsKey(name)) {
                         child = entries[name]
                         (child.kind == "array").ifFalse(() => {
                             fail()
@@ -4118,7 +4118,7 @@ parseDialect: (text, version) => {
                         (states[child] == "array-table").ifFalse(() => {
                             fail()
                         })
-                    })
+                    }
 
                     entries.containsKey(name).ifFalse(() => {
                         child = node("array", Array())
@@ -4128,13 +4128,13 @@ parseDialect: (text, version) => {
 
                     appendArrayTableElement(child, element)
                     created = element
-                })
+                }
 
                 last.ifFalse(() => {
-                    entries.containsKey(name).ifTrue(() => {
+                    if(entries.containsKey(name)) {
                         child = entries[name]
                         selected = existingParent(child)
-                    })
+                    }
 
                     entries.containsKey(name).ifFalse(() => {
                         child = node("table", Map())
@@ -4153,9 +4153,9 @@ parseDialect: (text, version) => {
         parseHeader: (statement) => {
             source: Encoding.UTF8.encode(statement)
             bounds: trimBounds(source)
-            (bounds.left >= bounds.right).ifTrue(() => {
+            if(bounds.left >= bounds.right) {
                 fail()
-            })
+            }
             (source[bounds.left] == 91).ifFalse(() => {
                 fail()
             })
@@ -4167,19 +4167,19 @@ parseDialect: (text, version) => {
             keyStart: bounds.left + 1
             keyEnd: bounds.right - 1
 
-            (keyStart < keyEnd).ifTrue(() => {
-                (source[keyStart] == 91).ifTrue(() => {
+            if(keyStart < keyEnd) {
+                if(source[keyStart] == 91) {
                     arrayHeader = true
-                    (keyStart + 1 >= keyEnd).ifTrue(() => {
+                    if(keyStart + 1 >= keyEnd) {
                         fail()
-                    })
+                    }
                     (source[keyEnd - 1] == 93).ifFalse(() => {
                         fail()
                     })
                     keyStart = keyStart + 1
                     keyEnd = keyEnd - 1
-                })
-            })
+                }
+            }
 
             keyText: decodeRange(source, keyStart, keyEnd)
             {
@@ -4199,62 +4199,62 @@ parseDialect: (text, version) => {
                         octet: source[position]
                         inQuote: quote >= 0
 
-                        inQuote.ifTrue(() => {
+                        if(inQuote) {
                             escaped: quote == 34
                             (octet == 92).ifFalse(() => {
                                 escaped = false
                             })
 
-                            escaped.ifTrue(() => {
+                            if(escaped) {
                                 position = position + 1
-                                (position >= length).ifTrue(() => {
+                                if(position >= length) {
                                     fail()
-                                })
+                                }
                                 position = position + 1
-                            })
+                            }
 
                             escaped.ifFalse(() => {
-                                (octet == quote).ifTrue(() => {
+                                if(octet == quote) {
                                     quote = -1
-                                })
+                                }
                                 position = position + 1
                             })
-                        })
+                        }
 
                         inQuote.ifFalse(() => {
                             isQuote: octet == 34
-                            (octet == 39).ifTrue(() => {
+                            if(octet == 39) {
                                 isQuote = true
-                            })
+                            }
 
-                            isQuote.ifTrue(() => {
+                            if(isQuote) {
                                 quote = octet
                                 position = position + 1
-                            })
+                            }
 
                             isQuote.ifFalse(() => {
                                 isNewline: octet == 10
-                                (octet == 13).ifTrue(() => {
+                                if(octet == 13) {
                                     isNewline = true
-                                })
-                                isNewline.ifTrue(() => {
+                                }
+                                if(isNewline) {
                                     fail()
-                                })
+                                }
 
-                                (octet == 61).ifTrue(() => {
+                                if(octet == 61) {
                                     separator = position
-                                })
+                                }
                                 position = position + 1
                             })
                         })
 
             }
-            (quote >= 0).ifTrue(() => {
+            if(quote >= 0) {
                 fail()
-            })
-            (separator < 0).ifTrue(() => {
+            }
+            if(separator < 0) {
                 fail()
-            })
+            }
 
             keyText: decodeRange(source, 0, separator)
             valueText: decodeRange(source, separator + 1, length)
@@ -4267,20 +4267,20 @@ parseDialect: (text, version) => {
         items.each((statement) => {
             source: Encoding.UTF8.encode(statement)
             bounds: trimBounds(source)
-            (bounds.left >= bounds.right).ifTrue(() => {
+            if(bounds.left >= bounds.right) {
                 fail()
-            })
+            }
 
             header: source[bounds.left] == 91
-            header.ifTrue(() => {
+            if(header) {
                 parsedHeader: parseHeader(statement)
-                parsedHeader.array.ifTrue(() => {
+                if(parsedHeader.array) {
                     current = selectArrayHeader(parsedHeader.path)
-                })
+                }
                 parsedHeader.array.ifFalse(() => {
                     current = selectHeader(parsedHeader.path)
                 })
-            })
+            }
 
             header.ifFalse(() => {
                 assignment: parseAssignment(statement)

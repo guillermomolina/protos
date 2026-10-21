@@ -43,9 +43,9 @@ begin: (caseRefs) => {
     caseRefs.each((text) => {
         CaseRef.requireSupported(text)
 
-        requested.containsKey(text).ifTrue(() => {
+        if(requested.containsKey(text)) {
             selectionError()
-        })
+        }
         requested[text] = false
     })
 
@@ -63,18 +63,18 @@ retain: (selection, cases) => {
     Arrays.filter(cases, (entry) => {
         ref: CaseRef.ref(entry)
 
-        selection.discovered.containsKey(ref).ifTrue(() => {
+        if(selection.discovered.containsKey(ref)) {
             selectionError()
-        })
+        }
         selection.discovered[ref] = true
 
         retained: true
-        selection.active.ifTrue(() => {
+        if(selection.active) {
             retained = selection.requested.containsKey(ref)
-            retained.ifTrue(() => {
+            if(retained) {
                 selection.requested[ref] = true
-            })
-        })
+            }
+        }
 
         retained
     })

@@ -22,9 +22,9 @@ AssertionFailure: Error {}
 /// when it is `true`. Any other value signals an Error.
 require: (condition) => {
     valid: condition === true
-    (condition === false).ifTrue(() => {
+    if(condition === false) {
         valid = true
-    })
+    }
 
     valid.ifFalse(() => {
         Error().signal()

@@ -38,26 +38,26 @@ storedObservation: Runner.resultObservation(storedEvaluation)
 freshObservation: Runner.resultObservation(freshEvaluation)
 
 passed: Runner.resultPassed(storedEvaluation) === true
-passed.ifTrue(() => {
+if(passed) {
     passed = storedObservation.state === "completed"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = storedObservation.error === null
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = storedObservation.value === true
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = Runner.resultPassed(freshEvaluation) === true
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = freshObservation.state === "completed"
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = freshObservation.error === null
-})
-passed.ifTrue(() => {
+}
+if(passed) {
     passed = freshObservation.value === true
-})
+}
 
 passed

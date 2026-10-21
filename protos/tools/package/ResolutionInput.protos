@@ -20,9 +20,9 @@ SHA256: import("std:crypto/SHA256")
 
 nonEmptyString: (text) => {
     encoded: Encoding.UTF8.encode(text)
-    (encoded.size() == 0).ifTrue(() => {
+    if(encoded.size() == 0) {
         fail()
-    })
+    }
     text
 }
 
@@ -34,21 +34,21 @@ bytesLess: (left, right) => {
 
     left.each((leftOctet) => {
         decided.ifFalse(() => {
-            (index < rightSize).ifTrue(() => {
+            if(index < rightSize) {
                 rightOctet: right[index]
 
-                (leftOctet < rightOctet).ifTrue(() => {
+                if(leftOctet < rightOctet) {
                     result = true
                     decided = true
-                })
+                }
 
                 decided.ifFalse(() => {
-                    (leftOctet > rightOctet).ifTrue(() => {
+                    if(leftOctet > rightOctet) {
                         result = false
                         decided = true
-                    })
+                    }
                 })
-            })
+            }
         })
 
         index = index + 1
@@ -81,31 +81,31 @@ versionText: (version) => {
 
 validateMemberLocation: (location) => {
     source: Encoding.UTF8.encode(location)
-    (source.size() == 0).ifTrue(() => {
+    if(source.size() == 0) {
         fail()
-    })
+    }
 
     component: Encoding.UTF8.encode("")
 
     validateComponent: () => {
-        (component.size() == 0).ifTrue(() => {
+        if(component.size() == 0) {
             fail()
-        })
+        }
 
         text: Encoding.UTF8.decode(component)
-        (text == ".").ifTrue(() => {
+        if(text == ".") {
             fail()
-        })
-        (text == "..").ifTrue(() => {
+        }
+        if(text == "..") {
             fail()
-        })
+        }
     }
 
     source.each((octet) => {
-        (octet == 47).ifTrue(() => {
+        if(octet == 47) {
             validateComponent()
             component = Encoding.UTF8.encode("")
-        })
+        }
 
         (octet == 47).ifFalse(() => {
             component.add(octet)
@@ -155,35 +155,35 @@ dependencyLess: (left, right) => {
 constraintText: (constraint) => {
     result: null
 
-    (constraint.kind == "exact").ifTrue(() => {
+    if(constraint.kind == "exact") {
         result =
             "exact " +
             Syntax.renderQstring(versionText(constraint.version))
-    })
+    }
 
-    (constraint.kind == "caret").ifTrue(() => {
+    if(constraint.kind == "caret") {
         result =
             "caret " +
             Syntax.renderQstring(versionText(constraint.lower))
-    })
+    }
 
-    (constraint.kind == "interval").ifTrue(() => {
+    if(constraint.kind == "interval") {
         constraint.lower.lower.ifFalse(() => {
             fail()
         })
-        constraint.upper.lower.ifTrue(() => {
+        if(constraint.upper.lower) {
             fail()
-        })
+        }
 
         lowerOperator: ">"
-        constraint.lower.inclusive.ifTrue(() => {
+        if(constraint.lower.inclusive) {
             lowerOperator = ">="
-        })
+        }
 
         upperOperator: "<"
-        constraint.upper.inclusive.ifTrue(() => {
+        if(constraint.upper.inclusive) {
             upperOperator = "<="
-        })
+        }
 
         result =
             "interval " +
@@ -191,11 +191,11 @@ constraintText: (constraint) => {
             Syntax.renderQstring(versionText(constraint.lower.version)) + " " +
             upperOperator + " " +
             Syntax.renderQstring(versionText(constraint.upper.version))
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }
@@ -212,16 +212,16 @@ renderDependency: (
     aliasText: Syntax.renderQstring(alias)
 
     prefix: "dependency root " + aliasText + " "
-    (declaringKind == "member").ifTrue(() => {
+    if(declaringKind == "member") {
         prefix =
             "dependency member " +
             Syntax.renderQstring(declaringLocation) + " " +
             aliasText + " "
-    })
+    }
 
     result: null
 
-    (dependency.kind == "registry").ifTrue(() => {
+    if(dependency.kind == "registry") {
         authority: nonEmptyString(dependency.authority)
         packageId: nonEmptyString(dependency.packageId)
 
@@ -231,9 +231,9 @@ renderDependency: (
             Syntax.renderQstring(authority) + " " +
             Syntax.renderQstring(packageId) + " constraint " +
             constraintText(dependency.constraint) + "\n"
-    })
+    }
 
-    (dependency.kind == "git").ifTrue(() => {
+    if(dependency.kind == "git") {
         repository: nonEmptyString(dependency.repository)
         revision: nonEmptyString(dependency.revision)
 
@@ -242,13 +242,13 @@ renderDependency: (
             "git " +
             Syntax.renderQstring(repository) + " " +
             Syntax.renderQstring(revision) + "\n"
-    })
+    }
 
-    (dependency.kind == "path").ifTrue(() => {
+    if(dependency.kind == "path") {
         targetLocation: dependency.targetLocation
         targetPackageId: nonEmptyString(dependency.targetPackageId)
 
-        (targetLocation == "").ifTrue(() => {
+        if(targetLocation == "") {
             (targetPackageId == rootPackageId).ifFalse(() => {
                 fail()
             })
@@ -257,7 +257,7 @@ renderDependency: (
                 prefix +
                 "path root " +
                 Syntax.renderQstring(targetPackageId) + "\n"
-        })
+        }
 
         (targetLocation == "").ifFalse(() => {
             validateMemberLocation(targetLocation)
@@ -274,11 +274,11 @@ renderDependency: (
                 Syntax.renderQstring(targetLocation) + " " +
                 Syntax.renderQstring(targetPackageId) + "\n"
         })
-    })
+    }
 
-    (result === null).ifTrue(() => {
+    if(result === null) {
         fail()
-    })
+    }
 
     result
 }
@@ -296,9 +296,9 @@ renderDependencies: (
         alias: dependency.alias
         ignoredAliasValidation: Syntax.renderQstring(alias)
 
-        seenAliases.containsKey(alias).ifTrue(() => {
+        if(seenAliases.containsKey(alias)) {
             fail()
-        })
+        }
         seenAliases[alias] = true
     })
 
@@ -332,14 +332,14 @@ manifestLine: (kind, location, manifest, activeCompatibility) => {
         Syntax.renderQstring(release) +
         " compatibility " + compatibility + "\n"
 
-    (kind == "member").ifTrue(() => {
+    if(kind == "member") {
         result =
             "manifest member " +
             Syntax.renderQstring(location) + " " +
             Syntax.renderQstring(packageId) + " " +
             Syntax.renderQstring(release) +
             " compatibility " + compatibility + "\n"
-    })
+    }
 
     result
 }
@@ -365,14 +365,14 @@ text: (resolutionRoot) => {
             fail()
         })
 
-        seenLocations.containsKey(location).ifTrue(() => {
+        if(seenLocations.containsKey(location)) {
             fail()
-        })
+        }
         seenLocations[location] = true
 
-        seenPackageIds.containsKey(packageId).ifTrue(() => {
+        if(seenPackageIds.containsKey(packageId)) {
             fail()
-        })
+        }
         seenPackageIds[packageId] = true
 
         memberPackageIds[location] = packageId
@@ -457,18 +457,18 @@ matchesHeader: (resolutionRoot, header) => {
     current: digest(resolutionRoot)
     matches: header.lockFormat == 1
 
-    matches.ifTrue(() => {
+    if(matches) {
         matches = header.resolverVersion == 1
-    })
-    matches.ifTrue(() => {
+    }
+    if(matches) {
         matches = header.resolutionMethod == current.method
-    })
-    matches.ifTrue(() => {
+    }
+    if(matches) {
         matches = header.digestAlgorithm == current.algorithm
-    })
-    matches.ifTrue(() => {
+    }
+    if(matches) {
         matches = header.digestHex == current.hex
-    })
+    }
 
     matches
 }

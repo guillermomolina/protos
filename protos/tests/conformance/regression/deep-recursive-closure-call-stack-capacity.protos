@@ -19,7 +19,7 @@ Test: import("std:test/Test")
 tests: [
     Test("10,000-deep recursive Closure self-calls do not overflow the host call stack", () => {
         repeat: (count, operation) => {
-            (count > 0).ifTrue() {
+            if(count > 0) {
                 operation()
                 repeat(count - 1, operation)
             }

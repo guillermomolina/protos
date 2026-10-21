@@ -56,13 +56,13 @@ parse: (text) => {
     sized: null
     sized = (count) => {
         result: Array()
-        (count > 0).ifTrue(() => {
+        if(count > 0) {
             half: sized(count.div(2))
             result = Array(...half, ...half)
-            ((count % 2) == 1).ifTrue(() => {
+            if((count % 2) == 1) {
                 result = Array(...result, null)
-            })
-        })
+            }
+        }
         result
     }
 
@@ -82,9 +82,9 @@ parse: (text) => {
     currentNumeric: true
 
     takeCurrent: () => {
-        (current.size() == 0).ifTrue(() => {
+        if(current.size() == 0) {
             Error().signal()
-        })
+        }
         taken: current
         current = Encoding.UTF8.encode("")
         currentNumeric = true
@@ -93,9 +93,9 @@ parse: (text) => {
 
     // Numeric core components and prerelease identifiers reject leading zeros.
     decimal: (bytes) => {
-        ((bytes.size() > 1) && (bytes[0] == 48)).ifTrue(() => {
+        if((bytes.size() > 1) && (bytes[0] == 48)) {
             Error().signal()
-        })
+        }
         value: 0
         bytes.each((octet) => {
             value = value * 10 + (octet - 48)
@@ -115,9 +115,9 @@ parse: (text) => {
         numeric: currentNumeric
         bytes: takeCurrent()
         identifier: null
-        numeric.ifTrue(() => {
+        if(numeric) {
             identifier = decimal(bytes)
-        })
+        }
         numeric.ifFalse(() => {
             identifier = Encoding.UTF8.decode(bytes)
         })
@@ -134,59 +134,59 @@ parse: (text) => {
     source.each((octet) => {
         previousSection: section
 
-        (previousSection == "core").ifTrue(() => {
+        if(previousSection == "core") {
             handled: false
 
-            isDigit(octet).ifTrue(() => {
+            if(isDigit(octet)) {
                 current.add(octet)
                 handled = true
-            })
+            }
 
             handled.ifFalse(() => {
-                (octet == 46).ifTrue(() => {
+                if(octet == 46) {
                     (components.size() < 2).ifFalse(() => {
                         Error().signal()
                     })
                     finishCore()
                     handled = true
-                })
+                }
             })
 
             handled.ifFalse(() => {
-                ((octet == 45) || (octet == 43)).ifTrue(() => {
+                if((octet == 45) || (octet == 43)) {
                     (components.size() == 2).ifFalse(() => {
                         Error().signal()
                     })
                     finishCore()
-                    (octet == 45).ifTrue(() => {
+                    if(octet == 45) {
                         section = "prerelease"
-                    })
-                    (octet == 43).ifTrue(() => {
+                    }
+                    if(octet == 43) {
                         section = "build"
-                    })
+                    }
                     handled = true
-                })
+                }
             })
 
             handled.ifFalse(() => {
                 Error().signal()
             })
-        })
+        }
 
-        (previousSection == "prerelease").ifTrue(() => {
+        if(previousSection == "prerelease") {
             handled: false
 
-            (octet == 46).ifTrue(() => {
+            if(octet == 46) {
                 finishPrerelease()
                 handled = true
-            })
+            }
 
             handled.ifFalse(() => {
-                (octet == 43).ifTrue(() => {
+                if(octet == 43) {
                     finishPrerelease()
                     section = "build"
                     handled = true
-                })
+                }
             })
 
             handled.ifFalse(() => {
@@ -198,12 +198,12 @@ parse: (text) => {
                 })
                 current.add(octet)
             })
-        })
+        }
 
-        (previousSection == "build").ifTrue(() => {
-            (octet == 46).ifTrue(() => {
+        if(previousSection == "build") {
+            if(octet == 46) {
                 finishBuild()
-            })
+            }
 
             (octet == 46).ifFalse(() => {
                 isIdentifierOctet(octet).ifFalse(() => {
@@ -211,21 +211,21 @@ parse: (text) => {
                 })
                 current.add(octet)
             })
-        })
+        }
     })
 
-    (section == "core").ifTrue(() => {
+    if(section == "core") {
         (components.size() == 2).ifFalse(() => {
             Error().signal()
         })
         finishCore()
-    })
-    (section == "prerelease").ifTrue(() => {
+    }
+    if(section == "prerelease") {
         finishPrerelease()
-    })
-    (section == "build").ifTrue(() => {
+    }
+    if(section == "build") {
         finishBuild()
-    })
+    }
 
     isVersion: (value) => {
         (value !== null) &&
@@ -285,9 +285,9 @@ parse: (text) => {
             result = mix(result, version.prerelease.size())
             version.prerelease.each((identifier) => {
                 family: 1
-                String.recognizes(identifier).ifTrue(() => {
+                if(String.recognizes(identifier)) {
                     family = 2
-                })
+                }
                 result = mix(mix(result, family), identifier.hash())
             })
             result = mix(result, version.build.size())
@@ -359,9 +359,9 @@ format: (version) => {
     appendDecimal: (value) => {
         digits: Map()
         remaining: value
-        (value == 0).ifTrue(() => {
+        if(value == 0) {
             digits[0] = 48
-        })
+        }
         while(remaining > 0) {
             digits[digits.size()] = 48 + (remaining % 10)
             remaining = remaining.div(10)
@@ -375,9 +375,9 @@ format: (version) => {
 
     appendText: (text, alphanumeric) => {
         bytes: Encoding.UTF8.encode(text)
-        (bytes.size() == 0).ifTrue(() => {
+        if(bytes.size() == 0) {
             Error().signal()
-        })
+        }
         hasNonDigit: false
         bytes.each((octet) => {
             isIdentifierOctet(octet).ifFalse(() => {
@@ -388,9 +388,9 @@ format: (version) => {
             })
             output.add(octet)
         })
-        (alphanumeric && (hasNonDigit == false)).ifTrue(() => {
+        if(alphanumeric && (hasNonDigit == false)) {
             Error().signal()
-        })
+        }
     }
 
     appendIdentifiers: (separator, identifiers, alphanumeric) => {
@@ -398,12 +398,12 @@ format: (version) => {
         identifiers.each((identifier) => {
             output.add(next)
             next = 46
-            Integer.recognizes(identifier).ifTrue(() => {
+            if(Integer.recognizes(identifier)) {
                 appendDecimal(identifier)
-            })
-            String.recognizes(identifier).ifTrue(() => {
+            }
+            if(String.recognizes(identifier)) {
                 appendText(identifier, alphanumeric)
-            })
+            }
         })
     }
 
@@ -457,12 +457,12 @@ comparePrecedence: (left, right) => {
 
     compareIntegers: (first, second) => {
         result: 0
-        (first < second).ifTrue(() => {
+        if(first < second) {
             result = -1
-        })
-        (first > second).ifTrue(() => {
+        }
+        if(first > second) {
             result = 1
-        })
+        }
         result
     }
 
@@ -470,18 +470,18 @@ comparePrecedence: (left, right) => {
         firstBytes: Encoding.UTF8.encode(first)
         secondBytes: Encoding.UTF8.encode(second)
         limit: firstBytes.size()
-        (secondBytes.size() < limit).ifTrue(() => {
+        if(secondBytes.size() < limit) {
             limit = secondBytes.size()
-        })
+        }
         result: 0
         index: 0
         while((result == 0) && (index < limit)) {
             result = compareIntegers(firstBytes[index], secondBytes[index])
             index = index + 1
         }
-        (result == 0).ifTrue(() => {
+        if(result == 0) {
             result = compareIntegers(firstBytes.size(), secondBytes.size())
-        })
+        }
         result
     }
 
@@ -489,49 +489,49 @@ comparePrecedence: (left, right) => {
         firstNumeric: Integer.recognizes(first)
         secondNumeric: Integer.recognizes(second)
         result: 0
-        (firstNumeric && secondNumeric).ifTrue(() => {
+        if(firstNumeric && secondNumeric) {
             result = compareIntegers(first, second)
-        })
-        (firstNumeric && (!secondNumeric)).ifTrue(() => {
+        }
+        if(firstNumeric && (!secondNumeric)) {
             result = -1
-        })
-        ((!firstNumeric) && secondNumeric).ifTrue(() => {
+        }
+        if((!firstNumeric) && secondNumeric) {
             result = 1
-        })
-        ((!firstNumeric) && (!secondNumeric)).ifTrue(() => {
+        }
+        if((!firstNumeric) && (!secondNumeric)) {
             result = compareText(first, second)
-        })
+        }
         result
     }
 
     result: compareIntegers(left.major, right.major)
-    (result == 0).ifTrue(() => {
+    if(result == 0) {
         result = compareIntegers(left.minor, right.minor)
-    })
-    (result == 0).ifTrue(() => {
+    }
+    if(result == 0) {
         result = compareIntegers(left.patch, right.patch)
-    })
-    (result == 0).ifTrue(() => {
+    }
+    if(result == 0) {
         leftSize: left.prerelease.size()
         rightSize: right.prerelease.size()
-        ((leftSize == 0) || (rightSize == 0)).ifTrue(() => {
+        if((leftSize == 0) || (rightSize == 0)) {
             // A release outranks any prerelease of the same core.
             result = compareIntegers(rightSize, leftSize)
-        })
-        ((leftSize > 0) && (rightSize > 0)).ifTrue(() => {
+        }
+        if((leftSize > 0) && (rightSize > 0)) {
             limit: leftSize
-            (rightSize < limit).ifTrue(() => {
+            if(rightSize < limit) {
                 limit = rightSize
-            })
+            }
             index: 0
             while((result == 0) && (index < limit)) {
                 result = compareIdentifiers(left.prerelease[index], right.prerelease[index])
                 index = index + 1
             }
-            (result == 0).ifTrue(() => {
+            if(result == 0) {
                 result = compareIntegers(leftSize, rightSize)
-            })
-        })
-    })
+            }
+        }
+    }
     result
 }

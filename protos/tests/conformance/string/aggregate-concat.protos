@@ -24,7 +24,7 @@ tests: [
             ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
             ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
             ("é" !== "e\u{301}").ifFalse(() => { ok = false })
-            ("é" == "e\u{301}").ifTrue(() => { ok = false })
+            if("é" == "e\u{301}") { ok = false }
 
             ok
 
@@ -54,7 +54,7 @@ tests: [
             ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
             ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
             ("é" !== "e\u{301}").ifFalse(() => { ok = false })
-            ("é" == "e\u{301}").ifTrue(() => { ok = false })
+            if("é" == "e\u{301}") { ok = false }
 
             ok
 
@@ -99,7 +99,7 @@ tests: [
             ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
             ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
             ("é" !== "e\u{301}").ifFalse(() => { ok = false })
-            ("é" == "e\u{301}").ifTrue(() => { ok = false })
+            if("é" == "e\u{301}") { ok = false }
 
             ok
 
@@ -149,7 +149,7 @@ tests: [
             ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
             ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
             ("é" !== "e\u{301}").ifFalse(() => { ok = false })
-            ("é" == "e\u{301}").ifTrue(() => { ok = false })
+            if("é" == "e\u{301}") { ok = false }
 
             ok
 
@@ -200,7 +200,7 @@ tests: [
             ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
             ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
             ("é" !== "e\u{301}").ifFalse(() => { ok = false })
-            ("é" == "e\u{301}").ifTrue(() => { ok = false })
+            if("é" == "e\u{301}") { ok = false }
 
             ok
 

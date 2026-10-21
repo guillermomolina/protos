@@ -107,9 +107,9 @@ tests: Array(
             forwardLast: null
 
             Ranges.each(base, base + 3, (value) => {
-                (forwardCount == 0).ifTrue(() => {
+                if(forwardCount == 0) {
                     forwardFirst = value
-                })
+                }
                 forwardLast = value
                 forwardCount = forwardCount + 1
             })
@@ -119,9 +119,9 @@ tests: Array(
             reverseLast: null
 
             Ranges.reverseEach(base, base + 3, (value) => {
-                (reverseCount == 0).ifTrue(() => {
+                if(reverseCount == 0) {
                     reverseFirst = value
-                })
+                }
                 reverseLast = value
                 reverseCount = reverseCount + 1
             })

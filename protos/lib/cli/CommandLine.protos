@@ -33,9 +33,9 @@ option: (descriptor) => {
 
     validateNonEmptyString: (value) => {
         validateString(value)
-        (value == "").ifTrue(() => {
+        if(value == "") {
             fail()
-        })
+        }
         value
     }
 
@@ -58,9 +58,9 @@ option: (descriptor) => {
     validateLongName: (value) => {
         validateString(value)
         source: Encoding.UTF8.encode(value)
-        (source.size() == 0).ifTrue(() => {
+        if(source.size() == 0) {
             fail()
-        })
+        }
         isAlpha(source[0]).ifFalse(() => {
             fail()
         })
@@ -111,9 +111,9 @@ option: (descriptor) => {
     (shortValue === null).ifFalse(() => {
         validateShortName(shortValue)
     })
-    ((longValue === null) && (shortValue === null)).ifTrue(() => {
+    if((longValue === null) && (shortValue === null)) {
         fail()
-    })
+    }
 
     validValueCardinality: ((minValuesValue == 0) && (maxValuesValue == 0)) ||
         ((minValuesValue == 1) && (maxValuesValue == 1))
@@ -121,18 +121,18 @@ option: (descriptor) => {
         fail()
     })
 
-    (maxValuesValue == 0).ifTrue(() => {
+    if(maxValuesValue == 0) {
         (valueNameValue === null).ifFalse(() => {
             fail()
         })
-    })
+    }
 
-    (maxValuesValue == 1).ifTrue(() => {
-        (valueNameValue === null).ifTrue(() => {
+    if(maxValuesValue == 1) {
+        if(valueNameValue === null) {
             fail()
-        })
+        }
         validateNonEmptyString(valueNameValue)
-    })
+    }
 
     ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
         fail()
@@ -178,9 +178,9 @@ positional: (descriptor) => {
 
     validateNonEmptyString: (value) => {
         validateString(value)
-        (value == "").ifTrue(() => {
+        if(value == "") {
             fail()
-        })
+        }
         value
     }
 
@@ -254,9 +254,9 @@ command: (descriptor) => {
     validateCommandName: (value) => {
         validateString(value)
         source: Encoding.UTF8.encode(value)
-        (source.size() == 0).ifTrue(() => {
+        if(source.size() == 0) {
             fail()
-        })
+        }
         isAlpha(source[0]).ifFalse(() => {
             fail()
         })
@@ -286,9 +286,9 @@ command: (descriptor) => {
     // Validates one command descriptor and canonicalizes its options and
     // positionals, returning an explicit heap frame suspended before its children.
     enterCommand: (candidate, parentFrame) => {
-        visiting.containsKey(candidate).ifTrue(() => {
+        if(visiting.containsKey(candidate)) {
             fail()
-        })
+        }
         visiting[candidate] = true
 
         required: (name) => {
@@ -313,22 +313,22 @@ command: (descriptor) => {
         optionDescriptors.each((entry) => {
             spec: option(entry)
 
-            optionKeys.containsKey(spec.key).ifTrue(() => {
+            if(optionKeys.containsKey(spec.key)) {
                 fail()
-            })
+            }
             optionKeys[spec.key] = true
 
             (spec.long === null).ifFalse(() => {
-                longNames.containsKey(spec.long).ifTrue(() => {
+                if(longNames.containsKey(spec.long)) {
                     fail()
-                })
+                }
                 longNames[spec.long] = true
             })
 
             (spec.short === null).ifFalse(() => {
-                shortNames.containsKey(spec.short).ifTrue(() => {
+                if(shortNames.containsKey(spec.short)) {
                     fail()
-                })
+                }
                 shortNames[spec.short] = true
             })
 
@@ -343,16 +343,16 @@ command: (descriptor) => {
         positionalDescriptors.each((entry) => {
             spec: positional(entry)
 
-            positionalKeys.containsKey(spec.key).ifTrue(() => {
+            if(positionalKeys.containsKey(spec.key)) {
                 fail()
-            })
+            }
             positionalKeys[spec.key] = true
 
-            (spec.maxOccurrences === null).ifTrue(() => {
+            if(spec.maxOccurrences === null) {
                 ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
                     fail()
                 })
-            })
+            }
 
             canonicalPositionals[positionalIndex] = spec
             positionalIndex = positionalIndex + 1
@@ -398,30 +398,24 @@ command: (descriptor) => {
     frame: enterCommand(descriptor, null)
     result: null
     while(result === null) {
-        (frame.childIndex < frame.subcommandDescriptors.size()).ifTrueIfFalse(
-            () => {
-                frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
-            },
-            () => {
-                spec: exitCommand(frame)
-                parentFrame: frame.parent
-                (parentFrame === null).ifTrueIfFalse(
-                    () => {
-                        result = spec
-                    },
-                    () => {
-                        parentFrame.subcommandNames.containsKey(spec.name).ifTrue(() => {
-                            fail()
-                        })
-                        parentFrame.subcommandNames[spec.name] = true
+        if(frame.childIndex < frame.subcommandDescriptors.size()) {
+            frame = enterCommand(frame.subcommandDescriptors[frame.childIndex], frame)
+        } else {
+            spec: exitCommand(frame)
+            parentFrame: frame.parent
+            if(parentFrame === null) {
+                result = spec
+            } else {
+                if(parentFrame.subcommandNames.containsKey(spec.name)) {
+                    fail()
+                }
+                parentFrame.subcommandNames[spec.name] = true
 
-                        parentFrame.subcommands[parentFrame.childIndex] = spec
-                        parentFrame.childIndex = parentFrame.childIndex + 1
-                        frame = parentFrame
-                    }
-                )
+                parentFrame.subcommands[parentFrame.childIndex] = spec
+                parentFrame.childIndex = parentFrame.childIndex + 1
+                frame = parentFrame
             }
-        )
+        }
     }
     result
 }
@@ -506,9 +500,9 @@ parse: ((arrayBuilderFactory) => {
                     requiredPositionals + positionalSpec.minOccurrences
             })
 
-            (rawPositionals.size() < requiredPositionals).ifTrue(() => {
+            if(rawPositionals.size() < requiredPositionals) {
                 fail()
-            })
+            }
 
             positionalBuilder: newBuilder()
             rawIndex: 0
@@ -521,25 +515,25 @@ parse: ((arrayBuilderFactory) => {
                 remaining: rawPositionals.size() - rawIndex
                 consume: 0
 
-                (positionalSpec.maxOccurrences === null).ifTrue(() => {
+                if(positionalSpec.maxOccurrences === null) {
                     consume = remaining
-                })
+                }
 
                 (positionalSpec.maxOccurrences === null).ifFalse(() => {
-                    (positionalSpec.minOccurrences == 1).ifTrue(() => {
+                    if(positionalSpec.minOccurrences == 1) {
                         consume = 1
-                    })
+                    }
 
-                    (positionalSpec.minOccurrences == 0).ifTrue(() => {
-                        (remaining > laterMinimum).ifTrue(() => {
+                    if(positionalSpec.minOccurrences == 0) {
+                        if(remaining > laterMinimum) {
                             consume = 1
-                        })
-                    })
+                        }
+                    }
                 })
 
-                (consume < positionalSpec.minOccurrences).ifTrue(() => {
+                if(consume < positionalSpec.minOccurrences) {
                     fail()
-                })
+                }
 
                 consumed: 0
                 while(consumed < consume) {
@@ -608,9 +602,9 @@ parse: ((arrayBuilderFactory) => {
                 requiredPositionals =
                     requiredPositionals + positionalSpec.minOccurrences
 
-                (positionalSpec.maxOccurrences === null).ifTrue(() => {
+                if(positionalSpec.maxOccurrences === null) {
                     unboundedPositionals = true
-                })
+                }
 
                 (positionalSpec.maxOccurrences === null).ifFalse(() => {
                     boundedMaximumPositionals =
@@ -633,9 +627,9 @@ parse: ((arrayBuilderFactory) => {
                 count: occurrenceCounts[optionSpec.key]
 
                 (optionSpec.maxOccurrences === null).ifFalse(() => {
-                    (count >= optionSpec.maxOccurrences).ifTrue(() => {
+                    if(count >= optionSpec.maxOccurrences) {
                         fail()
-                    })
+                    }
                 })
 
                 occurrenceCounts[optionSpec.key] = count + 1
@@ -666,11 +660,11 @@ parse: ((arrayBuilderFactory) => {
             positionalPrefixFeasible: () => {
                 feasible: rawPositionalCount >= requiredPositionals
 
-                ((feasible) && (unboundedPositionals == false)).ifTrue(() => {
-                    (rawPositionalCount > boundedMaximumPositionals).ifTrue(() => {
+                if((feasible) && (unboundedPositionals == false)) {
+                    if(rawPositionalCount > boundedMaximumPositionals) {
                         feasible = false
-                    })
-                })
+                    }
+                }
 
                 feasible
             }
@@ -690,45 +684,45 @@ parse: ((arrayBuilderFactory) => {
                 advance: 1
                 handled: false
 
-                optionsEnabled.ifTrue(() => {
-                    (token == "--").ifTrue(() => {
+                if(optionsEnabled) {
+                    if(token == "--") {
                         endOfOptionsIndex = scanIndex
                         optionsEnabled = false
                         handled = true
-                    })
+                    }
 
                     handled.ifFalse(() => {
                         optionLike: false
-                        (source.size() > 0).ifTrue(() => {
-                            (source[0] == 45).ifTrue(() => {
+                        if(source.size() > 0) {
+                            if(source[0] == 45) {
                                 optionLike = true
-                            })
-                        })
+                            }
+                        }
 
-                        optionLike.ifTrue(() => {
-                            (source.size() == 1).ifTrue(() => {
+                        if(optionLike) {
+                            if(source.size() == 1) {
                                 fail()
-                            })
+                            }
 
                             longForm: source[1] == 45
 
-                            longForm.ifTrue(() => {
+                            if(longForm) {
                                 equalsIndex: -1
                                 cursor: 2
                                 while(cursor < source.size()) {
-                                    (
+                                    if(
                                         (equalsIndex < 0) &&
                                         (source[cursor] == 61)
-                                    ).ifTrue(() => {
+                                    ) {
                                         equalsIndex = cursor
-                                    })
+                                    }
                                     cursor = cursor + 1
                                 }
 
                                 nameEnd: source.size()
-                                (equalsIndex >= 0).ifTrue(() => {
+                                if(equalsIndex >= 0) {
                                     nameEnd = equalsIndex
-                                })
+                                }
 
                                 longName: decodeRange(source, 2, nameEnd)
                                 longOptions.containsKey(longName).ifFalse(() => {
@@ -738,7 +732,7 @@ parse: ((arrayBuilderFactory) => {
                                 optionSpec: longOptions[longName]
                                 spelling: "--" + optionSpec.long
 
-                                (equalsIndex >= 0).ifTrue(() => {
+                                if(equalsIndex >= 0) {
                                     (optionSpec.maxValues == 1).ifFalse(() => {
                                         fail()
                                     })
@@ -755,15 +749,15 @@ parse: ((arrayBuilderFactory) => {
                                         value,
                                         scanIndex
                                     )
-                                })
+                                }
 
                                 (equalsIndex >= 0).ifFalse(() => {
-                                    (optionSpec.maxValues == 1).ifTrue(() => {
-                                        (
+                                    if(optionSpec.maxValues == 1) {
+                                        if(
                                             (scanIndex + 1) >= arguments.size()
-                                        ).ifTrue(() => {
+                                        ) {
                                             fail()
-                                        })
+                                        }
 
                                         recordOption(
                                             optionSpec,
@@ -773,7 +767,7 @@ parse: ((arrayBuilderFactory) => {
                                             scanIndex + 1
                                         )
                                         advance = 2
-                                    })
+                                    }
 
                                     (optionSpec.maxValues == 1).ifFalse(() => {
                                         recordOption(
@@ -787,7 +781,7 @@ parse: ((arrayBuilderFactory) => {
                                 })
 
                                 handled = true
-                            })
+                            }
 
                             longForm.ifFalse(() => {
                                 memberCount: source.size() - 1
@@ -811,7 +805,7 @@ parse: ((arrayBuilderFactory) => {
                                     optionSpec: shortOptions[shortName]
                                     spelling: "-" + optionSpec.short
 
-                                    (memberCount > 1).ifTrue(() => {
+                                    if(memberCount > 1) {
                                         (optionSpec.maxValues == 0).ifFalse(() => {
                                             fail()
                                         })
@@ -822,15 +816,15 @@ parse: ((arrayBuilderFactory) => {
                                             null,
                                             null
                                         )
-                                    })
+                                    }
 
-                                    (memberCount == 1).ifTrue(() => {
-                                        (optionSpec.maxValues == 1).ifTrue(() => {
-                                            (
+                                    if(memberCount == 1) {
+                                        if(optionSpec.maxValues == 1) {
+                                            if(
                                                 (scanIndex + 1) >= arguments.size()
-                                            ).ifTrue(() => {
+                                            ) {
                                                 fail()
-                                            })
+                                            }
 
                                             recordOption(
                                                 optionSpec,
@@ -840,7 +834,7 @@ parse: ((arrayBuilderFactory) => {
                                                 scanIndex + 1
                                             )
                                             advance = 2
-                                        })
+                                        }
 
                                         (optionSpec.maxValues == 1).ifFalse(() => {
                                             recordOption(
@@ -851,26 +845,26 @@ parse: ((arrayBuilderFactory) => {
                                                 null
                                             )
                                         })
-                                    })
+                                    }
 
                                     cursor = cursor + 1
                                 }
 
                                 handled = true
                             })
-                        })
+                        }
 
                         optionLike.ifFalse(() => {
-                            childSpecs.containsKey(token).ifTrue(() => {
-                                positionalPrefixFeasible().ifTrue(() => {
+                            if(childSpecs.containsKey(token)) {
+                                if(positionalPrefixFeasible()) {
                                     selectedChild = childSpecs[token]
                                     selectedChildIndex = scanIndex
                                     handled = true
-                                })
-                            })
+                                }
+                            }
                         })
                     })
-                })
+                }
 
                 handled.ifFalse(() => {
                     recordRawPositional(token, scanIndex)
@@ -880,12 +874,12 @@ parse: ((arrayBuilderFactory) => {
             }
 
             scopeSpec.options.each((optionSpec) => {
-                (
+                if(
                     occurrenceCounts[optionSpec.key] <
                     optionSpec.minOccurrences
-                ).ifTrue(() => {
+                ) {
                     fail()
-                })
+                }
             })
 
             rawPositionals: finishBuilder(rawPositionalBuilder)
@@ -966,17 +960,17 @@ renderHelp: (rootSpec, commandPath) => {
 
         selectedChild: null
         selectedSpec.subcommands.each((childSpec) => {
-            (
+            if(
                 (selectedChild === null) &&
                 (childSpec.name == segment)
-            ).ifTrue(() => {
+            ) {
                 selectedChild = childSpec
-            })
+            }
         })
 
-        (selectedChild === null).ifTrue(() => {
+        if(selectedChild === null) {
             fail()
-        })
+        }
 
         selectedSpec = selectedChild
     })
@@ -997,13 +991,13 @@ renderHelp: (rootSpec, commandPath) => {
         (optionSpec.long === null).ifFalse(() => {
             spelling = "--" + optionSpec.long
         })
-        (optionSpec.long === null).ifTrue(() => {
+        if(optionSpec.long === null) {
             spelling = "-" + optionSpec.short
-        })
+        }
 
-        (optionSpec.maxValues == 1).ifTrue(() => {
+        if(optionSpec.maxValues == 1) {
             spelling = spelling + " " + optionSpec.valueName
-        })
+        }
 
         spelling
     }
@@ -1011,28 +1005,28 @@ renderHelp: (rootSpec, commandPath) => {
     positionalTerm: (positionalSpec) => {
         rendered: positionalSpec.valueName
 
-        (
+        if(
             (positionalSpec.minOccurrences == 0) &&
             (positionalSpec.maxOccurrences == 1)
-        ).ifTrue(() => {
+        ) {
             rendered = "[" + positionalSpec.valueName + "]"
-        })
+        }
 
-        (
+        if(
             (positionalSpec.minOccurrences == 0) &&
             (positionalSpec.maxOccurrences === null)
-        ).ifTrue(() => {
+        ) {
             rendered = "[" + positionalSpec.valueName + "]..."
-        })
+        }
 
-        (
+        if(
             (positionalSpec.minOccurrences == 1) &&
             (positionalSpec.maxOccurrences === null)
-        ).ifTrue(() => {
+        ) {
             rendered =
                 positionalSpec.valueName +
                 " [" + positionalSpec.valueName + "]..."
-        })
+        }
 
         rendered
     }
@@ -1051,30 +1045,30 @@ renderHelp: (rootSpec, commandPath) => {
             rendered = rendered + "--" + optionSpec.long
         })
 
-        (optionSpec.maxValues == 1).ifTrue(() => {
+        if(optionSpec.maxValues == 1) {
             rendered = rendered + " " + optionSpec.valueName
-        })
+        }
 
-        (
+        if(
             (optionSpec.minOccurrences == 1) &&
             (optionSpec.maxOccurrences == 1)
-        ).ifTrue(() => {
+        ) {
             rendered = rendered + " (required)"
-        })
+        }
 
-        (
+        if(
             (optionSpec.minOccurrences == 0) &&
             (optionSpec.maxOccurrences === null)
-        ).ifTrue(() => {
+        ) {
             rendered = rendered + " (repeatable)"
-        })
+        }
 
-        (
+        if(
             (optionSpec.minOccurrences == 1) &&
             (optionSpec.maxOccurrences === null)
-        ).ifTrue(() => {
+        ) {
             rendered = rendered + " (required, repeatable)"
-        })
+        }
 
         rendered
     }
@@ -1096,67 +1090,67 @@ renderHelp: (rootSpec, commandPath) => {
 
     hasOptionalOptions: false
     selectedSpec.options.each((optionSpec) => {
-        (optionSpec.minOccurrences == 0).ifTrue(() => {
+        if(optionSpec.minOccurrences == 0) {
             hasOptionalOptions = true
-        })
+        }
 
-        (optionSpec.minOccurrences == 1).ifTrue(() => {
+        if(optionSpec.minOccurrences == 1) {
             term: optionUsageTerm(optionSpec)
             appendText(" ")
             appendText(term)
 
-            (optionSpec.maxOccurrences === null).ifTrue(() => {
+            if(optionSpec.maxOccurrences === null) {
                 appendText(" [")
                 appendText(term)
                 appendText("]...")
-            })
-        })
+            }
+        }
     })
 
-    hasOptionalOptions.ifTrue(() => {
+    if(hasOptionalOptions) {
         appendText(" [OPTIONS]")
-    })
+    }
 
     selectedSpec.positionals.each((positionalSpec) => {
         appendText(" ")
         appendText(positionalTerm(positionalSpec))
     })
 
-    (selectedSpec.subcommands.size() > 0).ifTrue(() => {
+    if(selectedSpec.subcommands.size() > 0) {
         appendText(" [COMMAND]")
-    })
+    }
 
     (selectedSpec.help === null).ifFalse(() => {
         appendText("\n\n")
         appendText(selectedSpec.help)
     })
 
-    (selectedSpec.positionals.size() > 0).ifTrue(() => {
+    if(selectedSpec.positionals.size() > 0) {
         appendText("\n\nArguments:")
         selectedSpec.positionals.each((positionalSpec) => {
             appendText("\n  ")
             appendText(positionalTerm(positionalSpec))
             appendDescription(positionalSpec.help)
         })
-    })
+    }
 
-    (selectedSpec.options.size() > 0).ifTrue(() => {
+    if(selectedSpec.options.size() > 0) {
         appendText("\n\nOptions:")
         selectedSpec.options.each((optionSpec) => {
             appendText("\n  ")
             appendText(optionEntry(optionSpec))
             appendDescription(optionSpec.help)
         })
-    })
+    }
 
-    (selectedSpec.subcommands.size() > 0).ifTrue(() => {
+    if(selectedSpec.subcommands.size() > 0) {
         appendText("\n\nCommands:")
         selectedSpec.subcommands.each((childSpec) => {
             appendText("\n  ")
             appendText(childSpec.name)
             appendDescription(childSpec.help)
         })
-    })
+    }
 
     Encoding.UTF8.decode(output)
 }

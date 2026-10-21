@@ -36,7 +36,7 @@ load: (corpusId) => {
     selected: null
     matched: false
 
-    (corpusId == "protos/corpus/library/uri").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/uri") {
         selected = planFromEntries(
             "uri/",
             Array(
@@ -46,9 +46,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/csv").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/csv") {
         selected = planFromEntries(
             "csv/",
             Array(
@@ -60,9 +60,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/cli").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/cli") {
         selected = planFromEntries(
             "cli/",
             Array(
@@ -74,9 +74,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/math/integer").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/math/integer") {
         selected = planFromEntries(
             "math/integer/",
             Array(
@@ -87,9 +87,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/crypto/sha256").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/crypto/sha256") {
         selected = planFromEntries(
             "crypto/sha256/",
             Array(
@@ -98,9 +98,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/network/ip-addresses").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/network/ip-addresses") {
         selected = planFromEntries(
             "network/ip-addresses/",
             Array(
@@ -110,9 +110,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/network/ip-endpoints").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/network/ip-endpoints") {
         selected = planFromEntries(
             "network/ip-endpoints/",
             Array(
@@ -120,9 +120,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/semver").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/semver") {
         selected = planFromEntries(
             "semver/",
             Array(
@@ -133,9 +133,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/datetime").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/datetime") {
         selected = planFromEntries(
             "datetime/",
             Array(
@@ -152,9 +152,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/regex").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/regex") {
         selected = planFromEntries(
             "regex/",
             Array(
@@ -174,9 +174,9 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
-    (corpusId == "protos/corpus/library/logging").ifTrue(() => {
+    if(corpusId == "protos/corpus/library/logging") {
         selected = planFromEntries(
             "logging/",
             Array(
@@ -190,7 +190,7 @@ load: (corpusId) => {
             )
         )
         matched = true
-    })
+    }
 
     matched.ifFalse(() => {
         fail()
