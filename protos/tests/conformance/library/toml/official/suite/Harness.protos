@@ -56,10 +56,10 @@ fail: () => {
 power10: (exponent) => {
     result: 1
     index: 0
-    (() => index < exponent).whileTrue(() => {
+    while(index < exponent) {
         result = result * 10
         index = index + 1
-    })
+    }
     result
 }
 
@@ -75,14 +75,14 @@ digitsAt: (octets, start, count) => {
 
     result: 0
     index: start
-    (() => index < (start + count)).whileTrue(() => {
+    while(index < (start + count)) {
         octet: octets[index]
         isDigit(octet).ifFalse(() => {
             fail()
         })
         result = result * 10 + (octet - 48)
         index = index + 1
-    })
+    }
     result
 }
 
@@ -148,7 +148,7 @@ decimalFloat: (text) => {
     inFraction: false
     scanning: true
 
-    (() => scanning).whileTrue(() => {
+    while(scanning) {
         scanning = false
         (position < length).ifTrue(() => {
             octet: octets[position]
@@ -170,7 +170,7 @@ decimalFloat: (text) => {
                 scanning = true
             })
         })
-    })
+    }
 
     (digitCount > 0).ifFalse(() => {
         fail()
@@ -282,7 +282,7 @@ officialTime: (octets, start) => {
         (octets[position] == 46).ifTrue(() => {
             position = position + 1
             scanning: true
-            (() => scanning).whileTrue(() => {
+            while(scanning) {
                 scanning = false
                 (position < length).ifTrue(() => {
                     octet: octets[position]
@@ -293,7 +293,7 @@ officialTime: (octets, start) => {
                         scanning = true
                     })
                 })
-            })
+            }
             (digits > 0).ifFalse(() => {
                 fail()
             })
@@ -579,10 +579,10 @@ requireEquivalent: (node, expected) => {
             items: expected.value
             Assertions.require(node.value.size() == items.size())
             index: 0
-            (() => index < items.size()).whileTrue(() => {
+            while(index < items.size()) {
                 requireEquivalent(node.value[index], items[index])
                 index = index + 1
-            })
+            }
             handled = true
         })
     })

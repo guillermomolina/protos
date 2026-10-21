@@ -37,7 +37,7 @@ append: (accumulator, value) => {
     level: 0
 
     // A chunk already at this level holds older elements, so it goes first.
-    (() => accumulator.chunks.containsKey(level)).whileTrue() {
+    while(accumulator.chunks.containsKey(level)) {
         chunk = Array(...accumulator.chunks[level], ...chunk)
         accumulator.chunks.remove(level)
         level = level + 1
@@ -57,7 +57,7 @@ finish: (accumulator) => {
     result: Array()
     level: accumulator.maxLevel
 
-    (() => level >= 0).whileTrue() {
+    while(level >= 0) {
         accumulator.chunks.containsKey(level).ifTrue(() => {
             result = Array(...result, ...accumulator.chunks[level])
         })

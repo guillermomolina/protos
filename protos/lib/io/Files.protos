@@ -124,7 +124,7 @@ writeAllBytes: (filesystem, path, bytes) => {
 
             offset: 0
             snapshotSize: snapshot.size()
-            (() => offset < snapshotSize).whileTrue(() => {
+            while(offset < snapshotSize) {
                 remaining: snapshotSize - offset
                 chunkSize: 65536
                 (remaining < chunkSize).ifTrue(() => {
@@ -133,17 +133,17 @@ writeAllBytes: (filesystem, path, bytes) => {
 
                 chunk: Encoding.UTF8.encode("")
                 chunkIndex: 0
-                (() => chunkIndex < chunkSize).whileTrue(() => {
+                while(chunkIndex < chunkSize) {
                     chunk.add(snapshot[offset + chunkIndex])
                     chunkIndex = chunkIndex + 1
-                })
+                }
 
                 // Each write is awaited before constructing/issuing the next
                 // chunk. A failed ordinary write is never retried because the
                 // Core failure may already have contributed a committed prefix.
                 file.write(chunk).value()
                 offset = offset + chunkSize
-            })
+            }
 
             filesystem
         }).ensure(() => {

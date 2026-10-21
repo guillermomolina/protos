@@ -128,7 +128,7 @@ compileWithFlags: ((unicode, transfer) => {
     freshArray: (entries, count) => {
         result: sized(count)
         index: 0
-        (() => index < count).whileTrue() {
+        while(index < count) {
             result[index] = entries[index]
             index = index + 1
         }
@@ -199,7 +199,7 @@ compileWithFlags: ((unicode, transfer) => {
         writer: newRangeWriter()
         leftIndex: 0
         rightIndex: 0
-        (() => (leftIndex < left.size()) || (rightIndex < right.size())).whileTrue() {
+        while((leftIndex < left.size()) || (rightIndex < right.size())) {
             takeLeft: (rightIndex >= right.size()) ||
                 ((leftIndex < left.size()) && (left[leftIndex] <= right[rightIndex]))
             takeLeft.ifTrueIfFalse(() => {
@@ -217,7 +217,7 @@ compileWithFlags: ((unicode, transfer) => {
         writer: newRangeWriter()
         leftIndex: 0
         rightIndex: 0
-        (() => (leftIndex < left.size()) && (rightIndex < right.size())).whileTrue() {
+        while((leftIndex < left.size()) && (rightIndex < right.size())) {
             low: left[leftIndex]
             (right[rightIndex] > low).ifTrue(() => {
                 low = right[rightIndex]
@@ -243,7 +243,7 @@ compileWithFlags: ((unicode, transfer) => {
         writer: newRangeWriter()
         next: 0
         index: 0
-        (() => index < set.size()).whileTrue() {
+        while(index < set.size()) {
             (set[index] > next).ifTrue(() => {
                 writer.add(next, set[index] - 1)
             })
@@ -455,7 +455,7 @@ compileWithFlags: ((unicode, transfer) => {
         capturedTexts: Array(...texts)
         capturedTexts.freeze()
         groupIndex: 0
-        (() => groupIndex < groupTotal).whileTrue() {
+        while(groupIndex < groupTotal) {
             first: capturedBounds[2 * groupIndex]
             last: capturedBounds[2 * groupIndex + 1]
             captured: capturedTexts[groupIndex]
@@ -527,7 +527,7 @@ compileWithFlags: ((unicode, transfer) => {
         low: 0
         high: ranges.size().div(2) - 1
         found: false
-        (() => !found && (low <= high)).whileTrue() {
+        while(!found && (low <= high)) {
             middle: (low + high).div(2)
             (scalar < ranges[2 * middle]).ifTrueIfFalse(() => {
                 high = middle - 1
@@ -571,7 +571,7 @@ compileWithFlags: ((unicode, transfer) => {
         scalars: decodeScalars(text)
         appendSpan: (bytes, first, last) => {
             index: first
-            (() => index < last).whileTrue() {
+            while(index < last) {
                 appendScalar(bytes, scalars[index])
                 index = index + 1
             }
@@ -632,7 +632,7 @@ compileWithFlags: ((unicode, transfer) => {
         bounds: Map()
         counterTotal: 0
         index: 0
-        (() => index < nodeCount).whileTrue() {
+        while(index < nodeCount) {
             node: nodes[index]
             op: node.op
             consumes: op == "set"
@@ -669,7 +669,7 @@ compileWithFlags: ((unicode, transfer) => {
         }
         // Repeat nesting depth; parents always have larger indexes.
         index = nodeCount - 1
-        (() => index >= 0).whileTrue() {
+        while(index >= 0) {
             depth: 0
             (parents[index] === null).ifFalse(() => {
                 depth = depths[parents[index]]
@@ -690,7 +690,7 @@ compileWithFlags: ((unicode, transfer) => {
         (counterTotal > 0).ifTrue(() => {
             zeros: sized(counterTotal)
             index = 0
-            (() => index < counterTotal).whileTrue() {
+            while(index < counterTotal) {
                 zeros[index] = 0
                 index = index + 1
             }
@@ -717,7 +717,7 @@ compileWithFlags: ((unicode, transfer) => {
             key: state * markerRange + marker + 1
             (counters === null).ifFalse(() => {
                 slot: 0
-                (() => slot < counterTotal).whileTrue() {
+                while(slot < counterTotal) {
                     key = key * (counterBounds[slot] + 1) + counters[slot]
                     slot = slot + 1
                 }
@@ -812,7 +812,7 @@ compileWithFlags: ((unicode, transfer) => {
                     })
                     (op == "alternate").ifTrue(() => {
                         item: node.items.size() - 1
-                        (() => item >= 0).whileTrue() {
+                        while(item >= 0) {
                             push(3 * node.items[item], marker, counters, captures)
                             item = item - 1
                         }
@@ -920,7 +920,7 @@ compileWithFlags: ((unicode, transfer) => {
             }
 
             close: () => {
-                (() => (depth > 0) && !cut).whileTrue() {
+                while((depth > 0) && !cut) {
                     depth = depth - 1
                     entry: stack[depth]
                     key: keyOf(entry.state, entry.marker, entry.counters)
@@ -933,13 +933,13 @@ compileWithFlags: ((unicode, transfer) => {
             }
 
             running: true
-            (() => running).whileTrue() {
+            while(running) {
                 visited = Map()
                 waiting = Map()
                 waitingCount = 0
                 cut = false
                 entryIndex: 0
-                (() => (entryIndex < pendingCount) && !cut).whileTrue() {
+                while((entryIndex < pendingCount) && !cut) {
                     entry: pending[entryIndex]
                     push(entry.state, entry.marker, entry.counters, entry.captures)
                     close()
@@ -954,7 +954,7 @@ compileWithFlags: ((unicode, transfer) => {
                 (position < size).ifTrue(() => {
                     scalar: scalars[position]
                     item: 0
-                    (() => item < waitingCount).whileTrue() {
+                    while(item < waitingCount) {
                         entry: waiting[item]
                         contains(nodes[entry.state.div(3)].ranges, scalar).ifTrue(() => {
                             // Consuming input ends the freshness of every
@@ -997,7 +997,7 @@ compileWithFlags: ((unicode, transfer) => {
             (spans === null).ifFalse(() => {
                 texts: sized(groupTotal)
                 group: 0
-                (() => group < groupTotal).whileTrue() {
+                while(group < groupTotal) {
                     (spans[2 * group] === null).ifFalse(() => {
                         texts[group] = input.slice(spans[2 * group], spans[2 * group + 1])
                     })
@@ -1016,7 +1016,7 @@ compileWithFlags: ((unicode, transfer) => {
         // the search; callers that copy input keep their own copy boundary.
         traverse: (input, visit) => {
             from: 0
-            (() => from <= input.size).whileTrue() {
+            while(from <= input.size) {
                 found: matchIn(input, from, false, false)
                 (found === null).ifTrueIfFalse(() => {
                     from = input.size + 1
@@ -1050,7 +1050,7 @@ compileWithFlags: ((unicode, transfer) => {
                 })
             }
             index: 0
-            (() => index < size).whileTrue() {
+            while(index < size) {
                 scalar: scalars[index]
                 (scalar == 36).ifTrueIfFalse(() => {
                     marker: -1
@@ -1066,7 +1066,7 @@ compileWithFlags: ((unicode, transfer) => {
                         })
                         first: index + 2
                         close: first
-                        (() => (close < size) && (scalars[close] != 125)).whileTrue() {
+                        while((close < size) && (scalars[close] != 125)) {
                             close = close + 1
                         }
                         ((close < size) && (close > first)).ifFalse(() => {
@@ -1079,7 +1079,7 @@ compileWithFlags: ((unicode, transfer) => {
                             })
                             number: 0
                             digit: first
-                            (() => digit < close).whileTrue() {
+                            while(digit < close) {
                                 ((scalars[digit] >= 48) && (scalars[digit] <= 57)).ifFalse(() => {
                                     Error().signal()
                                 })
@@ -1093,7 +1093,7 @@ compileWithFlags: ((unicode, transfer) => {
                         }, () => {
                             nameBytes: Encoding.UTF8.encode("")
                             digit: first
-                            (() => digit < close).whileTrue() {
+                            while(digit < close) {
                                 appendScalar(nameBytes, scalars[digit])
                                 digit = digit + 1
                             }
@@ -1408,8 +1408,8 @@ compileWithFlags: ((unicode, transfer) => {
             (isAsciiLetter(scalarAt(position)) || (scalarAt(position) == 95)).ifFalse(() => {
                 Error().signal()
             })
-            (() => isAsciiLetter(scalarAt(position)) || isAsciiDigit(scalarAt(position)) ||
-                (scalarAt(position) == 95)).whileTrue() {
+            while(isAsciiLetter(scalarAt(position)) || isAsciiDigit(scalarAt(position)) ||
+                (scalarAt(position) == 95)) {
                 bytes.add(scalarAt(position))
                 position = position + 1
             }
@@ -1487,7 +1487,7 @@ compileWithFlags: ((unicode, transfer) => {
                 Error().signal()
             })
             value: 0
-            (() => isAsciiDigit(scalarAt(position))).whileTrue() {
+            while(isAsciiDigit(scalarAt(position))) {
                 value = value * 10 + (scalarAt(position) - 48)
                 position = position + 1
             }
@@ -1563,7 +1563,7 @@ compileWithFlags: ((unicode, transfer) => {
             position = position + 1
             value: 0
             digits: 0
-            (() => (digits <= 6) && (hexValue(scalarAt(position)) >= 0)).whileTrue() {
+            while((digits <= 6) && (hexValue(scalarAt(position)) >= 0)) {
                 value = value * 16 + hexValue(scalarAt(position))
                 digits = digits + 1
                 position = position + 1
@@ -1587,7 +1587,7 @@ compileWithFlags: ((unicode, transfer) => {
             position = position + 1
             nameBytes: Encoding.UTF8.encode("")
             valueBytes: null
-            (() => scalarAt(position) != 125).whileTrue() {
+            while(scalarAt(position) != 125) {
                 current: scalarAt(position)
                 // Every Unicode property and value alias is ASCII.
                 ((current < 0) || (current > 127)).ifTrue(() => {
@@ -1744,7 +1744,7 @@ compileWithFlags: ((unicode, transfer) => {
             })
             operand: caseFold(fromPairs(classFrame.pairs, classFrame.pairCount))
             index: 0
-            (() => index < classFrame.nestedCount).whileTrue() {
+            while(index < classFrame.nestedCount) {
                 operand = union(operand, classFrame.nested[index])
                 index = index + 1
             }
@@ -1811,7 +1811,7 @@ compileWithFlags: ((unicode, transfer) => {
                 classDepth = classDepth + 1
             }
             openClass()
-            (() => result === null).whileTrue() {
+            while(result === null) {
                 current: classFrames[classDepth - 1]
                 first: scalarAt(position)
                 second: scalarAt(position + 1)
@@ -1876,9 +1876,9 @@ compileWithFlags: ((unicode, transfer) => {
 
         skipIgnorable: () => {
             extended.ifTrue(() => {
-                (() => isPatternWhiteSpace(scalarAt(position)) || (scalarAt(position) == 35)).whileTrue() {
+                while(isPatternWhiteSpace(scalarAt(position)) || (scalarAt(position) == 35)) {
                     (scalarAt(position) == 35).ifTrueIfFalse(() => {
-                        (() => (position < length) && !isLineTerminator(scalars[position])).whileTrue() {
+                        while((position < length) && !isLineTerminator(scalars[position])) {
                             position = position + 1
                         }
                     }, () => {
@@ -1888,7 +1888,7 @@ compileWithFlags: ((unicode, transfer) => {
             })
         }
 
-        (() => position < length).whileTrue() {
+        while(position < length) {
             skipIgnorable()
             (position < length).ifTrue(() => {
                 current: scalars[position]
@@ -1997,7 +1997,7 @@ compileWithFlags: ((unicode, transfer) => {
         frames = Map()
         frame = null
         nameIndex: 0
-        (() => nameIndex < nodeCount).whileTrue() {
+        while(nameIndex < nodeCount) {
             node: nodes[nameIndex]
             ((node.op == "capture") && (node.name !== null)).ifTrue(() => {
                 groupNames[node.group] = node.name
@@ -2090,7 +2090,7 @@ escape: (text) => {
         digits: "0123456789ABCDEF"
         hex: ""
         remaining: scalar
-        (() => remaining > 0).whileTrue() {
+        while(remaining > 0) {
             hex = digits[remaining % 16] + hex
             remaining = remaining.div(16)
         }

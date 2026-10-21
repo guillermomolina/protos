@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.395-SNAPSHOT
+
+- `I118` (#943, D210-Q2/#941): first-party Protos sources adopt the
+  contextual `while(condition) { body }` spelling.
+  - 311 equivalent `(() => condition).whileTrue() { body }` /
+    `.whileTrue(() => { body })` loops converted across 53 files in
+    `protos/lib`, `protos/tools` (including all 13 TOOL010
+    `Structural.protos` loops), `protos/tests` and `protos/examples`;
+    pure source migration with no runtime, parser, canonicalizer or
+    Bytecode DSL change.
+  - Kept as explicit `.whileTrue`: the `control/while-*.protos` protocol
+    conformance suites, multi-expression conditions in `IpAddresses` and
+    `IpEndpoints`, embedded Java/Python/shell literals, and the
+    `protos/benchmarks/concurrency` workloads (PERF001-F canonical
+    benchmark source stability).
+  - `ProtosTestToolFileSelectionMainAdoptionTest` source-shape assertion
+    updated to the new `Main.protos` loop spelling.
+  - Maintainer validation: `make check` PASS; `make test` PASS.
+
 ## 0.3.394-SNAPSHOT
 
 - `I117-B` (#942, D210-Q2/#941): contextual `while(condition) { body }`

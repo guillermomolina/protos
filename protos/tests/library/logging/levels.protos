@@ -40,16 +40,16 @@ tests: [
         Assertions.require(Level.hasSlot("CRITICAL") == false)
         Assertions.require(Level.hasSlot("OFF") == false)
         index: 0
-        (() => index < ordered.size()).whileTrue(() => {
+        while(index < ordered.size()) {
             Assertions.require(Level.compare(ordered[index], ordered[index]) == 0)
             index = index + 1
-        })
+        }
     }),
     Test("severity order is TRACE < DEBUG < INFO < WARN < ERROR", () => {
         leftIndex: 0
-        (() => leftIndex < ordered.size()).whileTrue(() => {
+        while(leftIndex < ordered.size()) {
             rightIndex: 0
-            (() => rightIndex < ordered.size()).whileTrue(() => {
+            while(rightIndex < ordered.size()) {
                 expected: 0
                 (leftIndex < rightIndex).ifTrue(() => {
                     expected = -1
@@ -61,9 +61,9 @@ tests: [
                     Level.compare(ordered[leftIndex], ordered[rightIndex]) == expected
                 )
                 rightIndex = rightIndex + 1
-            })
+            }
             leftIndex = leftIndex + 1
-        })
+        }
     }),
     Test("compare rejects values that are not canonical levels", () => {
         rejectsCompare("FATAL", Level.INFO)

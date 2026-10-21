@@ -39,10 +39,10 @@ renderValue: (value) => {
     prefix: "INFO \"\" {\"v\"="
     result: ""
     index: prefix.size()
-    (() => index < (line.size() - 1)).whileTrue(() => {
+    while(index < (line.size() - 1)) {
         result = result + line[index]
         index = index + 1
-    })
+    }
     result
 }
 
@@ -52,7 +52,7 @@ singleLine: (text) => {
         "\u{85}", "\u{9B}", "\u{2028}", "\u{2029}"]
     clean: true
     index: 0
-    (() => index < text.size()).whileTrue(() => {
+    while(index < text.size()) {
         scalar: text[index]
         forbidden.each((control) => {
             (scalar == control).ifTrue(() => {
@@ -60,7 +60,7 @@ singleLine: (text) => {
             })
         })
         index = index + 1
-    })
+    }
     clean
 }
 
@@ -167,10 +167,10 @@ tests: [
             forward[key] = key.size()
         })
         index: keys.size() - 1
-        (() => index >= 0).whileTrue(() => {
+        while(index >= 0) {
             backward[keys[index]] = keys[index].size()
             index = index - 1
-        })
+        }
         nestedForward: %{ "outer": %{ "y": 1; "x": 2; "xx": 3 } }
         nestedBackward: %{ "outer": %{ "xx": 3; "x": 2; "y": 1 } }
 

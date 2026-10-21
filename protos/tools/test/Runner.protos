@@ -1223,16 +1223,16 @@ runBoundedSimpleWithLoader: (
     }
 
     nextIndex: 0
-    (() => nextIndex < selectedCases.size()).whileTrue(() => {
+    while(nextIndex < selectedCases.size()) {
         waveSpecs: Array()
         waveSources: Array()
         pending: Array()
         admitted: 0
 
-        (() =>
+        while(
             (admitted < maxInFlight) &&
             (nextIndex < selectedCases.size())
-        ).whileTrue(() => {
+        ) {
             spec: selectedCases[nextIndex]
             source: sourceLoader(spec)
 
@@ -1242,12 +1242,12 @@ runBoundedSimpleWithLoader: (
 
             admitted = admitted + 1
             nextIndex = nextIndex + 1
-        })
+        }
 
         observations: Future.all(...pending).value()
 
         resultIndex: 0
-        (() => resultIndex < observations.size()).whileTrue(() => {
+        while(resultIndex < observations.size()) {
             spec: waveSpecs[resultIndex]
             source: waveSources[resultIndex]
             observation: observations[resultIndex]
@@ -1258,8 +1258,8 @@ runBoundedSimpleWithLoader: (
             )
             carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
             resultIndex = resultIndex + 1
-        })
-    })
+        }
+    }
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
@@ -1435,16 +1435,16 @@ runBoundedWithLoader: (
     }
 
     nextIndex: 0
-    (() => nextIndex < selectedCases.size()).whileTrue(() => {
+    while(nextIndex < selectedCases.size()) {
         waveSpecs: Array()
         waveSources: Array()
         pending: Array()
         admitted: 0
 
-        (() =>
+        while(
             (admitted < maxInFlight) &&
             (nextIndex < selectedCases.size())
-        ).whileTrue(() => {
+        ) {
             spec: selectedCases[nextIndex]
             source: sourceLoader(spec)
 
@@ -1462,20 +1462,20 @@ runBoundedWithLoader: (
 
             admitted = admitted + 1
             nextIndex = nextIndex + 1
-        })
+        }
 
         observations: Future.all(...pending).value()
 
         resultIndex: 0
-        (() => resultIndex < observations.size()).whileTrue(() => {
+        while(resultIndex < observations.size()) {
             spec: waveSpecs[resultIndex]
             source: waveSources[resultIndex]
             observation: observations[resultIndex]
             evaluation: evaluateDObservation(spec, source, observation)
             carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
             resultIndex = resultIndex + 1
-        })
-    })
+        }
+    }
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
@@ -1556,7 +1556,7 @@ runBoundedWithResourcesWithLoader: (
     reservationState: ResourceReservation.newState(resourceCatalog)
 
     nextIndex: 0
-    (() => nextIndex < selectedCases.size()).whileTrue(() => {
+    while(nextIndex < selectedCases.size()) {
         // D105 immutable logical H window.
         windowSpecs: Array()
         windowSources: Array()
@@ -1564,10 +1564,10 @@ runBoundedWithResourcesWithLoader: (
         windowResults: Array()
         windowCount: 0
 
-        (() =>
+        while(
             (windowCount < maxInFlight) &&
             (nextIndex < selectedCases.size())
-        ).whileTrue(() => {
+        ) {
             spec: selectedCases[nextIndex]
             source: sourceLoader(spec)
             bindings: ResourceBinding.bindCase(spec, resourceCatalog)
@@ -1579,18 +1579,18 @@ runBoundedWithResourcesWithLoader: (
 
             windowCount = windowCount + 1
             nextIndex = nextIndex + 1
-        })
+        }
 
         remainingInWindow: windowCount
 
-        (() => remainingInWindow > 0).whileTrue(() => {
+        while(remainingInWindow > 0) {
             roundIndexes: Array()
             roundReservations: Array()
             pending: Array()
 
             // Stable TestPlan-order scan with same-window backfill.
             windowIndex: 0
-            (() => windowIndex < windowCount).whileTrue(() => {
+            while(windowIndex < windowCount) {
                 (windowResults[windowIndex] === null).ifTrue(() => {
                     reservation: ResourceReservation.tryReserve(
                         windowBindings[windowIndex],
@@ -1619,7 +1619,7 @@ runBoundedWithResourcesWithLoader: (
                 })
 
                 windowIndex = windowIndex + 1
-            })
+            }
 
             // I8A static feasibility plus an empty prior-round boundary must
             // make progress. Fail closed rather than spin if invariants regress.
@@ -1632,13 +1632,13 @@ runBoundedWithResourcesWithLoader: (
             // H/D055 async completion is the terminal execution barrier used by
             // D105. Release the whole round before any rescan.
             releaseIndex: 0
-            (() => releaseIndex < roundReservations.size()).whileTrue(() => {
+            while(releaseIndex < roundReservations.size()) {
                 ResourceReservation.release(
                     roundReservations[releaseIndex],
                     reservationState
                 )
                 releaseIndex = releaseIndex + 1
-            })
+            }
 
             (
                 ResourceReservation.activeReservationCount(reservationState) == 0
@@ -1647,7 +1647,7 @@ runBoundedWithResourcesWithLoader: (
             })
 
             resultIndex: 0
-            (() => resultIndex < observations.size()).whileTrue(() => {
+            while(resultIndex < observations.size()) {
                 resultWindowIndex: roundIndexes[resultIndex]
                 spec: windowSpecs[resultWindowIndex]
                 source: windowSources[resultWindowIndex]
@@ -1659,20 +1659,20 @@ runBoundedWithResourcesWithLoader: (
 
                 remainingInWindow = remainingInWindow - 1
                 resultIndex = resultIndex + 1
-            })
-        })
+            }
+        }
 
         // Emit only after the whole fixed H window completes, in logical order.
         resultWindowIndex: 0
-        (() => resultWindowIndex < windowCount).whileTrue(() => {
+        while(resultWindowIndex < windowCount) {
             caseRun: windowResults[resultWindowIndex]
             (caseRun === null).ifTrue(() => {
                 policyError()
             })
             carryChunk(Array(caseRun), 0)
             resultWindowIndex = resultWindowIndex + 1
-        })
-    })
+        }
+    }
 
     caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
     passedCount: 0
@@ -1968,10 +1968,10 @@ runD108WithResourcesWithLoader: (
     invocationInfrastructureFailed: false
 
     nextIndex: 0
-    (() =>
+    while(
         (nextIndex < selectedCases.size()) &&
         invocationInfrastructureFailed.not()
-    ).whileTrue(() => {
+    ) {
         // D105 immutable fixed H window.
         windowSpecs: Array()
         windowSources: Array()
@@ -1980,10 +1980,10 @@ runD108WithResourcesWithLoader: (
         windowAttempted: Array()
         windowCount: 0
 
-        (() =>
+        while(
             (windowCount < maxInFlight) &&
             (nextIndex < selectedCases.size())
-        ).whileTrue(() => {
+        ) {
             spec: selectedCases[nextIndex]
             source: sourceLoader(spec)
             bindings:
@@ -1997,14 +1997,14 @@ runD108WithResourcesWithLoader: (
 
             windowCount = windowCount + 1
             nextIndex = nextIndex + 1
-        })
+        }
 
         remainingInWindow: windowCount
 
-        (() =>
+        while(
             (remainingInWindow > 0) &&
             invocationInfrastructureFailed.not()
-        ).whileTrue(() => {
+        ) {
             roundIndexes: Array()
             roundReservations: Array()
             roundResourceful: Array()
@@ -2012,7 +2012,7 @@ runD108WithResourcesWithLoader: (
 
             // Stable TestPlan-order scan with same-window backfill.
             windowIndex: 0
-            (() => windowIndex < windowCount).whileTrue(() => {
+            while(windowIndex < windowCount) {
                 (windowResults[windowIndex] === null).ifTrue(() => {
                     reservation:
                         ResourceReservation.tryReserve(
@@ -2063,7 +2063,7 @@ runD108WithResourcesWithLoader: (
                 })
 
                 windowIndex = windowIndex + 1
-            })
+            }
 
             // I8A feasibility + D105 prior release must guarantee progress while
             // the invocation is still healthy.
@@ -2079,7 +2079,7 @@ runD108WithResourcesWithLoader: (
             roundInfrastructureFailed: false
 
             resultIndex: 0
-            (() => resultIndex < observations.size()).whileTrue(() => {
+            while(resultIndex < observations.size()) {
                 resultWindowIndex: roundIndexes[resultIndex]
                 spec: windowSpecs[resultWindowIndex]
                 source: windowSources[resultWindowIndex]
@@ -2189,7 +2189,7 @@ runD108WithResourcesWithLoader: (
                 })
 
                 resultIndex = resultIndex + 1
-            })
+            }
 
             roundInfrastructureFailed.ifTrue(() => {
                 invocationInfrastructureFailed = true
@@ -2206,12 +2206,12 @@ runD108WithResourcesWithLoader: (
                     policyError()
                 })
             })
-        })
+        }
 
         // Preserve every guest CaseRun that really exists, always in logical
         // TestPlan/window order. In a healthy window every slot must exist.
         resultWindowIndex: 0
-        (() => resultWindowIndex < windowCount).whileTrue(() => {
+        while(resultWindowIndex < windowCount) {
             caseRun: windowResults[resultWindowIndex]
 
             (caseRun === null).ifTrue(() => {
@@ -2225,7 +2225,7 @@ runD108WithResourcesWithLoader: (
             })
 
             resultWindowIndex = resultWindowIndex + 1
-        })
+        }
 
         invocationInfrastructureFailed.ifTrue(() => {
             // Only cases never admitted in the affected H window belong to the
@@ -2233,7 +2233,7 @@ runD108WithResourcesWithLoader: (
             // infrastructureAttempts, not fabricated as a skipped/not-admitted
             // guest result.
             cutoverIndex: 0
-            (() => cutoverIndex < windowCount).whileTrue(() => {
+            while(cutoverIndex < windowCount) {
                 windowAttempted[cutoverIndex].not().ifTrue(() => {
                     cutoverCases =
                         Array(
@@ -2242,21 +2242,21 @@ runD108WithResourcesWithLoader: (
                         )
                 })
                 cutoverIndex = cutoverIndex + 1
-            })
+            }
 
             // D108 whole-invocation fail-stop: no later H window, including
             // resource-free cases, is started.
             laterIndex: nextIndex
-            (() => laterIndex < selectedCases.size()).whileTrue(() => {
+            while(laterIndex < selectedCases.size()) {
                 cutoverCases =
                     Array(
                         ...cutoverCases,
                         selectedCases[laterIndex]
                     )
                 laterIndex = laterIndex + 1
-            })
+            }
         })
-    })
+    }
 
     caseResults:
         resultTuple(...collectChunks(maxChunkLevel, Array()))

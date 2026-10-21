@@ -267,7 +267,7 @@ isConformanceLeaf: (leaf) => {
 hasPrefix: (text, prefix) => {
     matches: text.size() >= prefix.size()
     index: 0
-    (() => matches && (index < prefix.size())).whileTrue() {
+    while(matches && (index < prefix.size())) {
         matches = text[index] == prefix[index]
         index = index + 1
     }
@@ -277,7 +277,7 @@ hasPrefix: (text, prefix) => {
 substringFrom: (text, start) => {
     result: ""
     index: start
-    (() => index < text.size()).whileTrue() {
+    while(index < text.size()) {
         result = result + text[index]
         index = index + 1
     }
@@ -304,7 +304,7 @@ pathDirectory: (casePath) => {
     separatorFound: false
 
     index: 0
-    (() => index < casePath.size()).whileTrue() {
+    while(index < casePath.size()) {
         character: casePath[index]
         (character == "/").ifTrue(() => {
             (pending.size() == 0).ifTrue(() => {

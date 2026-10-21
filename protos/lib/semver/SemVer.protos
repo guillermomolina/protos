@@ -246,7 +246,7 @@ parse: (text) => {
     sameIdentifiers: (left, right) => {
         same: left.size() == right.size()
         index: 0
-        (() => same && (index < left.size())).whileTrue() {
+        while(same && (index < left.size())) {
             first: left[index]
             second: right[index]
             same = (Integer.recognizes(first) == Integer.recognizes(second)) &&
@@ -362,12 +362,12 @@ format: (version) => {
         (value == 0).ifTrue(() => {
             digits[0] = 48
         })
-        (() => remaining > 0).whileTrue() {
+        while(remaining > 0) {
             digits[digits.size()] = 48 + (remaining % 10)
             remaining = remaining.div(10)
         }
         index: digits.size() - 1
-        (() => index >= 0).whileTrue() {
+        while(index >= 0) {
             output.add(digits[index])
             index = index - 1
         }
@@ -475,7 +475,7 @@ comparePrecedence: (left, right) => {
         })
         result: 0
         index: 0
-        (() => (result == 0) && (index < limit)).whileTrue() {
+        while((result == 0) && (index < limit)) {
             result = compareIntegers(firstBytes[index], secondBytes[index])
             index = index + 1
         }
@@ -524,7 +524,7 @@ comparePrecedence: (left, right) => {
                 limit = rightSize
             })
             index: 0
-            (() => (result == 0) && (index < limit)).whileTrue() {
+            while((result == 0) && (index < limit)) {
                 result = compareIdentifiers(left.prerelease[index], right.prerelease[index])
                 index = index + 1
             }

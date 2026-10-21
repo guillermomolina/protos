@@ -50,11 +50,11 @@ tests: [
             ok: true
             depth: 0
             current: node
-            (() => current.kind == "array").whileTrue(() => {
+            while(current.kind == "array") {
                 (current.value.size() == 1).ifFalse(() => { ok = false })
                 current = current.value[0]
                 depth = depth + 1
-            })
+            }
             (depth == 2048).ifFalse(() => { ok = false })
             (current.kind == "null").ifFalse(() => { ok = false })
             ok

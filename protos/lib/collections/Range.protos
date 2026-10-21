@@ -26,7 +26,7 @@ each: (start, stop, block) => {
 
     current: start
 
-    (() => current < stop).whileTrue() {
+    while(current < stop) {
         block(current)
         current = current + 1
     }
@@ -45,7 +45,7 @@ reverseEach: (start, stop, block) => {
 
     current: stop
 
-    (() => current > start).whileTrue() {
+    while(current > start) {
         current = current - 1
         block(current)
     }

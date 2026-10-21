@@ -96,7 +96,7 @@ run: (
     nextIndex: 0
 
     runLane: () => {
-        (() => nextIndex < workItems.size()).whileTrue(() => {
+        while(nextIndex < workItems.size()) {
             index: nextIndex
             nextIndex = nextIndex + 1
 
@@ -144,7 +144,7 @@ run: (
             })
 
             results[index] = completion
-        })
+        }
 
         null
     }
@@ -157,13 +157,13 @@ run: (
     lanes: Array()
 
     laneIndex: 0
-    (() => laneIndex < laneCount).whileTrue(() => {
+    while(laneIndex < laneCount) {
         lanes = Array(
             ...lanes,
             runLane.future()
         )
         laneIndex = laneIndex + 1
-    })
+    }
 
     Future.all(...lanes).then((ignored) => {
         results.freeze()

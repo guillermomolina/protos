@@ -78,7 +78,7 @@ leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)
 // source authority nor host execution route.
 resolvedSuites: Array()
 resolveIndex: 0
-(() => resolveIndex < leaves.size()).whileTrue() {
+while(resolveIndex < leaves.size()) {
     leaf: leaves[resolveIndex]
     corpus: leaf.corpus
     requirement: leaf.executionRequirement
@@ -146,7 +146,7 @@ resolvedSuites.freeze()
 // scheduling begins. Loader/source mechanics never come from ExecutionBinding.
 plannedSuites: Array()
 planIndex: 0
-(() => planIndex < resolvedSuites.size()).whileTrue() {
+while(planIndex < resolvedSuites.size()) {
     resolved: resolvedSuites[planIndex]
     corpusBinding: resolved.corpusBinding
     planLoader: corpusBinding.planLoader
@@ -624,13 +624,13 @@ listCases.ifFalse(() => {
     suiteProgressGroupIndexes: Array()
 
     suiteIndex: 0
-    (() => suiteIndex < executionSuites.size()).whileTrue() {
+    while(suiteIndex < executionSuites.size()) {
         names: suiteGroupNames[suiteIndex]
         totals: suiteGroupTotals[suiteIndex]
         progressGroupIndexes: Array()
 
         localIndex: 0
-        (() => localIndex < names.size()).whileTrue() {
+        while(localIndex < names.size()) {
             progressGroupIndex: null
 
             (totals[localIndex] > 0).ifTrue(() => {
@@ -791,7 +791,7 @@ listCases.ifFalse(() => {
     // incrementally, by logicalCompletionObserver as each logical Case reached
     // its terminal event. Only the per-group terminal summary remains.
     groupFinishIndex: 0
-    (() => groupFinishIndex < groupProgressStates.size()).whileTrue() {
+    while(groupFinishIndex < groupProgressStates.size()) {
         Progress.finishPhase(
             groupProgressStates[groupFinishIndex],
             groupInfrastructureFailed[groupFinishIndex]

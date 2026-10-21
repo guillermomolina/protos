@@ -90,13 +90,13 @@ format: ((numeric) => (event) => {
         index: 0
         decided: false
         result: false
-        (() => (decided == false) && (index < leftSize) && (index < rightSize)).whileTrue(() => {
+        while((decided == false) && (index < leftSize) && (index < rightSize)) {
             (left[index] == right[index]).ifFalse(() => {
                 result = left[index] < right[index]
                 decided = true
             })
             index = index + 1
-        })
+        }
         decided.ifFalse(() => {
             result = leftSize < rightSize
         })

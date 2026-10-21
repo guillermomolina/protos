@@ -21,7 +21,7 @@ Regex: import("std:regex/Regex")
 repeated: (text, doublings) => {
     result: text
     count: 0
-    (() => count < doublings).whileTrue() {
+    while(count < doublings) {
         result = result + result
         count = count + 1
     }
@@ -31,7 +31,7 @@ repeated: (text, doublings) => {
 requireNames: (pattern, ...pairs) => {
     Assertions.require(pattern.captureNames.size() == pairs.size().div(2))
     index: 0
-    (() => index < pairs.size()).whileTrue() {
+    while(index < pairs.size()) {
         Assertions.require(pattern.captureNames[pairs[index]] == pairs[index + 1])
         index = index + 2
     }

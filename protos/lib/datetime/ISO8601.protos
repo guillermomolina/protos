@@ -65,7 +65,7 @@ parseDate: (text) => {
 
     digits: Map()
     d: 0
-    (() => d < 10).whileTrue() {
+    while(d < 10) {
         digits["0123456789"[d]] = d
         d = d + 1
     }
@@ -74,7 +74,7 @@ parseDate: (text) => {
     number: (start, count) => {
         value: 0
         index: start
-        (() => index < (start + count)).whileTrue() {
+        while(index < (start + count)) {
             digits.containsKey(text[index]).ifFalse(() => {
                 Error().signal()
             })
@@ -119,7 +119,7 @@ formatDate: (date) => {
         text: ""
         remaining: value
         count: 0
-        (() => count < width).whileTrue() {
+        while(count < width) {
             text = "0123456789"[remaining % 10] + text
             remaining = remaining.div(10)
             count = count + 1
@@ -151,7 +151,7 @@ parseTime: (text) => {
 
     digits: Map()
     d: 0
-    (() => d < 10).whileTrue() {
+    while(d < 10) {
         digits["0123456789"[d]] = d
         d = d + 1
     }
@@ -160,7 +160,7 @@ parseTime: (text) => {
     number: (start, count) => {
         value: 0
         index: start
-        (() => index < (start + count)).whileTrue() {
+        while(index < (start + count)) {
             digits.containsKey(text[index]).ifFalse(() => {
                 Error().signal()
             })
@@ -184,7 +184,7 @@ parseTime: (text) => {
         })
         fractionDigits: size - 9
         nanosecond = number(9, fractionDigits)
-        (() => fractionDigits < 9).whileTrue() {
+        while(fractionDigits < 9) {
             nanosecond = nanosecond * 10
             fractionDigits = fractionDigits + 1
         }
@@ -208,7 +208,7 @@ formatTime: (time) => {
         text: ""
         remaining: value
         count: 0
-        (() => count < width).whileTrue() {
+        while(count < width) {
             text = "0123456789"[remaining % 10] + text
             remaining = remaining.div(10)
             count = count + 1
@@ -220,7 +220,7 @@ formatTime: (time) => {
     (time.nanosecond > 0).ifTrue(() => {
         fraction: time.nanosecond
         width: 9
-        (() => (fraction % 10) == 0).whileTrue() {
+        while((fraction % 10) == 0) {
             fraction = fraction.div(10)
             width = width - 1
         }
@@ -245,7 +245,7 @@ parseLocalDateTime: (text) => {
     slice: (from, to) => {
         result: ""
         index: from
-        (() => index < to).whileTrue() {
+        while(index < to) {
             result = result + text[index]
             index = index + 1
         }
@@ -253,7 +253,7 @@ parseLocalDateTime: (text) => {
     }
 
     separator: 0
-    (() => (separator < text.size()) && (text[separator] != "T")).whileTrue() {
+    while((separator < text.size()) && (text[separator] != "T")) {
         separator = separator + 1
     }
     (separator < text.size()).ifFalse(() => {
@@ -297,7 +297,7 @@ parseOffsetDateTime: (text) => {
     slice: (from, to) => {
         result: ""
         index: from
-        (() => index < to).whileTrue() {
+        while(index < to) {
             result = result + text[index]
             index = index + 1
         }
@@ -308,13 +308,13 @@ parseOffsetDateTime: (text) => {
     // The offset starts at the first `Z`, `+`, or `-` after the `T`; the
     // local time itself contains none of them.
     start: 0
-    (() => (start < size) && (text[start] != "T")).whileTrue() {
+    while((start < size) && (text[start] != "T")) {
         start = start + 1
     }
     isOffsetStart: (scalar) => {
         (scalar == "Z") || (scalar == "+") || (scalar == "-")
     }
-    (() => (start < size) && (isOffsetStart(text[start]) == false)).whileTrue() {
+    while((start < size) && (isOffsetStart(text[start]) == false)) {
         start = start + 1
     }
     (start < size).ifFalse(() => {
@@ -371,7 +371,7 @@ formatOffsetDateTime: (value) => {
         text: ""
         remaining: amount
         count: 0
-        (() => count < width).whileTrue() {
+        while(count < width) {
             text = "0123456789"[remaining % 10] + text
             remaining = remaining.div(10)
             count = count + 1

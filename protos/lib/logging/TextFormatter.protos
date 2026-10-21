@@ -88,7 +88,7 @@ format: ((numeric) => (event) => {
         (remaining == 0).ifTrue(() => {
             reversed.add(48)
         })
-        (() => remaining > 0).whileTrue(() => {
+        while(remaining > 0) {
             digit: remaining.mod(radix)
             (digit < 10).ifTrue(() => {
                 reversed.add(48 + digit)
@@ -97,12 +97,12 @@ format: ((numeric) => (event) => {
                 reversed.add(55 + digit)
             })
             remaining = remaining.div(radix)
-        })
+        }
         index: reversed.size() - 1
-        (() => index >= 0).whileTrue(() => {
+        while(index >= 0) {
             output.add(reversed[index])
             index = index - 1
-        })
+        }
     }
 
     appendInteger: (value) => {
@@ -117,10 +117,10 @@ format: ((numeric) => (event) => {
 
     appendZeros: (count) => {
         remaining: count
-        (() => remaining > 0).whileTrue(() => {
+        while(remaining > 0) {
             output.add(48)
             remaining = remaining - 1
-        })
+        }
     }
 
     appendFloat: (value) => {
@@ -156,24 +156,24 @@ format: ((numeric) => (event) => {
             digits: Encoding.UTF8.encode("")
             reversed: Encoding.UTF8.encode("")
             remaining: decimal[0]
-            (() => remaining > 0).whileTrue(() => {
+            while(remaining > 0) {
                 reversed.add(48 + remaining.mod(10))
                 remaining = remaining.div(10)
-            })
+            }
             index: reversed.size() - 1
-            (() => index >= 0).whileTrue(() => {
+            while(index >= 0) {
                 digits.add(reversed[index])
                 index = index - 1
-            })
+            }
 
             k: digits.size()
             n: k + decimal[1]
             appendRange: (start, end) => {
                 position: start
-                (() => position < end).whileTrue(() => {
+                while(position < end) {
                     output.add(digits[position])
                     position = position + 1
-                })
+                }
             }
 
             fixed: (n <= 21) && (n > -6)
@@ -218,7 +218,7 @@ format: ((numeric) => (event) => {
         octets: Encoding.UTF8.encode(text)
         size: octets.size()
         index: 0
-        (() => index < size).whileTrue(() => {
+        while(index < size) {
             lead: octets[index]
             length: 1
             scalar: lead
@@ -235,10 +235,10 @@ format: ((numeric) => (event) => {
                 scalar = lead - 192
             })
             offset: 1
-            (() => offset < length).whileTrue(() => {
+            while(offset < length) {
                 scalar = scalar * 64 + (octets[index + offset] - 128)
                 offset = offset + 1
-            })
+            }
 
             escaped: true
             (scalar == 34).ifTrue(() => {
@@ -268,13 +268,13 @@ format: ((numeric) => (event) => {
             escaped = short || control
             escaped.ifFalse(() => {
                 offset = 0
-                (() => offset < length).whileTrue(() => {
+                while(offset < length) {
                     output.add(octets[index + offset])
                     offset = offset + 1
-                })
+                }
             })
             index = index + length
-        })
+        }
         output.add(34)
     }
 
@@ -286,13 +286,13 @@ format: ((numeric) => (event) => {
         index: 0
         decided: false
         result: false
-        (() => (decided == false) && (index < leftSize) && (index < rightSize)).whileTrue(() => {
+        while((decided == false) && (index < leftSize) && (index < rightSize)) {
             (left[index] == right[index]).ifFalse(() => {
                 result = left[index] < right[index]
                 decided = true
             })
             index = index + 1
-        })
+        }
         decided.ifFalse(() => {
             result = leftSize < rightSize
         })

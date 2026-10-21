@@ -23,9 +23,9 @@ LocalDateTime: import("std:datetime/LocalDateTime")
 // every pair.
 requireIncreasing: (compare, values) => {
     i: 0
-    (() => i < values.size()).whileTrue() {
+    while(i < values.size()) {
         j: 0
-        (() => j < values.size()).whileTrue() {
+        while(j < values.size()) {
             expected: 0
             (i < j).ifTrue(() => {
                 expected = -1

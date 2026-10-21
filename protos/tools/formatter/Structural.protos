@@ -26,10 +26,10 @@ indent: (level) => {
     result: ""
     index: 0
 
-    (() => index < level).whileTrue(() => {
+    while(index < level) {
         result = result + "    "
         index = index + 1
-    })
+    }
 
     result
 }
@@ -62,7 +62,7 @@ usesLogicalNewline: (items, layout) => {
     result: false
     index: 1
 
-    (() => index < items.size()).whileTrue(() => {
+    while(index < items.size()) {
         kind:
             separatorKind(
                 layout,
@@ -75,7 +75,7 @@ usesLogicalNewline: (items, layout) => {
         })
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -86,13 +86,13 @@ containsNewline: (text) => {
     result: false
     index: 0
 
-    (() => index < text.size()).whileTrue(() => {
+    while(index < text.size()) {
         (text[index] == "\n").ifTrue(() => {
             result = true
         })
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -210,7 +210,7 @@ formatArgumentCount: (arguments, count, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < count).whileTrue(() => {
+    while(index < count) {
         (index > 0).ifTrue(() => {
             result = result + ", "
         })
@@ -224,7 +224,7 @@ formatArgumentCount: (arguments, count, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -233,7 +233,7 @@ formatArguments: (arguments, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < arguments.size()).whileTrue(() => {
+    while(index < arguments.size()) {
         (index > 0).ifTrue(() => {
             result = result + ", "
         })
@@ -247,7 +247,7 @@ formatArguments: (arguments, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -256,7 +256,7 @@ formatArgumentLines: (arguments, count, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < count).whileTrue(() => {
+    while(index < count) {
         (index > 0).ifTrue(() => {
             result =
                 result +
@@ -273,7 +273,7 @@ formatArgumentLines: (arguments, count, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -375,10 +375,10 @@ containsPhysicalNewline: (text) => {
     index: 0
     found: false
 
-    (() =>
+    while(
         (index < text.size()) &&
         (!found)
-    ).whileTrue(() => {
+    ) {
         scalar:
             text.at(index)
 
@@ -388,7 +388,7 @@ containsPhysicalNewline: (text) => {
         })
 
         index = index + 1
-    })
+    }
 
     found
 }
@@ -718,7 +718,7 @@ formatSequence: (sequence, level, layout) => {
     expressions: sequence.expressions
     index: 0
 
-    (() => index < expressions.size()).whileTrue(() => {
+    while(index < expressions.size()) {
         (index > 0).ifTrue(() => {
             kind:
                 separatorKind(
@@ -747,7 +747,7 @@ formatSequence: (sequence, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -810,7 +810,7 @@ formatMapEntries: (entries, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < entries.size()).whileTrue(() => {
+    while(index < entries.size()) {
         (index > 0).ifTrue(() => {
             kind:
                 separatorKind(
@@ -845,7 +845,7 @@ formatMapEntries: (entries, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -908,7 +908,7 @@ formatObjectItems: (items, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < items.size()).whileTrue(() => {
+    while(index < items.size()) {
         (index > 0).ifTrue(() => {
             kind:
                 separatorKind(
@@ -943,7 +943,7 @@ formatObjectItems: (items, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -1012,7 +1012,7 @@ formatParameterList: (parameters, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < parameters.size()).whileTrue(() => {
+    while(index < parameters.size()) {
         (index > 0).ifTrue(() => {
             result = result + ", "
         })
@@ -1026,7 +1026,7 @@ formatParameterList: (parameters, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -1035,7 +1035,7 @@ formatParameterLines: (parameters, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < parameters.size()).whileTrue(() => {
+    while(index < parameters.size()) {
         (index > 0).ifTrue(() => {
             result =
                 result +
@@ -1052,7 +1052,7 @@ formatParameterLines: (parameters, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }
@@ -1414,7 +1414,7 @@ formatTargets: (targets, level, layout) => {
     result: ""
     index: 0
 
-    (() => index < targets.size()).whileTrue(() => {
+    while(index < targets.size()) {
         (index > 0).ifTrue(() => {
             result = result + ", "
         })
@@ -1428,7 +1428,7 @@ formatTargets: (targets, level, layout) => {
             )
 
         index = index + 1
-    })
+    }
 
     result
 }

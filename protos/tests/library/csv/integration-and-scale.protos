@@ -131,7 +131,7 @@ tests: [
             })
 
             iteration: 0
-            (() => { iteration < 4096 }).whileTrue() {
+            while(iteration < 4096) {
                 parser.feed("alpha,\"beta,beta\",gamma\r\n")
                 iteration = iteration + 1
             }
@@ -148,7 +148,7 @@ tests: [
 
             large.feed("\"")
             chunks: 0
-            (() => { chunks < 2048 }).whileTrue() {
+            while(chunks < 2048) {
                 large.feed("abcd")
                 chunks = chunks + 1
             }

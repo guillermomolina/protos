@@ -153,10 +153,10 @@ localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).whileTrue(() => {
+        while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
-        })
+        }
         (fractionCoefficient >= limit).ifTrue(() => {
             Error().signal()
         })
@@ -258,10 +258,10 @@ localDateTime: (
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).whileTrue(() => {
+        while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
-        })
+        }
         (fractionCoefficient >= limit).ifTrue(() => {
             Error().signal()
         })
@@ -369,10 +369,10 @@ offsetDateTime: (
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).whileTrue(() => {
+        while(index < fractionDigits) {
             limit = limit * 10
             index = index + 1
-        })
+        }
         (fractionCoefficient >= limit).ifTrue(() => {
             Error().signal()
         })
@@ -581,10 +581,10 @@ encode: (rootTable) => {
         (magnitude == 0).ifTrue(() => {
             reversed.add(48)
         })
-        (() => magnitude > 0).whileTrue(() => {
+        while(magnitude > 0) {
             reversed.add(48 + magnitude.mod(10))
             magnitude = magnitude.div(10)
-        })
+        }
 
         result: Encoding.UTF8.encode("")
         negative.ifTrue(() => {
@@ -592,10 +592,10 @@ encode: (rootTable) => {
         })
 
         index: reversed.size() - 1
-        (() => index >= 0).whileTrue(() => {
+        while(index >= 0) {
             result.add(reversed[index])
             index = index - 1
-        })
+        }
 
         Encoding.UTF8.decode(result)
     }
@@ -603,10 +603,10 @@ encode: (rootTable) => {
     repeatZero: (count) => {
         result: ""
         remaining: count
-        (() => remaining > 0).whileTrue(() => {
+        while(remaining > 0) {
             result = result + "0"
             remaining = remaining - 1
-        })
+        }
         result
     }
 
@@ -619,7 +619,7 @@ encode: (rootTable) => {
         factor: base
         remaining: exponent
 
-        (() => remaining > 0).whileTrue(() => {
+        while(remaining > 0) {
             (remaining.mod(2) == 1).ifTrue(() => {
                 result = result * factor
             })
@@ -627,7 +627,7 @@ encode: (rootTable) => {
             (remaining > 0).ifTrue(() => {
                 factor = factor * factor
             })
-        })
+        }
 
         result
     }
@@ -659,13 +659,13 @@ encode: (rootTable) => {
             (point > 0).ifTrue(() => {
                 result: ""
                 index: 0
-                (() => index < digitCount).whileTrue(() => {
+                while(index < digitCount) {
                     (index == point).ifTrue(() => {
                         result = result + "."
                     })
                     result = result + digits[index]
                     index = index + 1
-                })
+                }
                 fixed = result
             })
         })
@@ -676,10 +676,10 @@ encode: (rootTable) => {
         (digitCount > 1).ifTrue(() => {
             scientific = scientific + "."
             index: 1
-            (() => index < digitCount).whileTrue(() => {
+            while(index < digitCount) {
                 scientific = scientific + digits[index]
                 index = index + 1
-            })
+            }
         })
 
         scientific = scientific + "e" + integerText(scientificExponent)
@@ -741,15 +741,15 @@ encode: (rootTable) => {
             normalized: magnitude
             binaryExponent: 0
 
-            (() => normalized >= 2.0).whileTrue(() => {
+            while(normalized >= 2.0) {
                 normalized = normalized / 2.0
                 binaryExponent = binaryExponent + 1
-            })
+            }
 
-            (() => normalized < 1.0).whileTrue(() => {
+            while(normalized < 1.0) {
                 normalized = normalized * 2.0
                 binaryExponent = binaryExponent - 1
-            })
+            }
 
             significand: Integer(normalized * 4503599627370496.0)
             binaryShift: binaryExponent - 52
@@ -769,26 +769,26 @@ encode: (rootTable) => {
 
             (numerator >= denominator).ifTrue(() => {
                 threshold: denominator * 10
-                (() => numerator >= threshold).whileTrue(() => {
+                while(numerator >= threshold) {
                     decimalExponent = decimalExponent + 1
                     threshold = threshold * 10
-                })
+                }
             })
 
             (numerator < denominator).ifTrue(() => {
                 decimalExponent = -1
                 scaledNumerator: numerator * 10
-                (() => scaledNumerator < denominator).whileTrue(() => {
+                while(scaledNumerator < denominator) {
                     decimalExponent = decimalExponent - 1
                     scaledNumerator = scaledNumerator * 10
-                })
+                }
             })
 
             coefficient: null
             coefficientExponent: 0
             significantDigits: 1
 
-            (() => (coefficient === null) && (significantDigits <= 17)).whileTrue(() => {
+            while((coefficient === null) && (significantDigits <= 17)) {
                 candidateExponent: decimalExponent - significantDigits + 1
                 scaledNumerator: numerator
                 scaledDenominator: denominator
@@ -879,16 +879,16 @@ encode: (rootTable) => {
                 })
 
                 significantDigits = significantDigits + 1
-            })
+            }
 
             (coefficient === null).ifTrue(() => {
                 fail()
             })
 
-            (() => coefficient.mod(10) == 0).whileTrue(() => {
+            while(coefficient.mod(10) == 0) {
                 coefficient = coefficient.div(10)
                 coefficientExponent = coefficientExponent + 1
-            })
+            }
 
             result = decimalToken(coefficient, coefficientExponent)
             negative.ifTrue(() => {
@@ -902,9 +902,9 @@ encode: (rootTable) => {
     paddedIntegerText: (value, width) => {
         text: integerText(value)
         result: text
-        (() => result.size() < width).whileTrue(() => {
+        while(result.size() < width) {
             result = "0" + result
-        })
+        }
         result
     }
 
@@ -924,10 +924,10 @@ encode: (rootTable) => {
             raw: Encoding.UTF8.encode(integerText(coefficient))
             buffer: Encoding.UTF8.encode(".")
             padding: digits - raw.size()
-            (() => padding > 0).whileTrue(() => {
+            while(padding > 0) {
                 buffer.add(48)
                 padding = padding - 1
-            })
+            }
             raw.each((octet) => {
                 buffer.add(octet)
             })
@@ -1174,7 +1174,7 @@ encode: (rootTable) => {
     }
 
     running: true
-    (() => running).whileTrue(() => {
+    while(running) {
         frame: topFrame
         frameKind: frame.frameKind
 
@@ -1239,7 +1239,7 @@ encode: (rootTable) => {
                 pushValue(entry.child, frame)
             })
         })
-    })
+    }
 
     Encoding.UTF8.decode(output)
 }
@@ -1302,7 +1302,7 @@ parseDialect: (text, version) => {
 
         skipSpaces: () => {
             scanning: true
-            (() => scanning && (index < length)).whileTrue(() => {
+            while(scanning && (index < length)) {
                 octet: source[index]
                 whitespace: octet == 32
                 (octet == 9).ifTrue(() => {
@@ -1314,7 +1314,7 @@ parseDialect: (text, version) => {
                 whitespace.ifFalse(() => {
                     scanning = false
                 })
-            })
+            }
         }
 
         hexDigit: (octet) => {
@@ -1411,7 +1411,7 @@ parseDialect: (text, version) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            (() => done === false).whileTrue(() => {
+            while(done === false) {
                 octet: take()
                     (octet == 34).ifTrue(() => {
                         done = true
@@ -1484,7 +1484,7 @@ parseDialect: (text, version) => {
                             buffer.add(octet)
                         })
                     })
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -1495,7 +1495,7 @@ parseDialect: (text, version) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            (() => done === false).whileTrue(() => {
+            while(done === false) {
                 octet: take()
                     (octet == 39).ifTrue(() => {
                         done = true
@@ -1513,7 +1513,7 @@ parseDialect: (text, version) => {
                         })
                         buffer.add(octet)
                     })
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -1537,7 +1537,7 @@ parseDialect: (text, version) => {
             buffer: Encoding.UTF8.encode("")
             scanning: true
 
-            (() => scanning && (index < length)).whileTrue(() => {
+            while(scanning && (index < length)) {
                 octet: source[index]
                 validBare: isBareKeyOctet(octet)
                 validBare.ifTrue(() => {
@@ -1547,7 +1547,7 @@ parseDialect: (text, version) => {
                 validBare.ifFalse(() => {
                     scanning = false
                 })
-            })
+            }
 
             (buffer.size() == 0).ifTrue(() => {
                 fail()
@@ -1586,7 +1586,7 @@ parseDialect: (text, version) => {
         appendPathPart(parsePart())
         more: true
 
-        (() => more).whileTrue(() => {
+        while(more) {
             skipSpaces()
 
             (index < length).ifTrue(() => {
@@ -1600,7 +1600,7 @@ parseDialect: (text, version) => {
             (index >= length).ifTrue(() => {
                 more = false
             })
-        })
+        }
 
         skipSpaces()
         (index == length).ifFalse(() => {
@@ -1671,7 +1671,7 @@ parseDialect: (text, version) => {
 
         skipSpaces: () => {
             scanning: true
-            (() => scanning && (index < length)).whileTrue(() => {
+            while(scanning && (index < length)) {
                 whitespace: isSpace(source[index])
                 whitespace.ifTrue(() => {
                     index = index + 1
@@ -1679,12 +1679,12 @@ parseDialect: (text, version) => {
                 whitespace.ifFalse(() => {
                     scanning = false
                 })
-            })
+            }
         }
 
         skipComment: () => {
             scanning: true
-            (() => scanning && (index < length)).whileTrue(() => {
+            while(scanning && (index < length)) {
                 octet: source[index]
                 newline: isNewlineStart(octet)
                 newline.ifTrue(() => {
@@ -1703,12 +1703,12 @@ parseDialect: (text, version) => {
                     })
                     index = index + 1
                 })
-            })
+            }
         }
 
         skipArrayTrivia: () => {
             progressed: true
-            (() => progressed).whileTrue(() => {
+            while(progressed) {
                 progressed = false
                 (index < length).ifTrue(() => {
                     octet: source[index]
@@ -1726,7 +1726,7 @@ parseDialect: (text, version) => {
                         progressed = true
                     })
                 })
-            })
+            }
         }
 
         // TOML 1.0 inline tables are single-line, so only spaces and tabs may
@@ -1848,16 +1848,16 @@ parseDialect: (text, version) => {
 
             countQuotes: (initial) => {
                 count: initial
-                (() => peek() == 34).whileTrue(() => {
+                while(peek() == 34) {
                     index = index + 1
                     count = count + 1
-                })
+                }
                 count
             }
 
             skipContinuationWhitespace: () => {
                 scanning: true
-                (() => scanning && (index < length)).whileTrue(() => {
+                while(scanning && (index < length)) {
                     octet: source[index]
                     whitespace: isSpace(octet)
                     isNewlineStart(octet).ifTrue(() => {
@@ -1875,10 +1875,10 @@ parseDialect: (text, version) => {
                     whitespace.ifFalse(() => {
                         scanning = false
                     })
-                })
+                }
             }
 
-            (() => done === false).whileTrue(() => {
+            while(done === false) {
                 octet: take()
                 ordinaryOctet: true
 
@@ -1926,7 +1926,7 @@ parseDialect: (text, version) => {
                                     seeking: true
                                     sawNewline: false
 
-                                    (() => seeking && (look < length)).whileTrue(() => {
+                                    while(seeking && (look < length)) {
                                         candidate: source[look]
                                         candidateSpace: isSpace(candidate)
                                         candidateNewline: isNewlineStart(candidate)
@@ -1941,7 +1941,7 @@ parseDialect: (text, version) => {
                                         (candidateSpace || candidateNewline).ifFalse(() => {
                                             seeking = false
                                         })
-                                    })
+                                    }
                                     (look >= length).ifTrue(() => {
                                         seeking = false
                                     })
@@ -1951,9 +1951,9 @@ parseDialect: (text, version) => {
                                 })
 
                                 continuation.ifTrue(() => {
-                                    (() => isSpace(peek())).whileTrue(() => {
+                                    while(isSpace(peek())) {
                                         index = index + 1
-                                    })
+                                    }
                                     isNewlineStart(peek()).ifFalse(() => {
                                         fail()
                                     })
@@ -2045,7 +2045,7 @@ parseDialect: (text, version) => {
                         })
 
                     })
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -2070,14 +2070,14 @@ parseDialect: (text, version) => {
 
             countQuotes: (initial) => {
                 count: initial
-                (() => peek() == 39).whileTrue(() => {
+                while(peek() == 39) {
                     index = index + 1
                     count = count + 1
-                })
+                }
                 count
             }
 
-            (() => done === false).whileTrue(() => {
+            while(done === false) {
                 octet: take()
                 ordinaryOctet: true
 
@@ -2144,7 +2144,7 @@ parseDialect: (text, version) => {
                         })
 
                     })
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -2181,7 +2181,7 @@ parseDialect: (text, version) => {
                     buffer: Encoding.UTF8.encode("")
 
                     gathering: true
-                    (() => gathering && (index < length)).whileTrue(() => {
+                    while(gathering && (index < length)) {
                         octet: source[index]
                         bare: isBareKeyOctet(octet)
                         bare.ifTrue(() => {
@@ -2191,7 +2191,7 @@ parseDialect: (text, version) => {
                         bare.ifFalse(() => {
                             gathering = false
                         })
-                    })
+                    }
                     (buffer.size() == 0).ifTrue(() => {
                         fail()
                     })
@@ -2211,7 +2211,7 @@ parseDialect: (text, version) => {
                 level: 0
                 carrying: true
 
-                (() => carrying).whileTrue(() => {
+                while(carrying) {
                     present: chunks.containsKey(level)
                     present.ifTrue(() => {
                         left: chunks[level]
@@ -2226,13 +2226,13 @@ parseDialect: (text, version) => {
                         })
                         carrying = false
                     })
-                })
+                }
             }
 
             appendPart(parseKeyPart())
             more: true
 
-            (() => more).whileTrue(() => {
+            while(more) {
                 skipSpaces()
                 hasDot: peek() == 46
                 hasDot.ifTrue(() => {
@@ -2242,16 +2242,16 @@ parseDialect: (text, version) => {
                 hasDot.ifFalse(() => {
                     more = false
                 })
-            })
+            }
 
             parts: Array()
             level: maxLevel
-            (() => level >= 0).whileTrue(() => {
+            while(level >= 0) {
                 chunks.containsKey(level).ifTrue(() => {
                     parts = Array(...parts, ...chunks[level])
                 })
                 level = level - 1
-            })
+            }
             parts
         }
 
@@ -2261,7 +2261,7 @@ parseDialect: (text, version) => {
             current: map
             position: 0
 
-            (() => position < parts.size()).whileTrue(() => {
+            while(position < parts.size()) {
                 name: parts[position]
                 last: position == parts.size() - 1
 
@@ -2292,14 +2292,14 @@ parseDialect: (text, version) => {
                     current = child.value
                     position = position + 1
                 })
-            })
+            }
         }
 
         carryFrameChunk: (frame, initialChunk, initialLevel) => {
             chunk: initialChunk
             level: initialLevel
             carrying: true
-            (() => carrying).whileTrue(() => {
+            while(carrying) {
                 present: frame.chunks.containsKey(level)
                 present.ifTrue(() => {
                     left: frame.chunks[level]
@@ -2314,18 +2314,18 @@ parseDialect: (text, version) => {
                     })
                     carrying = false
                 })
-            })
+            }
         }
 
         collectFrameChunks: (frame, initialLevel, initialResult) => {
             level: initialLevel
             result: initialResult
-            (() => level >= 0).whileTrue(() => {
+            while(level >= 0) {
                 frame.chunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...frame.chunks[level])
                 })
                 level = level - 1
-            })
+            }
             result
         }
 
@@ -2423,7 +2423,7 @@ parseDialect: (text, version) => {
             leadingZero: false
 
             valid.ifTrue(() => {
-                (() => position < tokenLength).whileTrue(() => {
+                while(position < tokenLength) {
                     octet: token[position]
 
                     (octet == 95).ifTrue(() => {
@@ -2462,7 +2462,7 @@ parseDialect: (text, version) => {
                     })
 
                     position = position + 1
-                })
+                }
             })
 
             (digits == 0).ifTrue(() => {
@@ -2495,7 +2495,7 @@ parseDialect: (text, version) => {
             factor: 10
             remaining: power
 
-            (() => remaining > 0).whileTrue(() => {
+            while(remaining > 0) {
                 (remaining.mod(2) == 1).ifTrue(() => {
                     resultValue = resultValue * factor
                 })
@@ -2503,7 +2503,7 @@ parseDialect: (text, version) => {
                 (remaining > 0).ifTrue(() => {
                     factor = factor * factor
                 })
-            })
+            }
 
             resultValue
         }
@@ -2558,7 +2558,7 @@ parseDialect: (text, version) => {
 
                 valid.ifTrue(() => {
                     scanningInteger: true
-                    (() => scanningInteger && (position < tokenLength)).whileTrue(() => {
+                    while(scanningInteger && (position < tokenLength)) {
                         octet: token[position]
                         digit: decimalDigit(octet)
 
@@ -2605,7 +2605,7 @@ parseDialect: (text, version) => {
                                 scanningInteger = false
                             })
                         })
-                    })
+                    }
                 })
                 (integerDigits == 0).ifTrue(() => {
                     valid = false
@@ -2623,7 +2623,7 @@ parseDialect: (text, version) => {
                             previousDigit = false
 
                             scanningFraction: true
-                            (() => scanningFraction && (position < tokenLength)).whileTrue(() => {
+                            while(scanningFraction && (position < tokenLength)) {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
@@ -2662,7 +2662,7 @@ parseDialect: (text, version) => {
                                         scanningFraction = false
                                     })
                                 })
-                            })
+                            }
                             (fractionDigits == 0).ifTrue(() => {
                                 valid = false
                             })
@@ -2703,7 +2703,7 @@ parseDialect: (text, version) => {
 
                             previousDigit = false
                             scanningExponent: true
-                            (() => scanningExponent && (position < tokenLength)).whileTrue(() => {
+                            while(scanningExponent && (position < tokenLength)) {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
@@ -2733,7 +2733,7 @@ parseDialect: (text, version) => {
                                         scanningExponent = false
                                     })
                                 })
-                            })
+                            }
                             (exponentDigits == 0).ifTrue(() => {
                                 valid = false
                             })
@@ -2927,7 +2927,7 @@ parseDialect: (text, version) => {
                                     fractionStart: position
 
                                     scanningFraction: true
-                                    (() => scanningFraction && (position < tokenLength)).whileTrue(() => {
+                                    while(scanningFraction && (position < tokenLength)) {
                                         digit: decimalDigit(token[position])
                                         (digit >= 0).ifTrue(() => {
                                             fractionCoefficient =
@@ -2938,7 +2938,7 @@ parseDialect: (text, version) => {
                                         (digit < 0).ifTrue(() => {
                                             scanningFraction = false
                                         })
-                                    })
+                                    }
                                     (position == fractionStart).ifTrue(() => {
                                         valid = false
                                     })
@@ -3106,7 +3106,7 @@ parseDialect: (text, version) => {
             token: Encoding.UTF8.encode("")
 
             gathering: true
-            (() => gathering).whileTrue(() => {
+            while(gathering) {
                 octet: peek()
                 terminator: octet < 0
                 isNewlineStart(octet).ifTrue(() => { terminator = true })
@@ -3131,14 +3131,14 @@ parseDialect: (text, version) => {
                     })
                     token.add(take())
                 })
-            })
+            }
             (token.size() == 0).ifTrue(() => {
                 fail()
             })
 
             right: token.size()
             trimming: true
-            (() => trimming && (right > 0)).whileTrue(() => {
+            while(trimming && (right > 0)) {
                 whitespace: isSpace(token[right - 1])
                 whitespace.ifTrue(() => {
                     right = right - 1
@@ -3146,14 +3146,14 @@ parseDialect: (text, version) => {
                 whitespace.ifFalse(() => {
                     trimming = false
                 })
-            })
+            }
 
             trimmed: Encoding.UTF8.encode("")
             copyIndex: 0
-            (() => copyIndex < right).whileTrue(() => {
+            while(copyIndex < right) {
                 trimmed.add(token[copyIndex])
                 copyIndex = copyIndex + 1
-            })
+            }
 
             (trimmed.size() == 0).ifTrue(() => {
                 fail()
@@ -3335,7 +3335,7 @@ parseDialect: (text, version) => {
         }
 
         running: true
-        (() => running).whileTrue(() => {
+        while(running) {
             wasTopLevel: depth == 0
 
             wasTopLevel.ifTrue(() => {
@@ -3446,7 +3446,7 @@ parseDialect: (text, version) => {
                     })
                 })
             })
-        })
+        }
 
         result: rootValue
         skipSpaces()
@@ -3480,7 +3480,7 @@ parseDialect: (text, version) => {
             chunk: initialChunk
             level: initialLevel
             carrying: true
-            (() => carrying).whileTrue(() => {
+            while(carrying) {
                 present: statementChunks.containsKey(level)
                 present.ifTrue(() => {
                     left: statementChunks[level]
@@ -3495,18 +3495,18 @@ parseDialect: (text, version) => {
                     })
                     carrying = false
                 })
-            })
+            }
         }
 
         collectStatementChunks: (initialLevel, initialResult) => {
             level: initialLevel
             result: initialResult
-            (() => level >= 0).whileTrue(() => {
+            while(level >= 0) {
                 statementChunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...statementChunks[level])
                 })
                 level = level - 1
-            })
+            }
             result
         }
         squareDepth: 0
@@ -3543,10 +3543,10 @@ parseDialect: (text, version) => {
 
         appendQuotes: (quote, count) => {
             remaining: count
-            (() => remaining > 0).whileTrue(() => {
+            while(remaining > 0) {
                 append(quote)
                 remaining = remaining - 1
-            })
+            }
         }
 
         quoteRun: (quote) => {
@@ -3554,7 +3554,7 @@ parseDialect: (text, version) => {
             count: 0
             scanning: true
 
-            (() => scanning && (look < length)).whileTrue(() => {
+            while(scanning && (look < length)) {
                 matches: source[look] == quote
                 matches.ifTrue(() => {
                     count = count + 1
@@ -3563,7 +3563,7 @@ parseDialect: (text, version) => {
                 matches.ifFalse(() => {
                     scanning = false
                 })
-            })
+            }
 
             count
         }
@@ -3853,7 +3853,7 @@ parseDialect: (text, version) => {
             chunk: Array(element)
             level: 0
             carrying: true
-            (() => carrying).whileTrue(() => {
+            while(carrying) {
                 present: builder.chunks.containsKey(level)
                 present.ifTrue(() => {
                     left: builder.chunks[level]
@@ -3868,19 +3868,19 @@ parseDialect: (text, version) => {
                     })
                     carrying = false
                 })
-            })
+            }
             builder.last = element
         }
 
         materializeArrayTableBuilder: (builder) => {
             result: Array()
             level: builder.maxLevel
-            (() => level >= 0).whileTrue(() => {
+            while(level >= 0) {
                 builder.chunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...builder.chunks[level])
                 })
                 level = level - 1
-            })
+            }
             result
         }
 
@@ -3895,10 +3895,10 @@ parseDialect: (text, version) => {
         decodeRange: (source, start, end) => {
             buffer: Encoding.UTF8.encode("")
             position: start
-            (() => position < end).whileTrue(() => {
+            while(position < end) {
                 buffer.add(source[position])
                 position = position + 1
-            })
+            }
             Encoding.UTF8.decode(buffer)
         }
 
@@ -3907,7 +3907,7 @@ parseDialect: (text, version) => {
             right: source.size()
 
             trimmingLeft: true
-            (() => trimmingLeft && (left < right)).whileTrue(() => {
+            while(trimmingLeft && (left < right)) {
                 whitespace: isSpace(source[left])
                 whitespace.ifTrue(() => {
                     left = left + 1
@@ -3915,10 +3915,10 @@ parseDialect: (text, version) => {
                 whitespace.ifFalse(() => {
                     trimmingLeft = false
                 })
-            })
+            }
 
             trimmingRight: true
-            (() => trimmingRight && (right > left)).whileTrue(() => {
+            while(trimmingRight && (right > left)) {
                 whitespace: isSpace(source[right - 1])
                 whitespace.ifTrue(() => {
                     right = right - 1
@@ -3926,7 +3926,7 @@ parseDialect: (text, version) => {
                 whitespace.ifFalse(() => {
                     trimmingRight = false
                 })
-            })
+            }
 
             {
                 left: left
@@ -3944,7 +3944,7 @@ parseDialect: (text, version) => {
             selected: tableNode
             position: 0
 
-            (() => position < parts.count).whileTrue(() => {
+            while(position < parts.count) {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -3989,7 +3989,7 @@ parseDialect: (text, version) => {
                     selected = child
                     position = position + 1
                 })
-            })
+            }
         }
 
         latestArrayTable: (arrayNode) => {
@@ -4043,7 +4043,7 @@ parseDialect: (text, version) => {
             selected: root
             position: 0
 
-            (() => position < parts.count).whileTrue(() => {
+            while(position < parts.count) {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -4087,7 +4087,7 @@ parseDialect: (text, version) => {
                 })
 
                 position = position + 1
-            })
+            }
 
             selected
         }
@@ -4097,7 +4097,7 @@ parseDialect: (text, version) => {
             position: 0
             created: null
 
-            (() => position < parts.count).whileTrue(() => {
+            while(position < parts.count) {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -4145,7 +4145,7 @@ parseDialect: (text, version) => {
                 })
 
                 position = position + 1
-            })
+            }
 
             created
         }
@@ -4195,7 +4195,7 @@ parseDialect: (text, version) => {
             quote: -1
             separator: -1
 
-            (() => (position < length) && (separator < 0)).whileTrue(() => {
+            while((position < length) && (separator < 0)) {
                         octet: source[position]
                         inQuote: quote >= 0
 
@@ -4248,7 +4248,7 @@ parseDialect: (text, version) => {
                             })
                         })
 
-            })
+            }
             (quote >= 0).ifTrue(() => {
                 fail()
             })
@@ -4289,11 +4289,11 @@ parseDialect: (text, version) => {
         })
 
         builderIndex: 0
-        (() => builderIndex < arrayTableBuilderCount).whileTrue(() => {
+        while(builderIndex < arrayTableBuilderCount) {
             builder: arrayTableBuilderEntries[builderIndex]
             builder.arrayNode.value = materializeArrayTableBuilder(builder)
             builderIndex = builderIndex + 1
-        })
+        }
 
         root
     }

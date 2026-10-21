@@ -23,7 +23,7 @@ summary: (matches) => {
     number: (value) => {
         text: ""
         remaining: value
-        (() => (remaining > 0) || (text == "")).whileTrue() {
+        while((remaining > 0) || (text == "")) {
             text = digits[remaining % 10] + text
             remaining = remaining.div(10)
         }
@@ -46,13 +46,13 @@ tests: [
         texts: Array("abc123 de4", "  é9 ü", "😀xyz 77", "no digits here", "", "a1b2c3d4e5", "Ωμέγα 2026")
         expected: Map()
         index: 0
-        (() => index < texts.size()).whileTrue() {
+        while(index < texts.size()) {
             expected[index] = summary(pattern.findAll(texts[index]))
             index = index + 1
         }
         futures: Map()
         index = 0
-        (() => index < texts.size()).whileTrue() {
+        while(index < texts.size()) {
             text: texts[index]
             futures[2 * index] = (() => summary(pattern.findAll(text))).future()
             futures[2 * index + 1] = (() => {
@@ -66,7 +66,7 @@ tests: [
             index = index + 1
         }
         index = 0
-        (() => index < texts.size()).whileTrue() {
+        while(index < texts.size()) {
             Assertions.require(futures[2 * index].value() == expected[index])
             Assertions.require(futures[2 * index + 1].value() == "none")
             index = index + 1
@@ -79,12 +79,12 @@ tests: [
         workers: Map()
         count: 8
         index: 0
-        (() => index < count).whileTrue() {
+        while(index < count) {
             size: index + 1
             workers[index] = (() => {
                 text: ""
                 filled: 0
-                (() => filled < size).whileTrue() {
+                while(filled < size) {
                     text = text + "a"
                     filled = filled + 1
                 }
@@ -93,7 +93,7 @@ tests: [
             index = index + 1
         }
         index = 0
-        (() => index < count).whileTrue() {
+        while(index < count) {
             found: workers[index].value()
             Assertions.require(found.end(1) == index + 1)
             Assertions.require(found.group(2) == "b")

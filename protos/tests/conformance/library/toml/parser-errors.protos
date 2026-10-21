@@ -132,25 +132,25 @@ tests: [
         // inside a comment. Latin1 maps each octet to the same code point.
         octets: Encoding.Latin1.encode("")
         octet: 0
-        (() => octet < 32).whileTrue(() => {
+        while(octet < 32) {
             ((octet == 9) || (octet == 10) || (octet == 13)).ifFalse(() => {
                 octets.add(octet)
             })
             octet = octet + 1
-        })
+        }
         octets.add(127)
         controls: Encoding.Latin1.decode(octets)
 
         Assertions.require(controls.size() == 30)
         index: 0
-        (() => index < controls.size()).whileTrue(() => {
+        while(index < controls.size()) {
             input: "value = 1 # forbidden" + controls[index] + "control\n"
 
             Assertions.signals(Error, () => {
                 TOML.parse(input)
             })
             index = index + 1
-        })
+        }
     }),
     Test("parse adversarial nine quote run error", () => {
         TOML: import("std:toml/TOML")

@@ -21,7 +21,7 @@ Regex: import("std:regex/Regex")
 requireSpans: (matches, ...spans) => {
     Assertions.require(matches.size() * 2 == spans.size())
     index: 0
-    (() => index < matches.size()).whileTrue() {
+    while(index < matches.size()) {
         Assertions.require(matches[index].start(0) == spans[2 * index])
         Assertions.require(matches[index].end(0) == spans[2 * index + 1])
         index = index + 1

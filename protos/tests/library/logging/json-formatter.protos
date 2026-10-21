@@ -143,10 +143,10 @@ tests: [
             forward[key] = key.size()
         })
         index: keys.size() - 1
-        (() => index >= 0).whileTrue(() => {
+        while(index >= 0) {
             backward[keys[index]] = keys[index].size()
             index = index - 1
-        })
+        }
         // U+FFFD precedes U+1F600 as scalars, unlike UTF-16 code-unit order.
         expected: withField(
             "{\"\":0,\"A\":1,\"a\":1,\"aa\":2,\"ab\":2,\"b\":1,\"z\":1,\"\u{E9}\":1,\"\u{20AC}\":1,\"\u{FFFD}\":1,\"\u{1F600}\":1}"
@@ -244,11 +244,11 @@ tests: [
         text: render(Level.INFO, "m", %{ "k": "line\nbreak" }, null)
         Assertions.require(text[text.size() - 1] == "}")
         index: 0
-        (() => index < text.size()).whileTrue(() => {
+        while(index < text.size()) {
             Assertions.require((text[index] == "\n") == false)
             Assertions.require((text[index] == "\r") == false)
             index = index + 1
-        })
+        }
     }),
     Test("a TextSink frames each JSON event as one writer line", () => {
         target: byteTarget()

@@ -38,9 +38,9 @@ tests: [
     Test("each value is recognized exactly by its own family", () => {
         values: samples()
         i: 0
-        (() => i < families.size()).whileTrue() {
+        while(i < families.size()) {
             j: 0
-            (() => j < values.size()).whileTrue() {
+            while(j < values.size()) {
                 Assertions.require(families[i].recognizes(values[j]) === (i == j))
                 j = j + 1
             }

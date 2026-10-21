@@ -22,7 +22,7 @@ requireFields: (fields, ...expected) => {
     Assertions.require(Array.recognizes(fields))
     Assertions.require(fields.size() == expected.size())
     index: 0
-    (() => index < fields.size()).whileTrue() {
+    while(index < fields.size()) {
         Assertions.require(fields[index] == expected[index])
         index = index + 1
     }

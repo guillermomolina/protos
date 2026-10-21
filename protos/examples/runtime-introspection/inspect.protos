@@ -24,7 +24,7 @@ sum: (limit) => {
     i: 0
     total: 0
 
-    (() => i < limit).whileTrue() {
+    while(i < limit) {
         total = total + i
         i = i + 1
     }

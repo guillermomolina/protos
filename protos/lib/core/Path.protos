@@ -46,7 +46,7 @@ Path: {
 
         result: _corePathKernel.componentCount(other) == size
         index: 0
-        (() => result && (index < size)).whileTrue() {
+        while(result && (index < size)) {
             mine: _corePathKernel.componentAt(this, index)
             theirs: _corePathKernel.componentAt(other, index)
             (mine == theirs).ifFalse(() => {
@@ -68,7 +68,7 @@ Path: {
 
         h: 1
         index: 0
-        (() => index < size).whileTrue() {
+        while(index < size) {
             h = (31 * h + _corePathKernel.componentAt(this, index).hash()).mod(4294967296)
             (h < 0).ifTrue(() => {
                 h = h + 4294967296

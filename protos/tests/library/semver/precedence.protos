@@ -34,9 +34,9 @@ requireIncreasing: (...texts) => {
         versions[versions.size()] = SemVer.parse(text)
     })
     i: 0
-    (() => i < versions.size()).whileTrue() {
+    while(i < versions.size()) {
         j: 0
-        (() => j < versions.size()).whileTrue() {
+        while(j < versions.size()) {
             expected: 0
             (i < j).ifTrue(() => { expected = -1 })
             (i > j).ifTrue(() => { expected = 1 })

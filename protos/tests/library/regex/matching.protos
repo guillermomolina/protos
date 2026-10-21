@@ -31,7 +31,7 @@ requireGroups: (found, ...texts) => {
     Assertions.require(found !== null)
     Assertions.require(found.captureCount == texts.size())
     index: 0
-    (() => index < texts.size()).whileTrue() {
+    while(index < texts.size()) {
         Assertions.require(found.group(index + 1) == texts[index])
         index = index + 1
     }

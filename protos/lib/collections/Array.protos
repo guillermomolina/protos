@@ -446,7 +446,7 @@ parallelReduce: (array, reducer, ...arguments) => {
         (() => {
             values: round.value()
 
-            (() => { values.size() > 1 }).whileTrue() {
+            while(values.size() > 1) {
                 round = parallelMap(pairs(values), combine, reducer, ...arguments)
                 values = round.value()
             }

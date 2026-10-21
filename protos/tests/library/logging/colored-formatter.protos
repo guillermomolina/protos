@@ -46,12 +46,12 @@ stamp: Instant(1791342922123456789)
 escapes: (text) => {
     count: 0
     index: 0
-    (() => index < text.size()).whileTrue(() => {
+    while(index < text.size()) {
         (text[index] == esc).ifTrue(() => {
             count = count + 1
         })
         index = index + 1
-    })
+    }
     count
 }
 
@@ -59,10 +59,10 @@ escapes: (text) => {
 occursAt: (text, start, sequence) => {
     matched: (start + sequence.size()) <= text.size()
     offset: 0
-    (() => matched && (offset < sequence.size())).whileTrue(() => {
+    while(matched && (offset < sequence.size())) {
         matched = text[start + offset] == sequence[offset]
         offset = offset + 1
-    })
+    }
     matched
 }
 
@@ -72,7 +72,7 @@ withoutGenerated: (text, code) => {
     known: [sgr(code), reset]
     result: ""
     index: 0
-    (() => index < text.size()).whileTrue(() => {
+    while(index < text.size()) {
         skipped: false
         known.each((sequence) => {
             ((skipped == false) && occursAt(text, index, sequence)).ifTrue(() => {
@@ -84,7 +84,7 @@ withoutGenerated: (text, code) => {
             result = result + text[index]
             index = index + 1
         })
-    })
+    }
     result
 }
 

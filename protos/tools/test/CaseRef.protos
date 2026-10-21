@@ -134,9 +134,9 @@ requireSupported: (text) => {
     })
 
     index: 1
-    (() => (index < octets.size()) && (octets[index] >= 48) && (octets[index] <= 57)).whileTrue(() => {
+    while((index < octets.size()) && (octets[index] >= 48) && (octets[index] <= 57)) {
         index = index + 1
-    })
+    }
 
     (index == 1).ifTrue(() => {
         caseRefError()
@@ -157,7 +157,7 @@ requireSupported: (text) => {
     })
 
     payloadIndex: index + 1
-    (() => payloadIndex < octets.size()).whileTrue(() => {
+    while(payloadIndex < octets.size()) {
         octet: octets[payloadIndex]
         decimal: (octet >= 48) && (octet <= 57)
         lowerHex: (octet >= 97) && (octet <= 102)
@@ -165,7 +165,7 @@ requireSupported: (text) => {
             caseRefError()
         })
         payloadIndex = payloadIndex + 1
-    })
+    }
 
     // Version support is checked after the shape so that every well-formed
     // non-V1 version fails deterministically as unsupported.

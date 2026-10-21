@@ -37,7 +37,7 @@ blue: (text) => {
 hasEscape: (text) => {
     found: false
     index: 0
-    (() => index < text.size()).whileTrue() {
+    while(index < text.size()) {
         (text[index] == esc).ifTrue(() => {
             found = true
         })

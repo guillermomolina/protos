@@ -70,17 +70,17 @@ call: (mode, autoEnabled) => {
                 copy: (start, end) => {
                     part: Encoding.UTF8.encode("")
                     index: start
-                    (() => index < end).whileTrue(() => {
+                    while(index < end) {
                         part.add(octets[index])
                         index = index + 1
-                    })
+                    }
                     Encoding.UTF8.decode(part)
                 }
                 levelStart: 0
                 (event.timestamp === null).ifFalse(() => {
-                    (() => octets[levelStart] != 32).whileTrue(() => {
+                    while(octets[levelStart] != 32) {
                         levelStart = levelStart + 1
-                    })
+                    }
                     levelStart = levelStart + 1
                 })
                 levelEnd: levelStart + event.level.size()

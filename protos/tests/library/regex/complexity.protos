@@ -21,7 +21,7 @@ Regex: import("std:regex/Regex")
 repeated: (text, doublings) => {
     result: text
     count: 0
-    (() => count < doublings).whileTrue() {
+    while(count < doublings) {
         result = result + result
         count = count + 1
     }
@@ -54,9 +54,9 @@ tests: [
         letters: "abcdefghijklmnopqrstuvwxyz"
         source: "zz"
         first: 0
-        (() => first < 26).whileTrue() {
+        while(first < 26) {
             second: 0
-            (() => second < 26).whileTrue() {
+            while(second < 26) {
                 source = source + "|" + letters[first] + letters[second]
                 second = second + 1
             }

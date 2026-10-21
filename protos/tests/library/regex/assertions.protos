@@ -22,7 +22,7 @@ starts: (pattern, text) => {
     found: pattern.findAll(text)
     result: Array(...found)
     index: 0
-    (() => index < found.size()).whileTrue() {
+    while(index < found.size()) {
         result[index] = found[index].start(0)
         index = index + 1
     }
@@ -33,7 +33,7 @@ requireStarts: (pattern, text, ...expected) => {
     actual: starts(pattern, text)
     Assertions.require(actual.size() == expected.size())
     index: 0
-    (() => index < actual.size()).whileTrue() {
+    while(index < actual.size()) {
         Assertions.require(actual[index] == expected[index])
         index = index + 1
     }
