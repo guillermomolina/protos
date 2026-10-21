@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
+import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -946,6 +947,165 @@ final class ProtosFormatterToolBootstrapTest {
                 ProtosWholeDocumentFormatter.Status.SUCCESS,
                 repeatedLicense.status());
         assertEquals(formatted.source(), repeatedLicense.source());
+    }
+
+    @Test
+    void bug024PreservesEndOfLineCommentsAfterBlankLines()
+            throws Exception {
+        String[][] cases = {
+            {
+                "a:1\n\nb:2 // note\nc:3",
+                "a: 1\n\nb: 2 // note\nc: 3\n"
+            },
+            {
+                "a:1\n\nb:2 // note\n\nc:3",
+                "a: 1\n\nb: 2 // note\n\nc: 3\n"
+            },
+            {
+                "a:1\n\n\nb:2 // note\nc:3",
+                "a: 1\n\nb: 2 // note\nc: 3\n"
+            },
+            {
+                "a:1\n\nb:2 /* block comment */\nc:3",
+                "a: 1\n\nb: 2 /* block comment */\nc: 3\n"
+            },
+            {
+                "a:1\n\n// own comment\nb:2 // trailing comment\nc:3",
+                "a: 1\n\n// own comment\nb: 2 // trailing comment\nc: 3\n"
+            },
+            {
+                "a:1\n\nb:2 // first\nc:3 // second\nd:4",
+                "a: 1\n\nb: 2 // first\nc: 3 // second\nd: 4\n"
+            },
+            {
+                "a:1 // first\n\nb:2",
+                "a: 1 // first\n\nb: 2\n"
+            },
+            {
+                "a:1\r\n\r\nb:2 // note\r\nc:3\r\n",
+                "a: 1\n\nb: 2 // note\nc: 3\n"
+            },
+            {
+                "Runtime: import(\"std:runtime\")\n"
+                        + "info: Runtime.info()\n"
+                        + "\n"
+                        + "print(info.implementation )        // \"Protos\"\n"
+                        + "print(info.implementationVersion ) // version of this Protos build\n"
+                        + "print(info.engineVersion )         // active Polyglot Engine version\n"
+                        + "print(info.platform )              // \"JVM\" or \"NATIVE_IMAGE\"\n",
+                "Runtime: import(\"std:runtime\")\n"
+                        + "info: Runtime.info()\n"
+                        + "\n"
+                        + "print(info.implementation) // \"Protos\"\n"
+                        + "print(info.implementationVersion) // version of this Protos build\n"
+                        + "print(info.engineVersion) // active Polyglot Engine version\n"
+                        + "print(info.platform) // \"JVM\" or \"NATIVE_IMAGE\"\n"
+            }
+        };
+
+        ProtosStaticAnalysisCore analysis =
+                new ProtosStaticAnalysisCore();
+        long version = 240L;
+
+        for (String[] sample : cases) {
+            AtomicReference<ProtosProcessRuntime> observed =
+                    new AtomicReference<>();
+
+            ProtosWholeDocumentFormatter.Result result =
+                    ProtosWholeDocumentFormatter.format(
+                            CORE,
+                            TOOL_ROOT,
+                            new ProtosStandardLibraryModuleResolver(
+                                    STANDARD_LIBRARY),
+                            new ProtosDocumentSnapshot(
+                                    "memory:bug024-original",
+                                    version++,
+                                    sample[0]),
+                            observed::set,
+                            runtimeHost);
+
+            assertEquals(
+                    ProtosWholeDocumentFormatter.Status.SUCCESS,
+                    result.status(),
+                    sample[0]);
+            assertEquals(sample[1], result.source());
+
+            ProtosProcessRuntime process = observed.get();
+
+            assertNotNull(process);
+            assertEquals(
+                    ProtosProcessRuntime.LifecycleState.TERMINATED,
+                    process.lifecycleState());
+            assertTrue(
+                    process.rootFilesystemForRuntime().isEmpty());
+
+            ProtosDocumentSnapshot formattedSnapshot =
+                    new ProtosDocumentSnapshot(
+                            "memory:bug024-formatted",
+                            version++,
+                            result.source());
+
+            assertTrue(
+                    !(analysis.parse(formattedSnapshot)
+                            instanceof ProtosStaticParseResult.Failed),
+                    result.source());
+
+            assertEquals(
+                    analysis.sourceLayout(
+                                    new ProtosDocumentSnapshot(
+                                            "memory:bug024-input",
+                                            version++,
+                                            sample[0]))
+                            .preservationProjection()
+                            .comments()
+                            .stream()
+                            .map(
+                                    comment ->
+                                            comment.rawText()
+                                                    + "|"
+                                                    + comment.placement()
+                                                    + "|"
+                                                    + comment.boundaryKind()
+                                                    + "|"
+                                                    + comment.preceding()
+                                                    + "|"
+                                                    + comment.following())
+                            .toList(),
+                    analysis.sourceLayout(formattedSnapshot)
+                            .preservationProjection()
+                            .comments()
+                            .stream()
+                            .map(
+                                    comment ->
+                                            comment.rawText()
+                                                    + "|"
+                                                    + comment.placement()
+                                                    + "|"
+                                                    + comment.boundaryKind()
+                                                    + "|"
+                                                    + comment.preceding()
+                                                    + "|"
+                                                    + comment.following())
+                            .toList());
+
+            ProtosWholeDocumentFormatter.Result repeated =
+                    ProtosWholeDocumentFormatter.format(
+                            CORE,
+                            TOOL_ROOT,
+                            new ProtosStandardLibraryModuleResolver(
+                                    STANDARD_LIBRARY),
+                            new ProtosDocumentSnapshot(
+                                    "memory:bug024-idempotence",
+                                    version++,
+                                    result.source()),
+                            ignored -> {},
+                            runtimeHost);
+
+            assertEquals(
+                    ProtosWholeDocumentFormatter.Status.SUCCESS,
+                    repeated.status());
+            assertEquals(result.source(), repeated.source());
+        }
     }
 
     @Test

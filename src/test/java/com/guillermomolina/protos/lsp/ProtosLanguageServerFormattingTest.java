@@ -204,6 +204,30 @@ class ProtosLanguageServerFormattingTest {
                 edits.get(0).getNewText());
     }
 
+    @Test
+    void bug024RealFormatterPreservesEndOfLineCommentsAfterBlankLines() {
+        ProtosLanguageServer server =
+                new ProtosLanguageServer(code -> {});
+
+        server.textDocuments().didOpen(
+                open(URI, 1, "a:1\n\nb:2 // note\nc:3"));
+
+        List<? extends TextEdit> edits =
+                format(server, URI, options(8, false));
+
+        assertEquals(1, edits.size());
+        assertEquals(
+                new Range(new Position(0, 0), new Position(3, 3)),
+                edits.get(0).getRange());
+        assertEquals(
+                "a: 1\n\nb: 2 // note\nc: 3\n",
+                edits.get(0).getNewText());
+
+        server.textDocuments().didChange(
+                change(URI, 2, edits.get(0).getNewText()));
+        assertEquals(List.of(), format(server, URI, options(8, false)));
+    }
+
     private static ProtosLanguageServer server(ProtosLspDocumentFormatter formatter) {
         return new ProtosLanguageServer(
                 code -> {}, new ProtosProjectFileBindingProvider(), formatter);

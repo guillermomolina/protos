@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.392-SNAPSHOT
+
+- `BUG024` (#939): the TOOL010 formatter no longer fails on an
+  end-of-line comment whose owning expression follows a blank line.
+  - `formatSequenceBoundary` now counts a comment's `blankLineBefore`
+    only for `OWN_LINE` comments; for `END_OF_LINE` comments that blank
+    line precedes the owning expression and belongs to the earlier
+    boundary. The boundary consistency check is unchanged.
+  - No change to the source-layout projection, D183 formatting policy,
+    PLAT050 architecture, CLI or LSP.
+  - Coverage: source-layout facts, formatter integration cases
+    (line/block comments, adjacent comments, CRLF, original example)
+    with parse validity, comment preservation and idempotence, plus real
+    LSP and `protos format` regressions.
+  - Maintainer validation: focused JUnit set 65/65 PASS; `make test`
+    PASS.
+
 ## 0.3.391-SNAPSHOT
 
 - `CLI010`: standalone `--inspect` authorization of `std:inspect`.

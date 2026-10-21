@@ -283,6 +283,49 @@ class ProtosSourceLayoutViewTest {
     }
 
     @Test
+    void bug024KeepsPhysicalBlankLineFactsIndependentOfCommentAttachment() {
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                core.sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:bug024-eol-after-blank",
+                                        1L,
+                                        "a: 1\n"
+                                                + "\n"
+                                                + "b: 2 // note\n"
+                                                + "c: 3\n"))
+                        .preservationProjection();
+
+        assertEquals(1, projection.comments().size());
+
+        ProtosSourceLayoutView.CommentProjection note =
+                projection.comments().get(0);
+
+        assertEquals("// note", note.rawText());
+        assertEquals(
+                ProtosSourceLayoutView.CommentPlacement.END_OF_LINE,
+                note.placement());
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.SEQUENCE_SEPARATOR,
+                note.boundaryKind());
+        assertEquals(
+                SequenceSeparatorKind.LOGICAL_NEWLINE,
+                note.sequenceSeparatorKind().orElseThrow());
+        assertEquals(true, note.blankLineBefore());
+        assertEquals(false, note.blankLineAfter());
+
+        List<ProtosSourceLayoutView.SequenceSeparatorProjection>
+                separators = projection.sequenceSeparators();
+
+        assertEquals(2, separators.size());
+        assertEquals(true, separators.get(0).blankLine());
+        assertEquals(false, separators.get(1).blankLine());
+        assertEquals(note.preceding().orElseThrow(),
+                separators.get(1).preceding());
+        assertEquals(note.following().orElseThrow(),
+                separators.get(1).following());
+    }
+
+    @Test
     void commentRelationshipIsIndependentOfSourceOffsets() {
         ProtosSourceLayoutView first =
                 core.sourceLayout(

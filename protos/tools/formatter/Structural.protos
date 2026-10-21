@@ -599,20 +599,12 @@ formatSequenceBoundary: (
                 Error().signal()
             })
 
-            comment.blankLineBefore.ifTrue(() => {
-                commentBlankLineSeen = true
-            })
-
             comment.blankLineAfter.ifTrue(() => {
                 commentBlankLineSeen = true
             })
 
             (comment.placement == "END_OF_LINE").ifTrue(() => {
                 matched.ifTrue(() => {
-                    Error().signal()
-                })
-
-                comment.blankLineBefore.ifTrue(() => {
                     Error().signal()
                 })
 
@@ -628,6 +620,14 @@ formatSequenceBoundary: (
             })
 
             (comment.placement == "OWN_LINE").ifTrue(() => {
+                // blankLineBefore is the physical line above the comment's
+                // line; for an OWN_LINE comment that line lies inside this
+                // boundary, while for an END_OF_LINE comment it precedes the
+                // owning expression and belongs to an earlier boundary.
+                comment.blankLineBefore.ifTrue(() => {
+                    commentBlankLineSeen = true
+                })
+
                 matched.ifFalse(() => {
                     result =
                         result +

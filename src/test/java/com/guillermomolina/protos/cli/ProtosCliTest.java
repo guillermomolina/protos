@@ -350,6 +350,25 @@ final class ProtosCliTest {
     }
 
     @Test
+    void bug024FormatCliHandlesEndOfLineCommentsAfterBlankLines() {
+        String expected = "a: 1\n\nb: 2 // note\nc: 3\n";
+
+        R formatted =
+                runWithInput(
+                        "a:1\n\nb:2 // note\nc:3".getBytes(StandardCharsets.UTF_8),
+                        "format");
+        assertEquals(0, formatted.c, formatted.e);
+        assertEquals(expected, formatted.o);
+        assertEquals("", formatted.e);
+
+        R canonical =
+                runWithInput(formatted.o.getBytes(StandardCharsets.UTF_8), "format");
+        assertEquals(0, canonical.c, canonical.e);
+        assertEquals(expected, canonical.o);
+        assertEquals("", canonical.e);
+    }
+
+    @Test
     void formatSymlinkToRegularFileIsReadOnly() throws Exception {
         Path dir = Files.createTempDirectory("protos-cli-format-link-");
         Path target = dir.resolve("target.protos");
