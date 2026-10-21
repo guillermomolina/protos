@@ -17,6 +17,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.RootCallTarget;
@@ -167,6 +168,40 @@ final class ProtosPerf041VariableIfTrueCensusTest {
                                 + signatures.get(0).size());
                 System.out.println(
                         "PERF041V_TOTAL_FULL=" + total);
+
+                // I115-O: CONSTANT arguments of the run root only.
+                int guestIntegers = 0;
+                int primitiveIntegers = 0;
+                int otherConstants = 0;
+                for (Instruction instruction
+                        : runRoot.getBytecodeNode().getInstructionsAsList()) {
+                    for (Instruction.Argument argument
+                            : instruction.getArguments()) {
+                        if (argument.getKind()
+                                != Instruction.Argument.Kind.CONSTANT) {
+                            continue;
+                        }
+                        Object constant = argument.asConstant();
+                        if (constant instanceof Long) {
+                            primitiveIntegers++;
+                        } else if (constant instanceof ProtosIntegerValue) {
+                            guestIntegers++;
+                        } else {
+                            otherConstants++;
+                        }
+                    }
+                }
+                System.out.println(
+                        "PERF041V_GUEST_INTEGER_CONSTANTS=" + guestIntegers);
+                System.out.println(
+                        "PERF041V_PRIMITIVE_INTEGER_CONSTANTS="
+                                + primitiveIntegers);
+                System.out.println(
+                        "PERF041V_OTHER_CONSTANTS=" + otherConstants);
+                System.out.println(
+                        "PERF041V_GUEST_CONSTANT_RETURN="
+                                + (guestIntegers > 0
+                                        && primitiveIntegers == 0));
                 System.out.println("PERF041V_CENSUS=PASS");
 
             } finally {

@@ -8,6 +8,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.5-SNAPSHOT
+
+- `I115-O` (PLAT066-C / PERF041): optimize certified constant Integer
+  returns in experimental compact Bytecode DSL roots.
+  - Admit a returned root-local binding only when its terminal use is a
+    lookup and all other stores to it are eligible literal statements
+    (signed-64 Integer, `null`, `true` or `false`), with at least one
+    Integer store and no other read of that binding.
+  - Store prepared guest Integer constants directly at eligible write sites
+    and skip the compact return-carrier projection for the proven return.
+    Retain the previous lowering and return handling for unadmitted roots.
+  - Add constant-provenance, conditional-assignment, and physical Bytecode
+    census coverage, including the PERF041 variable-`ifTrue` case.
+  - **Historical semantic limitation:** this was an experimental
+    specialization layered on the I115-M/N compact path, not proof of
+    general method-selection, override, suspension, or numerical-equivalence
+    guarantees. Full language conformance was not established at this step.
+  - Reconstructed from original I115 commit
+    `9d41d119967a493e7236f7a0e3e76aeff2499fb9`;
+    no behavioral tests were run on this versioned replay.
+
 ## 0.4.4-SNAPSHOT
 
 - `I115-M/N` (PLAT066-C / PERF039 / PERF041): generalize the experimental
