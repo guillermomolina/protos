@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.391-SNAPSHOT
+
+- `CLI010`: standalone `--inspect` authorization of `std:inspect`.
+  - `protos --inspect <file>`, `protos --inspect -e <source>` and
+    `protos --inspect` (REPL) set the existing `protos.Inspect` Context
+    option for that invocation only; inspection stays denied by default.
+  - The flag takes no value, may appear once, combines with
+    `--foreign-provider-path` in either order before the input, and is a
+    usage error (exit 2) when repeated or placed before any other command.
+    Arguments after the input, including `--inspect`, stay in
+    `process.args()` and authorize nothing.
+  - New `ProtosPolyglotRuntimeHost.openWithInspection()` and
+    `openWithForeignProviders(configuration, inspectionAuthorized)`
+    factories; existing factories and embedder Engine options are
+    unchanged (`protos.Inspect` is never set to `false`). No DAP,
+    lowering, compilation or other authority change.
+  - Coverage: `ProtosCli010InspectTest`, a real external-provider plus
+    inspection CLI test, and four Native smoke checks; CLI and
+    `std:inspect` guides updated.
+  - Maintainer validation: focused JUnit set 86/86 PASS; Native
+    harness PASS including `NATIVE_INSPECT=PASS`; `make test` PASS;
+    `make check` PASS.
+
 ## 0.3.390-SNAPSHOT
 
 - `BUG023` (#937): restore the missing ICU4J NFC data in the Native

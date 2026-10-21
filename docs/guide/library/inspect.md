@@ -46,7 +46,31 @@ Context context = Context.newBuilder("protos")
 - Each operation checks the authority of the Context it runs in, so keeping a
   reference to one of its functions grants nothing in another Context.
 
-There is no command-line flag for this option.
+### Standalone execution
+
+The `protos` command line authorizes inspection with the `--inspect` flag:
+
+```sh
+protos --inspect show.protos
+protos --inspect -e 'Inspect: import("std:inspect")'
+protos --inspect
+```
+
+- The authorization is explicit and applies to one invocation only: the file,
+  the `-e` source, or the REPL session it starts. It sets `protos.Inspect` to
+  `"true"` for that invocation's Context.
+- Without `--inspect` nothing is authorized, and `import("std:inspect")`
+  signals an ordinary `Error`. Guest code cannot enable the flag or the option.
+- `--inspect` is completely independent of the Debug Adapter Protocol: it does
+  not start a debugger, and `protos debug` does not accept it.
+- It changes neither how code is lowered nor how it is compiled.
+- It grants no new filesystem, network, interop, or Process authority; every
+  other authority of the Context is unchanged.
+- `--inspect` is not the Chrome DevTools debugger option that other GraalVM
+  launchers offer under the same name.
+
+The flag rules (placement, repetition, incompatible commands) are described in
+the [command-line guide](../tools/cli.md#running-programs).
 
 ## Operations
 
@@ -104,7 +128,8 @@ An operation never answers an empty String in place of an error.
 
 The public contract of `std:inspect` is the same in the portable JVM
 distribution and the Native executable: the same four operations, the same
-authority, and the same Error behavior. What they answer is not:
+authority, and the same Error behavior. Both distributions accept the
+`--inspect` flag. What they answer is not:
 
 - The diagnostic text is specific to the running implementation and can differ
   between the distributions and between releases.

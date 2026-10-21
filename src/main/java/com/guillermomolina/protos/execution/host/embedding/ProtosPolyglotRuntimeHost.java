@@ -46,6 +46,11 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final ProtosForeignProviderRegistry foreignProviders;
     /** Class loader of external provider plugins, or null when none were configured. */
     private final URLClassLoader foreignProviderLoader;
+    /**
+     * Whether this standalone host explicitly authorized {@code std:inspect} for the Contexts it
+     * creates (CLI010); fixed at construction.
+     */
+    private final boolean inspectionAuthorized;
     private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
@@ -67,10 +72,20 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
             ProtosGraalDapReadinessAdapter debugReadiness,
             ProtosForeignProviderRegistry foreignProviders,
             URLClassLoader foreignProviderLoader) {
+        this(engine, debugReadiness, foreignProviders, foreignProviderLoader, false);
+    }
+
+    private ProtosPolyglotRuntimeHost(
+            Engine engine,
+            ProtosGraalDapReadinessAdapter debugReadiness,
+            ProtosForeignProviderRegistry foreignProviders,
+            URLClassLoader foreignProviderLoader,
+            boolean inspectionAuthorized) {
         this.engine = Objects.requireNonNull(engine, "engine");
         this.debugReadiness = debugReadiness;
         this.foreignProviders = Objects.requireNonNull(foreignProviders, "foreignProviders");
         this.foreignProviderLoader = foreignProviderLoader;
+        this.inspectionAuthorized = inspectionAuthorized;
         this.actorCarrierParallelism =
                 Math.max(1, Runtime.getRuntime().availableProcessors());
     }
@@ -79,6 +94,21 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     public static ProtosPolyglotRuntimeHost open() {
         return new ProtosPolyglotRuntimeHost(
                 Engine.create(ProtosLanguage.ID), null, ProtosForeignProviderRegistry.EMPTY);
+    }
+
+    /**
+     * Opens a normal host without DAP or foreign providers whose Process Contexts explicitly
+     * authorize {@code std:inspect} through the existing {@code protos.Inspect} Context option
+     * (CLI010). Lowering, compilation, and every other Context authority are unchanged.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static ProtosPolyglotRuntimeHost openWithInspection() {
+        return new ProtosPolyglotRuntimeHost(
+                Engine.create(ProtosLanguage.ID),
+                null,
+                ProtosForeignProviderRegistry.EMPTY,
+                null,
+                true);
     }
 
     /**
@@ -107,9 +137,21 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost openWithForeignProviders(
             ProtosForeignProviderConfiguration configuration) {
+        return openWithForeignProviders(configuration, false);
+    }
+
+    /**
+     * Variant of {@link #openWithForeignProviders(ProtosForeignProviderConfiguration)} whose
+     * Process Contexts additionally authorize {@code std:inspect} when {@code
+     * inspectionAuthorized} is true (CLI010). An empty configuration behaves exactly like {@link
+     * #open()} or {@link #openWithInspection()} respectively.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    public static ProtosPolyglotRuntimeHost openWithForeignProviders(
+            ProtosForeignProviderConfiguration configuration, boolean inspectionAuthorized) {
         Objects.requireNonNull(configuration, "configuration");
         if (configuration.providerPaths().isEmpty()) {
-            return open();
+            return inspectionAuthorized ? openWithInspection() : open();
         }
         ProtosExternalProviderPluginLoader.Loaded loaded =
                 ProtosExternalProviderPluginLoader.load(configuration);
@@ -118,7 +160,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     Engine.create(ProtosLanguage.ID),
                     null,
                     ProtosForeignProviderRegistry.of(loaded.descriptors()),
-                    loaded.classLoader());
+                    loaded.classLoader(),
+                    inspectionAuthorized);
         } catch (RuntimeException | Error failure) {
             try {
                 loaded.classLoader().close();
@@ -227,7 +270,8 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                             in,
                             out,
                             err,
-                            activeProcessContexts::decrementAndGet);
+                            activeProcessContexts::decrementAndGet,
+                            inspectionAuthorized);
             ProtosPolyglotProcessContext hosted =
                     new ProtosPolyglotProcessContext(this, process, context);
             process.bindExecutionHostForRuntime(hosted);

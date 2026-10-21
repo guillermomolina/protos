@@ -69,6 +69,11 @@ public final class ProtosCli {
      * execution.
      */
     private List<Path> foreignProviderPaths = List.of();
+    /**
+     * Whether this invocation explicitly authorized {@code std:inspect} (CLI010); {@code false}
+     * unless {@code --inspect} preceded a file, {@code -e}, or REPL execution.
+     */
+    private boolean inspectionAuthorized = false;
 
     public ProtosCli() {
         this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
@@ -138,10 +143,25 @@ public final class ProtosCli {
     }
 
     private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        foreignProviderPaths = List.of();
+        inspectionAuthorized = false;
         try {
             List<Path> providerPaths = new ArrayList<>();
+            boolean providerPathsRequested = false;
+            boolean inspect = false;
             int first = 0;
-            while (first < args.length && args[first].equals("--foreign-provider-path")) {
+            while (first < args.length
+                    && (args[first].equals("--foreign-provider-path")
+                            || args[first].equals("--inspect"))) {
+                if (args[first].equals("--inspect")) {
+                    if (inspect) {
+                        return usage(err, "--inspect may be given only once");
+                    }
+                    inspect = true;
+                    first += 1;
+                    continue;
+                }
+                providerPathsRequested = true;
                 if (first + 1 >= args.length) {
                     return usage(err, "--foreign-provider-path requires a path list");
                 }
@@ -166,10 +186,16 @@ public final class ProtosCli {
                         && (args[0].startsWith("-") || SUBCOMMANDS.contains(args[0]))) {
                     return usage(
                             err,
-                            "--foreign-provider-path applies only to file, -e, or REPL execution");
+                            (inspect && !providerPathsRequested
+                                            ? "--inspect"
+                                            : providerPathsRequested && !inspect
+                                                    ? "--foreign-provider-path"
+                                                    : "--inspect and --foreign-provider-path")
+                                    + " applies only to file, -e, or REPL execution");
                 }
             }
             foreignProviderPaths = List.copyOf(providerPaths);
+            inspectionAuthorized = inspect;
             if (args.length == 0) return repl(in, out, err);
             if (args.length == 1 && (args[0].equals("--help") || args[0].equals("-h"))) {
                 help(out);
@@ -1455,13 +1481,25 @@ public final class ProtosCli {
             PrintStream err,
             ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        // Only file, -e, and REPL sessions can carry explicitly authorized provider paths.
-        ProtosPolyglotRuntimeHost runtimeHost =
-                foreignProviderPaths.isEmpty()
-                        ? ProtosPolyglotRuntimeHost.open()
-                        : ProtosPolyglotRuntimeHost.openWithForeignProviders(
-                                ProtosForeignProviderConfiguration.trustedInProcess(
-                                        foreignProviderPaths));
+        // Only file, -e, and REPL sessions can carry explicitly authorized provider paths or
+        // explicit std:inspect authorization (CLI010).
+        ProtosPolyglotRuntimeHost runtimeHost;
+        if (!inspectionAuthorized) {
+            runtimeHost =
+                    foreignProviderPaths.isEmpty()
+                            ? ProtosPolyglotRuntimeHost.open()
+                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                    ProtosForeignProviderConfiguration.trustedInProcess(
+                                            foreignProviderPaths));
+        } else {
+            runtimeHost =
+                    foreignProviderPaths.isEmpty()
+                            ? ProtosPolyglotRuntimeHost.openWithInspection()
+                            : ProtosPolyglotRuntimeHost.openWithForeignProviders(
+                                    ProtosForeignProviderConfiguration.trustedInProcess(
+                                            foreignProviderPaths),
+                                    true);
+        }
         ProtosStandaloneProcessBootstrap.Result bootstrap;
         boolean bootstrapped = false;
         try {
@@ -1693,8 +1731,8 @@ public final class ProtosCli {
     private static void help(PrintStream out) {
         out.println(
                 "Usage:\n"
-                        + "  protos <file> [args...]\n"
-                        + "  protos -e <source> [args...]\n"
+                        + "  protos [--inspect] <file> [args...]\n"
+                        + "  protos [--inspect] -e <source> [args...]\n"
                         + "  protos debug <file> [args...]\n"
                         + "  protos language-server\n"
                         + "  protos run <entry> [args...]\n"
@@ -1702,10 +1740,11 @@ public final class ProtosCli {
                         + "  protos test [--jobs N] [args...]\n"
                         + "  protos format [<file>]\n"
                         + "  protos lint [--output text|json] [--fail-on-warning] [<file>]\n"
-                        + "  protos\n\n"
+                        + "  protos [--inspect]\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
                         + "  --foreign-provider-path <paths> (before <file>, -e, or REPL)\n"
+                        + "  --inspect (before <file>, -e, or REPL)\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"
                         + "Workspace run executes the explicit root-package logical <entry> "
@@ -1737,6 +1776,11 @@ public final class ProtosCli {
                         + "--foreign-provider-path loads external foreign provider plugins "
                         + "from exactly the listed JARs or directories (separated by the "
                         + "platform path separator; repeatable); they run trusted in process.\n"
+                        + "--inspect is opt-in: it authorizes only the std:inspect module for "
+                        + "this file, -e, or REPL invocation, which is denied by default; it "
+                        + "may be given once and combined with --foreign-provider-path in any "
+                        + "order before the input; arguments after the input are passed "
+                        + "unchanged to process.args().\n"
                         + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.");
     }
 

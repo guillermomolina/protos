@@ -328,6 +328,25 @@ class ProtosExternalForeignProviderTest {
                         sink, sink) != 0);
     }
 
+    @Test
+    void cliInspectAndForeignProviderAuthorizationsCombineInOneContext() {
+        // CLI010: both launcher authorizations reach the same Context, in either order.
+        String source =
+                "Inspect: import(\"std:inspect\")\n"
+                        + "Plugin: import(\"inventado:demo\")\n"
+                        + "print(Inspect.representation(1))\n"
+                        + "print(Plugin.double(21))\n";
+        // The representation text is an unstable diagnostic; only its family is checked.
+        for (String output :
+                new String[] {
+                    cli(0, "--inspect", "--foreign-provider-path", invented.toString(), "-e", source),
+                    cli(0, "--foreign-provider-path", invented.toString(), "--inspect", "-e", source)
+                }) {
+            assertTrue(output.contains("Integer"), output);
+            assertTrue(output.endsWith("\n42\n"), output);
+        }
+    }
+
     private static String cli(int expectedExit, String... args) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         ByteArrayOutputStream err = new ByteArrayOutputStream();

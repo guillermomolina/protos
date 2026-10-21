@@ -12,9 +12,9 @@ The dispatch code is
 
 | Command | What it does | Guide |
 |---|---|---|
-| `protos <file> [args...]` | Runs one source file | below |
-| `protos -e <source> [args...]` | Runs one source String | below |
-| `protos` | Starts the interactive REPL | below |
+| `protos [--inspect] <file> [args...]` | Runs one source file | below |
+| `protos [--inspect] -e <source> [args...]` | Runs one source String | below |
+| `protos [--inspect]` | Starts the interactive REPL | below |
 | `protos run <entry> [args...]` | Runs a root-package logical entry of the project in the current directory | below |
 | `protos debug <file> [args...]` | Runs one file under the Debug Adapter Protocol | below |
 | `protos format [<file>]` | Prints the canonical formatting of one document | below |
@@ -26,7 +26,8 @@ The dispatch code is
 | `protos -v`, `protos --version` | Prints `Protos <version>` | |
 
 `--foreign-provider-path <paths>` may precede `<file>`, `-e`, or the REPL; see
-[Foreign interoperability](../interop/README.md).
+[Foreign interoperability](../interop/README.md). `--inspect` may precede the
+same three forms; see [Inspection](#inspection) below.
 
 ## Running programs
 
@@ -47,6 +48,29 @@ protos -e 'print(process.args().size())' a b c
 
 The REPL supports line editing and history; `:help` lists its commands,
 `:quit` or Ctrl-D exits.
+
+### Inspection
+
+```sh
+protos --inspect show.protos
+protos --inspect -e 'Inspect: import("std:inspect")'
+protos --inspect
+protos --foreign-provider-path plugins --inspect show.protos
+```
+
+`--inspect` authorizes the [`std:inspect`](../library/inspect.md) module for
+this one invocation; without it the import signals an ordinary `Error`. It
+takes no value and grants nothing else.
+
+- It must appear before the file, `-e`, or the REPL start, and can be combined
+  with `--foreign-provider-path` in either order.
+- It may be given only once; repeating it is a usage error (status `2`).
+- Before any other command (`run`, `debug`, `package`, `test`, `format`,
+  `lint`, `language-server`, `--help`, `--version`, `-h`, `-v`) it is a usage
+  error (status `2`): the flag applies only to file, `-e`, or REPL execution.
+- Arguments after the file or the `-e` source are application arguments and
+  are kept intact in `process.args()`, even one spelled `--inspect`; such an
+  argument does not authorize inspection.
 
 ### `protos run`
 
@@ -167,6 +191,7 @@ protos lint --fail-on-warning src/main.protos
 | Guest execution | Interpreter-only; guest JIT disabled (PLAT045) | Optimizing runtime with guest JIT |
 | Commands on this page | All available | All available |
 | `--foreign-provider-path` | Not available: no dynamic plugin loading | Available |
+| `--inspect` | Available | Available |
 | Java embedding | Not available | Available through the standard Polyglot API ([guide](../embedding/java.md)) |
 
 Download and installation are described in [Try Protos](../00-try-protos.md).

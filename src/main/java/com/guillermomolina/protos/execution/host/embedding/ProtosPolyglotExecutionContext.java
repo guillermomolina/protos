@@ -75,6 +75,22 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
             OutputStream out,
             OutputStream err,
             Runnable closedCallback) {
+        return open(engine, in, out, err, closedCallback, false);
+    }
+
+    /**
+     * Opens a Context that additionally sets {@code protos.Inspect=true} when {@code
+     * inspectionAuthorized} is true (CLI010). When false the option is deliberately left unset so
+     * an embedder-supplied Engine option is never overwritten.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    static ProtosPolyglotExecutionContext open(
+            Engine engine,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            Runnable closedCallback,
+            boolean inspectionAuthorized) {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
@@ -90,6 +106,9 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
                         .allowIO(sourceReadability.ioAccess());
         if (engine != null) {
             builder.engine(engine);
+        }
+        if (inspectionAuthorized) {
+            builder.option("protos.Inspect", "true");
         }
         Context context = builder.build();
         boolean initialized = false;

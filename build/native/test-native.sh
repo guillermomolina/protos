@@ -20,6 +20,7 @@ probe_source="${tmp_dir}/interpreter-only.protos"
 dap_log="${tmp_dir}/dap.log"
 lsp_log="${tmp_dir}/lsp.log"
 regex_log="${tmp_dir}/regex.log"
+inspect_source="${tmp_dir}/inspect.protos"
 
 # PLAT045 (#772): the Native executable is a real AOT image built with the
 # supported fallback Truffle runtime, so guest execution is interpreter-only
@@ -140,6 +141,58 @@ PROTOS_HOME="${root}" \
     >"${probe_log}" 2>&1
 probe_status=$?
 
+# CLI010: --inspect explicitly authorizes std:inspect for file and -e
+# execution; without it the import is an ordinary Error. Only the Integer
+# representation is checked: Native bytecode and truffleTree dumps need not
+# match the JVM ones.
+{
+    echo 'Inspect: import("std:inspect")'
+    echo 'print(Inspect.representation(1))'
+} >"${inspect_source}"
+
+inspect_failures=0
+
+run_inspect_case() {
+    local name="$1"
+    local expected_status="$2"
+    shift 2
+    local case_out="${tmp_dir}/inspect-${name}.out"
+    local case_err="${tmp_dir}/inspect-${name}.err"
+    local case_ok=1
+
+    PROTOS_HOME="${root}" \
+        "${native_bin}" \
+        "$@" \
+        >"${case_out}" 2>"${case_err}"
+    local case_status=$?
+
+    if [[ "${case_status}" -ne "${expected_status}" ]]; then
+        case_ok=0
+    elif [[ "${expected_status}" -eq 0 ]]; then
+        if ! grep -Fq 'Integer' "${case_out}"; then
+            case_ok=0
+        fi
+    elif ! grep -Fq 'Error' "${case_err}" || \
+         grep -Fq 'Internal error' "${case_err}" || \
+         grep -Fq 'Integer' "${case_out}"; then
+        case_ok=0
+    fi
+
+    echo "NATIVE_INSPECT_${name}_STATUS=${case_status}"
+    if [[ "${case_ok}" -ne 1 ]]; then
+        cat "${case_out}" "${case_err}" >&2
+        echo "NATIVE_INSPECT_CASE_FAILURE=${name}" >&2
+        inspect_failures=$((inspect_failures + 1))
+    fi
+}
+
+inspect_eval_source="$(cat "${inspect_source}")"
+
+run_inspect_case FILE_DENIED 1 "${inspect_source}"
+run_inspect_case FILE_AUTHORIZED 0 --inspect "${inspect_source}"
+run_inspect_case EVAL_DENIED 1 -e "${inspect_eval_source}"
+run_inspect_case EVAL_AUTHORIZED 0 --inspect -e "${inspect_eval_source}"
+
 # Truffle's own interpreter-only warning is the selection evidence; it is
 # intentionally not suppressed.
 fallback_markers="$(
@@ -189,6 +242,7 @@ cat "${dap_log}"
 echo "NATIVE_DAP_STACKTRACE_STATUS=${dap_status}"
 echo "NATIVE_LSP_WORKSPACE_SYMBOLS_STATUS=${lsp_status}"
 echo "NATIVE_REGEX_STATUS=${regex_status}"
+echo "NATIVE_INSPECT_FAILURES=${inspect_failures}"
 echo "NATIVE_INTERPRETER_ONLY_STATUS=${probe_status}"
 echo "NATIVE_FALLBACK_RUNTIME_MARKERS=${fallback_markers}"
 echo "NATIVE_GUEST_JIT_POLICY=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
@@ -244,6 +298,11 @@ if [[ "${dap_status}" -ne 0 ]]; then
     exit 1
 fi
 
+if [[ "${inspect_failures}" -ne 0 ]]; then
+    echo "NATIVE_INSPECT=FAIL" >&2
+    exit 1
+fi
+
 if [[ "${probe_status}" -ne 0 ]]; then
     cat "${probe_log}" >&2
     echo "NATIVE_INTERPRETER_ONLY=FAIL_STATUS" >&2
@@ -286,6 +345,7 @@ echo "NATIVE_GUEST_SMOKE=PASS"
 echo "NATIVE_TEST_TOOL_SMOKE=PASS"
 echo "NATIVE_NUMERIC_CONFORMANCE=PASS"
 echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
+echo "NATIVE_INSPECT=PASS"
 echo "NATIVE_INTERPRETER_ONLY=PASS"
 echo "NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
 echo "FRAME_WITHOUT_BOXING_REGRESSION=PASS"
