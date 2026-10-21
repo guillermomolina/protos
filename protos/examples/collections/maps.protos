@@ -9,9 +9,11 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-scores: Map()
-scores["Ada"] = 10
-scores["Grace"] = 20
+scores: %{ 
+    "Ada": 10
+    "Grace": 20
+}
+
 scores["Ada"] = 15
 
 print(scores["Ada"])

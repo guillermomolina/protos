@@ -15,6 +15,8 @@
  * the specific language governing rights and limitations under the License.
  */
 
+Arrays: import("std:collections/Array")
+
 // Isolated parallel execution: closure.parallel() runs the computation in a
 // fresh isolated P domain, with no implicit access to the caller's mutable
 // lexical state. Inputs cross the boundary explicitly, and the result is
@@ -33,15 +35,11 @@ scale: (value, factor) => {
 // already-snapshotted P input.
 print(scale.parallel(7, multiplier).value())
 
-// The std:collections/Array parallel algorithms are Standard Library
-// conveniences composed from the same isolation model (closure.parallel plus
-// Future.all). Workers may run in any physical order, but every operation below
-// is deterministic across machines and schedulers. Trailing arguments after the
-// worker are passed to it explicitly, because workers cannot capture caller
-// state.
-Arrays: import("std:collections/Array")
+// The Array parallel algorithms are conveniences over the same isolation
+// model. Workers may run in any physical order, but every operation below is
+// deterministic across machines and schedulers.
 
-source: Array(3, 1, 4, 1, 5, 9, 2, 6)
+source: [3, 1, 4, 1, 5, 9, 2, 6]
 
 // parallelMap preserves logical source order.
 squares: Arrays.parallelMap(source, (value) => {
@@ -63,20 +61,20 @@ firstEven: Arrays.parallelFindIndex(source, (value) => {
 })
 print(firstEven.value())
 
-noMatch: Arrays.parallelFindIndex(source, (value, limit) => {
-    value > limit
-}, 100)
+noMatch: Arrays.parallelFindIndex(source, (value) => {
+    value > 100
+})
 print(noMatch.value())
 
-// parallelReduce combines adjacent pairs round by round, so scheduling does
-// not choose the parenthesization. Do not assume sequential left-fold
-// semantics; an empty source reduces to null.
+// parallelReduce uses one canonical logical reduction tree, so scheduling does
+// not choose the parenthesization. Do not assume sequential left-fold semantics;
+// an empty source reduces to null.
 sum: Arrays.parallelReduce(source, (a, b) => {
     a + b
 })
 print(sum.value())
 
-emptySum: Arrays.parallelReduce(Array(), (a, b) => {
+emptySum: Arrays.parallelReduce([], (a, b) => {
     a + b
 })
 print(emptySum.value())
