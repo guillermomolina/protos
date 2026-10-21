@@ -132,6 +132,8 @@ to `whileTrue` without a compatibility alias; all other D044 loop semantics are
 unchanged. D201 later made `whileTrue` return its last normal body result
 (canonical `null` for zero iterations) and added the distinct standard `while`
 selector, which runs the same loop and returns its final canonical `false`.
+D210 later retired that standard `Object.while` selector, keeping
+`Object.whileTrue` and its exact last-body result.
 
 `DOC001-E` is CLOSED with
 [chapter 04](04-control-flow-through-protocols.md), which explains the published

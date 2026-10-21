@@ -708,7 +708,7 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         /*
-         * Validate the standard whileTrue/while receiver/body before the first
+         * Validate the standard whileTrue receiver/body before the first
          * condition activation.
          */
         builder.beginStoreLocal(structuredWhile);
@@ -718,13 +718,10 @@ final class ProtosStructuredDispatchLowerer {
         builder.endStoreLocal();
 
         /*
-         * D201: the last normal body result for whileTrue. It starts as
+         * D210: the last normal body result for whileTrue. It starts as
          * canonical null (zero iterations) and is overwritten only by a body
          * invocation that completes normally; an abnormal condition/body exit
-         * propagates without reaching the result store below. For while each
-         * body result is replaced by null right after the body completes, so
-         * the terminal condition (even while suspended) keeps no body object
-         * reachable through this local.
+         * propagates without reaching the result store below.
          */
         builder.beginStoreLocal(structuredWhileBodyResult);
         builder.emitLoadConstant(ProtosNullValue.INSTANCE);

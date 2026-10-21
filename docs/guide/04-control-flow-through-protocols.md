@@ -275,18 +275,8 @@ This is a **pre-test** loop: the condition runs before the first possible body
 activation and before every later iteration.
 
 If the first condition result is `false`, the body runs zero times and the
-whole `whileTrue` operation returns canonical `null`.
-
-The standard `while` selector runs exactly the same loop but returns its final
-condition result, which is always canonical `false` on normal completion:
-
-```protos
-finished: (() => i < 3).while() {
-    i = i + 1
-}
-
-finished === false
-```
+whole `whileTrue` operation returns canonical `null`. After one or more
+iterations it returns the last normal body result.
 
 ## Why the receiver is a Closure
 
@@ -386,9 +376,6 @@ object, Boolean, number, or Future is returned as is. The terminal condition
 runs after the last body and may still mutate that object. If the terminal
 condition signals an Error or otherwise leaves abnormally, there is no normal
 result at all.
-
-Use `while` when the loop is run only for its effects and its result should not
-depend on the body: it always completes normally with canonical `false`.
 
 ## Ordinary lookup still matters
 
@@ -492,7 +479,7 @@ computation, the ordinary Future adoption rules then apply to that computation's
 own Future.
 
 Any structured-lifetime relationship created by the task that produced the
-Future remains governed by the ordinary task-ownership rules. Ignoring the body
+Future remains governed by the ordinary task-ownership rules. Returning the body
 value does not erase those independent rules.
 
 This is different from a condition returning a Future: a Future is not a valid
@@ -541,12 +528,13 @@ created.
 6. Model a `whileTrue` condition as a zero-argument Closure that recomputes a
    canonical Boolean every time it is invoked.
 7. Do not rely on truthiness or implicit Future awaiting for loop decisions.
-8. Treat normal body values as discarded; normal loop completion is `null`.
+8. Expect normal loop completion to return `null` after zero iterations and the
+   last normal body result after one or more iterations.
 9. Expect Error and valid non-local return to propagate through a reached
    callback normally.
 10. Remember that selector names still participate in ordinary lookup and may be
    shadowed by nearer user-defined behavior.
-11. Keep task/Future ownership separate from the loop's ignored body-result
+11. Keep task/Future ownership separate from the loop's last-body-result
     rule.
 
 ## Run the executable conformance examples
@@ -577,7 +565,7 @@ Representative loop cases include:
 - [`../../protos/tests/conformance/control/while-future-ownership.protos`](../../protos/tests/conformance/control/while-future-ownership.protos)
   demonstrates that the last normal body value is the `whileTrue` result;
 - [`../../protos/tests/conformance/control/while-loop-results.protos`](../../protos/tests/conformance/control/while-loop-results.protos)
-  demonstrates the `whileTrue` and `while` results for zero, one and many
+  demonstrates the standard `whileTrue` results for zero, one and many
   iterations, Future results and adoption, and terminal-condition transfers;
 - [`../../protos/tests/conformance/control/while-binding-and-transfer.protos`](../../protos/tests/conformance/control/while-binding-and-transfer.protos)
   demonstrates non-local return across a reached body;

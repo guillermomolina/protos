@@ -1048,11 +1048,7 @@ final class ProtosPreparedCalls {
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-            return new PreparedWhileCall(
-                    condition,
-                    body,
-                    activation,
-                    ProtosStandardObjectProtocol.returnsLastBodyResult(nativeBody));
+            return new PreparedWhileCall(condition, body, activation);
         }
 
         @Override

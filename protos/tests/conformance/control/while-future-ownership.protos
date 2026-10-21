@@ -41,11 +41,12 @@ tests: [
             condition: () => {
                 iterations < 1
             }
-            condition.whileTrue() {
+            result: condition.whileTrue() {
                 iterations = iterations + 1
                 saved = (() => { 42 }).future()
             }
-            (saved.value() == 42) &&
+            (result === saved) &&
+                (saved.value() == 42) &&
                 (iterations == 1)
         }
         Assertions.require(tool009LegacyCase() === true)

@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.464] - 2026-10-21
+
+### D210 / I117-A — Single standard whileTrue loop
+- `spec/semantics/EXECUTION_AND_CONTROL.md`: `whileTrue` is the only
+  standard pre-test loop selector. The D201 standard `while` selector and
+  its final-`false` result are retired; the normal result is the exact last
+  normal body result, or canonical `null` after zero iterations.
+  Validation, activation, Boolean, Future, control-transfer, suspension and
+  cancellation rules are unchanged.
+- `spec/semantics/CALLABLES.md`: `Object` installs four standard
+  Closure-specific selectors (`future`, `parallel`, `ensure`, `whileTrue`);
+  `Object.hasSlot("while")` is false. `while` is not reserved and
+  user-defined `while` slots follow the ordinary protocol.
+- `spec/PROTOS_GRAMMAR.md`: the `whileTrue` syntax note no longer treats
+  `condition.while(...)` as a standard call; `while` stays an ordinary
+  identifier and member name. No grammar production changes.
+- `spec/concurrency/FUTURES_AND_TASKS.md`: structured-ownership wording
+  names only `whileTrue` callback activations; ownership rules unchanged.
+- This is an intentional breaking change to the D201 contract.
+
 ## [0.1.463] - 2026-10-19
 
 ### D208-A — Runtime metadata without execution mode

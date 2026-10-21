@@ -438,28 +438,26 @@ users.map((user) => {
 })
 ```
 
-### Standard Closure `whileTrue` and `while` operations
+### Standard Closure `whileTrue` operation
 
-Core v0.1 exposes pre-test looping through two ordinary messages:
+Core v0.1 exposes pre-test looping through one ordinary message:
 
 ```text
 condition.whileTrue(body)
-condition.while(body)
 ```
 
-Both standard behaviors require the original receiver `condition` to be a
+The standard behavior requires the original receiver `condition` to be a
 semantic Closure, require exactly one argument, and require `body` to be a
-semantic Closure. `CALLABLES.md` owns the ordinary `Object.whileTrue` and
-`Object.while` slot placement, Closure-family receiver domain, extraction,
-shadowing, and invocation-role consequences. `../PROTOS_GRAMMAR.md` owns only the
-ordinary message and trailing-Closure syntax; neither selector introduces a
-dedicated grammar production or reserved word.
+semantic Closure. `CALLABLES.md` owns the ordinary `Object.whileTrue` slot
+placement, Closure-family receiver domain, extraction, shadowing, and
+invocation-role consequences. `../PROTOS_GRAMMAR.md` owns only the ordinary
+message and trailing-Closure syntax; the selector introduces no dedicated grammar
+production or reserved word.
 
-`whileTrue` and `while` are the standard pre-test loop selectors. They execute
-the identical validation and loop algorithm below and differ only in their
-normal result. They are not aliases: each is a distinct standard behavior.
-Core v0.1 defines no standard inverse `whileFalse` selector; that name remains an
-ordinary member name that programs may define under the ordinary slot rules
+`whileTrue` is the only standard pre-test loop selector. Core v0.1 defines no
+standard `while` selector (D210 retired the former D201 standard `while`
+behavior) and no standard inverse `whileFalse` selector; both names remain
+ordinary member names that programs may define under the ordinary slot rules
 without acquiring standard loop behavior.
 
 The common trailing-Closure spelling is therefore ordinary syntax for the same
@@ -486,7 +484,7 @@ reached. In particular, a body's defaults are not evaluated when the first
 condition result is `false`, even though the body value itself was already
 validated as a Closure before the first condition activation.
 
-After successful validation either operation repeats this exact pre-test algorithm:
+After successful validation the operation repeats this exact pre-test algorithm:
 
 1. Activate the semantic `condition` Closure itself with zero caller-supplied
    positional arguments, using its ordinary Closure activation, capture,
@@ -507,15 +505,11 @@ After successful validation either operation repeats this exact pre-test algorit
    that test. There is no truthiness, coercion, implicit invocation, Boolean
    delegation test, implicit awaiting, or Future adoption.
 
-The loop terminates normally only through step 2. Its normal result is then:
+The loop terminates normally only through step 2. Its normal result is then the
+exact normal result of the most recent normally completed body activation, or
+canonical `null` when no body activation ran (the zero-iteration case).
 
-- for `whileTrue`, the exact normal result of the most recent normally completed
-  body activation, or canonical `null` when no body activation ran (the
-  zero-iteration case);
-- for `while`, the final condition result, which is necessarily exact canonical
-  `false`, whether zero, one, or many body activations ran.
-
-The `whileTrue` result is returned as is: an object, Boolean, primitive value, or
+That result is returned as is: an object, Boolean, primitive value, or
 Future keeps its exact identity and is not converted, copied, wrapped, awaited,
 or adopted. Earlier body results are not accumulated or otherwise observable
 through the loop. The terminal condition activation runs after the last body
@@ -528,8 +522,7 @@ A normal Future value has no loop-specific meaning. If `condition` normally
 returns a Future, that object is a non-Boolean condition result and the standard
 invalid-result `Error` above is signaled; the loop does not await, adopt,
 flatten, or cancel it. If `body` normally returns a Future, the loop does not
-implicitly observe, await, adopt, flatten, or cancel it; under `whileTrue` that
-Future is the most recent body result like any other value and may therefore be
+implicitly observe, await, adopt, flatten, or cancel it; that Future is the most recent body result like any other value and may therefore be
 the invocation's normal result. When such a result in turn becomes the outcome of
 an enclosing asynchronous computation, the ordinary Future-resolution adoption
 rules of `../concurrency/FUTURES_AND_TASKS.md` apply to it there, not inside the
@@ -540,7 +533,7 @@ of their own merely by being invoked by a standard loop.
 
 ### Control transfer, suspension, and cancellation
 
-Neither `whileTrue` nor `while` introduces a handler, cleanup scope, return home,
+`whileTrue` introduces no handler, cleanup scope, return home,
 task, Future, scheduler boundary, cancellation mask, or hidden
 suspension/checkpoint of its own.
 
@@ -572,9 +565,8 @@ result, control transfer, suspension/replay, cancellation, and Future behavior
 remain identical.
 
 A future source form such as `while (...) { ... }` would require a separate
-normative grammar decision. It is not Core v0.1 syntax and cannot alter the
-ordinary `condition.whileTrue(body)` and `condition.while(body)` protocols defined
-here.
+normative grammar decision. It is not Core v0.1 syntax, would require its own implementation,
+and cannot alter the ordinary `condition.whileTrue(body)` protocol defined here.
 
 ## Resource Cleanup and `ensure`
 

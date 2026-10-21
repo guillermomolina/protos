@@ -3127,12 +3127,12 @@ return ...value
 ## Standard Closure `whileTrue` Syntax Note
 
 Core v0.1 introduces no `while` or `whileTrue` keyword, statement form, or
-dedicated loop production. `while` and `whileTrue` remain ordinary member names
-and the standard Closure loops use ordinary message syntax:
+dedicated loop production. `while` and `whileTrue` remain ordinary identifiers
+and member names that programs may define; the standard Closure loop uses
+ordinary message syntax:
 
 ```js
 condition.whileTrue(body)
-condition.while(body)
 ```
 
 The common form:
@@ -3148,10 +3148,10 @@ completed empty argument list is followed on the same logical line by the
 trailing braced Closure, which the existing mandatory desugaring appends as the
 single final positional argument. It is therefore semantically the same ordinary
 one-argument `whileTrue` message, with a parameterless Closure value in that argument
-position; `condition.while() { bodyExpression }` is likewise the ordinary
-one-argument `while` message. `semantics/EXECUTION_AND_CONTROL.md` owns the
-standard loop behaviors; `semantics/CALLABLES.md` owns the standard
-`Object.whileTrue` and `Object.while` placement and Closure receiver domain.
+position. `condition.while() { bodyExpression }` is only an ordinary
+one-argument `while` message with no standard behavior. `semantics/EXECUTION_AND_CONTROL.md`
+owns the standard loop behavior; `semantics/CALLABLES.md` owns the standard
+`Object.whileTrue` placement and Closure receiver domain.
 
 A source form such as:
 

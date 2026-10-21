@@ -126,7 +126,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
     }
 
     @Test
-    void eligibleLiteralPairOfStandardWhileRunsLocallyAndReturnsFalse() throws Exception {
+    void eligibleLiteralPairOfStandardWhileTrueRunsLocallyAndKeepsLastBodyResult() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -140,7 +140,7 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                     (() => {
                                         probe()
                                         n < 3
-                                    }).while() {
+                                    }).whileTrue() {
                                         probe()
                                         n = n + 1
                                     }
@@ -148,27 +148,27 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 run()
                                 """);
 
-                assertSame(ProtosBooleanValue.FALSE, root.getCallTarget().call(probe.module()));
+                assertInteger(3, root.getCallTarget().call(probe.module()));
                 assertEquals(7, probe.calls.get(), "four conditions and three bodies");
                 assertEquals(List.of(2), probe.depths(), () -> "stacks=" + probe.stacks);
             } finally {
                 context.leave();
             }
         }
-        System.out.println("D201_INLINE_WHILE_RETURNS_FINAL_FALSE=YES");
+        System.out.println("D210_INLINE_WHILE_TRUE_KEEPS_LAST_BODY_RESULT=YES");
     }
 
     /**
-     * D201 path equivalence: the inline local loop, the structured-dispatch
+     * D210 path equivalence: the inline local loop, the structured-dispatch
      * loop (dynamic condition) and an inline candidate that falls back to the
-     * structured loop (nested Closure literal) produce the same normal results
-     * for both selectors.
+     * structured loop (nested Closure literal) produce the same normal
+     * whileTrue results.
      */
     @Test
-    void inlineStructuredAndFallbackLoopsAgreeOnBothResultPolicies() throws Exception {
+    void inlineStructuredAndFallbackLoopsAgreeOnWhileTrueResults() throws Exception {
         ProtosExecutionOutcome outcome =
                 ProtosTestExecutionSupport.execute(
-                        "d201-path-equivalence.protos",
+                        "d210-path-equivalence.protos",
                         """
                         run: () => {
                             box: {}
@@ -189,38 +189,37 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
                                 n = n + step()
                                 box
                             }
+                            other: {}
                             n = 0
-                            inlineWhile: (() => { n < 2 }).while() {
+                            inlineOther: (() => { n < 2 }).whileTrue() {
                                 n = n + 1
-                                box
+                                other
                             }
                             n = 0
-                            structuredWhile: condition.while() {
+                            structuredOther: condition.whileTrue() {
                                 n = n + 1
-                                box
+                                other
                             }
                             n = 0
-                            fallbackWhile: (() => { n < 2 }).while() {
+                            fallbackOther: (() => { n < 2 }).whileTrue() {
                                 step: () => { 1 }
                                 n = n + step()
-                                box
+                                other
                             }
                             zeroTrue: (() => { false }).whileTrue() { box }
-                            zeroWhile: (() => { false }).while() { box }
                             ((inlineTrue === box) &&
                                 (structuredTrue === box) &&
                                 (fallbackTrue === box) &&
-                                (inlineWhile === false) &&
-                                (structuredWhile === false) &&
-                                (fallbackWhile === false) &&
-                                (zeroTrue === null) &&
-                                (zeroWhile === false)).ifTrueIfFalse(() => { 1 }, () => { 0 })
+                                (inlineOther === other) &&
+                                (structuredOther === other) &&
+                                (fallbackOther === other) &&
+                                (zeroTrue === null)).ifTrueIfFalse(() => { 1 }, () => { 0 })
                         }
                         run()
                         """,
                         new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
         assertCompletedWith(1, outcome);
-        System.out.println("D201_INLINE_STRUCTURED_FALLBACK_RESULTS_EQUAL=YES");
+        System.out.println("D210_INLINE_STRUCTURED_FALLBACK_RESULTS_EQUAL=YES");
     }
 
     @Test

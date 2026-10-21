@@ -6320,8 +6320,8 @@ final class CanonicalToBytecodeLowerer {
      * <p>{@code inlineWhile}, when non-null, is the send site's PERF026-C1
      * whileTrue literal pair ({@link #isInlineLiteralWhileCandidate}): a
      * prepared call that admits exactly that pair is sequenced by {@link
-     * #emitLocalInlineLiteralWhile}; every other prepared call, including any
-     * other standard while, keeps the dispatch below unchanged.
+     * #emitLocalInlineLiteralWhile}; every other prepared call keeps the
+     * dispatch below unchanged.
      *
      * <p>{@code inlineEach}, when non-null, is the send site's PERF026-D1
      * one-parameter ({@link #isInlineLiteralIndexedEachCandidate}) or
@@ -6430,7 +6430,7 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PLAT044 B′ (PERF026-C1) local standard whileTrue/while over an admitted
+     * PLAT044 B′ (PERF026-C1) local standard whileTrue over an admitted
      * literal pair.
      *
      * <p>Mirrors the while branch of {@code ProtosStructuredDispatchLowerer}
@@ -6440,9 +6440,8 @@ final class CanonicalToBytecodeLowerer {
      * each condition and (only after a canonical {@code true}) each body
      * activation is prepared fresh at the same point, the condition result
      * keeps its strict canonical Boolean authority, and normal completion
-     * applies the D201 result policy of {@code PreparedWhileCall#result}
-     * (whileTrue: last normal body result; while: final {@code false}),
-     * covering both standard pre-test loop selectors. The loop phase
+     * yields {@code PreparedWhileCall#result}: the last normal body result,
+     * or canonical {@code null} when no body ran (D210). The loop phase
      * lives in this root's Bytecode control state, so suspension resumes at
      * the exact loop PC through this root's continuation (PLAT014/PLAT021).
      *
@@ -6483,13 +6482,10 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         /*
-         * D201: the last normal body result for whileTrue. It starts as
+         * D210: the last normal body result for whileTrue. It starts as
          * canonical null (zero iterations) and is overwritten only by a body
          * invocation that completes normally; an abnormal condition/body exit
-         * propagates without reaching the result store below. For while each
-         * body result is replaced by null right after the body completes, so
-         * the terminal condition (even while suspended) keeps no body object
-         * reachable through this local.
+         * propagates without reaching the result store below.
          */
         builder.beginStoreLocal(structuredWhileBodyResult);
         builder.emitLoadConstant(ProtosNullValue.INSTANCE);

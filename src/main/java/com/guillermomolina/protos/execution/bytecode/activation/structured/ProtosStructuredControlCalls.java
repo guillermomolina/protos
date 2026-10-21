@@ -207,47 +207,40 @@ final class ProtosStructuredControlCalls {
     }
 
     /**
-     * Validated standard pre-test loop shared by {@code whileTrue} and {@code
-     * while} (D201). The loop algorithm is identical; {@link #result} applies
-     * the selector's normal-result policy once the final condition completed
-     * normally with canonical {@code false}.
+     * Validated standard {@code Object.whileTrue} pre-test loop (D210). {@link
+     * #result} yields the normal loop result once the final condition
+     * completed normally with canonical {@code false}.
      */
     static final class PreparedWhileCall {
         private final ProtosClosureValue condition;
         private final ProtosClosureValue body;
         private final ProtosActivation activation;
-        private final boolean returnsLastBody;
 
         PreparedWhileCall(
                 ProtosClosureValue condition,
                 ProtosClosureValue body,
-                ProtosActivation activation,
-                boolean returnsLastBody) {
+                ProtosActivation activation) {
             this.condition = java.util.Objects.requireNonNull(condition, "condition");
             this.body = java.util.Objects.requireNonNull(body, "body");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
-            this.returnsLastBody = returnsLastBody;
         }
 
         /**
          * Normal loop result. {@code lastBodyResult} is the exact result of the
          * last normally completed body activation, or canonical {@code null}
          * when none ran; it is returned unchanged (no copy, conversion, or
-         * Future await/adoption) for {@code whileTrue}. {@code while} returns
-         * its final canonical {@code false}.
+         * Future await/adoption).
          */
         Object result(Object lastBodyResult) {
-            return returnsLastBody ? lastBodyResult : ProtosBooleanValue.FALSE;
+            return lastBodyResult;
         }
 
         /**
          * Value kept in the loop's body-result local after a normal body
-         * activation: the exact result for {@code whileTrue}, canonical
-         * {@code null} for {@code while}, so {@code while} never keeps a body
-         * object reachable across its next (possibly suspending) condition.
+         * activation: the exact body result, unchanged.
          */
         Object retainedBodyResult(Object bodyResult) {
-            return returnsLastBody ? bodyResult : ProtosNullValue.INSTANCE;
+            return bodyResult;
         }
 
         PreparedClosureCall prepareCondition() {

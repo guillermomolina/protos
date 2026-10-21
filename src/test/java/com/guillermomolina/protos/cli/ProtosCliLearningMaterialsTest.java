@@ -88,8 +88,12 @@ final class ProtosCliLearningMaterialsTest {
                 .toList();
     }
 
-    private static void assertRuns(Path path) {
-        Result result = run(path.toString());
+    private static void assertRuns(Path path) throws Exception {
+        // CLI010: material importing std:inspect requires explicit --inspect authorization.
+        Result result =
+                Files.readString(path, StandardCharsets.UTF_8).contains("import(\"std:inspect\")")
+                        ? run("--inspect", path.toString())
+                        : run(path.toString());
 
         assertEquals(
                 0,

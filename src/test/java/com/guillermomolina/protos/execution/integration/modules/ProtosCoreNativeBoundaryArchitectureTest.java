@@ -69,7 +69,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/protocols/io/ProtosStandardByteIoProtocol.java", 12),
-                    Map.entry("execution/protocols/values/ProtosStandardObjectProtocol.java", 14),
+                    Map.entry("execution/protocols/values/ProtosStandardObjectProtocol.java", 13),
                     Map.entry("execution/protocols/actors/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/protocols/values/ProtosStandardIdentityMapProtocol.java", 8),
                     Map.entry("execution/protocols/values/ProtosStandardStringProtocol.java", 5),
@@ -168,7 +168,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(37, actualCore.size());
-        assertEquals(139, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -211,7 +211,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "parent",
                         "ensure",
                         "whileTrue",
-                        "while",
                         "caseOf"));
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("identityHash").isEmpty(),
@@ -219,6 +218,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("whileFalse").isEmpty(),
                 "standard Object must not publish an inverse whileFalse loop selector");
+        assertTrue(
+                ProtosObjectValue.rootObject().readLocalSlot("while").isEmpty(),
+                "standard Object must not publish while");
         assertSourceBacked(ProtosObjectValue.rootObject(), "init");
         assertSourceBacked(ProtosObjectValue.rootObject(), "==");
         assertSourceBacked(ProtosObjectValue.rootObject(), "match");

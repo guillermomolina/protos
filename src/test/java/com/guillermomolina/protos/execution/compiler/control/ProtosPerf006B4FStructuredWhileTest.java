@@ -511,7 +511,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
     }
 
     @Test
-    void standardWhileSharesTheLoopButReturnsFinalFalseCondition()
+    void suspendedStructuredWhileTrueReturnsResolvedLastBodyResult()
             throws Exception {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
@@ -550,34 +550,34 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
-                                    "d201-while-top.protos"));
+                                    "condition.whileTrue(body)",
+                                    "d210-while-true-top.protos"));
 
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.SUSPENDED, task.state());
             assertEquals(1, conditionCalls.get());
             assertEquals(1, bodyPrefix.get());
 
-            assertTrue(bodyGate.resolve(
-                    new ProtosObjectValue(ProtosObjectValue.rootObject()), module));
+            ProtosObjectValue resolved = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            assertTrue(bodyGate.resolve(resolved, module));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, task.state());
-            assertSame(ProtosBooleanValue.FALSE, task.result().orElseThrow());
+            assertSame(resolved, task.result().orElseThrow());
             assertEquals(3, conditionCalls.get());
             assertEquals(2, bodyPrefix.get(), "completed body prefix must not replay");
         }
 
-        System.out.println("D201_STRUCTURED_WHILE_RETURNS_FINAL_FALSE=PASS");
+        System.out.println("D210_STRUCTURED_WHILE_TRUE_SUSPENDED_LAST_BODY=PASS");
     }
 
     /**
-     * D201 direct invocation of the extracted standard loop behaviors (no
-     * send-site structured lowering): {@code whileTrue} returns the exact last
-     * body result, {@code while} the final canonical {@code false}, and a
-     * non-Closure body is rejected before the first condition activation.
+     * D210 direct invocation of the extracted standard {@code whileTrue}
+     * behavior (no send-site structured lowering): it returns the exact last
+     * body result, a non-Closure body is rejected before the first condition
+     * activation, and no standard {@code while} member exists.
      */
     @Test
-    void directInvocationOfBothSelectorsAppliesTheirResultPolicies()
+    void directInvocationOfWhileTrueReturnsLastBodyResult()
             throws Exception {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
@@ -607,33 +607,29 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             ProtosClosureValue.class,
                             ProtosValueLookup.readMember(condition, "whileTrue", prelude)
                                     .orElseThrow());
-            ProtosClosureValue whileLoop =
-                    assertInstanceOf(
-                            ProtosClosureValue.class,
-                            ProtosValueLookup.readMember(condition, "while", prelude)
-                                    .orElseThrow());
+            assertTrue(ProtosValueLookup.readMember(condition, "while", prelude).isEmpty());
 
             Object trueResult = ProtosClosureInvoker.invoke(whileTrue, List.of(body), module);
             assertEquals(3, conditionCalls.get());
             assertEquals(2, bodyCalls.get());
             assertSame(bodyResults.get(1), trueResult);
 
-            Object whileResult = ProtosClosureInvoker.invoke(whileLoop, List.of(body), module);
+            Object secondResult = ProtosClosureInvoker.invoke(whileTrue, List.of(body), module);
             assertEquals(6, conditionCalls.get());
             assertEquals(4, bodyCalls.get());
-            assertSame(ProtosBooleanValue.FALSE, whileResult);
+            assertSame(bodyResults.get(3), secondResult);
 
             assertThrows(
                     ProtosSignalException.class,
                     () -> ProtosClosureInvoker.invoke(
-                            whileLoop,
+                            whileTrue,
                             List.of(new ProtosObjectValue(ProtosObjectValue.rootObject())),
                             module));
             assertEquals(6, conditionCalls.get(), "invalid body must precede the condition");
         }
 
-        System.out.println("D201_DIRECT_WHILE_TRUE_RETURNS_LAST_BODY=PASS");
-        System.out.println("D201_DIRECT_WHILE_RETURNS_FINAL_FALSE=PASS");
+        System.out.println("D210_DIRECT_WHILE_TRUE_RETURNS_LAST_BODY=PASS");
+        System.out.println("D210_NO_STANDARD_WHILE_MEMBER=PASS");
     }
 
     private static ProtosClosureValue nativeClosure(

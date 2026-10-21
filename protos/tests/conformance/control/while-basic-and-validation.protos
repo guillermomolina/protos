@@ -166,18 +166,23 @@ tests: [
             (() => false).whileTrue(42)
         })
     }),
-    Test("whileTrue and while are the standard loop selectors", () => {
+    Test("whileTrue is the only standard loop selector", () => {
         Assertions.require(Object.hasSlot("whileTrue"))
-        Assertions.require(Object.hasSlot("while"))
+        Assertions.require(!Object.hasSlot("while"))
         Assertions.require(!Object.hasSlot("whileFalse"))
     }),
-    Test("user-defined while shadows the standard loop", () => {
+    Test("user-defined while is an ordinary method", () => {
         tool009LegacyCase: () => {
             holder: {}
             holder.while: (body) => body() + 1
             holder.while(() => 41)
         }
         Assertions.require(tool009LegacyCase() == 42)
+        plain: {}
+        Assertions.require(!plain.hasSlot("while"))
+        Assertions.signals(Error, () => {
+            (() => false).while(() => { null })
+        })
     }),
     Test("user-defined whileTrue shadows the standard loop", () => {
         tool009LegacyCase: () => {

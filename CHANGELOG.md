@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.393-SNAPSHOT
+
+- `I117-A` (#942, D210/#941): the standard `Object.while` selector is
+  removed; `Object.whileTrue` is the single standard Closure loop.
+  - `ProtosStandardObjectProtocol` no longer installs `while`; the
+    canonical pre-test loop selection accepts only the exact standard
+    `whileTrue` behavior homed on the standard Object, and the D201
+    `false` result policy (`returnsLastBodyResult`, the
+    `PreparedWhileCall` flag) is gone. `whileTrue` still returns the
+    exact last normal body result, or `null` for zero iterations.
+  - Native, structured-dispatch, PERF026-C1 inline and direct extracted
+    paths keep their existing validation, activation, suspension,
+    cancellation and control-transfer behavior.
+  - `while` stays an ordinary, non-reserved identifier and member name;
+    user-defined `while` slots use ordinary dispatch. No parser change;
+    `while(condition) { body }` syntax is left to I117-B.
+  - Specification, conformance tests, Java tests and the control-flow
+    guide updated; Core native provider count 139 → 138.
+  - `ProtosCliLearningMaterialsTest` runs learning material that imports
+    `std:inspect` with the CLI010 `--inspect` authorization.
+  - Maintainer validation: focused JUnit set 25/25 PASS;
+    `ProtosCliLearningMaterialsTest` 54/54 PASS; `make test` PASS;
+    `make check` PASS.
+
 ## 0.3.392-SNAPSHOT
 
 - `BUG024` (#939): the TOOL010 formatter no longer fails on an
