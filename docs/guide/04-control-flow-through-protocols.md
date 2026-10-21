@@ -305,6 +305,43 @@ Thinking of `whileTrue` as "repeatedly invoke this condition Closure" is much cl
 to Protos semantics than thinking of it as a keyword that owns an embedded
 expression.
 
+## The contextual `while(condition) { body }` form
+
+For the most common shape, Protos accepts a shorter spelling:
+
+```protos
+n: 4
+
+while(n > 1) {
+    n = n - 1
+}
+
+n
+```
+
+This is exactly the ordinary send:
+
+```protos
+(() => n > 1).whileTrue() {
+    n = n - 1
+}
+```
+
+The condition expression becomes the body of a fresh parameterless Closure, so
+it is reevaluated before every iteration, and the braced body is the ordinary
+trailing Closure. The receiver is still a Closure and the operation is still the
+standard `whileTrue` message, with its strict Boolean contract and its result:
+the last body result, or `null` when the body never runs. Here the program
+evaluates to `1`.
+
+`while` is not a reserved word. Only the bare spelling `while(argument) { body }`
+with exactly one ordinary argument and a body on the same line is read this
+way. `(while)(x) { ... }`, `holder.while(x) { ... }`, `while(x)` without a body,
+and `while(a, b) { ... }` are ordinary calls, and programs may still define
+`while` as a name or member. This is not a statement-level loop borrowed from
+another language: it is an expression with Closure semantics and no
+truthiness.
+
 ## Standard `whileTrue` has a strict contract
 
 The standard behavior is Closure-specific.

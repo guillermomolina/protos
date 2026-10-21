@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -183,6 +184,10 @@ final class ProtosStaticReferences {
                 case SurfaceCall call -> {
                     collect(call.receiver());
                     collectArguments(call.arguments());
+                }
+                case SurfaceContextualWhile loop -> {
+                    collect(loop.condition());
+                    collectClosure(loop.body());
                 }
                 case SurfaceArrayConstruction array ->
                         collectArguments(array.arguments());

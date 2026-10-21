@@ -3127,9 +3127,9 @@ return ...value
 ## Standard Closure `whileTrue` Syntax Note
 
 Core v0.1 introduces no `while` or `whileTrue` keyword, statement form, or
-dedicated loop production. `while` and `whileTrue` remain ordinary identifiers
-and member names that programs may define; the standard Closure loop uses
-ordinary message syntax:
+reserved word. `while` and `whileTrue` remain ordinary identifiers and member
+names that programs may define; the standard Closure loop uses ordinary message
+syntax:
 
 ```js
 condition.whileTrue(body)
@@ -3153,16 +3153,64 @@ one-argument `while` message with no standard behavior. `semantics/EXECUTION_AND
 owns the standard loop behavior; `semantics/CALLABLES.md` owns the standard
 `Object.whileTrue` placement and Closure receiver domain.
 
-A source form such as:
+### Contextual `while` expression (D210-Q2)
 
-```text
-while (condition) { body }
+One exact call shape is reinterpreted contextually:
+
+```ebnf
+contextual-while-expression =
+    "while", "(", expression, ")", trailing-closure ;
 ```
 
-is not Core v0.1 syntax. Adding such sugar in a future language version would
-require an explicit grammar/lowering rule and must preserve the ordinary
-Closure/message protocol unless that future specification deliberately changes
-it.
+The form is recognized only when, in the ordinary postfix call grammar:
+
+- the call receiver is the bare, ungrouped identifier `while` (not a member
+  name and not a parenthesized expression);
+- the argument list contains exactly one explicit argument, and that argument
+  is not a `...` spread;
+- a parameterless braced trailing Closure is attached under the ordinary
+  trailing-Closure rule, on the same logical line as the closing `)`.
+
+`while` continues to be lexed as an ordinary identifier; this is a contextual
+interpretation of an otherwise ordinary call, not a new token. The resulting
+expression is an ordinary postfix-foundation result, so later member, call, and
+index suffixes apply to it exactly as they would to the ordinary call.
+
+Mandatory desugaring:
+
+```js
+while(condition) { body }
+```
+
+is the ordinary message send
+
+```js
+(() => condition).whileTrue() { body }
+```
+
+where the receiver is a fresh parameterless lexical Closure whose body
+reevaluates `condition` on each activation, and the argument is the ordinary
+parameterless braced Closure. The `while` token is not a lexical lookup, and no
+synthetic name is introduced.
+
+For this exact shape only, the contextual interpretation takes precedence over
+a lexical binding named `while`: such a binding is not consulted. Every other
+spelling keeps its ordinary meaning, including:
+
+```text
+while(condition)
+while(a, b) { body }
+while(...args) { body }
+(while)(condition) { body }
+holder.while(condition) { body }
+while { body }
+while(condition)
+{ body }
+```
+
+Programs may still define and call `while` as an ordinary binding or member
+name through those spellings. No other identifier (in particular `if` or
+`else`) acquires a contextual interpretation.
 
 ## Resource Cleanup Syntax Note
 

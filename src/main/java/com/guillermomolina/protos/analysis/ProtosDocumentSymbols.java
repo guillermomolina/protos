@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -80,6 +81,10 @@ public final class ProtosDocumentSymbols {
             case SurfaceCall call -> {
                 collect(call.receiver(), destination);
                 collectArguments(call.arguments(), destination);
+            }
+            case SurfaceContextualWhile loop -> {
+                collect(loop.condition(), destination);
+                collect(loop.body(), destination);
             }
             case SurfaceArrayConstruction array ->
                     collectArguments(array.arguments(), destination);

@@ -32,6 +32,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -214,6 +215,22 @@ public final class ProtosSourceLayoutToolBridge {
                         "arguments",
                         arguments(
                                 call.arguments(),
+                                view,
+                                paths,
+                                prelude));
+            }
+            case SurfaceContextualWhile loop -> {
+                value.createLocalSlot(
+                        "condition",
+                        expression(
+                                loop.condition(),
+                                view,
+                                paths,
+                                prelude));
+                value.createLocalSlot(
+                        "body",
+                        expression(
+                                loop.body(),
                                 view,
                                 paths,
                                 prelude));
@@ -403,6 +420,8 @@ public final class ProtosSourceLayoutToolBridge {
             case SurfaceGroup ignored -> "GROUP";
             case SurfaceMember ignored -> "MEMBER";
             case SurfaceCall ignored -> "CALL";
+            case SurfaceContextualWhile ignored ->
+                    "CONTEXTUAL_WHILE";
             case SurfaceArrayConstruction ignored ->
                     "ARRAY_CONSTRUCTION";
             case SurfaceMapConstruction ignored ->

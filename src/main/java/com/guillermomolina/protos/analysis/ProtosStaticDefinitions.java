@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -168,6 +169,16 @@ final class ProtosStaticDefinitions {
                 case SurfaceCall call -> {
                     analyze(call.receiver(), facts);
                     analyzeArguments(call.arguments(), facts);
+                    opaqueInvocationBarrier(facts);
+                }
+                case SurfaceContextualWhile loop -> {
+                    // D210-Q2 lowers the condition to a parameterless Closure and
+                    // the body is a Closure literal; neither runs in the current
+                    // activation, so neither may consume its facts.
+                    analyze(loop.condition(), new Facts());
+                    if (!done) {
+                        analyzeClosure(loop.body());
+                    }
                     opaqueInvocationBarrier(facts);
                 }
                 case SurfaceArrayConstruction array -> {

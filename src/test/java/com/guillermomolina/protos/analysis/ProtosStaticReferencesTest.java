@@ -141,6 +141,44 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void contextualWhileHeaderIsNotAReferenceButGroupedWhileIs() {
+        String source =
+                "f: (while, n) => {\n"
+                        + "  (while)(n) { n }\n"
+                        + "  while(n > 1) { n = n - 1 }\n"
+                        + "}";
+        int declaration = source.indexOf("while");
+        int groupedRead = source.indexOf("while", source.indexOf("(while)"));
+        int contextualHeader = source.lastIndexOf("while");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration + 1).orElseThrow();
+
+        assertEquals(
+                List.of(new SourceSpan(groupedRead, groupedRead + "while".length())),
+                result.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+        assertTrue(references(source, contextualHeader).isEmpty());
+    }
+
+    @Test
+    void contextualWhileCapturedReadsAreNotClaimedAsExactReferences() {
+        String source =
+                "f: (n) => {\n"
+                        + "  while(n > 1) { n = n - 1 }\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+        int conditionRead = source.indexOf("n", source.indexOf("while("));
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration).orElseThrow();
+
+        assertTrue(result.occurrences().isEmpty());
+        assertTrue(references(source, conditionRead).isEmpty());
+    }
+
+    @Test
     void sessionResultRetainsExactSnapshotFreshness() {
         ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
         session.openWorkspace("workspace");

@@ -1264,6 +1264,40 @@ trailingClosurePath: (call, layout) => {
     selected
 }
 
+contextualWhileHeaderComments: (
+    node,
+    boundaryKind,
+    leadingSpace,
+    layout
+) => {
+    result: ""
+
+    layout.comments.each((comment) => {
+        sameBoundary:
+            (comment.boundaryKind == boundaryKind) &&
+            (comment.preceding === node.path)
+
+        sameBoundary.ifTrue(() => {
+            (comment.placement ==
+                "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
+                Error().signal()
+            })
+
+            (leadingSpace || (result.size() > 0)).ifTrue(() => {
+                result = result + " "
+            })
+
+            result = result + comment.rawText
+        })
+    })
+
+    (result.size() > 0).ifTrue(() => {
+        result = result + " "
+    })
+
+    result
+}
+
 formatTrailingClosureSeparator: (
     call,
     closure,
@@ -1478,6 +1512,40 @@ formatExpression = (node, level, layout) => {
             )
     })
 
+    (kind == "CONTEXTUAL_WHILE").ifTrue(() => {
+        formatted =
+            "while" +
+            contextualWhileHeaderComments(
+                node,
+                "CONTEXTUAL_WHILE_BEFORE_LPAREN",
+                true,
+                layout
+            ) +
+            "(" +
+            contextualWhileHeaderComments(
+                node,
+                "CONTEXTUAL_WHILE_AFTER_LPAREN",
+                false,
+                layout
+            ) +
+            formatExpression(
+                node.condition,
+                level,
+                layout
+            ) +
+            ")" +
+            formatTrailingClosureSeparator(
+                node,
+                node.body,
+                layout
+            ) +
+            formatBracedSequence(
+                node.body.body,
+                level,
+                layout
+            )
+    })
+
     (kind == "ARRAY_CONSTRUCTION").ifTrue(() => {
         formatted =
             formatArray(
@@ -1679,6 +1747,13 @@ formatBody: (layout) => {
             (comment.boundaryKind == "TRAILING_CLOSURE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        contextualWhileHeaderComment:
+            ((comment.boundaryKind ==
+                "CONTEXTUAL_WHILE_BEFORE_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_WHILE_AFTER_LPAREN")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         embeddedComment:
             (comment.boundaryKind == "NONE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
@@ -1688,6 +1763,7 @@ formatBody: (layout) => {
             trailingComment ||
             sequenceComment ||
             trailingClosureComment ||
+            contextualWhileHeaderComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })

@@ -27,6 +27,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
+import com.guillermomolina.protos.source.SourceSpan;
 import org.junit.jupiter.api.Test;
 
 class CanonicalizerCallTest {
@@ -79,6 +80,44 @@ class CanonicalizerCallTest {
         CanonicalCall inner =
                 assertInstanceOf(CanonicalCall.class, outer.arguments().get(0));
         assertEquals("g", assertInstanceOf(CanonicalLookup.class, inner.receiver()).name());
+    }
+
+    @Test
+    void lowersContextualWhileToOrdinaryWhileTrueSend() {
+        String source = "while(n > 1) { n = n - 1 }";
+        CanonicalSend send =
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly(source));
+
+        assertEquals("whileTrue", send.message());
+        assertEquals(new SourceSpan(0, source.length()), send.span());
+
+        CanonicalClosure condition =
+                assertInstanceOf(CanonicalClosure.class, send.receiver());
+        assertEquals(0, condition.parameters().size());
+        assertEquals(new SourceSpan(6, 11), condition.span());
+        assertEquals(new SourceSpan(6, 11), condition.body().span());
+        assertEquals(1, condition.body().expressions().size());
+        CanonicalSend comparison = assertInstanceOf(
+                CanonicalSend.class, condition.body().expressions().get(0));
+        assertEquals(">", comparison.message());
+        assertEquals(
+                "n",
+                assertInstanceOf(CanonicalLookup.class, comparison.receiver()).name());
+
+        assertEquals(1, send.arguments().size());
+        CanonicalClosure body =
+                assertInstanceOf(CanonicalClosure.class, send.arguments().get(0));
+        assertEquals(0, body.parameters().size());
+        assertEquals(new SourceSpan(13, source.length()), body.span());
+    }
+
+    @Test
+    void groupedWhileRemainsOrdinaryCanonicalCall() {
+        CanonicalCall call = assertInstanceOf(
+                CanonicalCall.class, canonicalizeOnly("(while)(n > 1) { body }"));
+
+        assertEquals(2, call.arguments().size());
+        assertInstanceOf(CanonicalClosure.class, call.arguments().get(1));
     }
 
     private Object canonicalizeOnly(String source) {

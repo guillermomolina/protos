@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.465] - 2026-10-21
+
+### D210-Q2 / I117-B — Contextual while expression
+- `spec/PROTOS_GRAMMAR.md`: new `contextual-while-expression`
+  (`"while", "(", expression, ")", trailing-closure`) recognized only for a
+  bare, ungrouped `while` identifier with exactly one non-spread argument and
+  an attached parameterless trailing Closure on the same logical line. It
+  desugars to `(() => condition).whileTrue() { body }`; the `while` token is
+  not a lexical lookup and takes precedence over a lexical `while` binding
+  only for this exact shape. `while` stays a non-reserved identifier; no
+  general identifier, message, argument, trailing-Closure or newline
+  production changes.
+- `spec/semantics/EXECUTION_AND_CONTROL.md`: the contextual form is exactly
+  the ordinary `whileTrue` send; the `whileTrue` contract is unchanged.
+- `spec/PROTOS_LANGUAGE_SPEC.md`: `while` is no longer listed as an open
+  syntactic-sugar question; navigation points to the grammar contract.
+- Programs that called a lexical `while` binding as
+  `while(x) { body }` now get the loop; this incompatibility was approved
+  in D210.
+
 ## [0.1.464] - 2026-10-21
 
 ### D210 / I117-A — Single standard whileTrue loop

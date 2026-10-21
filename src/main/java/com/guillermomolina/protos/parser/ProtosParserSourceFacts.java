@@ -19,6 +19,7 @@ package com.guillermomolina.protos.parser;
 
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
@@ -110,12 +111,22 @@ public final class ProtosParserSourceFacts {
         }
     }
 
+    /**
+     * Attached trailing braced Closure and the exact Surface node that owns it:
+     * an ordinary {@link SurfaceCall} or a D210-Q2 {@link SurfaceContextualWhile}.
+     */
     public record TrailingClosureOrigin(
-            SurfaceCall call,
+            SurfaceExpression owner,
             SurfaceClosure closure) {
         public TrailingClosureOrigin {
-            Objects.requireNonNull(call, "call");
+            Objects.requireNonNull(owner, "owner");
             Objects.requireNonNull(closure, "closure");
+            if (!(owner instanceof SurfaceCall)
+                    && !(owner instanceof SurfaceContextualWhile)) {
+                throw new IllegalArgumentException(
+                        "trailing Closure owner must be a call or contextual while: "
+                                + owner.getClass().getSimpleName());
+            }
         }
     }
 
@@ -203,9 +214,9 @@ public final class ProtosParserSourceFacts {
         }
 
         void recordTrailingClosureOrigin(
-                SurfaceCall call,
+                SurfaceExpression owner,
                 SurfaceClosure closure) {
-            trailingClosureOrigins.add(new TrailingClosureOrigin(call, closure));
+            trailingClosureOrigins.add(new TrailingClosureOrigin(owner, closure));
         }
 
         public ProtosParserSourceFacts build() {

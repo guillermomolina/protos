@@ -27,6 +27,9 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
+import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
+import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -1196,6 +1199,97 @@ final class ProtosFormatterToolBootstrapTest {
                 process.lifecycleState());
         assertTrue(
                 process.rootFilesystemForRuntime().isEmpty());
+    }
+
+    @Test
+    void i117bFormatsContextualWhileAndKeepsTrailingClosureComments()
+            throws Exception {
+        assertFormatsIdempotently(
+                "while(n > 0) /* comment */ {\n"
+                        + "    n = n - 1\n"
+                        + "}",
+                "while(n > 0) /* comment */ { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while(n > 0) /* comment */ {\n"
+                        + "    first()\n"
+                        + "    n = n - 1\n"
+                        + "}",
+                "while(n > 0) /* comment */ {\n"
+                        + "    first()\n"
+                        + "    n = n - 1\n"
+                        + "}",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while(n>0){n = n - 1}",
+                "while(n > 0) { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while /* before */ (n > 0) { n = n - 1 }",
+                "while /* before */ (n > 0) { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while(/* after */ n > 0) { n = n - 1 }",
+                "while(/* after */ n > 0) { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while /* before */ (/* after */ n>0) {n = n - 1}",
+                "while /* before */ (/* after */ n > 0) { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while /* one\n two */ (n > 0) { n = n - 1 }",
+                "while /* one\n two */ (n > 0) { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "while /* before */ (/* after */ n > 0) /* between */ { n = n - 1 }",
+                "while /* before */ (/* after */ n > 0) /* between */ { n = n - 1 }",
+                SurfaceContextualWhile.class);
+        assertFormatsIdempotently(
+                "foo(n) /* comment */ {body}",
+                "foo(n) /* comment */ { body }",
+                SurfaceCall.class);
+    }
+
+    private static void assertFormatsIdempotently(
+            String source,
+            String expected,
+            Class<? extends SurfaceExpression> expectedKind)
+            throws Exception {
+        String first = formatOnce(source, 30L);
+        assertEquals(expected + "\n", first);
+
+        ProtosSourceLayoutView formattedView =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i117b-formatted",
+                                        31L,
+                                        first));
+        assertEquals(1, formattedView.program().expressions().size());
+        assertInstanceOf(
+                expectedKind,
+                formattedView.program().expressions().get(0));
+
+        assertEquals(first, formatOnce(first, 32L));
+    }
+
+    private static String formatOnce(String source, long version)
+            throws Exception {
+        ProtosSourceLayoutView view =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i117b",
+                                        version,
+                                        source));
+        return ProtosFormatterToolBootstrap.formatStructural(
+                CORE,
+                TOOL_ROOT,
+                new ProtosStandardLibraryModuleResolver(
+                        STANDARD_LIBRARY),
+                view,
+                ignored -> {},
+                runtimeHost);
     }
 
     @Test

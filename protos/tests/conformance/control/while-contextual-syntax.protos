@@ -1,0 +1,315 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D210-Q2 / I117-B: the contextual expression `while(condition) { body }` is
+// the ordinary send `(() => condition).whileTrue() { body }`. The condition is
+// reevaluated by a fresh parameterless Closure activation, the result is the
+// last normal body result (null after zero iterations), and only the exact
+// bare `while(argument) { body }` shape is contextual; every other `while`
+// spelling keeps its ordinary meaning.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("zero iterations return null without running the body", () => {
+        bodyCalls: 0
+        result: while(false) {
+            bodyCalls = bodyCalls + 1
+            42
+        }
+        Assertions.require(result === null)
+        Assertions.require(bodyCalls == 0)
+    }),
+    Test("one iteration returns the body result", () => {
+        n: 0
+        result: while(n < 1) {
+            n = n + 1
+            7
+        }
+        Assertions.require(result == 7)
+        Assertions.require(n == 1)
+    }),
+    Test("many iterations return the last body result", () => {
+        n: 4
+        result: while(n > 1) {
+            n = n - 1
+        }
+        Assertions.require(result == 1)
+        Assertions.require(n == 1)
+    }),
+    Test("condition is reevaluated before every body in order", () => {
+        trace: 0
+        n: 0
+        check: () => {
+            trace = (trace * 10) + 1
+            n < 3
+        }
+        while(check()) {
+            trace = (trace * 10) + 2
+            n = n + 1
+        }
+        Assertions.require(trace == 1212121)
+    }),
+    Test("last body result keeps its object identity", () => {
+        marker: {}
+        n: 0
+        result: while(n < 2) {
+            n = n + 1
+            marker
+        }
+        Assertions.require(result === marker)
+    }),
+    Test("contextual and explicit whileTrue agree", () => {
+        marker: {}
+        n: 0
+        explicit: (() => n < 3).whileTrue() {
+            n = n + 1
+            marker
+        }
+        explicitCount: n
+        n = 0
+        contextual: while(n < 3) {
+            n = n + 1
+            marker
+        }
+        Assertions.require(explicit === marker)
+        Assertions.require(contextual === marker)
+        Assertions.require(explicitCount == n)
+    }),
+    Test("body Future is returned without awaiting it", () => {
+        failure: Error()
+        returned: null
+        i: 0
+        result: while(i < 1) {
+            i = i + 1
+            returned = (() => { failure.signal() }).future()
+            returned
+        }
+        Assertions.require(result === returned)
+        observed: Error.handle(
+            () => { returned.value() },
+            (caught) => caught
+        )
+        Assertions.require(observed === failure)
+    }),
+    Test("outer Future adopts the Future returned by the loop", () => {
+        outer: (() => {
+            i: 0
+            while(i < 2) {
+                i = i + 1
+                (() => { i * 21 }).future()
+            }
+        }).future()
+        Assertions.require(outer.value() == 42)
+    }),
+    Test("non-canonical Boolean conditions signal without truthiness", () => {
+        bodyCalls: 0
+        rejects: (condition) => {
+            caught: Error.handle(
+                () => {
+                    while(condition) {
+                        bodyCalls = bodyCalls + 1
+                    }
+                    null
+                },
+                (error) => error
+            )
+            caught.parent() === Error
+        }
+        Assertions.require(rejects(42))
+        Assertions.require(rejects(null))
+        Assertions.require(rejects(0))
+        Assertions.require(rejects(""))
+        Assertions.require(rejects(Object))
+        Assertions.require(rejects((() => true).future()))
+        Assertions.require(bodyCalls == 0)
+    }),
+    Test("condition Error propagates with identity", () => {
+        expected: Error()
+        bodyCalls: 0
+        fail: () => {
+            expected.signal()
+            true
+        }
+        caught: Error.handle(
+            () => {
+                while(fail()) {
+                    bodyCalls = bodyCalls + 1
+                }
+                null
+            },
+            (error) => error
+        )
+        Assertions.require(caught === expected)
+        Assertions.require(bodyCalls == 0)
+    }),
+    Test("body Error propagates with identity", () => {
+        expected: Error()
+        conditionCalls: 0
+        afterLoop: 0
+        check: () => {
+            conditionCalls = conditionCalls + 1
+            true
+        }
+        caught: Error.handle(
+            () => {
+                while(check()) {
+                    expected.signal()
+                }
+                afterLoop = afterLoop + 1
+                null
+            },
+            (error) => error
+        )
+        Assertions.require(caught === expected)
+        Assertions.require(conditionCalls == 1)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("body non-local return leaves the enclosing method", () => {
+        marker: {}
+        afterLoop: 0
+        bodyCalls: 0
+        outer: () => {
+            while(true) {
+                bodyCalls = bodyCalls + 1
+                ^marker
+            }
+            afterLoop = afterLoop + 1
+            null
+        }
+        Assertions.require(outer() === marker)
+        Assertions.require(bodyCalls == 1)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("condition non-local return leaves the enclosing method", () => {
+        bodyCalls: 0
+        afterLoop: 0
+        run: () => {
+            while(^42) {
+                bodyCalls = bodyCalls + 1
+                Error().signal()
+            }
+            afterLoop = afterLoop + 1
+            99
+        }
+        Assertions.require(run() == 42)
+        Assertions.require(bodyCalls == 0)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("body non-local return returns the enclosing method result", () => {
+        afterLoop: 0
+        run: () => {
+            while(true) {
+                ^42
+            }
+            afterLoop = afterLoop + 1
+            99
+        }
+        Assertions.require(run() == 42)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("condition and body suspension resume without repeating effects", () => {
+        work: () => {
+            conditionBefore: 0
+            conditionAfter: 0
+            bodyBefore: 0
+            bodyAfter: 0
+            check: () => {
+                conditionBefore = conditionBefore + 1
+                observed: (() => { conditionBefore }).future().value()
+                conditionAfter = conditionAfter + 1
+                observed < 3
+            }
+            while(check()) {
+                bodyBefore = bodyBefore + 1
+                (() => { bodyBefore }).future().value()
+                bodyAfter = bodyAfter + 1
+            }
+            (conditionBefore * 1000) +
+            (conditionAfter * 100) +
+            (bodyBefore * 10) +
+            bodyAfter
+        }
+        Assertions.require(work.future().value() === 3322)
+    }),
+    Test("condition and body capture and mutate outer bindings", () => {
+        limit: 2
+        n: 0
+        holder: {}
+        holder.total: 0
+        while(n < limit) {
+            n = n + 1
+            holder.total = holder.total + n
+            (n == 1).ifTrue(() => { limit = 4 })
+        }
+        Assertions.require(n == 4)
+        Assertions.require(holder.total == 10)
+    }),
+    Test("this is the enclosing receiver inside condition and body", () => {
+        counter: {}
+        counter.n: 0
+        counter.run: () => {
+            while(this.n < 3) {
+                this.n = this.n + 1
+            }
+        }
+        Assertions.require(counter.run() == 3)
+        Assertions.require(counter.n == 3)
+    }),
+    Test("a lexical whileTrue binding does not replace the ordinary send", () => {
+        shadowCalls: 0
+        whileTrue: (body) => {
+            shadowCalls = shadowCalls + 1
+            99
+        }
+        n: 0
+        result: while(n < 2) {
+            n = n + 1
+        }
+        Assertions.require(result == 2)
+        Assertions.require(shadowCalls == 0)
+    }),
+    Test("a lexical while binding is not consulted by the contextual form", () => {
+        whileCalls: 0
+        while: (condition, body) => {
+            whileCalls = whileCalls + 1
+            99
+        }
+        n: 0
+        result: while(n < 2) {
+            n = n + 1
+        }
+        Assertions.require(result == 2)
+        Assertions.require(whileCalls == 0)
+    }),
+    Test("grouped, member and body-less while spellings stay ordinary", () => {
+        received: []
+        while: (...args) => {
+            received = args
+            args.size()
+        }
+        Assertions.require((while)(false) { 1 } == 2)
+        Assertions.require(received[0] === false)
+        Assertions.require(while(false) == 1)
+        Assertions.require(while(false, true) { 1 } == 3)
+        spread: [false]
+        Assertions.require(while(...spread) { 1 } == 2)
+        holder: {}
+        holder.while: (condition, body) => body() + 1
+        Assertions.require(holder.while(false) { 41 } == 42)
+    })
+]
+tests.freeze()

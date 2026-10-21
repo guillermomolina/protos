@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
@@ -771,6 +772,15 @@ public final class ProtosParser {
             endOffset = trailingClosure.span().endOffset();
         }
 
+        if (isContextualWhile(receiver, arguments, trailingClosure)) {
+            SurfaceContextualWhile loop = new SurfaceContextualWhile(
+                    arguments.get(0).expression(),
+                    trailingClosure,
+                    new SourceSpan(receiver.span().startOffset(), endOffset));
+            recordTrailingClosureOrigin(loop, trailingClosure);
+            return loop;
+        }
+
         SurfaceCall call = new SurfaceCall(
                 receiver,
                 arguments,
@@ -779,6 +789,24 @@ public final class ProtosParser {
             recordTrailingClosureOrigin(call, trailingClosure);
         }
         return call;
+    }
+
+    /**
+     * D210-Q2: only a bare, ungrouped {@code while} name with exactly one
+     * non-spread explicit argument and an attached parameterless trailing
+     * Closure is the contextual form; every other shape stays an ordinary
+     * call.
+     */
+    private static boolean isContextualWhile(
+            SurfaceExpression receiver,
+            List<SurfaceArgument> arguments,
+            SurfaceClosure trailingClosure) {
+        return trailingClosure != null
+                && trailingClosure.parameters().isEmpty()
+                && receiver instanceof SurfaceName name
+                && name.name().equals("while")
+                && arguments.size() == 2
+                && !arguments.get(0).spread();
     }
 
     private SurfaceArgument parseArgument() {
@@ -898,11 +926,11 @@ public final class ProtosParser {
     }
 
     private void recordTrailingClosureOrigin(
-            SurfaceCall call,
+            SurfaceExpression owner,
             SurfaceClosure closure) {
         if (sourceFacts != null) {
             sourceFacts.recordTrailingClosureOrigin(
-                    call,
+                    owner,
                     closure);
         }
     }

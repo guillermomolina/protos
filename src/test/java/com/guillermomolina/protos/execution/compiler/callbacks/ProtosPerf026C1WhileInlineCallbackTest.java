@@ -222,6 +222,106 @@ final class ProtosPerf026C1WhileInlineCallbackTest {
         System.out.println("D210_INLINE_STRUCTURED_FALLBACK_RESULTS_EQUAL=YES");
     }
 
+    /**
+     * I117-B / D210-Q2: contextual {@code while(condition) { body }} lowers to
+     * the same ordinary {@code whileTrue} send as the explicit spelling, so it
+     * takes whichever path ordinary selection admits for that shape.
+     */
+    @Test
+    void contextualWhileTakesTheSamePathAsExplicitWhileTrue() throws Exception {
+        String explicit =
+                """
+                run: () => {
+                    n: 0
+                    (() => n < 3).whileTrue() {
+                        probe()
+                        n = n + 1
+                    }
+                }
+                run()
+                """;
+        String contextual =
+                """
+                run: () => {
+                    n: 0
+                    while(n < 3) {
+                        probe()
+                        n = n + 1
+                    }
+                }
+                run()
+                """;
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe explicitProbe = new Probe();
+                assertInteger(
+                        3,
+                        lowerRoot(explicit).getCallTarget().call(explicitProbe.module()));
+                Probe contextualProbe = new Probe();
+                assertInteger(
+                        3,
+                        lowerRoot(contextual).getCallTarget().call(contextualProbe.module()));
+
+                assertEquals(3, explicitProbe.calls.get(), "three explicit bodies");
+                assertEquals(3, contextualProbe.calls.get(), "three contextual bodies");
+                assertEquals(
+                        explicitProbe.depths(),
+                        contextualProbe.depths(),
+                        () -> "explicit=" + explicitProbe.stacks
+                                + " contextual=" + contextualProbe.stacks);
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("I117B_CONTEXTUAL_WHILE_SAME_PATH_AS_WHILE_TRUE=YES");
+    }
+
+    @Test
+    void contextualWhileMatchesExplicitWhileTrueEvaluationCountsAndResult() throws Exception {
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        "i117b-contextual-while.protos",
+                        """
+                        run: () => {
+                            box: {}
+                            conditions: 0
+                            bodies: 0
+                            n: 0
+                            check: () => {
+                                conditions = conditions + 1
+                                n < 3
+                            }
+                            explicitResult: (() => check()).whileTrue() {
+                                bodies = bodies + 1
+                                n = n + 1
+                                box
+                            }
+                            explicitCounts: (conditions * 100) + (bodies * 10) + n
+                            conditions = 0
+                            bodies = 0
+                            n = 0
+                            contextualResult: while(check()) {
+                                bodies = bodies + 1
+                                n = n + 1
+                                box
+                            }
+                            contextualCounts: (conditions * 100) + (bodies * 10) + n
+                            zero: while(false) { box }
+                            ((explicitResult === box) &&
+                                (contextualResult === box) &&
+                                (explicitCounts == 433) &&
+                                (contextualCounts == 433) &&
+                                (zero === null)).ifTrueIfFalse(() => { 1 }, () => { 0 })
+                        }
+                        run()
+                        """,
+                        new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
+        assertCompletedWith(1, outcome);
+        System.out.println("I117B_CONTEXTUAL_WHILE_COUNTS_AND_RESULT_EQUAL=YES");
+    }
+
     @Test
     void dynamicConditionRetainsStructuredWhile() throws Exception {
         assertStructuredWhilePreserved(

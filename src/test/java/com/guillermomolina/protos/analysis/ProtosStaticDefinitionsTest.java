@@ -121,6 +121,44 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
+    void contextualWhileHeaderIsNotALexicalReadOfWhileBinding() {
+        String source =
+                "f: (while, n) => {\n"
+                        + "  (while)(n) { n }\n"
+                        + "  while(n > 1) { n = n - 1 }\n"
+                        + "}";
+        int declaration = source.indexOf("while");
+        int groupedRead = source.indexOf("while", source.indexOf("(while)"));
+        int contextualHeader = source.lastIndexOf("while");
+
+        ProtosStaticDefinitionResult grouped = definition(source, groupedRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + "while".length()),
+                grouped.targets().get(0).span());
+        assertTrue(definition(source, contextualHeader).isEmpty());
+    }
+
+    @Test
+    void contextualWhileConditionAndBodyAreDeferredClosureActivations() {
+        String source =
+                "f: (n) => {\n"
+                        + "  while(n > 1) { n = n - 1 }\n"
+                        + "  n\n"
+                        + "}";
+        int conditionRead = source.indexOf("n", source.indexOf("while("));
+        int bodyRead = source.lastIndexOf("n - 1");
+        int afterLoop = source.lastIndexOf("n");
+
+        assertTrue(definition(source, conditionRead).isEmpty());
+        assertTrue(definition(source, bodyRead).isEmpty());
+        assertTrue(definition(source, afterLoop).isEmpty());
+
+        String inner = "while(c) { ((k) => k)(1) }";
+        int innerReference = inner.indexOf("k", inner.indexOf("=>"));
+        assertTrue(definition(inner, innerReference).isPresent());
+    }
+
+    @Test
     void sessionResultRetainsExactSnapshotFreshness() {
         ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
         session.openWorkspace("workspace");

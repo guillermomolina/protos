@@ -238,8 +238,11 @@ reinterpretation. Canonical conditional execution is the ordinary Boolean
 protocol owned by `semantics/VALUES_AND_COLLECTIONS.md` and its surface grammar
 boundary is owned by `PROTOS_GRAMMAR.md`.
 
-`return` and `while` remain independent possible future syntactic-sugar
-questions.
+`return` remains an independent possible future syntactic-sugar question.
+`while` is not a reserved word; the exact contextual expression
+`while(condition) { body }` is approved (D210-Q2) and defined, with its
+recognition limits and its desugaring to the ordinary `whileTrue` send, by
+`PROTOS_GRAMMAR.md`.
 
 ## 34. Core Language Invariants
 

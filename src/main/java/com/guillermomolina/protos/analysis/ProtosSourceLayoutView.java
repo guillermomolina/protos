@@ -34,6 +34,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -78,6 +79,8 @@ public final class ProtosSourceLayoutView {
         NONE,
         SEQUENCE_SEPARATOR,
         TRAILING_CLOSURE,
+        CONTEXTUAL_WHILE_BEFORE_LPAREN,
+        CONTEXTUAL_WHILE_AFTER_LPAREN,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
     }
@@ -547,7 +550,7 @@ public final class ProtosSourceLayoutView {
         for (ProtosParserSourceFacts.TrailingClosureOrigin fact :
                 sourceFacts.trailingClosureOrigins()) {
             StructuralPath call =
-                    structuralIndex.pathOf(fact.call())
+                    structuralIndex.pathOf(fact.owner())
                             .orElseThrow(
                                     () ->
                                             new IllegalStateException(
@@ -788,6 +791,14 @@ public final class ProtosSourceLayoutView {
                                 structuralIndex);
             }
 
+            if (boundary.isEmpty()) {
+                boundary =
+                        contextualWhileHeaderBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
+                                structuralIndex);
+            }
+
             if (boundary.isPresent()) {
                 ResolvedBoundary resolved =
                         boundary.orElseThrow();
@@ -832,8 +843,7 @@ public final class ProtosSourceLayoutView {
             TokenOccurrence close =
                     lastRightParenthesisBefore(
                             tokenOccurrences,
-                            origin.call()
-                                    .receiver()
+                            origin.owner()
                                     .span()
                                     .startOffset(),
                             closureStart);
@@ -846,7 +856,7 @@ public final class ProtosSourceLayoutView {
             }
 
             Optional<StructuralPath> callPath =
-                    structuralIndex.pathOf(origin.call());
+                    structuralIndex.pathOf(origin.owner());
             Optional<StructuralPath> closurePath =
                     structuralIndex.pathOf(origin.closure());
 
@@ -857,6 +867,78 @@ public final class ProtosSourceLayoutView {
                                 callPath.orElseThrow(),
                                 closurePath.orElseThrow(),
                                 CommentBoundaryKind.TRAILING_CLOSURE,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * D210-Q2 header comments: between the contextual {@code while} and its
+     * opening {@code (}, or between that {@code (} and the first condition
+     * token. Both attach from the real loop node to its real condition.
+     */
+    private static Optional<ResolvedBoundary>
+            contextualWhileHeaderBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    StructuralIndex structuralIndex) {
+        for (StructuralNode structuralNode : structuralIndex.nodes) {
+            if (!(structuralNode.node()
+                    instanceof SurfaceContextualWhile loop)) {
+                continue;
+            }
+
+            int loopStart = loop.span().startOffset();
+            int conditionStart =
+                    loop.condition().span().startOffset();
+            if (comment.startOffset() < loopStart
+                    || comment.endOffset() > conditionStart) {
+                continue;
+            }
+
+            TokenOccurrence keyword = null;
+            TokenOccurrence open = null;
+            for (TokenOccurrence occurrence : tokenOccurrences) {
+                if (occurrence.span().startOffset() < loopStart) {
+                    continue;
+                }
+                if (keyword == null) {
+                    keyword = occurrence;
+                    continue;
+                }
+                open = occurrence;
+                break;
+            }
+
+            if (keyword == null
+                    || open == null
+                    || keyword.token().type() != TokenType.IDENTIFIER
+                    || open.token().type() != TokenType.LPAREN) {
+                continue;
+            }
+
+            CommentBoundaryKind kind;
+            if (comment.startOffset() >= keyword.span().endOffset()
+                    && comment.endOffset() <= open.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_WHILE_BEFORE_LPAREN;
+            } else if (comment.startOffset() >= open.span().endOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_WHILE_AFTER_LPAREN;
+            } else {
+                continue;
+            }
+
+            Optional<StructuralPath> loopPath =
+                    structuralIndex.pathOf(loop);
+            Optional<StructuralPath> conditionPath =
+                    structuralIndex.pathOf(loop.condition());
+            if (loopPath.isPresent() && conditionPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                loopPath.orElseThrow(),
+                                conditionPath.orElseThrow(),
+                                kind,
                                 Optional.empty()));
             }
         }
@@ -1256,6 +1338,14 @@ public final class ProtosSourceLayoutView {
                                 call.arguments().get(index),
                                 path.child("argument", index));
                     }
+                }
+                case SurfaceContextualWhile loop -> {
+                    registerExpression(
+                            loop.condition(),
+                            path.child("condition"));
+                    registerExpression(
+                            loop.body(),
+                            path.child("body"));
                 }
                 case SurfaceArrayConstruction array -> {
                     for (int index = 0;

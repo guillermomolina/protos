@@ -25,11 +25,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparatorKind;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
+import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -643,6 +646,231 @@ class ProtosSourceLayoutViewTest {
                                                                 expression)
                                                         .span()))
                         .toList());
+    }
+
+    @Test
+    void contextualWhileHasStablePathsAndRealSpans() {
+        String source = "while(n > 1) { n = n - 1 }\nfoo() { body() }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-while",
+                                7L,
+                                source));
+
+        SurfaceContextualWhile loop =
+                assertInstanceOf(
+                        SurfaceContextualWhile.class,
+                        view.program().expressions().get(0));
+
+        assertEquals(
+                "program/expression[0]",
+                view.pathOf(loop).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/condition",
+                view.pathOf(loop.condition()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/body",
+                view.pathOf(loop.body()).orElseThrow().toString());
+        assertEquals(
+                "while(n > 1) { n = n - 1 }",
+                view.sourceText(loop.span()));
+        assertEquals("n > 1", view.sourceText(loop.condition().span()));
+        assertEquals(new SourceSpan(13, 26), loop.body().span());
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                view.preservationProjection();
+
+        SurfaceCall call =
+                assertInstanceOf(
+                        SurfaceCall.class,
+                        view.program().expressions().get(1));
+        assertEquals(2, projection.trailingClosures().size());
+        assertEquals(
+                view.pathOf(loop).orElseThrow(),
+                projection.trailingClosures().get(0).call());
+        assertEquals(
+                view.pathOf(loop.body()).orElseThrow(),
+                projection.trailingClosures().get(0).closure());
+        assertEquals(
+                view.pathOf(call).orElseThrow(),
+                projection.trailingClosures().get(1).call());
+    }
+
+    @Test
+    void contextualWhileBlockCommentProjectsOneTrailingClosureBoundary() {
+        assertContextualWhileCommentBoundary(
+                "while(n > 0) /* comment */ { body() }",
+                "/* comment */");
+    }
+
+    @Test
+    void contextualWhileMultilineBlockCommentKeepsTrailingClosureBoundary() {
+        assertContextualWhileCommentBoundary(
+                "while(n > 0) /* one\n two */ { body() }",
+                "/* one\n two */");
+    }
+
+    @Test
+    void contextualWhileCommentBeforeLeftParenthesisAttachesToCondition() {
+        assertContextualWhileHeaderComments(
+                "while /* before */ (n > 0) { n = n - 1 }",
+                List.of("/* before */"),
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_WHILE_BEFORE_LPAREN));
+    }
+
+    @Test
+    void contextualWhileCommentAfterLeftParenthesisAttachesToCondition() {
+        assertContextualWhileHeaderComments(
+                "while(/* after */ n > 0) { n = n - 1 }",
+                List.of("/* after */"),
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_WHILE_AFTER_LPAREN));
+    }
+
+    @Test
+    void contextualWhileCommentsOnBothSidesOfLeftParenthesis() {
+        assertContextualWhileHeaderComments(
+                "while /* before */ (/* after */ n > 0) { n = n - 1 }",
+                List.of("/* before */", "/* after */"),
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_WHILE_BEFORE_LPAREN,
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_WHILE_AFTER_LPAREN));
+    }
+
+    @Test
+    void contextualWhileMultilineCommentBeforeLeftParenthesis() {
+        assertContextualWhileHeaderComments(
+                "while /* one\n two */ (n > 0) { n = n - 1 }",
+                List.of("/* one\n two */"),
+                List.of(
+                        ProtosSourceLayoutView.CommentBoundaryKind
+                                .CONTEXTUAL_WHILE_BEFORE_LPAREN));
+    }
+
+    @Test
+    void commentInsideContextualWhileConditionIsNotAHeaderBoundary() {
+        String source = "while(n /* inner */ > 0) { n = n - 1 }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-while-inner",
+                                9L,
+                                source));
+
+        assertEquals(1, view.commentAttachments().size());
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.NONE,
+                view.commentAttachments().get(0).boundaryKind());
+    }
+
+    private void assertContextualWhileHeaderComments(
+            String source,
+            List<String> commentTexts,
+            List<ProtosSourceLayoutView.CommentBoundaryKind> kinds) {
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-while-header",
+                                10L,
+                                source));
+
+        SurfaceContextualWhile loop =
+                assertInstanceOf(
+                        SurfaceContextualWhile.class,
+                        view.program().expressions().get(0));
+        String loopPath = view.pathOf(loop).orElseThrow().toString();
+        String conditionPath =
+                view.pathOf(loop.condition()).orElseThrow().toString();
+        assertEquals("program/expression[0]", loopPath);
+        assertEquals("program/expression[0]/condition", conditionPath);
+
+        List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                view.commentAttachments();
+        assertEquals(commentTexts.size(), attachments.size());
+        for (int index = 0; index < attachments.size(); index++) {
+            ProtosSourceLayoutView.CommentAttachment attachment =
+                    attachments.get(index);
+            String text = commentTexts.get(index);
+            int start = source.indexOf(text);
+            assertEquals(kinds.get(index), attachment.boundaryKind());
+            assertEquals(
+                    new SourceSpan(start, start + text.length()),
+                    attachment.comment().span());
+            assertEquals(
+                    loopPath,
+                    attachment.preceding().orElseThrow().toString());
+            assertEquals(
+                    conditionPath,
+                    attachment.following().orElseThrow().toString());
+        }
+
+        List<ProtosSourceLayoutView.CommentProjection> projected =
+                view.preservationProjection().comments();
+        assertEquals(commentTexts, projected.stream()
+                .map(ProtosSourceLayoutView.CommentProjection::rawText)
+                .toList());
+        assertEquals(kinds, projected.stream()
+                .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
+                .toList());
+    }
+
+    private void assertContextualWhileCommentBoundary(
+            String source,
+            String commentText) {
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-while-comment",
+                                8L,
+                                source));
+
+        SurfaceContextualWhile loop =
+                assertInstanceOf(
+                        SurfaceContextualWhile.class,
+                        view.program().expressions().get(0));
+        String loopPath = view.pathOf(loop).orElseThrow().toString();
+        String bodyPath = view.pathOf(loop.body()).orElseThrow().toString();
+
+        List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                view.commentAttachments();
+        assertEquals(1, attachments.size());
+        ProtosSourceLayoutView.CommentAttachment attachment =
+                attachments.get(0);
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.TRAILING_CLOSURE,
+                attachment.boundaryKind());
+        assertEquals(
+                loopPath,
+                attachment.preceding().orElseThrow().toString());
+        assertEquals(
+                bodyPath,
+                attachment.following().orElseThrow().toString());
+        int start = source.indexOf("/*");
+        assertEquals(
+                new SourceSpan(start, start + commentText.length()),
+                attachment.comment().span());
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                view.preservationProjection();
+        assertEquals(1, projection.trailingClosures().size());
+        assertEquals(
+                loopPath,
+                projection.trailingClosures().get(0).call().toString());
+        assertEquals(
+                bodyPath,
+                projection.trailingClosures().get(0).closure().toString());
+        assertEquals(
+                List.of(ProtosSourceLayoutView.CommentBoundaryKind.TRAILING_CLOSURE),
+                projection.comments().stream()
+                        .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
+                        .toList());
+        assertEquals(commentText, projection.comments().get(0).rawText());
     }
 
     @Test

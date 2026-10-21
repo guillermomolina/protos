@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
@@ -83,6 +84,7 @@ public final class Canonicalizer {
             case SurfaceAssignment assignment -> lowerAssignment(assignment);
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceCall call -> lowerCall(call);
+            case SurfaceContextualWhile loop -> lowerContextualWhile(loop);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -163,6 +165,27 @@ public final class Canonicalizer {
         }
 
         return new CanonicalCall(canonicalize(call.receiver()), arguments, call.span());
+    }
+
+    /**
+     * D210-Q2: {@code while(condition) { body }} is the ordinary
+     * {@code (() => condition).whileTrue() { body }} send; no loop-specific
+     * canonical node exists.
+     */
+    private CanonicalExpression lowerContextualWhile(SurfaceContextualWhile loop) {
+        CanonicalClosure condition =
+                new CanonicalClosure(
+                        List.of(),
+                        new CanonicalSequence(
+                                List.of(canonicalize(loop.condition())),
+                                loop.condition().span()),
+                        loop.condition().span());
+
+        return new CanonicalSend(
+                condition,
+                "whileTrue",
+                List.of(canonicalize(loop.body())),
+                loop.span());
     }
 
     private List<CanonicalExpression> canonicalizeArguments(List<SurfaceArgument> arguments) {

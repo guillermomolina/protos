@@ -450,9 +450,10 @@ The standard behavior requires the original receiver `condition` to be a
 semantic Closure, require exactly one argument, and require `body` to be a
 semantic Closure. `CALLABLES.md` owns the ordinary `Object.whileTrue` slot
 placement, Closure-family receiver domain, extraction, shadowing, and
-invocation-role consequences. `../PROTOS_GRAMMAR.md` owns only the ordinary
-message and trailing-Closure syntax; the selector introduces no dedicated grammar
-production or reserved word.
+invocation-role consequences. `../PROTOS_GRAMMAR.md` owns the ordinary
+message and trailing-Closure syntax and the D210-Q2 contextual
+`while(condition) { body }` expression; the selector introduces no reserved
+word.
 
 `whileTrue` is the only standard pre-test loop selector. Core v0.1 defines no
 standard `while` selector (D210 retired the former D201 standard `while`
@@ -564,9 +565,13 @@ validation timing, exact Boolean tests, callback activation count/order, normal
 result, control transfer, suspension/replay, cancellation, and Future behavior
 remain identical.
 
-A future source form such as `while (...) { ... }` would require a separate
-normative grammar decision. It is not Core v0.1 syntax, would require its own implementation,
-and cannot alter the ordinary `condition.whileTrue(body)` protocol defined here.
+The contextual expression `while(condition) { body }` (D210-Q2, defined in
+`../PROTOS_GRAMMAR.md`) is exactly the ordinary send
+`(() => condition).whileTrue() { body }`: its receiver is a fresh parameterless
+lexical Closure reevaluating `condition`, and its argument is the braced body
+Closure. It does not redefine this protocol; ordinary lookup, shadowing,
+extraction, validation, exact Boolean tests, result, control transfer,
+suspension, cancellation, and Future behavior are those of `whileTrue`.
 
 ## Resource Cleanup and `ensure`
 

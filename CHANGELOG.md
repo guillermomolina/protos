@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.394-SNAPSHOT
+
+- `I117-B` (#942, D210-Q2/#941): contextual `while(condition) { body }`
+  expression.
+  - The parser recognizes only a bare, ungrouped `while` name with exactly
+    one non-spread argument and an attached parameterless trailing Closure,
+    producing the new `SurfaceContextualWhile` node; `while` stays an
+    `IDENTIFIER` and every other spelling stays an ordinary call.
+  - `Canonicalizer` lowers it to the ordinary
+    `(() => condition).whileTrue() { body }` `CanonicalSend`; no new
+    canonical node, loop runtime or bytecode path.
+  - `TrailingClosureOrigin` now names an `owner` (`SurfaceCall` or
+    `SurfaceContextualWhile`) so `TRAILING_CLOSURE` comment boundaries stay
+    attached to the real node; static hover, lint, references, definitions,
+    document symbols, source layout and the tooling bridge
+    (`CONTEXTUAL_WHILE`) support the node, and the TOOL010 formatter
+    formats it through `formatTrailingClosureSeparator`.
+  - New `CONTEXTUAL_WHILE_BEFORE_LPAREN` / `CONTEXTUAL_WHILE_AFTER_LPAREN`
+    comment boundaries attach header comments from the loop to its
+    condition, and TOOL010 preserves them idempotently.
+  - Grammar, execution-and-control and language specification, the
+    control-flow guide, Java tests and the new
+    `control/while-contextual-syntax.protos` conformance suite updated.
+  - Maintainer validation: focused JUnit set PASS (including
+    `ProtosFormatterToolBootstrapTest` and
+    `ProtosPerf026C1WhileInlineCallbackTest`);
+    `while-contextual-syntax.protos` 20/20, `while-basic-and-validation.protos`
+    13/13 and `while-loop-results.protos` 17/17 PASS; `make test` PASS;
+    `make check` PASS.
+
 ## 0.3.393-SNAPSHOT
 
 - `I117-A` (#942, D210/#941): the standard `Object.while` selector is

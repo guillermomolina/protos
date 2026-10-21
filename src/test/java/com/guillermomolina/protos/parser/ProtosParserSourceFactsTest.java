@@ -19,6 +19,7 @@ package com.guillermomolina.protos.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.lexer.ProtosLexer;
@@ -28,7 +29,10 @@ import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceContext
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparatorKind;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SingleParameterClosureForm;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
+import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.source.SourceSpan;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -127,7 +131,7 @@ class ProtosParserSourceFactsTest {
         assertEquals(1, built.trailingClosureOrigins().size());
         assertEquals(
                 call,
-                built.trailingClosureOrigins().get(0).call());
+                built.trailingClosureOrigins().get(0).owner());
 
         assertEquals(
                 0L,
@@ -137,6 +141,128 @@ class ProtosParserSourceFactsTest {
                                         token.token().type()
                                                 == TokenType.NEWLINE)
                         .count());
+    }
+
+    @Test
+    void contextualWhileRecordsTrailingClosureOriginOnItsRealNode() {
+        String source = "while(n > 1) { n = n - 1 }\nfoo() { body }";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualWhile loop = assertInstanceOf(
+                SurfaceContextualWhile.class,
+                parsed.program().expressions().get(0));
+        assertEquals(new SourceSpan(0, 26), loop.span());
+        assertEquals(new SourceSpan(6, 11), loop.condition().span());
+        assertEquals(new SourceSpan(13, 26), loop.body().span());
+
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class,
+                parsed.program().expressions().get(1));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(2, origins.size());
+        assertSame(loop, origins.get(0).owner());
+        assertSame(loop.body(), origins.get(0).closure());
+        assertSame(call, origins.get(1).owner());
+        assertSame(call.arguments().get(0).expression(), origins.get(1).closure());
+    }
+
+    @Test
+    void blockCommentNewlinesDoNotBreakContextualWhile() {
+        String source = "while(c) /* one\n two */ { body() }";
+
+        List<ProtosLexer.TriviaOccurrence> trivia =
+                new ArrayList<>();
+        List<TokenOccurrence> tokens =
+                new ProtosLexer(source)
+                        .tokenizeOccurrencesWithTrivia(trivia::add);
+
+        ProtosParserSourceFacts.Builder facts =
+                new ProtosParserSourceFacts.Builder();
+        SurfaceSequence program =
+                ProtosParser.forTooling(tokens, facts).parseProgram();
+
+        assertEquals(1, program.expressions().size());
+        SurfaceContextualWhile loop = assertInstanceOf(
+                SurfaceContextualWhile.class,
+                program.expressions().get(0));
+        assertEquals(new SourceSpan(0, source.length()), loop.span());
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                facts.build().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(loop, origins.get(0).owner());
+        assertSame(loop.body(), origins.get(0).closure());
+    }
+
+    @Test
+    void lineCommentNewlineDetachesContextualWhileBody() {
+        String source = "while(c) // note\n{ body }";
+
+        List<ProtosLexer.TriviaOccurrence> trivia =
+                new ArrayList<>();
+        List<TokenOccurrence> tokens =
+                new ProtosLexer(source)
+                        .tokenizeOccurrencesWithTrivia(trivia::add);
+
+        ProtosParserSourceFacts.Builder facts =
+                new ProtosParserSourceFacts.Builder();
+        SurfaceSequence program =
+                ProtosParser.forTooling(tokens, facts).parseProgram();
+
+        assertEquals(2, program.expressions().size());
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class,
+                program.expressions().get(0));
+        assertEquals(1, call.arguments().size());
+        assertInstanceOf(SurfaceObject.class, program.expressions().get(1));
+        assertEquals(List.of(), facts.build().trailingClosureOrigins());
+    }
+
+    @Test
+    void blockCommentBoundaryOfContextualWhileOwnsTheRealNodes() {
+        String source = "while(n > 0) /* comment */ {\n    n = n - 1\n}";
+        Parsed parsed = parseWithTrivia(source);
+
+        SurfaceContextualWhile loop = assertInstanceOf(
+                SurfaceContextualWhile.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(loop, origins.get(0).owner());
+        assertSame(loop.body(), origins.get(0).closure());
+    }
+
+    @Test
+    void blockCommentBoundaryOfOrdinaryCallKeepsCallOwner() {
+        String source = "foo(n) /* comment */ { body }";
+        Parsed parsed = parseWithTrivia(source);
+
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class,
+                parsed.program().expressions().get(0));
+        assertEquals(2, call.arguments().size());
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(call, origins.get(0).owner());
+        assertSame(call.arguments().get(1).expression(), origins.get(0).closure());
+    }
+
+    private Parsed parseWithTrivia(String source) {
+        List<ProtosLexer.TriviaOccurrence> trivia =
+                new ArrayList<>();
+        List<TokenOccurrence> tokens =
+                new ProtosLexer(source)
+                        .tokenizeOccurrencesWithTrivia(trivia::add);
+
+        ProtosParserSourceFacts.Builder facts =
+                new ProtosParserSourceFacts.Builder();
+
+        SurfaceSequence program =
+                ProtosParser.forTooling(tokens, facts).parseProgram();
+
+        return new Parsed(program, facts.build());
     }
 
     private Parsed parseWithFacts(String source) {
