@@ -8,6 +8,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.4-SNAPSHOT
+
+- `I115-M/N` (PLAT066-C / PERF039 / PERF041): generalize the experimental
+  compact Bytecode DSL lowering path for admitted root-local Integer operations,
+  Boolean control and simple `whileTrue` loops.
+  - Use specialized Integer operations and local Bytecode storage within the
+    admitted compact roots, avoiding prepared message sends and persistent
+    frame-backed lexical authority on those narrowly proven paths.
+  - Lower admitted standard Boolean selectors (`ifTrue`, `ifFalse`,
+    `ifTrueIfFalse`, `if`, `else`) to structured `IfThen`/`IfThenElse`
+    operations. Require canonical Boolean conditions, never truthiness.
+  - Add I115-M/N root and Boolean-control regression/structural tests and a
+    PERF039 primitive-while census with opt-in real compiler-graph capture.
+  - **Historical semantic limitation:** the experimental Integer operations
+    do not generally preserve operator method selection, custom numeric
+    methods or arbitrary-precision overflow promotion. The special Boolean
+    lane is likewise not evidence of equivalence for arbitrary receiver
+    overrides. This intermediate snapshot does not claim full Protos semantic
+    conformance.
+  - Reconstructed from original I115 commit `8de92642fa98eaa060fa39132fc97dfb472cc141`. No behavioral
+    tests have been run on this versioned replay.
+
 ## 0.4.3-SNAPSHOT
 
 - `I115-H` (PLAT066-C): introduce an experimental static invocation path for a
