@@ -1321,9 +1321,10 @@ final class CanonicalToBytecodeLowerer {
         boolean epilogProjectsReturnCarrier = false;
         if (experimentalCompact != null) {
             emitExperimentalCompactRoot(builder, sequence, experimentalCompact);
-            // I115-O: a certified guest-constant return delivers no carrier.
+            // I115-O/I115-Q: a certified guest-constant return delivers no carrier.
             epilogProjectsReturnCarrier =
-                    experimentalCompact.guestIntegerReturn() == null;
+                    experimentalCompact.guestIntegerReturn() == null
+                            && !experimentalCompact.guestIntegerLiteralReturn();
         } else if (activationDefinition == null
                 && sequence.expressions().size() == 1
                 && sequence.expressions().get(0) instanceof CanonicalCreate create
@@ -9814,10 +9815,13 @@ final class CanonicalToBytecodeLowerer {
      * bindings of {@code scope}. It carries no physical or runtime state.
      * I115-O: {@code guestIntegerReturn} is the returned binding proven by
      * admitExperimentalConstantIntegerReturn, or null.
+     * I115-Q: {@code guestIntegerLiteralReturn} is true when the terminal is
+     * a signed-64 Integer literal returned as a prepared guest constant.
      */
     private record ExperimentalCompactRoot(
             CanonicalLexicalScope scope,
-            CanonicalBindingIdentity guestIntegerReturn) {}
+            CanonicalBindingIdentity guestIntegerReturn,
+            boolean guestIntegerLiteralReturn) {}
 
     /*
      * I115-N: compile-time binding families keyed by binding identity. A
@@ -9875,8 +9879,16 @@ final class CanonicalToBytecodeLowerer {
                 == null) {
             return null;
         }
+        CanonicalExpression terminal =
+                sequence.expressions().get(sequence.expressions().size() - 1);
+        boolean guestIntegerLiteralReturn =
+                terminal instanceof CanonicalLiteral literal
+                        && literal.kind() == CanonicalLiteral.Kind.NUMBER
+                        && primitiveNumberLiteralOrNull(literal) instanceof Long;
         return new ExperimentalCompactRoot(
-                scope, admitExperimentalConstantIntegerReturn(sequence, scope));
+                scope,
+                admitExperimentalConstantIntegerReturn(sequence, scope),
+                guestIntegerLiteralReturn);
     }
 
     /**
@@ -10137,8 +10149,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * I115-M: a whileTrue send over two parameterless literal Closures whose
-     * bodies are compact. The condition ends in an Integer comparison.
+     * I115-M/I115-P: a whileTrue send over two parameterless literal
+     * Closures whose bodies are compact. The condition's last expression is
+     * any BOOLEAN proven by the existing compact-kind analysis; its whole
+     * body, prefix included, is evaluated on every iteration.
      * I115-N: the loop-head state is the join of the entry state and every
      * body exit state, iterated to its fixpoint (families only widen to
      * OBJECT); the exit state is the condition's exit at that head.
@@ -10158,9 +10172,7 @@ final class CanonicalToBytecodeLowerer {
         }
         java.util.List<CanonicalExpression> tests =
                 condition.body().expressions();
-        if (tests.isEmpty()
-                || !(tests.get(tests.size() - 1) instanceof CanonicalSend comparison)
-                || !experimentalCompactComparison(comparison.message())) {
+        if (tests.isEmpty()) {
             return null;
         }
         ExperimentalCompactKinds head = new ExperimentalCompactKinds(kinds);
@@ -10328,7 +10340,13 @@ final class CanonicalToBytecodeLowerer {
                     expressions.get(expressions.size() - 1);
             beginStatement(builder, terminal);
             builder.beginReturn();
-            emitExperimentalCompactValue(builder, terminal);
+            if (compact.guestIntegerLiteralReturn()) {
+                // I115-Q: the returned guest Integer is prepared at lowering time.
+                builder.emitLoadConstant(
+                        guestLiteralConstant((CanonicalLiteral) terminal));
+            } else {
+                emitExperimentalCompactValue(builder, terminal);
+            }
             builder.endReturn();
             endStatement(builder);
         } finally {
@@ -10542,21 +10560,25 @@ final class CanonicalToBytecodeLowerer {
         builder.endWhile();
     }
 
-    /* I115-M: the condition body yields a Java boolean for the branch. */
+    /*
+     * I115-P: an admitted Boolean condition produces a Java primitive
+     * boolean. Preserve preceding expressions and reuse the I115-N
+     * Boolean conversion for the final expression.
+     */
     private void emitExperimentalCompactCondition(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence) {
         java.util.List<CanonicalExpression> tests = sequence.expressions();
-        CanonicalSend comparison = (CanonicalSend) tests.get(tests.size() - 1);
+        CanonicalExpression condition = tests.get(tests.size() - 1);
         if (tests.size() == 1) {
-            emitExperimentalCompactSend(builder, comparison, true);
+            emitExperimentalCompactBooleanCondition(builder, condition);
             return;
         }
         builder.beginBlock();
         for (int index = 0; index < tests.size() - 1; index++) {
             emitExperimentalCompactStatement(builder, tests.get(index));
         }
-        emitExperimentalCompactSend(builder, comparison, true);
+        emitExperimentalCompactBooleanCondition(builder, condition);
         builder.endBlock();
     }
 
@@ -10628,10 +10650,17 @@ final class CanonicalToBytecodeLowerer {
      * I115-N: the receiver evaluated once as a Java boolean. An Integer
      * comparison uses its direct Bool form; any other admitted BOOLEAN value
      * is converted by one ExperimentalCanonicalBooleanCondition.
+     * I115-Q: a true/false literal is loaded directly as a Java boolean.
      */
     private void emitExperimentalCompactBooleanCondition(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression receiver) {
+        if (receiver instanceof CanonicalLiteral literal
+                && (literal.kind() == CanonicalLiteral.Kind.TRUE
+                        || literal.kind() == CanonicalLiteral.Kind.FALSE)) {
+            builder.emitLoadConstant(literal.kind() == CanonicalLiteral.Kind.TRUE);
+            return;
+        }
         if (receiver instanceof CanonicalSend comparison
                 && experimentalCompactComparison(comparison.message())) {
             emitExperimentalCompactSend(builder, comparison, true);
