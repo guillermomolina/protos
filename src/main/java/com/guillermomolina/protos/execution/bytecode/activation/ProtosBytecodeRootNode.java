@@ -58,6 +58,7 @@ import com.guillermomolina.protos.execution.ProtosStructuredControlCalls.Prepare
 import com.guillermomolina.protos.execution.ProtosFrameLocalBindings.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -92,6 +93,7 @@ import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.Fallback;
 import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -7866,6 +7868,191 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static boolean perform(PreparedWhileCall prepared) {
             return prepared.postTest();
+        }
+    }
+
+    /**
+     * I115-J/I115-M EXPERIMENTAL: GraalPy-style direct integer operations.
+     * Each operation specializes on Long carriers and falls back to an
+     * Integer value (Long carrier or ProtosIntegerValue) in the same node.
+     * No protocol lookup, user-defined numeric methods, generic numeric
+     * fallback or overflow promotion is supported by this experimental lane.
+     */
+    private static long experimentalInteger(Object value) {
+        if (value instanceof Long carrier) {
+            return carrier.longValue();
+        }
+        return ((ProtosIntegerValue) value).longValue();
+    }
+
+    /**
+     * I115-N EXPERIMENTAL: the Java boolean of an admitted canonical Boolean
+     * for a structured Bytecode branch. No truthiness: any other input
+     * violates compact admission and is rejected, never treated as false.
+     */
+    @Operation
+    public static final class ExperimentalCanonicalBooleanCondition {
+        @Specialization
+        public static boolean doBoolean(ProtosBooleanValue value) {
+            return value.value();
+        }
+
+        @Fallback
+        public static boolean doOther(Object value) {
+            throw CompilerDirectives.shouldNotReachHere(
+                    "I115-N compact Boolean condition is not a Boolean");
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left < right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalInteger(left) < experimentalInteger(right);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessEqualBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left <= right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalInteger(left) <= experimentalInteger(right);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left > right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalInteger(left) > experimentalInteger(right);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterEqualBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left >= right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalInteger(left) >= experimentalInteger(right);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLess {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left < right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalInteger(left) < experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessEqual {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left <= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalInteger(left) <= experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreater {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left > right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalInteger(left) > experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterEqual {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left >= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalInteger(left) >= experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerAdd {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.addExact(left, right));
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return ProtosNumericValueSupport.integer(
+                    Math.addExact(
+                            experimentalInteger(left),
+                            experimentalInteger(right)));
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerSubtract {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.subtractExact(left, right));
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return ProtosNumericValueSupport.integer(
+                    Math.subtractExact(
+                            experimentalInteger(left),
+                            experimentalInteger(right)));
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerMultiply {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.multiplyExact(left, right));
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return ProtosNumericValueSupport.integer(
+                    Math.multiplyExact(
+                            experimentalInteger(left),
+                            experimentalInteger(right)));
         }
     }
 
