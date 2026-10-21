@@ -523,14 +523,15 @@ final class ProtosI101ProfileSpecializedLoweringTest {
                 new Case("() => { true.ifTrue() { null } }", "() => { null }",
                         ProtosNullValue.INSTANCE),
                 // Not folded: an unselected callback, a send, a non-local return, a large
-                // Integer, a receiver/canonical-Boolean result policy and a wrong arity.
+                // Integer, the canonical-Boolean result policy (and/or) and a wrong arity.
                 new Case("() => { false.ifTrue() { 1 } }", null, ProtosNullValue.INSTANCE),
                 new Case("() => { true.ifTrue() { 1 + 2 } }", "() => { 3 }", 3L),
                 new Case("() => {\n    true.ifTrue() { ^1 }\n    2\n}", "() => { 1 }", 1L),
                 new Case("() => { true.ifTrue() { 99999999999999999999 } }",
                         "() => { 99999999999999999999 }",
                         new BigInteger("99999999999999999999")),
-                new Case("() => { true.if() { 1 } }", "() => { true }", ProtosBooleanValue.TRUE),
+                new Case("() => { false.or() { true } }", "() => { true }",
+                        ProtosBooleanValue.TRUE),
                 new Case("() => { true.and() { true } }", "() => { true }",
                         ProtosBooleanValue.TRUE),
                 new Case("() => { Error.handle(() => { true.ifTrue() }, (caught) => { 7 }) }",

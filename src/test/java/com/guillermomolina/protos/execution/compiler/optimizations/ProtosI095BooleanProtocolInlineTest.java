@@ -46,8 +46,9 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I095-D focal evidence: the shared Boolean-control lowering covers all
- * eight standard selectors. {@code ifTrueIfFalse} proves and inlines each
+ * I095-D focal evidence: the shared Boolean-control lowering covers the
+ * five callback-taking standard selectors. {@code ifTrueIfFalse} proves
+ * and inlines each
  * literal callback independently, {@code and}/{@code or} inline the selected
  * body and then require a canonical Boolean result, {@code not} needs no
  * callback, and a canonical literal receiver that selects no callback admits
@@ -307,17 +308,15 @@ final class ProtosI095BooleanProtocolInlineTest {
                     }
                     a: false.ifTrue(produce(1))
                     b: true.ifFalse(produce({ marker: 1 }))
-                    c: false.if(produce(3))
-                    d: true.else(produce(4))
                     e: false.and(produce(5))
                     g: true.or(produce(6))
                     h: true.ifTrueIfFalse(() => { count }, produce(7))
-                    ok: (a === null) && (b === null) && (c === false) && (d === true) && (e === false) && (g === true)
+                    ok: (a === null) && (b === null) && (e === false) && (g === true)
                     ok.ifTrueIfFalse(() => { h * 10 + count }, () => { -1 })
                 }
                 run()
                 """;
-        assertParity(source, 7 * 10 + 7);
+        assertParity(source, 5 * 10 + 5);
 
         String structure = """
                 run: (callback) => {

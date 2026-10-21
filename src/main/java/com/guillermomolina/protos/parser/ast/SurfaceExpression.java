@@ -28,6 +28,7 @@ public sealed interface SurfaceExpression
                 SurfaceMember,
                 SurfaceCall,
                 SurfaceContextualWhile,
+                SurfaceContextualIf,
                 SurfaceArrayConstruction,
                 SurfaceMapConstruction,
                 SurfaceIndex,

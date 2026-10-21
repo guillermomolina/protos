@@ -1264,7 +1264,7 @@ trailingClosurePath: (call, layout) => {
     selected
 }
 
-contextualWhileHeaderComments: (
+contextualHeaderComments: (
     node,
     boundaryKind,
     leadingSpace,
@@ -1293,6 +1293,39 @@ contextualWhileHeaderComments: (
 
     (result.size() > 0).ifTrue(() => {
         result = result + " "
+    })
+
+    result
+}
+
+// D211: comments between the true branch's closing brace and the paired
+// else, or between that else and the false branch's opening brace. The
+// separators are spaces only: a logical newline before else would end the
+// contextual expression and change its parse.
+contextualElseSeparatorComments: (
+    node,
+    boundaryKind,
+    layout
+) => {
+    result: " "
+
+    layout.comments.each((comment) => {
+        sameBoundary:
+            (comment.boundaryKind == boundaryKind) &&
+            (comment.preceding === node.path) &&
+            (comment.following === node.falseBranch.path)
+
+        sameBoundary.ifTrue(() => {
+            (comment.placement ==
+                "EMBEDDED_BETWEEN_TOKENS").ifFalse(() => {
+                Error().signal()
+            })
+
+            result =
+                result +
+                comment.rawText +
+                " "
+        })
     })
 
     result
@@ -1515,14 +1548,14 @@ formatExpression = (node, level, layout) => {
     (kind == "CONTEXTUAL_WHILE").ifTrue(() => {
         formatted =
             "while" +
-            contextualWhileHeaderComments(
+            contextualHeaderComments(
                 node,
                 "CONTEXTUAL_WHILE_BEFORE_LPAREN",
                 true,
                 layout
             ) +
             "(" +
-            contextualWhileHeaderComments(
+            contextualHeaderComments(
                 node,
                 "CONTEXTUAL_WHILE_AFTER_LPAREN",
                 false,
@@ -1544,6 +1577,62 @@ formatExpression = (node, level, layout) => {
                 level,
                 layout
             )
+    })
+
+    (kind == "CONTEXTUAL_IF").ifTrue(() => {
+        formatted =
+            "if" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_IF_BEFORE_LPAREN",
+                true,
+                layout
+            ) +
+            "(" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_IF_AFTER_LPAREN",
+                false,
+                layout
+            ) +
+            formatExpression(
+                node.condition,
+                level,
+                layout
+            ) +
+            ")" +
+            formatTrailingClosureSeparator(
+                node,
+                node.trueBranch,
+                layout
+            ) +
+            formatBracedSequence(
+                node.trueBranch.body,
+                level,
+                layout
+            )
+
+        // The paired else stays on the true branch's closing line.
+        (node.falseBranch === null).ifFalse(() => {
+            formatted =
+                formatted +
+                contextualElseSeparatorComments(
+                    node,
+                    "CONTEXTUAL_IF_BEFORE_ELSE",
+                    layout
+                ) +
+                "else" +
+                contextualElseSeparatorComments(
+                    node,
+                    "CONTEXTUAL_IF_AFTER_ELSE",
+                    layout
+                ) +
+                formatBracedSequence(
+                    node.falseBranch.body,
+                    level,
+                    layout
+                )
+        })
     })
 
     (kind == "ARRAY_CONSTRUCTION").ifTrue(() => {
@@ -1754,6 +1843,17 @@ formatBody: (layout) => {
                     "CONTEXTUAL_WHILE_AFTER_LPAREN")) &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        contextualIfComment:
+            ((comment.boundaryKind ==
+                "CONTEXTUAL_IF_BEFORE_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_IF_AFTER_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_IF_BEFORE_ELSE") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_IF_AFTER_ELSE")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         embeddedComment:
             (comment.boundaryKind == "NONE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
@@ -1764,6 +1864,7 @@ formatBody: (layout) => {
             sequenceComment ||
             trailingClosureComment ||
             contextualWhileHeaderComment ||
+            contextualIfComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })

@@ -201,8 +201,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "ifTrue",
                         "ifFalse",
                         "ifTrueIfFalse",
-                        "if",
-                        "else",
                         "and",
                         "or",
                         "hash",
@@ -221,6 +219,12 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("while").isEmpty(),
                 "standard Object must not publish while");
+        assertTrue(
+                ProtosObjectValue.rootObject().readLocalSlot("if").isEmpty(),
+                "standard Object must not publish if");
+        assertTrue(
+                ProtosObjectValue.rootObject().readLocalSlot("else").isEmpty(),
+                "standard Object must not publish else");
         assertSourceBacked(ProtosObjectValue.rootObject(), "init");
         assertSourceBacked(ProtosObjectValue.rootObject(), "==");
         assertSourceBacked(ProtosObjectValue.rootObject(), "match");

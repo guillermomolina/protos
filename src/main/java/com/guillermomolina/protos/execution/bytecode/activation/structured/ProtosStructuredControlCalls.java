@@ -379,8 +379,6 @@ final class ProtosStructuredControlCalls {
                 case IF_TRUE_IF_FALSE -> true;
                 case AND -> receiver == ProtosBooleanValue.TRUE;
                 case OR -> receiver == ProtosBooleanValue.FALSE;
-                case IF -> receiver == ProtosBooleanValue.TRUE;
-                case ELSE -> receiver == ProtosBooleanValue.FALSE;
             };
         }
 
@@ -414,7 +412,7 @@ final class ProtosStructuredControlCalls {
          */
         private int selectedIndex() {
             return switch (kind) {
-                case IF_TRUE, IF_FALSE, AND, OR, IF, ELSE -> 0;
+                case IF_TRUE, IF_FALSE, AND, OR -> 0;
                 case IF_TRUE_IF_FALSE ->
                         receiver == ProtosBooleanValue.TRUE ? 0 : 1;
             };
@@ -429,7 +427,6 @@ final class ProtosStructuredControlCalls {
                 case IF_TRUE, IF_FALSE -> ProtosNullValue.INSTANCE;
                 case AND -> ProtosBooleanValue.FALSE;
                 case OR -> ProtosBooleanValue.TRUE;
-                case IF, ELSE -> receiver;
                 case IF_TRUE_IF_FALSE ->
                         throw new IllegalStateException(
                                 "ifTrueIfFalse always selects one callback");
@@ -443,8 +440,6 @@ final class ProtosStructuredControlCalls {
                                 result,
                                 activation);
                 case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
-                // D200: the callback's normal result is ignored; the receiver is returned.
-                case IF, ELSE -> receiver;
             };
         }
 

@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -85,6 +86,7 @@ public final class Canonicalizer {
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceCall call -> lowerCall(call);
             case SurfaceContextualWhile loop -> lowerContextualWhile(loop);
+            case SurfaceContextualIf conditional -> lowerContextualIf(conditional);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -186,6 +188,34 @@ public final class Canonicalizer {
                 "whileTrue",
                 List.of(canonicalize(loop.body())),
                 loop.span());
+    }
+
+    /**
+     * D211: {@code if(condition) { a }} is the ordinary
+     * {@code condition.ifTrue(() => { a })} send and
+     * {@code if(condition) { a } else { b }} is the ordinary
+     * {@code condition.ifTrueIfFalse(() => { a }, () => { b })} send. The
+     * condition is the send receiver itself, evaluated once and eagerly
+     * (unlike contextual while, it is never wrapped in a Closure); no
+     * conditional-specific canonical node exists.
+     */
+    private CanonicalExpression lowerContextualIf(SurfaceContextualIf conditional) {
+        CanonicalExpression condition = canonicalize(conditional.condition());
+        if (conditional.falseBranch() == null) {
+            return new CanonicalSend(
+                    condition,
+                    "ifTrue",
+                    List.of(canonicalize(conditional.trueBranch())),
+                    conditional.span());
+        }
+
+        CanonicalExpression trueBranch = canonicalize(conditional.trueBranch());
+        CanonicalExpression falseBranch = canonicalize(conditional.falseBranch());
+        return new CanonicalSend(
+                condition,
+                "ifTrueIfFalse",
+                List.of(trueBranch, falseBranch),
+                conditional.span());
     }
 
     private List<CanonicalExpression> canonicalizeArguments(List<SurfaceArgument> arguments) {

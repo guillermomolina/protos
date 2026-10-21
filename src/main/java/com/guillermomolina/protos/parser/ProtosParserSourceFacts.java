@@ -19,6 +19,7 @@ package com.guillermomolina.protos.parser;
 
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
@@ -113,7 +114,9 @@ public final class ProtosParserSourceFacts {
 
     /**
      * Attached trailing braced Closure and the exact Surface node that owns it:
-     * an ordinary {@link SurfaceCall} or a D210-Q2 {@link SurfaceContextualWhile}.
+     * an ordinary {@link SurfaceCall}, a D210-Q2 {@link SurfaceContextualWhile},
+     * or a D211 {@link SurfaceContextualIf} (whose true branch is the attached
+     * trailing Closure; its false branch is a {@link ContextualElseOrigin}).
      */
     public record TrailingClosureOrigin(
             SurfaceExpression owner,
@@ -122,10 +125,33 @@ public final class ProtosParserSourceFacts {
             Objects.requireNonNull(owner, "owner");
             Objects.requireNonNull(closure, "closure");
             if (!(owner instanceof SurfaceCall)
-                    && !(owner instanceof SurfaceContextualWhile)) {
+                    && !(owner instanceof SurfaceContextualWhile)
+                    && !(owner instanceof SurfaceContextualIf)) {
                 throw new IllegalArgumentException(
-                        "trailing Closure owner must be a call or contextual while: "
+                        "trailing Closure owner must be a call, contextual while,"
+                                + " or contextual if: "
                                 + owner.getClass().getSimpleName());
+            }
+        }
+    }
+
+    /**
+     * D211 paired {@code else} suffix of a two-arm contextual if: the owning
+     * node, the exact {@code else} token span, and the false-branch Closure.
+     * Kept distinct from {@link TrailingClosureOrigin} so every owner has at
+     * most one attached trailing Closure.
+     */
+    public record ContextualElseOrigin(
+            SurfaceContextualIf owner,
+            SourceSpan elseSpan,
+            SurfaceClosure falseBranch) {
+        public ContextualElseOrigin {
+            Objects.requireNonNull(owner, "owner");
+            Objects.requireNonNull(elseSpan, "elseSpan");
+            Objects.requireNonNull(falseBranch, "falseBranch");
+            if (owner.falseBranch() != falseBranch) {
+                throw new IllegalArgumentException(
+                        "contextual else Closure must be the owner's false branch");
             }
         }
     }
@@ -133,14 +159,17 @@ public final class ProtosParserSourceFacts {
     private final List<SequenceSeparatorFact> sequenceSeparators;
     private final List<SingleParameterClosureSourceForm> singleParameterClosureForms;
     private final List<TrailingClosureOrigin> trailingClosureOrigins;
+    private final List<ContextualElseOrigin> contextualElseOrigins;
 
     private ProtosParserSourceFacts(
             List<SequenceSeparatorFact> sequenceSeparators,
             List<SingleParameterClosureSourceForm> singleParameterClosureForms,
-            List<TrailingClosureOrigin> trailingClosureOrigins) {
+            List<TrailingClosureOrigin> trailingClosureOrigins,
+            List<ContextualElseOrigin> contextualElseOrigins) {
         this.sequenceSeparators = List.copyOf(sequenceSeparators);
         this.singleParameterClosureForms = List.copyOf(singleParameterClosureForms);
         this.trailingClosureOrigins = List.copyOf(trailingClosureOrigins);
+        this.contextualElseOrigins = List.copyOf(contextualElseOrigins);
     }
 
     public List<SequenceSeparatorFact> sequenceSeparators() {
@@ -155,12 +184,18 @@ public final class ProtosParserSourceFacts {
         return trailingClosureOrigins;
     }
 
+    public List<ContextualElseOrigin> contextualElseOrigins() {
+        return contextualElseOrigins;
+    }
+
     public static final class Builder {
         private final List<SequenceSeparatorFact> sequenceSeparators =
                 new ArrayList<>();
         private final List<SingleParameterClosureSourceForm> singleParameterClosureForms =
                 new ArrayList<>();
         private final List<TrailingClosureOrigin> trailingClosureOrigins =
+                new ArrayList<>();
+        private final List<ContextualElseOrigin> contextualElseOrigins =
                 new ArrayList<>();
 
         void recordExpressionSeparator(
@@ -219,11 +254,20 @@ public final class ProtosParserSourceFacts {
             trailingClosureOrigins.add(new TrailingClosureOrigin(owner, closure));
         }
 
+        void recordContextualElseOrigin(
+                SurfaceContextualIf owner,
+                SourceSpan elseSpan,
+                SurfaceClosure falseBranch) {
+            contextualElseOrigins.add(
+                    new ContextualElseOrigin(owner, elseSpan, falseBranch));
+        }
+
         public ProtosParserSourceFacts build() {
             return new ProtosParserSourceFacts(
                     sequenceSeparators,
                     singleParameterClosureForms,
-                    trailingClosureOrigins);
+                    trailingClosureOrigins,
+                    contextualElseOrigins);
         }
     }
 }

@@ -19,8 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosDapTestSupport.DapClient;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.PolyglotException;
 import org.junit.jupiter.api.Test;
 
+import java.net.SocketException;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
@@ -44,6 +46,7 @@ final class ProtosI026FDapTransportTest {
         Context context = null;
         DapClient client = null;
         Thread dapClientConnectionThread = null;
+        boolean disconnected = false;
 
         try {
             context =
@@ -96,6 +99,7 @@ final class ProtosI026FDapTransportTest {
                     client.awaitResponse(disconnect, TIMEOUT),
                     disconnect,
                     "disconnect");
+            disconnected = true;
         } finally {
             if (client != null) {
                 client.close();
@@ -104,9 +108,49 @@ final class ProtosI026FDapTransportTest {
                 awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
             }
             if (context != null) {
-                context.close();
+                closeAfterDapSession(context, disconnected);
             }
         }
+    }
+
+    /**
+     * GraalVM's DAP server closes its session socket on {@code disconnect}, but
+     * {@code Context.close()} can still report the disposal of a thread the DAP
+     * {@code ThreadsHandler} registered, and the resulting "thread exited" event
+     * write fails on that already closed socket. Whether the thread is
+     * registered depends on scheduling, so the failure is intermittent under
+     * the parallel suite. Only that exact upstream teardown failure is
+     * tolerated, and only after the full handshake, including disconnect,
+     * succeeded; every other close failure still fails the test.
+     */
+    private static void closeAfterDapSession(Context context, boolean disconnected) {
+        try {
+            context.close();
+        } catch (PolyglotException exception) {
+            if (!disconnected || !isDapThreadDisposalWriteAfterDisconnect(exception)) {
+                throw exception;
+            }
+        }
+    }
+
+    private static boolean isDapThreadDisposalWriteAfterDisconnect(Throwable exception) {
+        boolean socketClosed = false;
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SocketException
+                    && "Socket closed".equals(cause.getMessage())) {
+                socketClosed = true;
+            }
+        }
+        if (!socketClosed) {
+            return false;
+        }
+        for (StackTraceElement frame : exception.getStackTrace()) {
+            if (frame.getClassName().equals("com.oracle.truffle.tools.dap.server.ThreadsHandler")
+                    && frame.getMethodName().equals("onThreadDisposed")) {
+                return true;
+            }
+        }
+        return false;
     }
 
 

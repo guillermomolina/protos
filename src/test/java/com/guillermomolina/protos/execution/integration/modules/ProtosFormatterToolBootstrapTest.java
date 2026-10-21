@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -28,6 +29,7 @@ import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -166,7 +168,8 @@ final class ProtosFormatterToolBootstrapTest {
                         "structuralForms",
                         "sequenceSeparators",
                         "closureForms",
-                        "trailingClosures"),
+                        "trailingClosures",
+                        "contextualElses"),
                 projected.localSlotsSnapshot().keySet());
 
         assertEquals(
@@ -1202,6 +1205,161 @@ final class ProtosFormatterToolBootstrapTest {
     }
 
     @Test
+    void i119FormatsContextualIfAndKeepsElseOnTheClosingLine()
+            throws Exception {
+        assertFormatsContextualIf(
+                "if(a){b}",
+                "if(a) { b }");
+        assertFormatsContextualIf(
+                "if(a){b}else{c}",
+                "if(a) { b } else { c }");
+        assertFormatsContextualIf(
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "    b\n"
+                        + "} else {\n"
+                        + "    c()\n"
+                        + "    d\n"
+                        + "}",
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "    b\n"
+                        + "} else {\n"
+                        + "    c()\n"
+                        + "    d\n"
+                        + "}");
+        assertFormatsContextualIf(
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "\n"
+                        + "    b\n"
+                        + "} else {\n"
+                        + "    c\n"
+                        + "}",
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "\n"
+                        + "    b\n"
+                        + "} else { c }");
+        assertFormatsContextualIf(
+                "if(a){if(b){1}else{2}}else{3}",
+                "if(a) { if(b) { 1 } else { 2 } } else { 3 }");
+        assertFormatsContextualIf(
+                "if(a) {\n"
+                        + "    if(b) {\n"
+                        + "        first()\n"
+                        + "        1\n"
+                        + "    } else { 2 }\n"
+                        + "    3\n"
+                        + "} else { 4 }",
+                "if(a) {\n"
+                        + "    if(b) {\n"
+                        + "        first()\n"
+                        + "        1\n"
+                        + "    } else { 2 }\n"
+                        + "    3\n"
+                        + "} else { 4 }");
+    }
+
+    @Test
+    void i119PreservesContextualIfCommentsExactlyOnce()
+            throws Exception {
+        assertFormatsContextualIf(
+                "if /* comment */ (a) { b }",
+                "if /* comment */ (a) { b }");
+        assertFormatsContextualIf(
+                "if(/* comment */ a) { b }",
+                "if(/* comment */ a) { b }");
+        assertFormatsContextualIf(
+                "if(a) /* comment */ { b }",
+                "if(a) /* comment */ { b }");
+        assertFormatsContextualIf(
+                "if(a) { b } /* comment */ else { c }",
+                "if(a) { b } /* comment */ else { c }");
+        assertFormatsContextualIf(
+                "if(a) { b } else /* comment */ { c }",
+                "if(a) { b } else /* comment */ { c }");
+        assertFormatsContextualIf(
+                "if(a){b}/* one\n two */else{c}",
+                "if(a) { b } /* one\n two */ else { c }");
+        assertFormatsContextualIf(
+                "if(a){b}else/* one\n two */{c}",
+                "if(a) { b } else /* one\n two */ { c }");
+        assertFormatsContextualIf(
+                "if /* a */ (/* b */ x) /* c */ {y} /* d */ else /* e */ {z}",
+                "if /* a */ (/* b */ x) /* c */ { y } /* d */ else /* e */ { z }");
+        assertFormatsContextualIf(
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "    // inside true\n"
+                        + "    b\n"
+                        + "} else {\n"
+                        + "    c() // inside false\n"
+                        + "    d\n"
+                        + "}",
+                "if(a) {\n"
+                        + "    first()\n"
+                        + "    // inside true\n"
+                        + "    b\n"
+                        + "} else {\n"
+                        + "    c() // inside false\n"
+                        + "    d\n"
+                        + "}");
+    }
+
+    private static void assertFormatsContextualIf(
+            String source,
+            String expected)
+            throws Exception {
+        assertFormatsIdempotently(
+                source,
+                expected,
+                SurfaceContextualIf.class);
+        String formatted = formatOnce(source, 33L);
+        assertFalse(
+                formatted.matches("(?s).*\\}\\s*\\n\\s*else.*"),
+                () -> "a paired else must stay on the closing line: " + formatted);
+        assertEquals(
+                commentCount(source),
+                commentCount(formatted),
+                () -> "comments must be preserved exactly once: " + formatted);
+
+        SurfaceContextualIf original = assertInstanceOf(
+                SurfaceContextualIf.class,
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i119-source",
+                                        34L,
+                                        source))
+                        .program()
+                        .expressions()
+                        .get(0));
+        SurfaceContextualIf reparsed = assertInstanceOf(
+                SurfaceContextualIf.class,
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i119-formatted",
+                                        35L,
+                                        formatted))
+                        .program()
+                        .expressions()
+                        .get(0));
+        assertEquals(
+                original.falseBranch() == null,
+                reparsed.falseBranch() == null,
+                () -> "formatting must keep the contextual if arity: " + formatted);
+    }
+
+    private static int commentCount(String text) {
+        return text.split("/\\*", -1).length
+                - 1
+                + text.split("//", -1).length
+                - 1;
+    }
+
+    @Test
     void i117bFormatsContextualWhileAndKeepsTrailingClosureComments()
             throws Exception {
         assertFormatsIdempotently(
@@ -1738,6 +1896,11 @@ final class ProtosFormatterToolBootstrapTest {
         assertEquals(
                 before.trailingClosures(),
                 after.trailingClosures(),
+                context);
+
+        assertEquals(
+                before.contextualElses(),
+                after.contextualElses(),
                 context);
     }
 

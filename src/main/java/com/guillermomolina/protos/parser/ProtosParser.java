@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -781,6 +782,13 @@ public final class ProtosParser {
             return loop;
         }
 
+        if (isContextualIf(receiver, arguments, trailingClosure)) {
+            return parseContextualIf(
+                    receiver,
+                    arguments.get(0).expression(),
+                    trailingClosure);
+        }
+
         SurfaceCall call = new SurfaceCall(
                 receiver,
                 arguments,
@@ -807,6 +815,62 @@ public final class ProtosParser {
                 && name.name().equals("while")
                 && arguments.size() == 2
                 && !arguments.get(0).spread();
+    }
+
+    /**
+     * D211: only a bare, ungrouped {@code if} name with exactly one non-spread
+     * explicit argument and an attached parameterless trailing Closure is the
+     * contextual form; every other shape stays an ordinary call. The attached
+     * trailing Closure is the second entry of {@code arguments}.
+     */
+    private static boolean isContextualIf(
+            SurfaceExpression receiver,
+            List<SurfaceArgument> arguments,
+            SurfaceClosure trailingClosure) {
+        return trailingClosure != null
+                && trailingClosure.parameters().isEmpty()
+                && receiver instanceof SurfaceName name
+                && name.name().equals("if")
+                && arguments.size() == 2
+                && !arguments.get(0).spread();
+    }
+
+    /**
+     * D211: completes a recognized contextual if. The optional {@code else}
+     * suffix pairs only when the identifier {@code else} immediately follows
+     * the true branch and is itself immediately followed by a braced body,
+     * with no logical NEWLINE in between; otherwise the single-arm form is
+     * returned and any later {@code else} is left to ordinary grammar.
+     */
+    private SurfaceExpression parseContextualIf(
+            SurfaceExpression keyword,
+            SurfaceExpression condition,
+            SurfaceClosure trueBranch) {
+        SurfaceClosure falseBranch = null;
+        SourceSpan elseSpan = null;
+        int endOffset = trueBranch.span().endOffset();
+
+        if (cursor.at(TokenType.IDENTIFIER)
+                && cursor.current().token().lexeme().equals("else")
+                && cursor.nextAt(TokenType.LBRACE)) {
+            elseSpan = cursor.advance().span();
+            falseBranch =
+                    (SurfaceClosure) parseClosureBody(
+                            List.of(),
+                            cursor.current().span().startOffset());
+            endOffset = falseBranch.span().endOffset();
+        }
+
+        SurfaceContextualIf conditional = new SurfaceContextualIf(
+                condition,
+                trueBranch,
+                falseBranch,
+                new SourceSpan(keyword.span().startOffset(), endOffset));
+        recordTrailingClosureOrigin(conditional, trueBranch);
+        if (falseBranch != null) {
+            recordContextualElseOrigin(conditional, elseSpan, falseBranch);
+        }
+        return conditional;
     }
 
     private SurfaceArgument parseArgument() {
@@ -932,6 +996,18 @@ public final class ProtosParser {
             sourceFacts.recordTrailingClosureOrigin(
                     owner,
                     closure);
+        }
+    }
+
+    private void recordContextualElseOrigin(
+            SurfaceContextualIf owner,
+            SourceSpan elseSpan,
+            SurfaceClosure falseBranch) {
+        if (sourceFacts != null) {
+            sourceFacts.recordContextualElseOrigin(
+                    owner,
+                    elseSpan,
+                    falseBranch);
         }
     }
 

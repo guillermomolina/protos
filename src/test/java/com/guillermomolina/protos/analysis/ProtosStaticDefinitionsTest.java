@@ -159,6 +159,52 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
+    void contextualIfHeaderIsNotALexicalReadOfIfBinding() {
+        String source =
+                "f: (if, n) => {\n"
+                        + "  (if)(n) { n }\n"
+                        + "  if(n) { n } else { n }\n"
+                        + "}";
+        int declaration = source.indexOf("if");
+        int groupedRead = source.indexOf("if", source.indexOf("(if)"));
+        int contextualHeader = source.lastIndexOf("if(");
+
+        ProtosStaticDefinitionResult grouped = definition(source, groupedRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + "if".length()),
+                grouped.targets().get(0).span());
+        assertTrue(definition(source, contextualHeader).isEmpty());
+        assertTrue(definition(source, source.indexOf("else")).isEmpty());
+    }
+
+    @Test
+    void contextualIfConditionIsEagerButBranchesAreClosureActivations() {
+        String source =
+                "f: (n) => {\n"
+                        + "  if(n > 1) { n } else { n }\n"
+                        + "  n\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+        int conditionRead = source.indexOf("n", source.indexOf("if("));
+        int trueRead = source.indexOf("n", source.indexOf("{ n }"));
+        int falseRead = source.indexOf("n", source.indexOf("else"));
+        int afterConditional = source.lastIndexOf("n");
+
+        ProtosStaticDefinitionResult condition =
+                definition(source, conditionRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + 1),
+                condition.targets().get(0).span());
+        assertTrue(definition(source, trueRead).isEmpty());
+        assertTrue(definition(source, falseRead).isEmpty());
+        assertTrue(definition(source, afterConditional).isEmpty());
+
+        String inner = "if(c) { ((k) => k)(1) } else { ((j) => j)(2) }";
+        assertTrue(definition(inner, inner.indexOf("k", inner.indexOf("=>"))).isPresent());
+        assertTrue(definition(inner, inner.indexOf("j", inner.indexOf("j) =>") + 1)).isPresent());
+    }
+
+    @Test
     void sessionResultRetainsExactSnapshotFreshness() {
         ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
         session.openWorkspace("workspace");

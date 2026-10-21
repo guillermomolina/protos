@@ -13,216 +13,180 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+// D211 contextual if/else. The file name is the historical location of the
+// retired D200 receiver-preserving Object.if/Object.else coverage.
+
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("if and else return the exact receiver for all four cases", () => {
-        runs: 0
-        Assertions.require(true.if(() => { runs = runs + 1 }) === true)
-        Assertions.require(false.if(() => { runs = runs + 10 }) === false)
-        Assertions.require(true.else(() => { runs = runs + 100 }) === true)
-        Assertions.require(false.else(() => { runs = runs + 1000 }) === false)
-        Assertions.require(runs == 1001)
-    }),
-    Test("selected callback result is ignored whatever its value", () => {
-        pending: (() => { 7 }).future()
-        results: [null, true, false, 42, {}, pending]
-        results.each((value) => {
-            Assertions.require(true.if(() => { value }) === true)
-            Assertions.require(false.else(() => { value }) === false)
-        })
-        Assertions.require(pending.value() == 7)
-    }),
-    Test("returned future is neither awaited nor adopted", () => {
-        produced: null
-        result: true.if(() => {
-            produced = (() => { Error().signal() }).future()
-            produced
-        })
-        Assertions.require(result === true)
-        Assertions.signals(Error, () => { produced.value() })
-    }),
-    Test("unselected callback is neither validated nor invoked", () => {
-        Assertions.require(false.if(123) === false)
-        Assertions.require(true.else(123) === true)
-        Assertions.require(false.if((a, b) => { a }) === false)
-        Assertions.require(true.else({ call: 1 }) === true)
-    }),
-    Test("selected non-invokable callback signals error", () => {
-        Assertions.signals(Error, () => { true.if(123) })
-        Assertions.signals(Error, () => { false.else(123) })
-        Assertions.signals(Error, () => { true.if({ call: 1 }) })
-    }),
-    Test("selected callback is invoked once with zero arguments", () => {
-        calls: 0
-        // D203: a declared parameter without a supplied argument binds null.
-        Assertions.require(true.if((required) => {
-            Assertions.require(required === null)
-            calls = calls + 1
-        }) === true)
-        Assertions.require(false.else((required) => {
-            Assertions.require(required === null)
-            calls = calls + 1
-        }) === false)
-        seen: null
-        true.if((x: 5) => { seen = x })
-        Assertions.require(seen == 5)
-        false.else((...rest) => { seen = rest.size() })
-        Assertions.require(seen == 0)
-        Assertions.require(calls == 2)
-    }),
-    Test("selected callback may be a non-closure invokable object", () => {
-        count: 0
-        callable: { call: () => { count = count + 1 } }
-        Assertions.require(true.if(callable) === true)
-        Assertions.require(false.else(callable) === false)
-        Assertions.require(count == 2)
-    }),
-    Test("exact arity is one", () => {
-        Assertions.signals(Error, () => { true.if() })
-        Assertions.signals(Error, () => { false.else() })
-        Assertions.signals(Error, () => { true.if(() => { 1 }, () => { 2 }) })
-        Assertions.signals(Error, () => { false.else(() => { 1 }, () => { 2 }) })
-    }),
-    Test("argument expressions are evaluated even when unselected", () => {
-        produced: 0
-        entered: 0
-        make: () => {
-            produced = produced + 1
-            () => { entered = entered + 1 }
-        }
-        false.if(make())
-        true.else(make())
-        Assertions.require((produced == 2) && (entered == 0))
-    }),
-    Test("chaining in both orders runs only the selected action", () => {
-        log: ""
-        Assertions.require(true.if(() => { log = log + "a" }).else(() => { log = log + "b" }) === true)
-        Assertions.require(false.if(() => { log = log + "c" }).else(() => { log = log + "d" }) === false)
-        Assertions.require(true.else(() => { log = log + "e" }).if(() => { log = log + "f" }) === true)
-        Assertions.require(false.else(() => { log = log + "g" }).if(() => { log = log + "h" }) === false)
-        Assertions.require(log == "adfg")
-    }),
-    Test("trailing closure form is an ordinary call per send", () => {
-        log: ""
-        ready: false
-        ready.if() { log = log + "yes" }.else() { log = log + "no" }
-        Assertions.require(log == "no")
-    }),
-    Test("repeated else runs every selected action", () => {
-        log: ""
-        false.else(() => { log = log + "A" }).else(() => { log = log + "B" })
-        Assertions.require(log == "AB")
-    }),
-    Test("later chained argument is evaluated after the earlier send completes", () => {
-        log: ""
-        true.if(() => { log = log + "1" }).else((() => {
-            log = log + "2"
-            () => { log = log + "x" }
-        })())
-        Assertions.require(log == "12")
-    }),
-    Test("or composes multi-way selection without elseIf", () => {
-        pick: (n) => {
-            log: ""
-            (n == 1).if(() => { log = log + "A" })
-                .or(() => { (n == 2).if(() => { log = log + "B" }) })
-                .or(() => { (n == 3).if(() => { log = log + "C" }) })
-                .else(() => { log = log + "D" })
-            log
-        }
-        Assertions.require(pick(1) == "A")
-        Assertions.require(pick(2) == "B")
-        Assertions.require(pick(3) == "C")
-        Assertions.require(pick(4) == "D")
-    }),
-    Test("|| composes multi-way selection and short-circuits", () => {
-        checked: 0
-        log: ""
-        second: () => {
-            checked = checked + 1
-            true
-        }
-        (true.if(() => { log = log + "A" }) || second().if(() => { log = log + "B" }))
-            .else(() => { log = log + "D" })
-        Assertions.require((log == "A") && (checked == 0))
-    }),
-    Test("no elseIf or elif selector is published", () => {
+    Test("standard Object publishes no if, else, elseIf or elif", () => {
+        Assertions.require(Object.hasSlot("if") === false)
+        Assertions.require(Object.hasSlot("else") === false)
+        Assertions.signals(Error, () => { true.if(() => { 1 }) })
+        Assertions.signals(Error, () => { false.else(() => { 1 }) })
         Assertions.signals(Error, () => { true.elseIf(() => { 1 }) })
         Assertions.signals(Error, () => { false.elif(() => { 1 }) })
     }),
-    Test("error from selected callback propagates", () => {
+    Test("single arm returns the selected result or null", () => {
+        Assertions.require(if(true) { 42 } == 42)
+        Assertions.require(if(false) { 42 } === null)
+    }),
+    Test("two arms return the selected branch result", () => {
+        Assertions.require(if(true) { 1 } else { 2 } == 1)
+        Assertions.require(if(false) { 1 } else { 2 } == 2)
+    }),
+    Test("selected result is not the Boolean condition", () => {
+        Assertions.require(if(true) { false } else { true } === false)
+        Assertions.require(if(false) { false } else { null } === null)
+    }),
+    Test("selected object identity is preserved", () => {
+        value: { marker: 42 }
+        result: if(true) {
+            value
+        } else {
+            {}
+        }
+        Assertions.require(result === value)
+    }),
+    Test("selected future identity is preserved and not awaited", () => {
+        pending: (() => { 7 }).future()
+        result: if(false) {
+            null
+        } else {
+            pending
+        }
+        Assertions.require(result === pending)
+        failing: null
+        produced: if(true) {
+            failing = (() => { Error().signal() }).future()
+            failing
+        }
+        Assertions.require(produced === failing)
+        Assertions.signals(Error, () => { produced.value() })
+    }),
+    Test("condition is evaluated eagerly exactly once", () => {
+        count: 0
+        next: () => {
+            count = count + 1
+            true
+        }
+        result: if(next()) {
+            42
+        } else {
+            0
+        }
+        Assertions.require((count == 1) && (result == 42))
+        if(next()) { 1 }
+        Assertions.require(count == 2)
+    }),
+    Test("condition is evaluated before either branch body", () => {
+        log: ""
+        if((() => {
+            log = log + "c"
+            false
+        })()) {
+            log = log + "t"
+        } else {
+            log = log + "f"
+        }
+        Assertions.require(log == "cf")
+    }),
+    Test("unselected branch body is not executed", () => {
+        log: ""
+        if(true) { log = log + "a" } else { log = log + "b" }
+        if(false) { log = log + "c" } else { log = log + "d" }
+        if(false) { log = log + "e" }
+        Assertions.require(log == "ad")
+    }),
+    Test("custom two-arm selector receives both branch Closures in order", () => {
+        custom: {
+            ifTrueIfFalse: (yes, no) => {
+                yes() + no()
+            }
+        }
+        Assertions.require(if(custom) { "t" } else { "f" } == "tf")
+    }),
+    Test("custom ifTrue override is dispatched", () => {
+        custom: {
+            ifTrue: (body) => {
+                body() + 10
+            }
+        }
+        Assertions.require(if(custom) { 32 } == 42)
+    }),
+    Test("custom if and else member names remain usable", () => {
+        custom: {
+            if: (body) => { 42 }
+            else: (body) => { 43 }
+        }
+        Assertions.require(custom.if() { 7 } == 42)
+        Assertions.require(custom.else() { 7 } == 43)
+    }),
+    Test("standard selectors are strict about the condition", () => {
+        Assertions.signals(Error, () => { if(0) { 1 } })
+        Assertions.signals(Error, () => { if(null) { 1 } else { 2 } })
+        Assertions.signals(Error, () => { if({}) { 1 } else { 2 } })
+    }),
+    Test("contextual if composes with postfix suffixes", () => {
+        item: { name: "box" }
+        Assertions.require(if(true) { item }.name == "box")
+        Assertions.require((if(false) { item } else { item }).name == "box")
+        Assertions.require(if(true) { [1, 2] } else { [3] }[1] == 2)
+    }),
+    Test("nested conditionals pair structurally", () => {
+        pick: (a, b) => {
+            if(a) {
+                if(b) { 1 } else { 2 }
+            } else {
+                3
+            }
+        }
+        Assertions.require(pick(true, true) == 1)
+        Assertions.require(pick(true, false) == 2)
+        Assertions.require(pick(false, true) == 3)
+    }),
+    Test("error from the selected branch propagates", () => {
         result: Error.handle(
-            () => { false.else(() => { Error().signal() }) },
+            () => {
+                if(false) { 1 } else { Error().signal() }
+            },
             (caught) => { 42 })
         Assertions.require(result == 42)
     }),
-    Test("non local return through selected callback", () => {
-        viaIf: () => {
-            true.if(() => { ^1 })
+    Test("non local return through the selected branch", () => {
+        viaTrue: () => {
+            if(true) { ^1 }
             100
         }
-        viaElse: () => {
-            false.else(() => { ^2 })
+        viaFalse: () => {
+            if(false) { 100 } else { ^2 }
             100
         }
-        Assertions.require(viaIf() + viaElse() == 3)
+        Assertions.require(viaTrue() + viaFalse() == 3)
     }),
-    Test("cancellation observed by a selected callback propagates", () => {
+    Test("cancellation observed by the selected branch propagates", () => {
         future: (() => { 42 }).future()
         future.cancel()
-        Assertions.signals(Cancelled, () => { true.if(() => { future.value() }) })
+        Assertions.signals(Cancelled, () => {
+            if(true) { future.value() }
+        })
     }),
-    Test("selected callback may suspend inside a task without replay", () => {
+    Test("selected branch may suspend inside a task without replay", () => {
         outcome: (() => {
             count: 0
             pending: (() => { 41 }).future()
-            seen: null
-            receiver: true.if(() => {
+            result: if(true) {
                 count = count + 1
-                seen = pending.value() + 1
-            })
-            other: false.else(() => { seen = seen + pending.value() })
-            [receiver, other, seen, count]
+                pending.value() + 1
+            } else {
+                count = count + 100
+                0
+            }
+            [result, count]
         }).future().value()
-        Assertions.require(outcome[0] === true)
-        Assertions.require(outcome[1] === false)
-        Assertions.require(outcome[2] == 83)
-        Assertions.require(outcome[3] == 1)
-    }),
-    Test("non-boolean receiver selecting standard behavior signals error", () => {
-        Assertions.signals(Error, () => { {}.if(() => { 1 }) })
-        Assertions.signals(Error, () => { {}.else(() => { 1 }) })
-        Assertions.signals(Error, () => { (0).if(() => { 1 }) })
-        Assertions.signals(Error, () => { null.else(() => { 1 }) })
-    }),
-    Test("copied standard if and else keep their non-boolean receiver", () => {
-        holder: {
-            if: Object.slotValue("if")
-            else: Object.slotValue("else")
-        }
-        Assertions.signals(Error, () => { holder.if(() => { 1 }) })
-        Assertions.signals(Error, () => { holder.else(() => { 1 }) })
-    }),
-    Test("custom same-name selectors stay ordinary", () => {
-        invoked: 0
-        custom: {
-            if: (callback) => { 11 }
-            else: (callback) => { 22 }
-        }
-        Assertions.require(custom.if(() => { invoked = invoked + 1 }) == 11)
-        Assertions.require(custom.else(() => { invoked = invoked + 1 }) == 22)
-        Assertions.require(invoked == 0)
-    }),
-    Test("existing result-producing protocol is unchanged", () => {
-        Assertions.require(true.ifTrue(() => { 42 }) == 42)
-        Assertions.require(false.ifTrue(() => { 42 }) === null)
-        Assertions.require(false.ifFalse(() => { 43 }) == 43)
-        Assertions.require(true.ifTrueIfFalse(() => { 1 }, () => { 2 }) == 1)
-        Assertions.signals(Error, () => { true.and(() => { 1 }) })
-        Assertions.require(false.or(() => { true }) === true)
-        Assertions.require(true.not() === false)
+        Assertions.require(outcome[0] == 42)
+        Assertions.require(outcome[1] == 1)
     })
 ]
 tests.freeze()

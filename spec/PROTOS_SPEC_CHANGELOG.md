@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.466] - 2026-10-21
+
+### D211 / I119 — Contextual if/else expression
+- `spec/PROTOS_GRAMMAR.md`: §36 replaces the D051 "no conditional syntax"
+  boundary with `contextual-if-expression`
+  (`"if", "(", expression, ")", trailing-closure, [ "else",
+  braced-closure-body ]`), recognized only for a bare, ungrouped `if` with
+  exactly one non-spread argument and an attached parameterless trailing
+  Closure; the optional `else` suffix pairs only with no intervening
+  logical `NEWLINE`. Mandatory desugaring is `condition.ifTrue(() => {...})`
+  or `condition.ifTrueIfFalse(() => {...}, () => {...})`, with the
+  condition evaluated eagerly as the receiver. `if`/`else` stay
+  non-reserved; §19, the reserved-word note and the D210-Q2 section are
+  cross-referenced.
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: §16 removes the D200
+  `if(block)` / `else(block)` standard selectors and their receiver-
+  preserving results; Core publishes no standard `Object.if`,
+  `Object.else`, `elseIf` or `elif`. The remaining Boolean contracts are
+  unchanged.
+- `spec/PROTOS_LANGUAGE_SPEC.md`: §33 records the D211 contextual exception.
+- Approved incompatibilities (D211): the exact bare `if(c) { body }` shape
+  no longer calls a lexical `if` binding (D051), and standard
+  receiver-preserving `.if()` / `.else()` no longer exist (D200).
+
 ## [0.1.465] - 2026-10-21
 
 ### D210-Q2 / I117-B — Contextual while expression

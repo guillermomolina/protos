@@ -71,6 +71,12 @@ acceptSourceLayout: (layout) => {
         trailingClosure.closure
     })
 
+    layout.contextualElses.each((contextualElse) => {
+        contextualElse.conditional
+        contextualElse.elseToken
+        contextualElse.falseBranch
+    })
+
     layout
 }
 

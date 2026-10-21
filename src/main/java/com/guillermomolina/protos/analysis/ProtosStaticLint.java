@@ -22,6 +22,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -115,6 +116,13 @@ public final class ProtosStaticLint {
             case SurfaceContextualWhile loop -> {
                 visit(loop.condition());
                 visit(loop.body());
+            }
+            case SurfaceContextualIf conditional -> {
+                visit(conditional.condition());
+                visit(conditional.trueBranch());
+                if (conditional.falseBranch() != null) {
+                    visit(conditional.falseBranch());
+                }
             }
             case SurfaceArrayConstruction array ->
                     visitArguments(array.arguments());

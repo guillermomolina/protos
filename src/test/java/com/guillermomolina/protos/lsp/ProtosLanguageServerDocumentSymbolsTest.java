@@ -76,6 +76,26 @@ class ProtosLanguageServerDocumentSymbolsTest {
     }
 
     @Test
+    void definitionsInsideBothContextualIfBranchesAreDiscoverable() {
+        ProtosLanguageServer server = initializedServer();
+        ProtosTextDocumentService documents = server.textDocuments();
+        String uri = "file:///workspace/conditional.protos";
+        String source = "if(ready) {\n"
+                + "    started: 1\n"
+                + "} else {\n"
+                + "    waiting: 2\n"
+                + "}\n";
+
+        documents.didOpen(open(uri, 1, source));
+        List<DocumentSymbol> symbols = symbols(documents, uri);
+
+        assertEquals(List.of("started", "waiting"),
+                symbols.stream().map(DocumentSymbol::getName).toList());
+        assertEquals(new Position(1, 4), symbols.get(0).getSelectionRange().getStart());
+        assertEquals(new Position(3, 4), symbols.get(1).getSelectionRange().getStart());
+    }
+
+    @Test
     void preservesUtf16ColumnsAndReturnsNoTreeForCurrentParseFailure() {
         ProtosLanguageServer server = initializedServer();
         ProtosTextDocumentService documents = server.textDocuments();

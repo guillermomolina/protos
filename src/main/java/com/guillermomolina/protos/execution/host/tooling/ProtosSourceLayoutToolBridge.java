@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.ClosureFormProjection;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.CommentProjection;
+import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.ContextualElseProjection;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.SequenceSeparatorProjection;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.SourcePreservationProjection;
 import com.guillermomolina.protos.analysis.ProtosSourceLayoutView.StructuralFormProjection;
@@ -32,6 +33,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -131,6 +133,12 @@ public final class ProtosSourceLayoutToolBridge {
                 "trailingClosures",
                 trailingClosures(
                         projection.trailingClosures(),
+                        paths,
+                        toolPrelude));
+        root.createLocalSlot(
+                "contextualElses",
+                contextualElses(
+                        projection.contextualElses(),
                         paths,
                         toolPrelude));
         root.freeze();
@@ -234,6 +242,31 @@ public final class ProtosSourceLayoutToolBridge {
                                 view,
                                 paths,
                                 prelude));
+            }
+            case SurfaceContextualIf conditional -> {
+                value.createLocalSlot(
+                        "condition",
+                        expression(
+                                conditional.condition(),
+                                view,
+                                paths,
+                                prelude));
+                value.createLocalSlot(
+                        "trueBranch",
+                        expression(
+                                conditional.trueBranch(),
+                                view,
+                                paths,
+                                prelude));
+                value.createLocalSlot(
+                        "falseBranch",
+                        conditional.falseBranch() != null
+                                ? expression(
+                                        conditional.falseBranch(),
+                                        view,
+                                        paths,
+                                        prelude)
+                                : ProtosNullValue.INSTANCE);
             }
             case SurfaceArrayConstruction array ->
                     value.createLocalSlot(
@@ -422,6 +455,8 @@ public final class ProtosSourceLayoutToolBridge {
             case SurfaceCall ignored -> "CALL";
             case SurfaceContextualWhile ignored ->
                     "CONTEXTUAL_WHILE";
+            case SurfaceContextualIf ignored ->
+                    "CONTEXTUAL_IF";
             case SurfaceArrayConstruction ignored ->
                     "ARRAY_CONSTRUCTION";
             case SurfaceMapConstruction ignored ->
@@ -810,6 +845,38 @@ public final class ProtosSourceLayoutToolBridge {
                     "closure",
                     path(
                             trailing.closure(),
+                            paths,
+                            prelude));
+            value.freeze();
+            values.add(value);
+        }
+
+        return prelude.newFrozenArray(values);
+    }
+
+    private static Object contextualElses(
+            List<ContextualElseProjection> source,
+            Map<StructuralPath, ProtosObjectValue> paths,
+            ProtosPrelude prelude) {
+        List<Object> values =
+                new ArrayList<>(source.size());
+
+        for (ContextualElseProjection contextualElse : source) {
+            ProtosObjectValue value = object();
+            value.createLocalSlot(
+                    "conditional",
+                    path(
+                            contextualElse.conditional(),
+                            paths,
+                            prelude));
+            value.createLocalSlot(
+                    "elseToken",
+                    ProtosNumericValueSupport.integer(
+                            contextualElse.elseToken()));
+            value.createLocalSlot(
+                    "falseBranch",
+                    path(
+                            contextualElse.falseBranch(),
                             paths,
                             prelude));
             value.freeze();

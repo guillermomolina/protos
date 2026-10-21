@@ -45,8 +45,9 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * I095-C focal evidence: ordinary {@code ifTrue}, {@code ifFalse}, {@code if}
- * and {@code else} sends share one lowering. A canonical literal
+ * I095-C focal evidence: ordinary {@code ifTrue} and {@code ifFalse} sends,
+ * including the {@code ifTrue}/{@code ifTrueIfFalse} sends that D211 contextual
+ * {@code if} canonicalizes to, share one lowering. A canonical literal
  * receiver selects its branch statically; any other receiver is evaluated
  * once and classified at run time, a non-canonical receiver keeping the
  * ordinary send. A selected literal callback whose whole activation is proven
@@ -68,9 +69,12 @@ final class ProtosI095BooleanControlInlineTest {
 
     private static final int INLINE_DEPTH = 2;
 
-    /** The eight rows of the standard table, constant and dynamic receivers. */
+    /**
+     * The standard ifTrue/ifFalse rows and the D211 contextual if sends,
+     * constant and dynamic receivers.
+     */
     @Test
-    void allEightStandardRowsForConstantAndDynamicReceivers() throws Exception {
+    void standardRowsAndContextualIfForConstantAndDynamicReceivers() throws Exception {
         // Digits: selected result 7, unselected null 0, true 1, false 2.
         String code = """
                 code: (value) => {
@@ -87,15 +91,15 @@ final class ProtosI095BooleanControlInlineTest {
                     b: code(false.ifTrue(() => { 9 }))
                     c: code(true.ifFalse(() => { 9 }))
                     d: code(false.ifFalse(() => { 7 }))
-                    e: code(true.if(() => { 9 }))
-                    f: code(false.if(() => { 9 }))
-                    g: code(true.else(() => { 9 }))
-                    h: code(false.else(() => { 9 }))
+                    e: code(if(true) { 7 })
+                    f: code(if(false) { 9 })
+                    g: code(if(true) { 7 } else { 9 })
+                    h: code(if(false) { 9 } else { 7 })
                     ((((((a * 10 + b) * 10 + c) * 10 + d) * 10 + e) * 10 + f) * 10 + g) * 10 + h
                 }
                 run()
                 """;
-        assertParity(constant, 70071212);
+        assertParity(constant, 70077077);
 
         String dynamic = code + """
                 row: (t, f) => {
@@ -103,16 +107,16 @@ final class ProtosI095BooleanControlInlineTest {
                     b: code(f.ifTrue(() => { 9 }))
                     c: code(t.ifFalse(() => { 9 }))
                     d: code(f.ifFalse(() => { 7 }))
-                    e: code(t.if(() => { 9 }))
-                    g: code(f.if(() => { 9 }))
-                    h: code(t.else(() => { 9 }))
-                    i: code(f.else(() => { 9 }))
+                    e: code(if(t) { 7 })
+                    g: code(if(f) { 9 })
+                    h: code(if(t) { 7 } else { 9 })
+                    i: code(if(f) { 9 } else { 7 })
                     ((((((a * 10 + b) * 10 + c) * 10 + d) * 10 + e) * 10 + g) * 10 + h) * 10 + i
                 }
                 row(true, false) * 10 + row(true, false)
                 """;
-        assertParity(dynamic, 700712120L + 70071212L);
-        System.out.println("I095_C_EIGHT_ROWS=PASS");
+        assertParity(dynamic, 700770770L + 70077077L);
+        System.out.println("I095_C_STANDARD_ROWS_AND_CONTEXTUAL_IF=PASS");
     }
 
     /**
@@ -152,26 +156,24 @@ final class ProtosI095BooleanControlInlineTest {
         String source = """
                 run: (b) => {
                     probe()
-                    b.if(() => {
+                    if(b) {
                         inner: 5
                         inner + 1
-                    })
+                    }
                 }
                 custom: {
-                    if: (callback) => {
+                    ifTrue: (callback) => {
                         probe()
                         callback() + 30
                     }
                 }
                 code: (value) => {
-                    (value === true).ifTrueIfFalse(() => { 1 }, () => {
-                        (value === false).ifTrueIfFalse(() => { 2 }, () => { value })
-                    })
+                    (value === null).ifTrueIfFalse(() => { 2 }, () => { value })
                 }
                 code(run(true)) * 1000 + code(run(false)) * 100 + code(run(true)) * 10 + 0 * code(run(false)) + run(custom)
                 """;
         Execution normal = execute(false, source);
-        assertInteger(1210 + 36, normal.value());
+        assertInteger(6260 + 36, normal.value());
         List<String> names = instructionNames(normal.rootOfFirstProbe());
         int classify = position(names, "TryCompactCanonicalBooleanOne");
         int falseClass = position(names, "IsCanonicalBooleanFalseClass");
@@ -188,7 +190,7 @@ final class ProtosI095BooleanControlInlineTest {
         assertTrue(
                 normal.probe().depths().stream().anyMatch(depth -> depth > INLINE_DEPTH),
                 normal.probe()::toString);
-        assertParity(source, 1246);
+        assertParity(source, 6296);
         System.out.println("I095_C_DYNAMIC_ALTERNATION_AND_MISS=PASS");
     }
 
@@ -234,13 +236,13 @@ final class ProtosI095BooleanControlInlineTest {
                 run: (b) => {
                     p: probe
                     value: 9
-                    r: b.if(() => {
+                    r: if(b) {
                         value: 41
                         value = 42
                         p()
                         value
-                    })
-                    (r === b).ifTrueIfFalse(() => { value }, () => { -1 })
+                    }
+                    (r == 42).ifTrueIfFalse(() => { value }, () => { -1 })
                 }
                 run(true)
                 """;
@@ -272,7 +274,7 @@ final class ProtosI095BooleanControlInlineTest {
                         order = order * 10 + 2
                         5
                     })
-                    b: next().else(() => {
+                    b: next().ifFalse(() => {
                         hits = hits + 1
                         order = order * 10 + 3
                         5
@@ -282,8 +284,8 @@ final class ProtosI095BooleanControlInlineTest {
                         9
                     })
                     nullMark: (c === null).ifTrueIfFalse(() => { 1 }, () => { 0 })
-                    falseMark: (b === false).ifTrueIfFalse(() => { 1 }, () => { 0 })
-                    order * 1000 + hits * 100 + a * 10 + nullMark + falseMark
+                    selectedMark: (b == 5).ifTrueIfFalse(() => { 1 }, () => { 0 })
+                    order * 1000 + hits * 100 + a * 10 + nullMark + selectedMark
                 }
                 trace()
                 """;
@@ -297,9 +299,9 @@ final class ProtosI095BooleanControlInlineTest {
                         () => { 1 }
                     }
                     run: (receiver) => {
-                        receiver.if(producer())
+                        receiver.ifTrue(producer())
                     }
-                    custom: { if: (callback) => { callback() + 10 } }
+                    custom: { ifTrue: (callback) => { callback() + 10 } }
                     run(true)
                     run(false)
                     r: run(custom)
@@ -308,6 +310,25 @@ final class ProtosI095BooleanControlInlineTest {
                 trace()
                 """;
         assertParity(producer, 311);
+
+        // D211: the contextual condition is the send receiver, evaluated once.
+        String contextual = """
+                trace: () => {
+                    count: 0
+                    next: () => {
+                        count = count + 1
+                        true
+                    }
+                    r: if(next()) {
+                        40
+                    } else {
+                        0
+                    }
+                    count + r + 1
+                }
+                trace()
+                """;
+        assertParity(contextual, 42);
         System.out.println("I095_C_EVALUATED_ONCE=PASS");
     }
 
@@ -318,11 +339,11 @@ final class ProtosI095BooleanControlInlineTest {
                 run: (t, f) => {
                     a: t.ifFalse((x, y) => { x + y })
                     b: f.ifTrue((x, y) => { x + y })
-                    c: t.else((x) => { x })
-                    d: f.if((x) => { x })
+                    c: t.ifFalse((x) => { x })
+                    d: f.ifTrue((x) => { x })
                     e: true.ifFalse((x, y) => { x + y })
-                    g: false.if((x) => { x })
-                    ok: (a === null) && (b === null) && (c === true) && (d === false) && (e === null) && (g === false)
+                    g: false.ifTrue((x) => { x })
+                    ok: (a === null) && (b === null) && (c === null) && (d === null) && (e === null) && (g === null)
                     ok.ifTrueIfFalse(() => { 1 }, () => { 0 })
                 }
                 run(true, false)
@@ -339,7 +360,7 @@ final class ProtosI095BooleanControlInlineTest {
                     callable: { call: () => { 8 } }
                     a: t.ifTrue(callable)
                     b: f.ifFalse(callable)
-                    c: t.if(callable)
+                    c: t.ifTrueIfFalse(callable, 5)
                     custom: {
                         ifTrue: (callback) => { 100 }
                         ifFalse: (callback) => { 200 }
@@ -348,14 +369,14 @@ final class ProtosI095BooleanControlInlineTest {
                     }
                     d: custom.ifTrue(() => { 1 })
                     e: custom.ifFalse(() => { 1 })
+                    // D211: if/else are ordinary custom members, not standard selectors.
                     g: custom.if(() => { 1 })
                     h: custom.else(() => { 1 })
-                    ok: (c === true).ifTrueIfFalse(() => { 1 }, () => { 0 })
-                    a + b + ok + d + e + g + h
+                    a + b + c + d + e + g + h
                 }
                 run(true, false)
                 """;
-        assertParity(source, 8 + 8 + 1 + 1000);
+        assertParity(source, 8 + 8 + 8 + 1000);
 
         String callOverride = """
                 run: (b) => {
@@ -374,53 +395,53 @@ final class ProtosI095BooleanControlInlineTest {
         System.out.println("I095_C_CALLABLE_AND_OVERRIDES=PASS");
     }
 
-    /** if/else discard the callback's normal result, whatever its value. */
+    /** D211 contextual if returns the selected branch's exact result. */
     @Test
-    void ifAndElseDiscardNumberObjectBooleanAndFuture() throws Exception {
+    void contextualIfReturnsTheExactSelectedResult() throws Exception {
         String source = """
                 run: (t, f) => {
-                    a: t.if(() => { 5 })
-                    b: t.if(() => { { marker: 1 } })
-                    c: f.else(() => { true })
-                    d: f.else(() => { (() => { 41 }).future() })
-                    e: true.if(() => { false })
-                    g: false.else(() => { (() => { 41 }).future() })
-                    future: t.ifTrue(() => { (() => { 41 }).future() })
-                    ok: (a === true) && (b === true) && (c === false) && (d === false) && (e === true) && (g === false)
-                    ok.ifTrueIfFalse(() => { future.value() + 1 }, () => { 0 })
+                    marker: { marker: 1 }
+                    pending: (() => { 41 }).future()
+                    a: if(t) { 5 }
+                    b: if(t) { marker } else { null }
+                    c: if(f) { 1 } else { true }
+                    d: if(f) { null } else { pending }
+                    e: if(true) { false }
+                    g: if(false) { 1 }
+                    ok: (a == 5) && (b === marker) && (c === true) && (d === pending) && (e === false) && (g === null)
+                    ok.ifTrueIfFalse(() => { d.value() + 1 }, () => { 0 })
                 }
                 run(true, false)
                 """;
         assertExecutedOutcome(source, 42);
-        System.out.println("I095_C_IF_ELSE_DISCARD=PASS");
+        System.out.println("I095_C_CONTEXTUAL_IF_EXACT_RESULT=PASS");
     }
 
-    /** Chains are two independent sends; repeated else sends are not merged. */
+    /** D211 two-arm contextual if invokes only the selected branch. */
     @Test
-    void chainsAndRepeatedElseAreIndependentSends() throws Exception {
+    void contextualIfInvokesOnlyTheSelectedBranch() throws Exception {
         String source = """
                 run: (b) => {
                     trace: 0
-                    r: b.if(() => { trace = trace * 10 + 1 }).else(() => { trace = trace * 10 + 2 })
-                    s: b.else(() => { trace = trace * 10 + 3 }).else(() => { trace = trace * 10 + 4 })
-                    same: (r === b) && (s === b)
-                    same.ifTrueIfFalse(() => { trace }, () => { -1 })
+                    if(b) { trace = trace * 10 + 1 } else { trace = trace * 10 + 2 }
+                    if(b) { trace = trace * 10 + 3 }
+                    trace
                 }
                 run(true) * 1000 + run(false)
                 """;
-        assertParity(source, 1 * 1000 + 234);
+        assertParity(source, 13 * 1000 + 2);
 
         String constant = """
                 run: () => {
                     trace: 0
-                    false.else(() => { trace = trace * 10 + 1 }).else(() => { trace = trace * 10 + 2 })
-                    true.if(() => { trace = trace * 10 + 3 }).else(() => { trace = trace * 10 + 4 })
+                    if(false) { trace = trace * 10 + 1 } else { trace = trace * 10 + 2 }
+                    if(true) { trace = trace * 10 + 3 } else { trace = trace * 10 + 4 }
                     trace
                 }
                 run()
                 """;
-        assertParity(constant, 123);
-        System.out.println("I095_C_CHAINS_UNMERGED=PASS");
+        assertParity(constant, 23);
+        System.out.println("I095_C_CONTEXTUAL_IF_SELECTED_ONLY=PASS");
     }
 
     /** Captures by reference, own bindings, shadowing and D179. */
@@ -466,11 +487,11 @@ final class ProtosI095BooleanControlInlineTest {
                     total: 0
                     i: 0
                     (() => i < 3).whileTrue(() => {
-                        b.if(() => {
+                        if(b) {
                             own: i
                             own = own + 1
                             total = total + own
-                        })
+                        }
                         i = i + 1
                     })
                     total
@@ -488,11 +509,13 @@ final class ProtosI095BooleanControlInlineTest {
                 cleaned: 0
                 run: (b) => {
                     (() => {
-                        b.else(() => {
+                        if(b) {
+                            0
+                        } else {
                             inner: 1
                             Error().signal()
                             inner
-                        })
+                        }
                     }).ensure(() => { cleaned = cleaned + 1 })
                     99
                 }
@@ -503,7 +526,7 @@ final class ProtosI095BooleanControlInlineTest {
 
         String nonLocal = """
                 run: (b) => {
-                    b.if(() => { ^41 })
+                    if(b) { ^41 }
                     0
                 }
                 run(true) + run(false) + 1
@@ -514,11 +537,12 @@ final class ProtosI095BooleanControlInlineTest {
                 run: (b) => {
                     pending: (() => { 41 }).future()
                     seen: 0
-                    r: b.if(() => {
+                    r: if(b) {
                         inner: pending.value()
                         seen = inner + 1
-                    })
-                    (r === b).ifTrueIfFalse(() => { seen }, () => { -1 })
+                        seen
+                    }
+                    (r == 42).ifTrueIfFalse(() => { seen }, () => { -1 })
                 }
                 run(true)
                 """;
@@ -547,7 +571,7 @@ final class ProtosI095BooleanControlInlineTest {
         String source = """
                 run: (b) => {
                     probe()
-                    b.else(() => {
+                    b.ifFalse(() => {
                         inner: 1
                         missing + inner
                     })

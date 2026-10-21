@@ -8662,8 +8662,10 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I095-C/D: the eight standard Boolean selectors share one open-coded
-     * lowering. Each row declares, for each canonical receiver, the
+     * I095-C/D: five callback-taking standard Boolean selectors share
+     * this table-driven open-coded lowering. The standard not selector
+     * uses a separate no-callback path. Each row declares, for each
+     * canonical receiver, the
      * supplied position of the selected callback (-1: none), the result
      * when no callback is selected and the policy applied to a selected
      * callback's normal result. The rows restate the standard behaviors of
@@ -8677,19 +8679,16 @@ final class CanonicalToBytecodeLowerer {
         IF_FALSE(1, -1, 0, Unselected.NULL, SelectedResult.EXACT),
         IF_TRUE_IF_FALSE(2, 0, 1, Unselected.NULL, SelectedResult.EXACT),
         AND(1, 0, -1, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN),
-        OR(1, -1, 0, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN),
-        IF(1, 0, -1, Unselected.RECEIVER, SelectedResult.RECEIVER),
-        ELSE(1, -1, 0, Unselected.RECEIVER, SelectedResult.RECEIVER);
+        OR(1, -1, 0, Unselected.RECEIVER, SelectedResult.CANONICAL_BOOLEAN);
 
         /** Result of a canonical receiver that selects no callback. */
         private enum Unselected { NULL, RECEIVER, NEGATION }
 
         /**
-         * Exact callback result (ifTrue, ifFalse, ifTrueIfFalse), the
-         * receiver after discarding it (D200 if/else), or the result
-         * required to be canonical true/false (and/or).
+         * Exact callback result (ifTrue, ifFalse, ifTrueIfFalse) or the
+         * result required to be canonical true/false (and/or).
          */
-        private enum SelectedResult { EXACT, RECEIVER, CANONICAL_BOOLEAN }
+        private enum SelectedResult { EXACT, CANONICAL_BOOLEAN }
 
         private final int arity;
         private final int selectedOnTrue;
@@ -8718,8 +8717,6 @@ final class CanonicalToBytecodeLowerer {
                 case "ifTrueIfFalse" -> IF_TRUE_IF_FALSE;
                 case "and" -> AND;
                 case "or" -> OR;
-                case "if" -> IF;
-                case "else" -> ELSE;
                 default -> null;
             };
         }
@@ -9304,14 +9301,6 @@ final class CanonicalToBytecodeLowerer {
                 switch (control.selectedResult) {
                     case EXACT -> emitNormalInlineControlBody(
                             builder, closure, result);
-                    case RECEIVER -> {
-                        BytecodeLocal discarded = builder.createLocal(
-                                "normalBooleanControlDiscarded", null);
-                        emitNormalInlineControlBody(
-                                builder, closure, discarded);
-                        emitStoreConstant(builder, result,
-                                NormalBooleanControl.canonicalBoolean(receiver));
-                    }
                     case CANONICAL_BOOLEAN -> {
                         emitNormalInlineControlBody(builder, closure, result);
                         builder.beginStoreLocal(result);

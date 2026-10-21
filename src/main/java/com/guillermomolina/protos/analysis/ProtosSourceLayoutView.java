@@ -34,6 +34,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -81,6 +82,10 @@ public final class ProtosSourceLayoutView {
         TRAILING_CLOSURE,
         CONTEXTUAL_WHILE_BEFORE_LPAREN,
         CONTEXTUAL_WHILE_AFTER_LPAREN,
+        CONTEXTUAL_IF_BEFORE_LPAREN,
+        CONTEXTUAL_IF_AFTER_LPAREN,
+        CONTEXTUAL_IF_BEFORE_ELSE,
+        CONTEXTUAL_IF_AFTER_ELSE,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
     }
@@ -262,6 +267,25 @@ public final class ProtosSourceLayoutView {
     }
 
     /**
+     * D211 paired {@code else} of a two-arm contextual if. {@code elseToken}
+     * is the index of the {@code else} identifier in the projected token
+     * list, so the token boundary survives without source offsets.
+     */
+    public record ContextualElseProjection(
+            StructuralPath conditional,
+            int elseToken,
+            StructuralPath falseBranch) {
+        public ContextualElseProjection {
+            Objects.requireNonNull(conditional, "conditional");
+            Objects.requireNonNull(falseBranch, "falseBranch");
+            if (elseToken < 0) {
+                throw new IllegalArgumentException(
+                        "else token index must be non-negative");
+            }
+        }
+    }
+
+    /**
      * D183 preservation evidence without source offsets.
      *
      * <p>Ordering is represented by immutable list order. Raw spellings come
@@ -274,7 +298,8 @@ public final class ProtosSourceLayoutView {
             List<StructuralFormProjection> structuralForms,
             List<SequenceSeparatorProjection> sequenceSeparators,
             List<ClosureFormProjection> closureForms,
-            List<TrailingClosureProjection> trailingClosures) {
+            List<TrailingClosureProjection> trailingClosures,
+            List<ContextualElseProjection> contextualElses) {
         public SourcePreservationProjection {
             tokens = List.copyOf(
                     Objects.requireNonNull(tokens, "tokens"));
@@ -296,6 +321,10 @@ public final class ProtosSourceLayoutView {
                     Objects.requireNonNull(
                             trailingClosures,
                             "trailingClosures"));
+            contextualElses = List.copyOf(
+                    Objects.requireNonNull(
+                            contextualElses,
+                            "contextualElses"));
         }
     }
 
@@ -575,13 +604,66 @@ public final class ProtosSourceLayoutView {
                             closure));
         }
 
+        List<ContextualElseProjection> projectedContextualElses =
+                new ArrayList<>();
+
+        for (ProtosParserSourceFacts.ContextualElseOrigin fact :
+                sourceFacts.contextualElseOrigins()) {
+            StructuralPath conditional =
+                    structuralIndex.pathOf(fact.owner())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "contextual else owner "
+                                                            + "is absent from "
+                                                            + "canonical "
+                                                            + "Surface tree"));
+
+            StructuralPath falseBranch =
+                    structuralIndex.pathOf(fact.falseBranch())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "contextual else closure "
+                                                            + "is absent from "
+                                                            + "canonical "
+                                                            + "Surface tree"));
+
+            projectedContextualElses.add(
+                    new ContextualElseProjection(
+                            conditional,
+                            projectedTokenIndex(fact.elseSpan()),
+                            falseBranch));
+        }
+
         return new SourcePreservationProjection(
                 projectedTokens,
                 projectedComments,
                 projectedForms,
                 projectedSeparators,
                 projectedClosureForms,
-                projectedTrailingClosures);
+                projectedTrailingClosures,
+                projectedContextualElses);
+    }
+
+    private int projectedTokenIndex(SourceSpan tokenSpan) {
+        int index = 0;
+
+        for (TokenOccurrence occurrence : tokenOccurrences) {
+            if (occurrence.token().type() == TokenType.EOF) {
+                continue;
+            }
+
+            if (occurrence.span().startOffset()
+                    == tokenSpan.startOffset()) {
+                return index;
+            }
+
+            index++;
+        }
+
+        throw new IllegalStateException(
+                "source fact token is absent from the token stream");
     }
 
     private boolean separatorHasBlankLine(
@@ -793,9 +875,17 @@ public final class ProtosSourceLayoutView {
 
             if (boundary.isEmpty()) {
                 boundary =
-                        contextualWhileHeaderBoundary(
+                        contextualHeaderBoundary(
                                 occurrence.span(),
                                 tokenOccurrences,
+                                structuralIndex);
+            }
+
+            if (boundary.isEmpty()) {
+                boundary =
+                        contextualElseBoundary(
+                                occurrence.span(),
+                                sourceFacts,
                                 structuralIndex);
             }
 
@@ -875,25 +965,45 @@ public final class ProtosSourceLayoutView {
     }
 
     /**
-     * D210-Q2 header comments: between the contextual {@code while} and its
-     * opening {@code (}, or between that {@code (} and the first condition
-     * token. Both attach from the real loop node to its real condition.
+     * D210-Q2 and D211 header comments: between the contextual {@code while}
+     * or {@code if} and its opening {@code (}, or between that {@code (} and
+     * the first condition token. Both attach from the real contextual node to
+     * its real condition, with a boundary kind distinct per construct.
      */
     private static Optional<ResolvedBoundary>
-            contextualWhileHeaderBoundary(
+            contextualHeaderBoundary(
                     SourceSpan comment,
                     List<TokenOccurrence> tokenOccurrences,
                     StructuralIndex structuralIndex) {
         for (StructuralNode structuralNode : structuralIndex.nodes) {
-            if (!(structuralNode.node()
-                    instanceof SurfaceContextualWhile loop)) {
+            SurfaceExpression owner;
+            SurfaceExpression condition;
+            CommentBoundaryKind beforeParenthesis;
+            CommentBoundaryKind afterParenthesis;
+            if (structuralNode.node()
+                    instanceof SurfaceContextualWhile contextualWhile) {
+                owner = contextualWhile;
+                condition = contextualWhile.condition();
+                beforeParenthesis =
+                        CommentBoundaryKind.CONTEXTUAL_WHILE_BEFORE_LPAREN;
+                afterParenthesis =
+                        CommentBoundaryKind.CONTEXTUAL_WHILE_AFTER_LPAREN;
+            } else if (structuralNode.node()
+                    instanceof SurfaceContextualIf contextualIf) {
+                owner = contextualIf;
+                condition = contextualIf.condition();
+                beforeParenthesis =
+                        CommentBoundaryKind.CONTEXTUAL_IF_BEFORE_LPAREN;
+                afterParenthesis =
+                        CommentBoundaryKind.CONTEXTUAL_IF_AFTER_LPAREN;
+            } else {
                 continue;
             }
 
-            int loopStart = loop.span().startOffset();
+            int ownerStart = owner.span().startOffset();
             int conditionStart =
-                    loop.condition().span().startOffset();
-            if (comment.startOffset() < loopStart
+                    condition.span().startOffset();
+            if (comment.startOffset() < ownerStart
                     || comment.endOffset() > conditionStart) {
                 continue;
             }
@@ -901,7 +1011,7 @@ public final class ProtosSourceLayoutView {
             TokenOccurrence keyword = null;
             TokenOccurrence open = null;
             for (TokenOccurrence occurrence : tokenOccurrences) {
-                if (occurrence.span().startOffset() < loopStart) {
+                if (occurrence.span().startOffset() < ownerStart) {
                     continue;
                 }
                 if (keyword == null) {
@@ -922,22 +1032,73 @@ public final class ProtosSourceLayoutView {
             CommentBoundaryKind kind;
             if (comment.startOffset() >= keyword.span().endOffset()
                     && comment.endOffset() <= open.span().startOffset()) {
-                kind = CommentBoundaryKind.CONTEXTUAL_WHILE_BEFORE_LPAREN;
+                kind = beforeParenthesis;
             } else if (comment.startOffset() >= open.span().endOffset()) {
-                kind = CommentBoundaryKind.CONTEXTUAL_WHILE_AFTER_LPAREN;
+                kind = afterParenthesis;
             } else {
                 continue;
             }
 
-            Optional<StructuralPath> loopPath =
-                    structuralIndex.pathOf(loop);
+            Optional<StructuralPath> ownerPath =
+                    structuralIndex.pathOf(owner);
             Optional<StructuralPath> conditionPath =
-                    structuralIndex.pathOf(loop.condition());
-            if (loopPath.isPresent() && conditionPath.isPresent()) {
+                    structuralIndex.pathOf(condition);
+            if (ownerPath.isPresent() && conditionPath.isPresent()) {
                 return Optional.of(
                         new ResolvedBoundary(
-                                loopPath.orElseThrow(),
+                                ownerPath.orElseThrow(),
                                 conditionPath.orElseThrow(),
+                                kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * D211 paired-else comments: between the true branch's closing brace and
+     * {@code else}, or between {@code else} and the false branch's opening
+     * brace. Such comments cannot contain a logical newline (that would
+     * have prevented pairing). Both attach from the contextual if node to
+     * its false-branch Closure.
+     */
+    private static Optional<ResolvedBoundary>
+            contextualElseBoundary(
+                    SourceSpan comment,
+                    ProtosParserSourceFacts sourceFacts,
+                    StructuralIndex structuralIndex) {
+        for (ProtosParserSourceFacts.ContextualElseOrigin origin
+                : sourceFacts.contextualElseOrigins()) {
+            int trueBranchEnd =
+                    origin.owner().trueBranch().span().endOffset();
+            int falseBranchStart =
+                    origin.falseBranch().span().startOffset();
+            if (comment.startOffset() < trueBranchEnd
+                    || comment.endOffset() > falseBranchStart) {
+                continue;
+            }
+
+            CommentBoundaryKind kind;
+            if (comment.endOffset()
+                    <= origin.elseSpan().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_IF_BEFORE_ELSE;
+            } else if (comment.startOffset()
+                    >= origin.elseSpan().endOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_IF_AFTER_ELSE;
+            } else {
+                continue;
+            }
+
+            Optional<StructuralPath> ownerPath =
+                    structuralIndex.pathOf(origin.owner());
+            Optional<StructuralPath> falseBranchPath =
+                    structuralIndex.pathOf(origin.falseBranch());
+            if (ownerPath.isPresent() && falseBranchPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                ownerPath.orElseThrow(),
+                                falseBranchPath.orElseThrow(),
                                 kind,
                                 Optional.empty()));
             }
@@ -1346,6 +1507,19 @@ public final class ProtosSourceLayoutView {
                     registerExpression(
                             loop.body(),
                             path.child("body"));
+                }
+                case SurfaceContextualIf conditional -> {
+                    registerExpression(
+                            conditional.condition(),
+                            path.child("condition"));
+                    registerExpression(
+                            conditional.trueBranch(),
+                            path.child("trueBranch"));
+                    if (conditional.falseBranch() != null) {
+                        registerExpression(
+                                conditional.falseBranch(),
+                                path.child("falseBranch"));
+                    }
                 }
                 case SurfaceArrayConstruction array -> {
                     for (int index = 0;

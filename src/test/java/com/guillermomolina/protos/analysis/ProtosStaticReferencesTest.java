@@ -163,6 +163,47 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void contextualIfHeaderIsNotAReferenceButGroupedIfIs() {
+        String source =
+                "f: (if, n) => {\n"
+                        + "  (if)(n) { n }\n"
+                        + "  if(n) { n } else { n }\n"
+                        + "}";
+        int declaration = source.indexOf("if");
+        int groupedRead = source.indexOf("if", source.indexOf("(if)"));
+        int contextualHeader = source.lastIndexOf("if(");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration + 1).orElseThrow();
+
+        assertEquals(
+                List.of(new SourceSpan(groupedRead, groupedRead + "if".length())),
+                result.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+        assertTrue(references(source, contextualHeader).isEmpty());
+    }
+
+    @Test
+    void contextualIfEagerConditionIsAReferenceButBranchReadsAreNot() {
+        String source =
+                "f: (n) => {\n"
+                        + "  if(n > 1) { n } else { n }\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+        int conditionRead = source.indexOf("n", source.indexOf("if("));
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration).orElseThrow();
+
+        assertEquals(
+                List.of(new SourceSpan(conditionRead, conditionRead + 1)),
+                result.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+    }
+
+    @Test
     void contextualWhileCapturedReadsAreNotClaimedAsExactReferences() {
         String source =
                 "f: (n) => {\n"

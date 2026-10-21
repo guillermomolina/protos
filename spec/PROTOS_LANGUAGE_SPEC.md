@@ -231,12 +231,15 @@ throw
 finally
 ```
 
-`if` and `else` remain ordinary identifiers in Core v0.1 and have no dedicated
-conditional syntax; `if(condition) { ... }` retains its ordinary
-call-plus-trailing-Closure grammar rather than being reserved for conditional
-reinterpretation. Canonical conditional execution is the ordinary Boolean
-protocol owned by `semantics/VALUES_AND_COLLECTIONS.md` and its surface grammar
-boundary is owned by `PROTOS_GRAMMAR.md`.
+`if` and `else` are not reserved words. The exact contextual expressions
+`if(condition) { ... }` and `if(condition) { ... } else { ... }` are approved
+(D211) and defined, with their recognition limits and their mandatory desugaring
+to ordinary `ifTrue` / `ifTrueIfFalse` sends whose receiver is the eagerly
+evaluated condition, by `PROTOS_GRAMMAR.md` (Optional Control-flow Sugar). Every
+other spelling of `if` or `else` keeps its ordinary identifier, call, and member
+meaning. Conditional execution itself remains the ordinary Boolean protocol owned
+by `semantics/VALUES_AND_COLLECTIONS.md`; no conditional runtime primitive
+exists.
 
 `return` remains an independent possible future syntactic-sugar question.
 `while` is not a reserved word; the exact contextual expression

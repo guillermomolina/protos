@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.396-SNAPSHOT
+
+- `I119` (#945, D211/#944): contextual `if`/`else` and removal of the
+  standard receiver-preserving `Object.if` / `Object.else`.
+  - Removed the D200 `if`/`else` standard selectors: native bodies,
+    Closures, structured callback kinds, root installation and frozen-root
+    validation, `PreparedBooleanCall` cases and the Bytecode
+    `NormalBooleanControl` rows (with the now-unused receiver result
+    policy). `ifTrue`, `ifFalse`, `ifTrueIfFalse`, `not`, `and` and `or`
+    are unchanged.
+  - The parser recognizes a bare, ungrouped `if` with exactly one
+    non-spread argument and an attached parameterless trailing Closure,
+    plus an optional `else { ... }` attached on the same logical line,
+    producing the new `SurfaceContextualIf` node; `if`/`else` stay
+    identifiers and every other spelling stays ordinary syntax.
+  - `Canonicalizer` lowers it to an ordinary `ifTrue` or `ifTrueIfFalse`
+    `CanonicalSend` whose receiver is the eagerly evaluated condition; no
+    condition Closure, canonical node or runtime path is added.
+  - Parser source facts add `ContextualElseOrigin`; the source-layout
+    view, tool bridge (`contextualElses`) and TOOL010 formatter preserve
+    both branch identities and comments around `if(`, `(`, before and
+    after `else`, always keeping `} else {` on one line. Static
+    definitions, references, hover, lint and document symbols traverse the
+    eager condition and both branches.
+  - Native conformance and Java tests updated for D211.
+  - `ProtosI026FDapTransportTest` tolerates only the upstream GraalVM DAP
+    `ThreadsHandler.onThreadDisposed` write to an already closed session
+    socket during `Context.close()` after a verified disconnect, which made
+    the parallel suite fail intermittently.
+  - Maintainer validation: `make check` PASS; `make test` PASS.
+
 ## 0.3.395-SNAPSHOT
 
 - `I118` (#943, D210-Q2/#941): first-party Protos sources adopt the

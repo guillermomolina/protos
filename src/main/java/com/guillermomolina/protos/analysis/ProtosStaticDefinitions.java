@@ -23,6 +23,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -178,6 +179,20 @@ final class ProtosStaticDefinitions {
                     analyze(loop.condition(), new Facts());
                     if (!done) {
                         analyzeClosure(loop.body());
+                    }
+                    opaqueInvocationBarrier(facts);
+                }
+                case SurfaceContextualIf conditional -> {
+                    // D211 evaluates the condition eagerly in this activation, as
+                    // the ordinary ifTrue/ifTrueIfFalse send receiver; the branches
+                    // are Closure literals constructed but not run here, and the
+                    // send itself is an opaque invocation.
+                    analyze(conditional.condition(), facts);
+                    if (!done) {
+                        analyzeClosure(conditional.trueBranch());
+                    }
+                    if (!done && conditional.falseBranch() != null) {
+                        analyzeClosure(conditional.falseBranch());
                     }
                     opaqueInvocationBarrier(facts);
                 }

@@ -278,8 +278,9 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
 
     /**
      * PERF015: canonical represented Booleans are admitted to the guarded
-     * structured selection for exactly the seven Boolean callbacks (D200 adds if/else), with the
-     * canonical behavior/home provenance of the generic D013 selection.
+     * structured selection for exactly the five Boolean callbacks, with the canonical
+     * behavior/home provenance of the generic D013 selection. D211 retired the standard
+     * if/else selectors, so those names receive no guarded admission.
      */
     @SuppressWarnings("try")
     @Test
@@ -287,15 +288,13 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
-            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or", "if", "else"};
+            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or"};
             ProtosStandardBooleanProtocol.StructuredCallbackKind[] kinds = {
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind.ELSE
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
             };
             for (ProtosBooleanValue receiver :
                     new ProtosBooleanValue[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
@@ -320,6 +319,11 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
                         .createGuardedStructuredSend(receiver, "not", module));
                 assertNull(ProtosBytecodeRootNode.PrepareSendArguments
                         .createGuardedStructuredSend(receiver, "ensure", module));
+                // D211: no standard if/else exists to select.
+                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
+                        .createGuardedStructuredSend(receiver, "if", module));
+                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
+                        .createGuardedStructuredSend(receiver, "else", module));
             }
         }
         System.out.println("PERF015_CANONICAL_BOOLEAN_REPRESENTED_GUARD=PASS");

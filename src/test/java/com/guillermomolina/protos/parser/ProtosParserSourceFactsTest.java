@@ -29,6 +29,7 @@ import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceContext
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparatorKind;
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SingleParameterClosureForm;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
@@ -247,6 +248,102 @@ class ProtosParserSourceFactsTest {
         assertEquals(1, origins.size());
         assertSame(call, origins.get(0).owner());
         assertSame(call.arguments().get(1).expression(), origins.get(0).closure());
+    }
+
+    @Test
+    void singleArmContextualIfRecordsOnlyItsTrueBranchOrigin() {
+        String source = "if(a) { b }";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualIf conditional = assertInstanceOf(
+                SurfaceContextualIf.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(conditional, origins.get(0).owner());
+        assertSame(conditional.trueBranch(), origins.get(0).closure());
+        assertEquals(List.of(), parsed.facts().contextualElseOrigins());
+    }
+
+    @Test
+    void twoArmContextualIfRecordsTrueOriginAndContextualElse() {
+        String source = "if(a) { b } else { c }";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualIf conditional = assertInstanceOf(
+                SurfaceContextualIf.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(1, origins.size());
+        assertSame(conditional, origins.get(0).owner());
+        assertSame(conditional.trueBranch(), origins.get(0).closure());
+
+        List<ProtosParserSourceFacts.ContextualElseOrigin> elses =
+                parsed.facts().contextualElseOrigins();
+        assertEquals(1, elses.size());
+        assertSame(conditional, elses.get(0).owner());
+        assertSame(conditional.falseBranch(), elses.get(0).falseBranch());
+        assertEquals(new SourceSpan(12, 16), elses.get(0).elseSpan());
+    }
+
+    @Test
+    void blockCommentsAroundElseKeepTheExactElseSpan() {
+        String source = "if(a) { b } /* one\n two */ else /* three */ { c }";
+        Parsed parsed = parseWithTrivia(source);
+
+        SurfaceContextualIf conditional = assertInstanceOf(
+                SurfaceContextualIf.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.ContextualElseOrigin> elses =
+                parsed.facts().contextualElseOrigins();
+        assertEquals(1, elses.size());
+        assertSame(conditional, elses.get(0).owner());
+        int elseStart = source.indexOf("else");
+        assertEquals(new SourceSpan(elseStart, elseStart + 4), elses.get(0).elseSpan());
+    }
+
+    @Test
+    void lineCommentBeforeElseRecordsNoContextualElse() {
+        String source = "if(a) { b } // note\nelse { c }";
+        Parsed parsed = parseWithTrivia(source);
+
+        assertEquals(2, parsed.program().expressions().size());
+        assertInstanceOf(SurfaceContextualIf.class, parsed.program().expressions().get(0));
+        assertEquals(1, parsed.facts().trailingClosureOrigins().size());
+        assertEquals(List.of(), parsed.facts().contextualElseOrigins());
+    }
+
+    @Test
+    void nestedContextualIfOriginsAreOrderedInnerFirstWithDistinctOwners() {
+        String source = "if(a) { if(b) { 1 } else { 2 } } else { 3 }";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualIf outer = assertInstanceOf(
+                SurfaceContextualIf.class,
+                parsed.program().expressions().get(0));
+        SurfaceContextualIf inner = assertInstanceOf(
+                SurfaceContextualIf.class,
+                outer.trueBranch().body().expressions().get(0));
+
+        List<ProtosParserSourceFacts.TrailingClosureOrigin> origins =
+                parsed.facts().trailingClosureOrigins();
+        assertEquals(2, origins.size());
+        assertSame(inner, origins.get(0).owner());
+        assertSame(inner.trueBranch(), origins.get(0).closure());
+        assertSame(outer, origins.get(1).owner());
+        assertSame(outer.trueBranch(), origins.get(1).closure());
+
+        List<ProtosParserSourceFacts.ContextualElseOrigin> elses =
+                parsed.facts().contextualElseOrigins();
+        assertEquals(2, elses.size());
+        assertSame(inner, elses.get(0).owner());
+        assertSame(inner.falseBranch(), elses.get(0).falseBranch());
+        assertEquals(new SourceSpan(20, 24), elses.get(0).elseSpan());
+        assertSame(outer, elses.get(1).owner());
+        assertSame(outer.falseBranch(), elses.get(1).falseBranch());
+        assertEquals(new SourceSpan(33, 37), elses.get(1).elseSpan());
     }
 
     private Parsed parseWithTrivia(String source) {

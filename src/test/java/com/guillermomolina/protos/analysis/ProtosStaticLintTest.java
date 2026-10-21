@@ -80,6 +80,30 @@ class ProtosStaticLintTest {
     }
 
     @Test
+    void contextualIfBranchesAreClosuresNotProvenExecution() {
+        assertTrue(lint(
+                "f: (x) => {\n    if(x) { ^1 } else { ^2 }\n    a\n}").isEmpty());
+    }
+
+    @Test
+    void contextualIfVisitsConditionAndBothBranches() {
+        String condition = "if(a === { x: 1 }) { 1 }";
+        assertEquals(FRESH, single(condition).ruleId());
+
+        String trueBranch = "if(x) { ^1; b }";
+        assertEquals(
+                new SourceSpan(trueBranch.indexOf("b }"), trueBranch.indexOf("b }") + 1),
+                single(trueBranch).span());
+
+        String falseBranch = "if(x) { 1 } else { ^2; c }";
+        ProtosStaticLintDiagnostic only = single(falseBranch);
+        assertEquals(UNREACHABLE, only.ruleId());
+        assertEquals(
+                new SourceSpan(falseBranch.indexOf("c }"), falseBranch.indexOf("c }") + 1),
+                only.span());
+    }
+
+    @Test
     void nestedClosureCreationIsNotExecutionOfItsReturn() {
         assertTrue(lint("f: () => { g: () => { ^1 }; a }").isEmpty());
 

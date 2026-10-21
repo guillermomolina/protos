@@ -24,17 +24,37 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 43)
     }),
-    Test("if spelling remains ordinary call", () => {
+    Test("grouped if spelling remains ordinary call", () => {
         tool009LegacyCase: () => {
             if: (condition, branch) => {
                 branch()
             }
 
-            if(123) {
+            (if)(123) {
                 42
             }
         }
         Assertions.require(tool009LegacyCase() == 42)
+    }),
+    Test("bare if call shape is contextual even with an if binding", () => {
+        calls: 0
+        if: (condition, branch) => {
+            calls = calls + 1
+            99
+        }
+        Assertions.require(if(true) { 42 } == 42)
+        Assertions.require(if(false) { 1 } else { 2 } == 2)
+        Assertions.require(calls == 0)
+        Assertions.require((if)(false) { 1 } == 99)
+        Assertions.require(calls == 1)
+    }),
+    Test("member if and else spellings remain ordinary calls", () => {
+        holder: {
+            if: (condition, branch) => { branch() + condition }
+            else: (branch) => { branch() }
+        }
+        Assertions.require(holder.if(1) { 41 } == 42)
+        Assertions.require(holder.else() { 43 } == 43)
     })
 ]
 tests.freeze()

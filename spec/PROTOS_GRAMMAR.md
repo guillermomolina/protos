@@ -170,7 +170,9 @@ This revision does not introduce contextual lexing. The lexer continues to token
 Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, `IdentityMap`, or `Context`, are not reserved words. In particular, the standard prelude prototype `Context` is not a reserved word and is distinct from the reserved intrinsic `context`. Error object names are not reserved.
 
 Core v0.1 defines no additional reserved words such as `if`, `else`, `while`,
-`for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
+`for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`. The
+contextual `while` (D210-Q2) and `if`/`else` (D211) expressions reinterpret exact
+call shapes without reserving these spellings.
 
 Under D131, `match`, `case`, `when`, `exact`, and `captures` have no
 matching-specific contextual structural meaning. They remain ordinary
@@ -1772,6 +1774,12 @@ A block comment behaves as whitespace and consumes embedded logical source newli
 
 What the braces of a non-attached `{ ... }` after a separating newline may mean, if anything, is governed by the ordinary grammar independently; the normative claim is only that they are not attached as a trailing closure to the preceding call. This revision does not restore parameterized trailing closures: a trailing closure remains parameterless, and `foo() (x) { body }` is not trailing-closure syntax.
 
+The contextual `while` expression (D210-Q2) and the contextual `if` expression
+with its optional `else` suffix (D211, Optional Control-flow Sugar) use exactly
+this attachment rule for their braced bodies; the D211 `else` suffix applies the
+same no-intervening-`NEWLINE` requirement between the true branch and `else` and
+between `else` and its braced body.
+
 ## 20. Object Construction vs Trailing Closure
 
 The distinction is intentional:
@@ -2373,50 +2381,119 @@ This is control flow, not an ordinary message send.
 
 ## 36. Optional Control-flow Sugar
 
-Core v0.1 defines **no dedicated `if` / `else` conditional syntax**.
+Core v0.1 defines exactly one conditional surface form: the D211 contextual
+`if` expression and its optional paired `else` suffix. It is an exact contextual
+reinterpretation of one ordinary call shape, not a statement form and not a
+keyword. The spellings `if` and `else` remain ordinary identifiers under the
+exact reserved-word rule above; the lexer tokenizes them as identifier tokens,
+and every spelling other than the exact shapes below keeps its ordinary
+identifier, call, member, and trailing-Closure meaning.
 
-The spellings `if` and `else` remain ordinary identifiers under the exact
-reserved-word rule above. The parser, canonicalizer, runtime, and tools must not
-assign either spelling special conditional authority merely because of its
-name.
+### Contextual `if` expression (D211)
 
-In particular, a source form such as:
+```ebnf
+contextual-if-expression =
+    "if", "(", expression, ")", trailing-closure,
+    [ contextual-else-suffix ] ;
 
-```js
-if(condition) {
-    yes()
-}
+contextual-else-suffix =
+    "else", braced-closure-body ;
 ```
 
-is governed by the ordinary identifier, call, and trailing-Closure grammar. When
-`if` resolves to an ordinary invokable value, the form is an ordinary call whose
-final argument is the parameterless trailing Closure. It is **not** a conditional
-construct and is not reserved for later reinterpretation within Core v0.1.
+The form is recognized only when, in the ordinary postfix call grammar:
 
-Likewise, `else` has no special continuation role. It may be used wherever an
-ordinary identifier is accepted, subject to the same separator and expression
-grammar as any other identifier. Core v0.1 does not define an
-`if (...) { ... } else { ... }` pairing.
+- the call receiver is the bare, ungrouped identifier `if` (not a member name
+  and not a parenthesized expression);
+- the argument list contains exactly one explicit argument, and that argument
+  is not a `...` spread;
+- a parameterless braced trailing Closure is attached under the ordinary
+  trailing-Closure rule (Trailing Closures), on the same continuing logical line
+  as the closing `)`.
 
-Canonical conditional execution is expressed through the ordinary strict-Boolean
-protocol defined by `semantics/VALUES_AND_COLLECTIONS.md`, including
-`ifTrue(block)`, `ifFalse(block)`, and
-`ifTrueIfFalse(trueBlock, falseBlock)`. D051 adds no second conditional
-semantics and no truthiness rule. The standard Boolean messages `if(block)` and
-`else(block)` defined there (D200) are ordinary member names reached through
-`.`; they confer no grammar role on the spellings `if` and `else`, and a form
-such as `b.if() { ... }.else() { ... }` is two ordinary sends with trailing
-Closures, not a paired construct.
+The optional `contextual-else-suffix` is recognized only when the next parser
+token after the true branch's closing `}` is the identifier `else` and the next
+parser token after that `else` is the `{` of a braced, parameterless Closure
+body. No logical `NEWLINE` token may intervene at either point. Comments that
+produce no `NEWLINE` token (see Comments) remain ordinary lexical separation; a
+`//` comment leaves a separating `NEWLINE` token and therefore prevents pairing.
+There is no newline-continuation exception for `else`: when a logical `NEWLINE`
+separates the true branch from a later `else`, the contextual expression ends
+after its true branch, and the later source is parsed by the ordinary grammar
+without retroactive pairing.
 
-A future language version may reconsider conditional surface ergonomics only as
-a separate explicit design decision. Such a future design must account for the
-fact that Core v0.1 already assigns ordinary-call meaning to source forms such as
-`if(condition) { ... }`; it must not silently retroactively reinterpret Core
-v0.1 source.
+Both forms are expressions. The result is an ordinary postfix-foundation result,
+so later member, call, and index suffixes apply to the complete contextual
+expression, including its `else` suffix when present. Nested contextual
+expressions pair structurally through their braces: an `else` suffix belongs to
+the contextual `if` whose true branch it immediately follows.
 
+Mandatory desugaring:
+
+```js
+if(condition) { trueBody }
+```
+
+is the ordinary message send
+
+```js
+condition.ifTrue(() => { trueBody })
+```
+
+and
+
+```js
+if(condition) { trueBody } else { falseBody }
+```
+
+is the ordinary message send
+
+```js
+condition.ifTrueIfFalse(() => { trueBody }, () => { falseBody })
+```
+
+The receiver is `condition` itself, evaluated once and eagerly in the
+surrounding execution context as the ordinary send receiver; it is never wrapped
+in a Closure. Each branch is an ordinary parameterless braced Closure,
+constructed as an ordinary send argument; in the two-arm form the true-branch
+Closure is constructed before the false-branch Closure. Selection, invocation,
+results, and errors are entirely those of the ordinary send under ordinary
+lookup, including user-defined overrides of `ifTrue` and `ifTrueIfFalse`; the
+standard Boolean behaviors are owned by `semantics/VALUES_AND_COLLECTIONS.md`.
+The `if` and `else` tokens are not lexical lookups, and no synthetic name is
+introduced. No conditional-specific canonical node, truthiness conversion, or
+runtime primitive exists.
+
+The two contextual control forms deliberately treat their conditions
+differently:
+
+```text
+while(condition) { body }   condition becomes a reevaluated parameterless Closure
+if(condition) { body }      condition remains an eagerly evaluated expression
+```
+
+For these exact shapes only, the contextual interpretation takes precedence over
+a lexical binding named `if`: such a binding is not consulted. Every other
+spelling keeps its ordinary meaning, including:
+
+```text
+(if)(condition) { body }
+object.if(condition) { body }
+if(condition)
+if(a, b) { body }
+if(...args) { body }
+if(condition)
+{ body }
+else { body }
+```
+
+Programs may still define and call `if` or `else` as ordinary bindings or member
+names through those spellings. Core defines no `elseIf`, `elif`, or other chained
+conditional syntax, and D211 does not make arbitrary undotted message sends
+valid (D199).
+
+Contextual `while` is specified by D210-Q2 (Contextual `while` expression).
 Other possible control-flow surface conveniences remain independent questions.
-For example, a future `while` form may lower to a message sent to a condition
-Closure, and:
+For example:
 
 ```js
 return value
@@ -3209,8 +3286,9 @@ while(condition)
 ```
 
 Programs may still define and call `while` as an ordinary binding or member
-name through those spellings. No other identifier (in particular `if` or
-`else`) acquires a contextual interpretation.
+name through those spellings. Apart from the D211 contextual `if`/`else`
+expression (Optional Control-flow Sugar), no other identifier acquires a
+contextual interpretation.
 
 ## Resource Cleanup Syntax Note
 

@@ -200,6 +200,29 @@ class ProtosStaticHoverTest {
     }
 
     @Test
+    void contextualIfExposesConditionAndBothBranchesWithoutAKeywordBinding() {
+        String source = "f: (n) => {\n  if(n) { (k) => k } else { (j) => j }\n}";
+        int header = source.indexOf("if(");
+        int condition = source.indexOf("n", header);
+        int trueBrace = source.indexOf('{', header);
+        int falseBrace = source.indexOf('{', source.indexOf("else"));
+        int trueReference = source.indexOf("k", source.indexOf("=>", header));
+        int falseReference = source.lastIndexOf("j");
+
+        assertTrue(hover(source, header).isEmpty());
+        assertTrue(hover(source, source.indexOf("else")).isEmpty());
+        assertProven(hover(source, condition));
+        assertEquals(
+                syntax("Closure", "Parameters: none", "Body form: braced"),
+                hover(source, trueBrace).orElseThrow().sections());
+        assertEquals(
+                syntax("Closure", "Parameters: none", "Body form: braced"),
+                hover(source, falseBrace).orElseThrow().sections());
+        assertEquals(span(trueReference, "k"), hover(source, trueReference).orElseThrow().span());
+        assertEquals(span(falseReference, "j"), hover(source, falseReference).orElseThrow().span());
+    }
+
+    @Test
     void invalidSourceOffsetsAndUninformativePositionsReturnEmpty() {
         assertTrue(hover("f: (value) => {", 4).isEmpty());
 

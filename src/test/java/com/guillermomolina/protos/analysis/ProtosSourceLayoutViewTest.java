@@ -27,6 +27,7 @@ import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparat
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
@@ -767,6 +768,170 @@ class ProtosSourceLayoutViewTest {
         assertEquals(
                 ProtosSourceLayoutView.CommentBoundaryKind.NONE,
                 view.commentAttachments().get(0).boundaryKind());
+    }
+
+    @Test
+    void contextualIfHasStablePathsAndProjectsBothBranchOrigins() {
+        String source = "if(a) { b } else { c }\nif(d) { e }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-if",
+                                11L,
+                                source));
+
+        SurfaceContextualIf paired =
+                assertInstanceOf(
+                        SurfaceContextualIf.class,
+                        view.program().expressions().get(0));
+        SurfaceContextualIf single =
+                assertInstanceOf(
+                        SurfaceContextualIf.class,
+                        view.program().expressions().get(1));
+
+        assertEquals(
+                "program/expression[0]",
+                view.pathOf(paired).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/condition",
+                view.pathOf(paired.condition()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/trueBranch",
+                view.pathOf(paired.trueBranch()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/falseBranch",
+                view.pathOf(paired.falseBranch()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[1]/trueBranch",
+                view.pathOf(single.trueBranch()).orElseThrow().toString());
+        assertEquals("if(a) { b } else { c }", view.sourceText(paired.span()));
+        assertEquals("{ c }", view.sourceText(paired.falseBranch().span()));
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                view.preservationProjection();
+        assertEquals(2, projection.trailingClosures().size());
+        assertEquals(
+                view.pathOf(paired).orElseThrow(),
+                projection.trailingClosures().get(0).call());
+        assertEquals(
+                view.pathOf(paired.trueBranch()).orElseThrow(),
+                projection.trailingClosures().get(0).closure());
+        assertEquals(
+                view.pathOf(single).orElseThrow(),
+                projection.trailingClosures().get(1).call());
+
+        assertEquals(1, projection.contextualElses().size());
+        ProtosSourceLayoutView.ContextualElseProjection contextualElse =
+                projection.contextualElses().get(0);
+        assertEquals(view.pathOf(paired).orElseThrow(), contextualElse.conditional());
+        assertEquals(
+                view.pathOf(paired.falseBranch()).orElseThrow(),
+                contextualElse.falseBranch());
+        assertEquals(7, contextualElse.elseToken());
+        assertEquals(
+                "else",
+                projection.tokens().get(contextualElse.elseToken()).rawText());
+    }
+
+    @Test
+    void contextualIfCommentsAttachToFiveDistinctBoundaries() {
+        String source =
+                "if /* a */ (/* b */ x) /* c */ { y } /* d */ else /* e */ { z }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-if-comments",
+                                12L,
+                                source));
+
+        SurfaceContextualIf conditional =
+                assertInstanceOf(
+                        SurfaceContextualIf.class,
+                        view.program().expressions().get(0));
+        String conditionalPath = view.pathOf(conditional).orElseThrow().toString();
+        String conditionPath =
+                view.pathOf(conditional.condition()).orElseThrow().toString();
+        String truePath =
+                view.pathOf(conditional.trueBranch()).orElseThrow().toString();
+        String falsePath =
+                view.pathOf(conditional.falseBranch()).orElseThrow().toString();
+
+        List<String> texts =
+                List.of("/* a */", "/* b */", "/* c */", "/* d */", "/* e */");
+        List<ProtosSourceLayoutView.CommentBoundaryKind> kinds = List.of(
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_IF_BEFORE_LPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_IF_AFTER_LPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.TRAILING_CLOSURE,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_IF_BEFORE_ELSE,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_IF_AFTER_ELSE);
+        List<String> following =
+                List.of(conditionPath, conditionPath, truePath, falsePath, falsePath);
+
+        List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                view.commentAttachments();
+        assertEquals(texts.size(), attachments.size());
+        for (int index = 0; index < attachments.size(); index++) {
+            ProtosSourceLayoutView.CommentAttachment attachment =
+                    attachments.get(index);
+            int start = source.indexOf(texts.get(index));
+            assertEquals(
+                    new SourceSpan(start, start + texts.get(index).length()),
+                    attachment.comment().span());
+            assertEquals(kinds.get(index), attachment.boundaryKind());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.EMBEDDED_BETWEEN_TOKENS,
+                    attachment.placement());
+            assertEquals(
+                    conditionalPath,
+                    attachment.preceding().orElseThrow().toString());
+            assertEquals(
+                    following.get(index),
+                    attachment.following().orElseThrow().toString());
+        }
+
+        List<ProtosSourceLayoutView.CommentProjection> projected =
+                view.preservationProjection().comments();
+        assertEquals(texts, projected.stream()
+                .map(ProtosSourceLayoutView.CommentProjection::rawText)
+                .toList());
+        assertEquals(kinds, projected.stream()
+                .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
+                .toList());
+    }
+
+    @Test
+    void nestedContextualIfElsesProjectDistinctOwners() {
+        String source = "if(a) { if(b) { 1 } else { 2 } } else { 3 }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-if-nested",
+                                13L,
+                                source));
+
+        SurfaceContextualIf outer =
+                assertInstanceOf(
+                        SurfaceContextualIf.class,
+                        view.program().expressions().get(0));
+        SurfaceContextualIf inner =
+                assertInstanceOf(
+                        SurfaceContextualIf.class,
+                        outer.trueBranch().body().expressions().get(0));
+
+        List<ProtosSourceLayoutView.ContextualElseProjection> elses =
+                view.preservationProjection().contextualElses();
+        assertEquals(2, elses.size());
+        assertEquals(view.pathOf(inner).orElseThrow(), elses.get(0).conditional());
+        assertEquals(
+                view.pathOf(inner.falseBranch()).orElseThrow(),
+                elses.get(0).falseBranch());
+        assertEquals(view.pathOf(outer).orElseThrow(), elses.get(1).conditional());
+        assertEquals(
+                view.pathOf(outer.falseBranch()).orElseThrow(),
+                elses.get(1).falseBranch());
+        assertEquals(
+                "program/expression[0]/trueBranch/body/expression[0]",
+                view.pathOf(inner).orElseThrow().toString());
     }
 
     private void assertContextualWhileHeaderComments(

@@ -76,58 +76,86 @@ selected callback is validated for callability and invoked; the unselected
 callback is never invoked. The selected callback receives zero supplied
 arguments, and its exact normal result is returned unchanged.
 
-This gives an ordinary-protocol spelling for a complete two-branch conditional
-without introducing `if` or `else` as Core v0.1 syntax.
+This is the ordinary-protocol spelling of a complete two-branch conditional.
+The contextual `if` form below is a shorter spelling of exactly this send.
 
-## Result-producing versus receiver-preserving conditionals
+## The contextual `if(condition) { ... }` form
 
-D200 adds two more ordinary messages, `if(block)` and `else(block)`. They are
-for running an *action*, not for computing a value:
-
-```text
-true.if(block)    -> invoke block(); return true
-false.if(block)   -> false
-true.else(block)  -> true
-false.else(block) -> invoke block(); return false
-```
-
-The selected callback's normal result is ignored, whatever it is (`null`, a
-Boolean, any object, or a Future, which is not awaited). The message always
-returns the same canonical Boolean that received it. That makes chaining
-natural:
+For the common shapes, Protos accepts a shorter spelling:
 
 ```protos
-ready.if() {
+if(ready) {
     start()
-}.else() {
+}
+```
+
+and, with a paired `else`:
+
+```protos
+result: if(ready) {
+    start()
+} else {
     wait()
 }
 ```
 
-Each `.if` / `.else` is an independent ordinary send with its own trailing
-Closure; there is no syntactic pairing and no new grammar. The order may be
-reversed (`ready.else(...).if(...)`), and `false.else(a).else(b)` runs both `a`
-and `b` because both sends receive `false`.
-
-So choose by what you need back:
-
-- `ifTrue`, `ifFalse`, and `ifTrueIfFalse` **produce** the selected callback's
-  result (or `null` when `ifTrue`/`ifFalse` select nothing);
-- `if` and `else` **preserve** the Boolean, so the next send in a chain can
-  still branch on it.
-
-There is no `elseIf`. Multi-way action selection composes with the existing
-lazy `or`, because each `if` returns whether its alternative was selected:
+Both forms are expressions, not statements and not new runtime primitives.
+They are exactly the ordinary sends:
 
 ```protos
-(n == 1).if() { actionA() }
-    .or(() => { (n == 2).if() { actionB() } })
-    .or(() => { (n == 3).if() { actionC() } })
-    .else() { actionDefault() }
+ready.ifTrue(() => {
+    start()
+})
+
+result: ready.ifTrueIfFalse(
+    () => { start() },
+    () => { wait() }
+)
 ```
 
-Once an alternative is selected, `or` does not evaluate the later conditions.
-The same holds with `||`, which lowers to `or`.
+So everything above still applies:
+
+- the result is the selected branch's exact normal result: an object, a
+  Boolean, `null`, or a Future, unchanged and never awaited or adopted;
+- a single-arm `if` whose condition is `false` returns `null`;
+- the condition is evaluated eagerly, exactly once, as the send receiver; it is
+  never wrapped in a Closure;
+- in the two-arm form both branch Closures are constructed (true branch first),
+  but only the selected one is invoked;
+- the standard selectors are strict: a condition that is not canonical `true`
+  or `false` signals an `Error`; there is no truthiness;
+- a custom object may override `ifTrue` or `ifTrueIfFalse`, and the contextual
+  form dispatches to that override through ordinary lookup.
+
+The `else` must follow the true branch's closing `}` on the same line:
+
+```protos
+if(ready) {
+    start()
+} else {
+    wait()
+}
+```
+
+A line break before `else` ends the conditional after its true branch, so the
+`else` that follows is not paired with it.
+
+`if` and `else` are not reserved words. Only the bare spelling
+`if(argument) { body }` with exactly one ordinary argument and a body on the
+same line is read this way. `(if)(x) { ... }`, `holder.if(x) { ... }`, `if(x)`
+without a body, and `if(a, b) { ... }` are ordinary calls, and programs may still
+define `if` or `else` as names or members. There is no `elseIf`; nest a
+conditional inside the `else` branch instead.
+
+Unlike contextual `while` (below), whose condition becomes a Closure reevaluated
+before every iteration, the `if` condition is an ordinary expression evaluated
+once before the send.
+
+Core does not provide standard `Object.if` or `Object.else` messages. Earlier
+revisions had receiver-preserving `.if()` / `.else()` messages that returned the
+Boolean so that sends could be chained; those messages no longer exist. Use the
+contextual form, or `ifTrue` / `ifFalse` / `ifTrueIfFalse` directly; `or` / `||`
+are strict Boolean operations and are not a substitute for that old chaining.
 
 ## Boolean negation and two-way selection
 
@@ -589,9 +617,13 @@ Representative Boolean cases include:
   case), and ordinary eager evaluation of callback-producing argument expressions
   (`iftrueiffalse argument expressions eager` case);
 - [`../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos`](../../protos/tests/conformance/boolean/receiver-preserving-if-else.protos)
-  demonstrates that `if` / `else` return the exact receiver and ignore the
-  callback result, chaining in both orders, and multi-way selection through
-  `or` and `||`.
+  demonstrates the contextual `if` / `else` expression: exact selected results
+  and identities, `null` for an unselected single arm, one eager condition
+  evaluation, ordinary custom `ifTrue` / `ifTrueIfFalse` dispatch, and that
+  Core no longer publishes standard `Object.if` / `Object.else`;
+- [`../../protos/tests/conformance/control/control-spelling-is-ordinary.protos`](../../protos/tests/conformance/control/control-spelling-is-ordinary.protos)
+  demonstrates that grouped `(if)(...)` and member `.if(...)` spellings remain
+  ordinary calls while the exact bare form is contextual.
 
 Representative loop cases include:
 
