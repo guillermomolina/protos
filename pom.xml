@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.389-SNAPSHOT</version>
+    <version>0.3.390-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>

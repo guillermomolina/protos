@@ -18,6 +18,8 @@ test_tool_log="${tmp_dir}/test-tool.log"
 probe_log="${tmp_dir}/interpreter-only.log"
 probe_source="${tmp_dir}/interpreter-only.protos"
 dap_log="${tmp_dir}/dap.log"
+lsp_log="${tmp_dir}/lsp.log"
+regex_log="${tmp_dir}/regex.log"
 
 # PLAT045 (#772): the Native executable is a real AOT image built with the
 # supported fallback Truffle runtime, so guest execution is interpreter-only
@@ -122,6 +124,17 @@ PROTOS_HOME="${root}" \
 dap_status=$?
 
 PROTOS_HOME="${root}" \
+    python3 "${root}/build/native/test-lsp-workspace-symbols.py" "${native_bin}" \
+    >"${lsp_log}" 2>&1
+lsp_status=$?
+
+PROTOS_HOME="${root}" \
+    "${native_bin}" \
+    test --file "${root}/protos/tests/library/regex/compile.protos" \
+    >"${regex_log}" 2>&1
+regex_status=$?
+
+PROTOS_HOME="${root}" \
     "${native_bin}" \
     -e "$(cat "${probe_source}")" \
     >"${probe_log}" 2>&1
@@ -174,6 +187,8 @@ echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
 echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
 cat "${dap_log}"
 echo "NATIVE_DAP_STACKTRACE_STATUS=${dap_status}"
+echo "NATIVE_LSP_WORKSPACE_SYMBOLS_STATUS=${lsp_status}"
+echo "NATIVE_REGEX_STATUS=${regex_status}"
 echo "NATIVE_INTERPRETER_ONLY_STATUS=${probe_status}"
 echo "NATIVE_FALLBACK_RUNTIME_MARKERS=${fallback_markers}"
 echo "NATIVE_GUEST_JIT_POLICY=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
@@ -274,4 +289,17 @@ echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
 echo "NATIVE_INTERPRETER_ONLY=PASS"
 echo "NATIVE_GUEST_JIT=UNSUPPORTED_UPSTREAM_ORACLE_GRAAL_14579"
 echo "FRAME_WITHOUT_BOXING_REGRESSION=PASS"
-echo "NATIVE_REGRESSION_SUITE=PASS"
+cat "${lsp_log}"
+
+if [[ "${lsp_status}" -ne 0 ]]; then
+    echo "NATIVE_LSP_WORKSPACE_SYMBOLS=FAIL" >&2
+    false
+elif [[ "${regex_status}" -ne 0 ]] || \
+     ! grep -Eq '^[[:space:]]*[1-9][0-9]* passed, 0 failed[[:space:]]*$' "${regex_log}"; then
+    cat "${regex_log}" >&2
+    echo "NATIVE_REGEX=FAIL" >&2
+    false
+else
+    echo "NATIVE_REGEX=PASS"
+    echo "NATIVE_REGRESSION_SUITE=PASS"
+fi

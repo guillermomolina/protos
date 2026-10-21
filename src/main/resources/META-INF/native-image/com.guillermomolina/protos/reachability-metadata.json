@@ -15,6 +15,9 @@
     },
     {
       "glob": "com/ibm/icu/impl/data/icudata/*.icu"
+    },
+    {
+      "glob": "com/ibm/icu/impl/data/icudata/nfc.nrm"
     }
   ]
 }

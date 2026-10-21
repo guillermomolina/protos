@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.390-SNAPSHOT
+
+- `BUG023` (#937): restore the missing ICU4J NFC data in the Native
+  Image so LSP `workspace/symbol` requests no longer fail on first use.
+  - Register `com/ibm/icu/impl/data/icudata/nfc.nrm` in existing
+    reachability metadata, retaining the prior ICU resources and LSP4J
+    reflection declarations. No language or LSP matching semantics change.
+  - Add real JSON-RPC JVM/Native coverage for unbound and canonical
+    workspaces, Unicode NFC/case-fold matching, response parity and clean
+    LSP shutdown.
+  - Integrate the new LSP test and Native `std:regex` coverage into the
+    maintained Native regression harness.
+  - Maintainer validation: focused LSP JUnit PASS; rebuilt Native
+    image PASS; JVM/Native LSP regression PASS; Native regex 12/12 PASS;
+    integrated Native harness PASS; `make JAVA_TEST_JOBS=1 test` PASS.
+    A default-parallel `make test` encountered an unrelated DAP
+    socket-close error; the isolated DAP test and serial full suite PASS.
+
 ## 0.3.389-SNAPSHOT
 
 - `LM013` (#861): D209-C document-local LSP intelligence.
