@@ -165,8 +165,8 @@ final class ProtosGuardedSendSelection {
         } else if (ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
                 closure, home, caller)) {
             kind = GuardedStructuredKind.ERROR_HANDLE;
-        } else if (ProtosStandardObjectProtocol.isCanonicalStandardPreTestLoopSelection(
-                closure, home)) {
+        } else if (ProtosStandardObjectProtocol.structuredLoopKindForCanonicalSelection(
+                closure, home) != null) {
             kind = GuardedStructuredKind.WHILE;
         } else if ((booleanKind =
                 ProtosStandardBooleanProtocol

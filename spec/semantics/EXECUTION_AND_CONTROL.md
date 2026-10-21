@@ -455,11 +455,12 @@ message and trailing-Closure syntax and the D210-Q2 contextual
 `while(condition) { body }` expression; the selector introduces no reserved
 word.
 
-`whileTrue` is the only standard pre-test loop selector. Core v0.1 defines no
-standard `while` selector (D210 retired the former D201 standard `while`
-behavior) and no standard inverse `whileFalse` selector; both names remain
-ordinary member names that programs may define under the ordinary slot rules
-without acquiring standard loop behavior.
+Core v0.1 defines exactly four standard Closure loop selectors: `whileTrue`
+(this subsection), and `whileFalse`, `untilTrue`, and `untilFalse` (D212,
+defined below). It defines no standard `while` selector (D210 retired the former
+D201 standard `while` behavior) and no standard `until` selector; those names
+remain ordinary member names that programs may define under the ordinary slot
+rules without acquiring standard loop behavior.
 
 The common trailing-Closure spelling is therefore ordinary syntax for the same
 one-argument message:
@@ -532,11 +533,82 @@ activation executes remain owned by `../concurrency/FUTURES_AND_TASKS.md`. Those
 synchronous callback activations do not establish new structured execution scopes
 of their own merely by being invoked by a standard loop.
 
+### Standard Closure `whileFalse`, `untilTrue`, and `untilFalse` operations
+
+D212 adds three standard Closure loop messages beside `whileTrue`:
+
+```text
+condition.whileFalse(body)
+body.untilTrue(condition)
+body.untilFalse(condition)
+```
+
+| Selector | Original receiver | Sole argument | Phase | Exit condition result |
+|---|---|---|---|---|
+| `whileTrue` | condition | body | pre-test | canonical `false` |
+| `whileFalse` | condition | body | pre-test | canonical `true` |
+| `untilTrue` | body | condition | post-test | canonical `true` |
+| `untilFalse` | body | condition | post-test | canonical `false` |
+
+For a pre-test selector the original receiver is the condition and the argument
+is the body; for a post-test selector the original receiver is the body and the
+argument is the condition. The roles follow from the selected standard
+behavior, never from either Closure's identity, parameters, or results.
+
+Receiver/argument evaluation and validation are exactly those of `whileTrue`:
+receiver and argument expressions are evaluated completely by the ordinary call
+rules; the standard behavior then validates, in order, that the original
+receiver is a semantic Closure, that exactly one argument was supplied, and that
+the argument is a semantic Closure. If any validation fails, neither Closure is
+activated. Validation does not inspect declared parameters, evaluate defaults,
+or execute user code. Every callback activation supplies zero positional
+arguments and uses the ordinary Closure activation rules described for
+`whileTrue` (step 1 above), including defaults evaluated only for activations
+actually reached.
+
+A completed condition result is tested exactly: the selector's exit Boolean
+(table above) ends the loop normally; the other canonical Boolean continues it;
+any other value, including a Future, signals one fresh standard `Error` failure
+occurrence under `ERRORS.md` without activating the body for that test. There
+is no `not()` invocation, truthiness, coercion, Boolean delegation test,
+implicit awaiting, or Future adoption.
+
+`whileFalse` repeats the `whileTrue` pre-test algorithm with the canonical
+Boolean roles exchanged: activate `condition`; on canonical `true` terminate
+normally; on canonical `false` activate `body`, record its exact normal result
+as the most recent body result, and begin the next iteration. Zero, one, or any
+number of body activations may occur; with zero body activations the normal
+result is canonical `null`.
+
+`untilTrue` and `untilFalse` are post-test loops. After successful validation
+they repeat:
+
+1. Activate `body`. If it completes normally, its exact normal result becomes
+   the most recent body result, replacing any earlier one.
+2. Activate `condition`. On the selector's exit Boolean, terminate normally; on
+   the other canonical Boolean, begin the next iteration at step 1; on any other
+   value, signal the invalid-result `Error` above.
+
+The body is therefore activated before the first condition activation, and a
+normally terminating post-test loop has at least one body activation. A body
+activation that does not complete normally is never followed by a condition
+activation.
+
+For all four selectors the normal result is the exact normal result of the most
+recent normally completed body activation (canonical `null` only for a pre-test
+loop with zero body activations), returned with its exact identity and not
+converted, copied, wrapped, awaited, or adopted, exactly as specified for
+`whileTrue`, including the Future rules above. The terminal condition activation
+may observe or mutate that object; its identity is still the result. A loop
+whose condition or body activation does not complete normally has no normal
+result.
+
 ### Control transfer, suspension, and cancellation
 
-`whileTrue` introduces no handler, cleanup scope, return home,
-task, Future, scheduler boundary, cancellation mask, or hidden
-suspension/checkpoint of its own.
+The standard loop operations `whileTrue`, `whileFalse`, `untilTrue`, and
+`untilFalse` introduce no handler, cleanup scope, return home, task, Future,
+scheduler boundary, cancellation mask, new Closure kind, or hidden
+suspension/checkpoint of their own.
 
 If condition or body execution signals an Error, performs a valid non-local
 return, encounters `InvalidReturn`, begins cooperative cancellation unwind, or

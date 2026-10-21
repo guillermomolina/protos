@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.397-SNAPSHOT
+
+- `I121-A` (#948, D212/#947): standard Closure loop protocols `whileFalse`,
+  `untilTrue` and `untilFalse`.
+  - `ProtosStandardObjectProtocol` installs the three new native Closures as
+    local `Object` slots beside `whileTrue` and replaces the pre-test-only
+    native loop with one loop parameterized by `StructuredLoopKind` (phase
+    and canonical exit Boolean). Pre-test kinds take the receiver as the
+    condition; post-test kinds take it as the body and run it before the
+    first condition. Validation precedes every activation and noncanonical
+    condition results signal a fresh standard Error.
+  - Canonical selection and implementation recognition return the loop kind
+    and still require the exact standard behavior homed at the root
+    `Object`; same-named program slots stay ordinary dispatch.
+  - Prepared/structured execution carries the kind through
+    `PreparedWhileCall`, whose condition test is polarity-aware. The
+    structured dispatch lowering adds a post-test shape (body then
+    condition inside the Bytecode `While` condition) selected by the new
+    `StructuredWhilePostTest` operation; the pre-test shape is unchanged.
+    The inline-literal loop path admits only the pre-test kinds.
+  - Root `Object` surface validation and the native-boundary audit include
+    the new slots; the generated-bytecode BCI baseline records the two
+    proven `StructuredWhilePostTest` dispatch sites.
+  - New native conformance suite `loop-standard-polarities.protos` and Java
+    test `ProtosD212StandardLoopPolaritiesTest`; D210-era assertions that
+    `whileFalse` is absent were updated.
+  - Maintainer validation: `make test` PASS.
+
 ## 0.3.396-SNAPSHOT
 
 - `I119` (#945, D211/#944): contextual `if`/`else` and removal of the

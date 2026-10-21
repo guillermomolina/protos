@@ -130,9 +130,12 @@ final class CanonicalToBytecodeLowerer {
             ProtosClosureExecutionPlanCell literalPlan) {}
 
     /**
-     * A send site's PLAT044 B′ (PERF026-C1) inline whileTrue candidate pair:
-     * the receiver literal staged as the condition and the sole supplied
-     * literal staged as the body. The condition's {@code position} is unused.
+     * A send site's PLAT044 B′ (PERF026-C1) inline pre-test loop candidate
+     * pair, admitted only for the standard {@code whileTrue} or (D212)
+     * {@code whileFalse}: the receiver literal staged as the condition and the
+     * sole supplied literal staged as the body. Post-test {@code untilTrue}
+     * and {@code untilFalse} are never admitted. The condition's
+     * {@code position} is unused.
      */
     private record InlineLiteralWhile(
             InlineLiteralCallback condition,
@@ -6430,8 +6433,13 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PLAT044 B′ (PERF026-C1) local standard whileTrue over an admitted
-     * literal pair.
+     * PLAT044 B′ (PERF026-C1) local standard pre-test loop ({@code whileTrue}
+     * or, D212, {@code whileFalse}) over an admitted literal pair: the
+     * original receiver is the condition Closure and the sole argument the
+     * body Closure. The prepared loop's immutable kind decides which canonical
+     * Boolean continues the loop; post-test {@code untilTrue} and
+     * {@code untilFalse} are not admitted here and keep the
+     * structured-dispatch loop.
      *
      * <p>Mirrors the while branch of {@code ProtosStructuredDispatchLowerer}
      * against the same {@code PreparedWhileCall} state machine, so the outer
@@ -6440,8 +6448,9 @@ final class CanonicalToBytecodeLowerer {
      * each condition and (only after a canonical {@code true}) each body
      * activation is prepared fresh at the same point, the condition result
      * keeps its strict canonical Boolean authority, and normal completion
-     * yields {@code PreparedWhileCall#result}: the last normal body result,
-     * or canonical {@code null} when no body ran (D210). The loop phase
+     * yields {@code PreparedWhileCall#result}: the exact last normally
+     * completed body result, or canonical {@code null} when no body ran
+     * (D210/D212). The loop phase
      * lives in this root's Bytecode control state, so suspension resumes at
      * the exact loop PC through this root's continuation (PLAT014/PLAT021).
      *
@@ -6482,10 +6491,11 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
         /*
-         * D210: the last normal body result for whileTrue. It starts as
-         * canonical null (zero iterations) and is overwritten only by a body
-         * invocation that completes normally; an abnormal condition/body exit
-         * propagates without reaching the result store below.
+         * D210/D212: the last normal body result of the inline pre-test loop
+         * (whileTrue or whileFalse). It starts as canonical null (zero
+         * iterations) and is overwritten only by a body invocation that
+         * completes normally; an abnormal condition/body exit propagates
+         * without reaching the result store below.
          */
         builder.beginStoreLocal(structuredWhileBodyResult);
         builder.emitLoadConstant(ProtosNullValue.INSTANCE);

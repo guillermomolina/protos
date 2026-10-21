@@ -123,6 +123,14 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 The primary normative contract formerly contained here has moved to `semantics/EXECUTION_AND_CONTROL.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
+Standard looping is ordinary Closure messaging: the four standard loop
+selectors `whileTrue`, `whileFalse` (pre-test, receiver is the condition) and
+`untilTrue`, `untilFalse` (post-test, receiver is the body) are ordinary
+Closure-valued slots of `Object` (D212). Their algorithms are owned by
+`semantics/EXECUTION_AND_CONTROL.md` and their slot placement by
+`semantics/CALLABLES.md`. Only `whileTrue` has contextual source syntax
+(`while(condition) { body }`).
+
 ## 18. Trailing Closures
 
 Trailing-closure syntax, attachment, and mandatory desugaring are owned by

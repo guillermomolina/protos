@@ -317,10 +317,9 @@ tests: [
         }
         Assertions.require(observation().value() === true)
     }),
-    Test("only whileTrue is standard; while is an ordinary name", () => {
+    Test("whileTrue is standard; bare while is an ordinary name", () => {
         Assertions.require(Object.hasSlot("whileTrue"))
         Assertions.require(!Object.hasSlot("while"))
-        Assertions.require(!Object.hasSlot("whileFalse"))
         holder: {}
         holder.while: 5
         Assertions.require(holder.while === 5)

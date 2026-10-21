@@ -207,8 +207,9 @@ like every other Core Closure.
 ### Standard Closure-specific behavior ownership
 
 Core v0.1 installs the standard Closure-specific selectors `future`, `parallel`,
-`ensure`, and `whileTrue` as ordinary **local Closure-valued slots of
-`Object`**.
+`ensure`, and the four standard loop selectors `whileTrue`, `whileFalse`,
+`untilTrue`, and `untilFalse` (D212) as ordinary **local Closure-valued slots
+of `Object`**.
 They are not hidden runtime methods, per-Closure materialized slots, entries in a
 separate method table, or slots on a standard `Closure` prototype. Core defines
 no standard `Closure` prototype.
@@ -216,37 +217,39 @@ no standard `Closure` prototype.
 This location is ordinary and observable. Under the portable topology in
 `OBJECT_MODEL.md`, every Closure delegates directly to `Object`, so ordinary
 lookup of `closure.future`, `closure.parallel`, `closure.ensure`,
-or `closure.whileTrue` reaches the corresponding local slot on
-`Object` unless a nearer ordinary slot shadows it. Consequently
-`Object.hasSlot("future")`, `Object.hasSlot("parallel")`,
-`Object.hasSlot("ensure")`, and `Object.hasSlot("whileTrue")` are true, and
-`Object.slotNames()` includes all four names under the ordinary reflection rules.
-Core defines no standard `while` selector (D210): on the freshly initialized
-standard `Object`, `Object.hasSlot("while")` is false. Any other receiver whose delegation
+`closure.whileTrue`, `closure.whileFalse`, `closure.untilTrue`, or
+`closure.untilFalse` reaches the corresponding local slot on `Object` unless a
+nearer ordinary slot shadows it. Consequently `Object.hasSlot(name)` is true
+for each of these seven names, and `Object.slotNames()` includes all seven under
+the ordinary reflection rules. Core defines no standard `while` selector (D210)
+and no standard `until` selector (D212): on the freshly initialized standard
+`Object`, `Object.hasSlot("while")` and `Object.hasSlot("until")` are false. Any other receiver whose delegation
 chain reaches `Object` can likewise find these selectors by ordinary lookup.
 
-The **standard** behaviors stored in those four `Object` slots have the semantic
+The **standard** behaviors stored in those seven `Object` slots have the semantic
 Closure family as their receiver domain. Finding one of those behaviors does not
 make the original receiver a Closure. If ordinary lookup selects the standard
-`Object.future`, `Object.parallel`, `Object.ensure`, or `Object.whileTrue`
-behavior for an original receiver that is not a semantic Closure, invocation signals the
+`Object.future`, `Object.parallel`, `Object.ensure`, or one of the four standard
+loop behaviors for an original receiver that is not a semantic Closure, invocation signals the
 ordinary invalid-receiver `Error` required by `OBJECT_MODEL.md` before the
 selected standard operation performs its Closure-specific effect. Failure of
 that selected behavior does not resume lookup at another slot with the same
 name.
 
 The selectors themselves are not reserved. A nearer local `future`, `parallel`,
-`ensure`, or `whileTrue` slot shadows the inherited standard slot exactly as for
+`ensure`, `whileTrue`, `whileFalse`, `untilTrue`, or `untilFalse` slot shadows the inherited standard slot exactly as for
 any other name, including when the nearer value is not a Closure. A program-defined
 Closure-valued override has its own ordinary receiver contract and is not
 automatically restricted to Closure receivers merely because it uses one of
 these names. Subject to the ordinary open/closed/frozen and slot-creation rules,
-a Closure object may itself define a nearer local override. `while` is not
-reserved either: any object may define a local `while` slot, which is selected
-and invoked under the ordinary protocol with no standard loop behavior.
+a Closure object may itself define a nearer local override. `while` and `until`
+are not reserved either: any object may define a local `while` or `until` slot,
+which is selected and invoked under the ordinary protocol with no standard loop
+behavior.
 
-Reading `receiver.future`, `receiver.parallel`, `receiver.ensure`,
-or `receiver.whileTrue` is an ordinary member read. When the selected value is a
+Reading `receiver.future`, `receiver.parallel`, `receiver.ensure`, or any of
+`receiver.whileTrue`, `receiver.whileFalse`, `receiver.untilTrue`, and
+`receiver.untilFalse` is an ordinary member read. When the selected value is a
 Closure, extraction follows §11 exactly: the resulting Closure retains the
 original receiver and selected slot owner as the ordinary receiver/`methodHome`
 binding metadata. No second bound-method kind or Closure-specific extraction
@@ -267,7 +270,11 @@ also owns what the standard `whileTrue(body)` behavior does after
 receiver/argument validation, including zero-argument Closure activation order,
 strict canonical Boolean condition results, its normal result (the last normal
 body result, or canonical `null` when no body activation ran), and
-Error/control-transfer/suspension/cancellation/Future composition.
+Error/control-transfer/suspension/cancellation/Future composition, and likewise
+for the standard `whileFalse(body)`, `untilTrue(condition)`, and
+`untilFalse(condition)` behaviors, including which original operand is the
+condition and which is the body, their pre-test or post-test phase order, and
+their canonical exit Boolean.
 
 An implementation may realize any of these standard behaviors using host
 primitives, intrinsics, cached dispatch, worker pools, scheduler machinery, or

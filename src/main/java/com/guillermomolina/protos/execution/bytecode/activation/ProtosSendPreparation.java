@@ -278,7 +278,7 @@ final class ProtosSendPreparation {
                 activation,
                 ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
                 ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                ProtosStandardObjectProtocol.isStandardPreTestLoopImplementation(closure),
+                ProtosStandardObjectProtocol.structuredLoopKindForImplementation(closure),
                 ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
                 ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
@@ -299,7 +299,7 @@ final class ProtosSendPreparation {
             ProtosActivation activation,
             boolean structuredEnsure,
             boolean structuredErrorHandler,
-            boolean structuredWhile,
+            ProtosStandardObjectProtocol.StructuredLoopKind structuredWhile,
             ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
             boolean structuredArrayEach,
             boolean structuredBytesEach,
@@ -344,7 +344,7 @@ final class ProtosSendPreparation {
         }
         if (structuredEnsure
                 || structuredErrorHandler
-                || structuredWhile
+                || structuredWhile != null
                 || structuredBoolean != null
                 || structuredArrayEach
                 || structuredBytesEach

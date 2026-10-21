@@ -7764,6 +7764,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * D212: whether the prepared standard loop is post-test, so the lowering
+     * runs the body before each condition. Fixed by the selected standard
+     * behavior when the loop was prepared.
+     */
+    @Operation
+    public static final class StructuredWhilePostTest {
+        @Specialization
+        public static boolean perform(PreparedWhileCall prepared) {
+            return prepared.postTest();
+        }
+    }
+
     @Operation
     public static final class StructuredWhileCondition {
         @Specialization

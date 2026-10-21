@@ -76,7 +76,7 @@ final class ProtosPreparedCalls {
     private static final class StructuredCallCapabilities {
         final boolean ensure;
         final boolean errorHandler;
-        final boolean whileLoop;
+        final ProtosStandardObjectProtocol.StructuredLoopKind whileLoop;
         final ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind;
         final boolean arrayEach;
         final boolean bytesEach;
@@ -93,7 +93,7 @@ final class ProtosPreparedCalls {
         private StructuredCallCapabilities(
                 boolean ensure,
                 boolean errorHandler,
-                boolean whileLoop,
+                ProtosStandardObjectProtocol.StructuredLoopKind whileLoop,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
@@ -124,7 +124,7 @@ final class ProtosPreparedCalls {
             int controlCapabilities =
                     (ensure ? 1 : 0)
                             + (errorHandler ? 1 : 0)
-                            + (whileLoop ? 1 : 0)
+                            + (whileLoop != null ? 1 : 0)
                             + (booleanKind != null ? 1 : 0)
                             + (arrayEach ? 1 : 0)
                             + (bytesEach ? 1 : 0)
@@ -147,7 +147,7 @@ final class ProtosPreparedCalls {
         static StructuredCallCapabilities of(
                 boolean ensure,
                 boolean errorHandler,
-                boolean whileLoop,
+                ProtosStandardObjectProtocol.StructuredLoopKind whileLoop,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
@@ -163,7 +163,7 @@ final class ProtosPreparedCalls {
             boolean any =
                     ensure
                             || errorHandler
-                            || whileLoop
+                            || whileLoop != null
                             || booleanKind != null
                             || arrayEach
                             || bytesEach
@@ -444,7 +444,7 @@ final class ProtosPreparedCalls {
                 ProtosActivation activation,
                 boolean structuredEnsure,
                 boolean structuredErrorHandler,
-                boolean structuredWhile,
+                ProtosStandardObjectProtocol.StructuredLoopKind structuredWhile,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
@@ -766,7 +766,7 @@ final class ProtosPreparedCalls {
         }
 
         @Override
-        public boolean isStructuredWhile() { return structured != null && structured.whileLoop; }
+        public boolean isStructuredWhile() { return structured != null && structured.whileLoop != null; }
 
         /**
          * PLAT044 B′ (PERF026-C1): true only when ordinary selection prepared
@@ -785,6 +785,7 @@ final class ProtosPreparedCalls {
         @Override
         public boolean admitsInlineLiteralWhile(Object condition, Object body) {
             return isStructuredWhile()
+                    && !structured.whileLoop.postTest()
                     && activation.receiver() == condition
                     && supplied.size() == 1
                     && supplied.get(0) == body
@@ -928,7 +929,7 @@ final class ProtosPreparedCalls {
                             || structured.importRuntime != null
                             || structured.ensure
                             || structured.errorHandler
-                            || structured.whileLoop
+                            || structured.whileLoop != null
                             || structured.booleanKind != null
                             || structured.arrayEach
                             || structured.bytesEach
@@ -1036,19 +1037,21 @@ final class ProtosPreparedCalls {
 
         @Override
         public PreparedWhileCall prepareStructuredWhile() {
-            if (structured == null || !structured.whileLoop) {
+            if (structured == null || structured.whileLoop == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured while capability");
             }
-            Object receiver = activation.receiver();
-            if (!(receiver instanceof ProtosClosureValue condition)
+            if (!(activation.receiver() instanceof ProtosClosureValue receiver)
                     || supplied.size() != 1
-                    || !(supplied.get(0) instanceof ProtosClosureValue body)) {
+                    || !(supplied.get(0) instanceof ProtosClosureValue argument)) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
-            return new PreparedWhileCall(condition, body, activation);
+            ProtosStandardObjectProtocol.StructuredLoopKind kind = structured.whileLoop;
+            return kind.postTest()
+                    ? new PreparedWhileCall(kind, argument, receiver, activation)
+                    : new PreparedWhileCall(kind, receiver, argument, activation);
         }
 
         @Override

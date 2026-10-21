@@ -23,6 +23,28 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.467] - 2026-10-21
+
+### D212 / I121-A — Standard Closure loop polarities
+- `spec/semantics/EXECUTION_AND_CONTROL.md`: new standard Closure
+  operations `condition.whileFalse(body)` (pre-test, exits on canonical
+  `true`), `body.untilTrue(condition)` (post-test, exits on canonical
+  `true`) and `body.untilFalse(condition)` (post-test, exits on canonical
+  `false`). Receiver/argument validation, zero-argument callback
+  activation, strict canonical Boolean tests (no `not()`, truthiness or
+  Future awaiting), body-before-condition ordering for post-test loops, and
+  the exact last-body result (canonical `null` only for a pre-test loop
+  with zero body activations) are specified. The control-transfer,
+  suspension and cancellation rules now cover all four standard loop
+  selectors. No standard `while` or `until` selector exists.
+- `spec/semantics/CALLABLES.md`: `whileFalse`, `untilTrue` and
+  `untilFalse` join the ordinary local Closure-valued `Object` slots with
+  the semantic Closure receiver domain and the ordinary extraction and
+  shadowing rules; `until` stays a non-reserved ordinary name.
+- `spec/PROTOS_LANGUAGE_SPEC.md`: §17 navigation note naming the four
+  standard loop selectors and their owners.
+- No grammar change; contextual `until` syntax is not part of this revision.
+
 ## [0.1.466] - 2026-10-21
 
 ### D211 / I119 — Contextual if/else expression

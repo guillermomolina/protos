@@ -708,8 +708,8 @@ final class ProtosStructuredDispatchLowerer {
         builder.beginBlock();
 
         /*
-         * Validate the standard whileTrue receiver/body before the first
-         * condition activation.
+         * Validate the standard loop receiver/argument before the first
+         * condition or body activation.
          */
         builder.beginStoreLocal(structuredWhile);
         builder.beginPrepareStructuredCall(ProtosStructuredCallKind.WHILE);
@@ -718,10 +718,11 @@ final class ProtosStructuredDispatchLowerer {
         builder.endStoreLocal();
 
         /*
-         * D210: the last normal body result for whileTrue. It starts as
-         * canonical null (zero iterations) and is overwritten only by a body
-         * invocation that completes normally; an abnormal condition/body exit
-         * propagates without reaching the result store below.
+         * D210/D212: the last normal body result of the standard loop. It
+         * starts as canonical null (zero pre-test iterations) and is
+         * overwritten only by a body invocation that completes normally; an
+         * abnormal condition/body exit propagates without reaching the
+         * result store below.
          */
         builder.beginStoreLocal(structuredWhileBodyResult);
         builder.emitLoadConstant(ProtosNullValue.INSTANCE);
@@ -732,48 +733,63 @@ final class ProtosStructuredDispatchLowerer {
          * condition/body activation is prepared fresh so each invocation owns
          * its own activation/ReturnHome; suspension resumes at the exact loop
          * PC without a replay checkpoint or callback compaction cursor.
+         *
+         * D212: the prepared loop's immutable kind selects one of two shapes.
+         * A post-test loop runs body-then-condition inside the While
+         * condition with an empty While body, so each iteration activates
+         * the body before its condition and a body that exits abnormally
+         * never reaches the condition. A pre-test loop keeps the D210
+         * condition-then-body shape.
          */
+        builder.beginIfThenElse();
+
+        builder.beginStructuredWhilePostTest();
+        builder.emitLoadLocal(structuredWhile);
+        builder.endStructuredWhilePostTest();
+
         builder.beginWhile();
-
         builder.beginBlock();
-        builder.beginStoreLocal(structuredWhileChild);
-        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
-        builder.emitLoadLocal(structuredWhile);
-        builder.endStructuredPrepareChildCall();
-        builder.endStoreLocal();
-        emitScopedPreparedInvocation(
+        emitStructuredLoopBody(
                 builder,
-                structuredWhileConditionResult,
+                structuredWhile,
                 structuredWhileChild,
-                childResult,
-                resumeValue);
-        builder.beginStructuredWhileCondition();
-        builder.emitLoadLocal(structuredWhile);
-        builder.emitLoadLocal(structuredWhileConditionResult);
-        builder.endStructuredWhileCondition();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredWhileChild);
-        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.SECONDARY_CHILD);
-        builder.emitLoadLocal(structuredWhile);
-        builder.endStructuredPrepareChildCall();
-        builder.endStoreLocal();
-        emitScopedPreparedInvocation(
-                builder,
                 structuredWhileBodyResult,
-                structuredWhileChild,
                 childResult,
                 resumeValue);
-        builder.beginStoreLocal(structuredWhileBodyResult);
-        builder.beginStructuredWhileRetainBodyResult();
-        builder.emitLoadLocal(structuredWhile);
-        builder.emitLoadLocal(structuredWhileBodyResult);
-        builder.endStructuredWhileRetainBodyResult();
-        builder.endStoreLocal();
+        emitStructuredLoopCondition(
+                builder,
+                structuredWhile,
+                structuredWhileChild,
+                structuredWhileConditionResult,
+                childResult,
+                resumeValue);
         builder.endBlock();
-
+        builder.beginBlock();
+        builder.endBlock();
         builder.endWhile();
+
+        builder.beginWhile();
+        builder.beginBlock();
+        emitStructuredLoopCondition(
+                builder,
+                structuredWhile,
+                structuredWhileChild,
+                structuredWhileConditionResult,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.beginBlock();
+        emitStructuredLoopBody(
+                builder,
+                structuredWhile,
+                structuredWhileChild,
+                structuredWhileBodyResult,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.endIfThenElse();
 
         builder.beginStoreLocal(result);
         builder.beginStructuredFinishWithChildResult();
@@ -1431,6 +1447,65 @@ final class ProtosStructuredDispatchLowerer {
         builder.endBlock();
 
         builder.endIfThenElse();
+    }
+
+    /**
+     * Emits one fresh standard-loop condition activation followed by its
+     * strict, polarity-aware continuation test; the emitted value is the
+     * boolean "continue looping".
+     */
+    private static void emitStructuredLoopCondition(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal structuredWhile,
+            BytecodeLocal structuredWhileChild,
+            BytecodeLocal structuredWhileConditionResult,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.CHILD);
+        builder.emitLoadLocal(structuredWhile);
+        builder.endStructuredPrepareChildCall();
+        builder.endStoreLocal();
+        emitScopedPreparedInvocation(
+                builder,
+                structuredWhileConditionResult,
+                structuredWhileChild,
+                childResult,
+                resumeValue);
+        builder.beginStructuredWhileCondition();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileConditionResult);
+        builder.endStructuredWhileCondition();
+    }
+
+    /**
+     * Emits one fresh standard-loop body activation and retains its exact
+     * normal result in {@code structuredWhileBodyResult}.
+     */
+    private static void emitStructuredLoopBody(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal structuredWhile,
+            BytecodeLocal structuredWhileChild,
+            BytecodeLocal structuredWhileBodyResult,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginStructuredPrepareChildCall(ProtosStructuredPhase.SECONDARY_CHILD);
+        builder.emitLoadLocal(structuredWhile);
+        builder.endStructuredPrepareChildCall();
+        builder.endStoreLocal();
+        emitScopedPreparedInvocation(
+                builder,
+                structuredWhileBodyResult,
+                structuredWhileChild,
+                childResult,
+                resumeValue);
+        builder.beginStoreLocal(structuredWhileBodyResult);
+        builder.beginStructuredWhileRetainBodyResult();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileBodyResult);
+        builder.endStructuredWhileRetainBodyResult();
+        builder.endStoreLocal();
     }
 
     private static void emitScopedPreparedInvocation(

@@ -361,7 +361,10 @@ final class ProtosGuardedSendExecution {
                 activation,
                 cachedStructured.kind() == GuardedStructuredKind.ENSURE,
                 cachedStructured.kind() == GuardedStructuredKind.ERROR_HANDLE,
-                cachedStructured.kind() == GuardedStructuredKind.WHILE,
+                cachedStructured.kind() == GuardedStructuredKind.WHILE
+                        ? ProtosStandardObjectProtocol.structuredLoopKindForImplementation(
+                                cachedStructured.closure())
+                        : null,
                 cachedStructured.booleanKind(),
                 cachedStructured.kind() == GuardedStructuredKind.ARRAY_EACH,
                 cachedStructured.kind() == GuardedStructuredKind.BYTES_EACH,
