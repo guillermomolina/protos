@@ -225,7 +225,6 @@ class PrepareReleaseTest(unittest.TestCase):
         self.assertEqual(
             labels,
             [
-                "refresh-origin-main",
                 "native-image-build",
                 "native-archive-build",
                 "native-complete-admission",
@@ -237,7 +236,7 @@ class PrepareReleaseTest(unittest.TestCase):
         )
 
         prepare_command = (
-            step.call_args_list[6].args[1]
+            step.call_args_list[5].args[1]
         )
 
         self.assertIn(

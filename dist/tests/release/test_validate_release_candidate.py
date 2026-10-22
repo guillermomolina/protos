@@ -346,13 +346,27 @@ echo "FIXTURE_RELEASE_B5: PASS"
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("release tag already exists locally", result.stderr)
 
-    def test_rejects_existing_remote_tag(self) -> None:
+    def test_allows_remote_tag_collision_before_publication(self) -> None:
         git(self.repo, "tag", "v0.2.230")
         git(self.repo, "push", "-q", "origin", "refs/tags/v0.2.230")
         git(self.repo, "tag", "-d", "v0.2.230")
-        result = self.validate(check=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("release tag already exists on origin", result.stderr)
+
+        result = self.validate()
+
+        self.assertIn(
+            "DIST001_E3C3_CANDIDATE_GATE: PASS",
+            result.stdout,
+        )
+
+    def test_validates_without_configured_origin(self) -> None:
+        git(self.repo, "remote", "remove", "origin")
+
+        result = self.validate()
+
+        self.assertIn(
+            "DIST001_E3C3_CANDIDATE_GATE: PASS",
+            result.stdout,
+        )
 
 
 if __name__ == "__main__":

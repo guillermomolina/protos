@@ -243,17 +243,28 @@ def verify_lineage(
         if exists.returncode != 0:
             fail(label + " commit object is unavailable locally")
 
-    origin_main = git(root, "rev-parse", "origin/main").stdout.strip()
+    local_main = git(
+        root,
+        "rev-parse",
+        "--verify",
+        "refs/heads/main",
+        check=False,
+    )
+    if local_main.returncode != 0:
+        fail("cannot resolve local main")
+
     ancestry = git(
         root,
         "merge-base",
         "--is-ancestor",
         baseline,
-        origin_main,
+        local_main.stdout.strip(),
         check=False,
     )
+    if ancestry.returncode == 1:
+        fail("selected baseline is not an ancestor of local main")
     if ancestry.returncode != 0:
-        fail("selected baseline is not an ancestor of origin/main")
+        fail("cannot verify selected baseline ancestry")
 
     parents = git(root, "rev-list", "--parents", "-n", "1", candidate).stdout.split()
     if len(parents) != 2:
@@ -335,19 +346,8 @@ def verify_lineage(
     if local_tag.returncode not in (0, 1):
         fail("cannot determine local future release tag availability")
 
-    remote_tag = git(
-        root,
-        "ls-remote",
-        "--exit-code",
-        "--tags",
-        "origin",
-        "refs/tags/" + selection["release_tag"],
-        check=False,
-    )
-    if remote_tag.returncode == 0:
-        fail("future release tag already exists on origin")
-    if remote_tag.returncode != 2:
-        fail("cannot determine origin future release tag availability")
+    # Remote collisions are verified by publish_release.py.
+    # Candidate lineage verification uses local Git objects only.
 
     print("E4B4_SELECTION_IDENTITY_CHECK: PASS")
     print("E4B4_BASELINE_ANCESTRY_CHECK: PASS")

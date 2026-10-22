@@ -74,7 +74,7 @@ class ReleaseCandidateLineageVerificationTest(unittest.TestCase):
         source = Path(__file__).resolve().parents[3] / "dist/verify_release_candidate_lineage.py"
         shutil.copy2(source, self.repo / "dist/verify_release_candidate_lineage.py")
 
-        git(self.repo, "init", "-q")
+        git(self.repo, "init", "-q", "-b", "main")
         git(self.repo, "config", "user.email", "fixture@example.invalid")
         git(self.repo, "config", "user.name", "Fixture")
         run(["git", "init", "--bare", "-q", str(self.remote)], cwd=self.top)
@@ -155,6 +155,29 @@ class ReleaseCandidateLineageVerificationTest(unittest.TestCase):
     def test_accepts_exact_release_only_detached_candidate(self) -> None:
         result = self.invoke()
         self.assertIn("DIST001_E4B4_LINEAGE: PASS candidate=" + self.candidate, result.stdout)
+
+    def test_accepts_without_configured_origin(self) -> None:
+        git(self.repo, "remote", "remove", "origin")
+
+        result = self.invoke()
+
+        self.assertIn(
+            "DIST001_E4B4_LINEAGE: PASS candidate=" + self.candidate,
+            result.stdout,
+        )
+
+    def test_ignores_remote_tag_until_publication(self) -> None:
+        git(self.repo, "tag", "v0.2.236", self.baseline)
+        git(self.repo, "push", "-q", "origin", "refs/tags/v0.2.236")
+        git(self.repo, "tag", "-d", "v0.2.236")
+        git(self.repo, "remote", "remove", "origin")
+
+        result = self.invoke()
+
+        self.assertIn(
+            "DIST001_E4B4_LINEAGE: PASS candidate=" + self.candidate,
+            result.stdout,
+        )
 
     def test_accepts_external_bundle_invocation_with_explicit_repository_root(self) -> None:
         source_root = Path(__file__).resolve().parents[3]

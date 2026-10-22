@@ -149,11 +149,8 @@ def prepare(
             "current repository"
         )
 
-    step(
-        "refresh-origin-main",
-        ["git", "fetch", "--quiet", "origin", "main"],
-        repo,
-    )
+    # Preparation uses the approved local baseline.
+    # Remote tag and release collision checks belong to publication.
     require_tag_available(repo, selection["release_tag"])
 
     version = selection["release_version"]

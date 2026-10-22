@@ -212,20 +212,8 @@ def require_tag_available(root: Path, tag: str) -> None:
     if local.returncode != 1:
         fail("cannot determine local release-tag availability: " + tag)
 
-    remote = git(
-        root,
-        "ls-remote",
-        "--exit-code",
-        "--tags",
-        "origin",
-        "refs/tags/" + tag,
-        check=False,
-    )
-    if remote.returncode == 0:
-        fail("release tag already exists on origin: " + tag)
-    if remote.returncode != 2:
-        detail = remote.stderr.strip() or remote.stdout.strip()
-        fail("cannot determine origin release-tag availability: " + detail)
+    # Remote tag collisions are checked by the publication workflow.
+    # Candidate preparation and validation require only local Git state.
 
 
 def run_release_b5(
