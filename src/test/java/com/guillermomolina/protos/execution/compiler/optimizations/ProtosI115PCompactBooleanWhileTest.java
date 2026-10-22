@@ -88,7 +88,11 @@ final class ProtosI115PCompactBooleanWhileTest {
 
         assertEquals(2, census.rootCount());
         assertStructuredWhile(census);
-        assertBooleanConversion(census);
+        // I115-Q: a literal condition is loaded directly as a Java boolean,
+        // so it needs no Boolean conversion (see ProtosI115QCompactLiteralReturnTest).
+        assertFalse(census.names().stream()
+                        .anyMatch(name -> name.contains("ExperimentalCanonicalBooleanCondition")),
+                "A literal Boolean condition needs no conversion");
         assertFalse(census.names().stream()
                         .anyMatch(name -> name.contains("ExperimentalIntegerLessBool")),
                 "A literal Boolean condition must not become an Integer comparison");

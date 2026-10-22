@@ -137,6 +137,21 @@ final class ProtosTailCallContinuation implements TruffleObject {
      * {@link #isSuspended was proved suspended} by the caller. A direct entry
      * has no owner, so no prepared call is built; the caller location is
      * materialized only here, inside the cold transport construction.
+     *
+     * <p>I115: the transport retains only the suspended outcome, which owns
+     * the callee frame and therefore its B5 arguments with the caller
+     * reference still unresolved. The transport itself never reads caller,
+     * Task or dynamic-control state. After resumption the callee's terminal
+     * operations and its owning call read them through the shared admitted
+     * accessors of ProtosFrameArguments (admittedPreludeOrNull,
+     * admittedCompactTask, resolveAdmittedCaller); other readers keep the
+     * general accessors. Either way the caller's single activation is
+     * published only when an exact identity is required. A PROVEN entry
+     * never creates a transport. A caller slot holding a
+     * ProtosCallerFrameReference survives suspension unchanged: the
+     * reference is immutable, its transported prelude was fixed before the
+     * call, and resolution after resumption still publishes through the
+     * referenced header, so the same single activation is obtained.
      */
     static Object deferDirect(
             Object suspendedOutcome,
