@@ -29,6 +29,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -464,6 +465,208 @@ class ProtosParserTrailingClosureTest {
                 assertInstanceOf(SurfaceContextualIf.class, member.receiver());
         assertEquals(new SourceSpan(0, 22), conditional.span());
         assertInstanceOf(SurfaceClosure.class, conditional.falseBranch());
+    }
+
+    @Test
+    void oneLineBracedBodyFollowedByUntilIsContextualUntil() {
+        String source = "{ a } until(b)";
+        SurfaceContextualUntil loop =
+                assertInstanceOf(SurfaceContextualUntil.class, only(source));
+
+        assertEquals(0, loop.body().parameters().size());
+        assertFalse(loop.body().expressionBody());
+        assertEquals(1, loop.body().body().expressions().size());
+        assertEquals(new SourceSpan(0, 5), loop.body().span());
+        assertEquals(new SourceSpan(6, 11), loop.untilSpan());
+        assertEquals(
+                "b",
+                assertInstanceOf(SurfaceName.class, loop.condition()).name());
+        assertEquals(new SourceSpan(12, 13), loop.condition().span());
+        assertEquals(new SourceSpan(0, source.length()), loop.span());
+    }
+
+    @Test
+    void multilineBodyWithSameLineSuffixIsContextualUntil() {
+        SurfaceContextualUntil loop = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                only("{\n    first\n    second; third\n} until(\n    done()\n)"));
+
+        assertEquals(3, loop.body().body().expressions().size());
+        assertInstanceOf(SurfaceCall.class, loop.condition());
+    }
+
+    @Test
+    void emptyBodyFollowedByUntilIsContextualUntil() {
+        SurfaceContextualUntil loop =
+                assertInstanceOf(SurfaceContextualUntil.class, only("{} until(done)"));
+
+        assertEquals(0, loop.body().body().expressions().size());
+    }
+
+    @Test
+    void contextualUntilBodyMayContainNestedObjectConstruction() {
+        SurfaceContextualUntil loop = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                only("{ item = { x: 1 } } until(item.x)"));
+
+        SurfaceAssignment assignment = assertInstanceOf(
+                SurfaceAssignment.class, loop.body().body().expressions().get(0));
+        assertInstanceOf(SurfaceObject.class, assignment.value());
+    }
+
+    @Test
+    void contextualControlFormsNestInsideContextualUntilBody() {
+        SurfaceContextualUntil outer = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                only("{ while(a) { b }\nif(c) { d } else { e }\n{ f } until(g) } until(h)"));
+
+        assertEquals(3, outer.body().body().expressions().size());
+        assertInstanceOf(
+                SurfaceContextualWhile.class, outer.body().body().expressions().get(0));
+        assertInstanceOf(
+                SurfaceContextualIf.class, outer.body().body().expressions().get(1));
+        SurfaceContextualUntil inner = assertInstanceOf(
+                SurfaceContextualUntil.class, outer.body().body().expressions().get(2));
+        assertEquals("g", assertInstanceOf(SurfaceName.class, inner.condition()).name());
+        assertEquals("h", assertInstanceOf(SurfaceName.class, outer.condition()).name());
+    }
+
+    @Test
+    void nestedCommasInsideTheConditionDoNotCountAsSuffixArguments() {
+        SurfaceContextualUntil loop = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                only("{ a } until(check(x, [y, z], (p, q) => p))"));
+
+        SurfaceCall check = assertInstanceOf(SurfaceCall.class, loop.condition());
+        assertEquals(3, check.arguments().size());
+    }
+
+    @Test
+    void bracedFormWithoutSuffixRemainsOrdinaryObject() {
+        assertInstanceOf(SurfaceObject.class, only("{ a: 1 }"));
+        assertInstanceOf(SurfaceObject.class, only("{ a }"));
+    }
+
+    @Test
+    void compositionItemIsInvalidInContextualUntilBody() {
+        assertThrows(ParseError.class, () -> only("{ ...base } until(done)"));
+    }
+
+    @Test
+    void newlineBetweenBodyAndUntilDoesNotAttach() {
+        SurfaceSequence program =
+                new ProtosParser("{ a }\nuntil(b)").parseProgram();
+
+        assertEquals(2, program.expressions().size());
+        assertInstanceOf(SurfaceObject.class, program.expressions().get(0));
+        SurfaceCall call = assertInstanceOf(SurfaceCall.class, program.expressions().get(1));
+        assertEquals("until", assertInstanceOf(SurfaceName.class, call.receiver()).name());
+    }
+
+    @Test
+    void lineCommentBeforeUntilPreventsTheContextualForm() {
+        SurfaceSequence program =
+                new ProtosParser("{ a } // note\nuntil(b)").parseProgram();
+
+        assertEquals(2, program.expressions().size());
+        assertInstanceOf(SurfaceObject.class, program.expressions().get(0));
+    }
+
+    @Test
+    void sameLineBlockCommentsDoNotPreventTheContextualForm() {
+        assertInstanceOf(
+                SurfaceContextualUntil.class,
+                only("{ a } /* x */ until /* y */ ( /* z */ b)"));
+    }
+
+    @Test
+    void memberUntilAfterBracesIsOrdinaryObjectSend() {
+        SurfaceCall call =
+                assertInstanceOf(SurfaceCall.class, only("{ a }.until(b)"));
+        SurfaceMember member = assertInstanceOf(SurfaceMember.class, call.receiver());
+        assertEquals("until", member.name());
+        assertInstanceOf(SurfaceObject.class, member.receiver());
+    }
+
+    @Test
+    void groupedBracesFollowedByUntilAreNotContextual() {
+        assertThrows(ParseError.class, () -> only("({ a }) until(b)"));
+    }
+
+    @Test
+    void prefixedObjectFollowedByUntilIsNotContextual() {
+        assertThrows(ParseError.class, () -> only("parent { a } until(b)"));
+    }
+
+    @Test
+    void trailingClosureFollowedByUntilIsNotContextual() {
+        assertThrows(ParseError.class, () -> only("foo() { a } until(b)"));
+    }
+
+    @Test
+    void untilSuffixWithMissingExtraOrSpreadArgumentsIsNotContextual() {
+        assertThrows(ParseError.class, () -> only("{ a } until()"));
+        assertThrows(ParseError.class, () -> only("{ a } until(b, c)"));
+        assertThrows(ParseError.class, () -> only("{ a } until(...args)"));
+        assertThrows(ParseError.class, () -> only("{ a } until"));
+    }
+
+    @Test
+    void prefixUntilWithTrailingClosureIsOrdinaryCall() {
+        SurfaceCall call =
+                assertInstanceOf(SurfaceCall.class, only("until(done) { work() }"));
+        assertEquals("until", assertInstanceOf(SurfaceName.class, call.receiver()).name());
+        assertEquals(2, call.arguments().size());
+    }
+
+    @Test
+    void untilRemainsAnOrdinaryIdentifierOutsideTheContextualForm() {
+        SurfaceSequence program =
+                new ProtosParser("until: 1\nuntil = until + 1").parseProgram();
+
+        SurfaceSlotCreation creation = assertInstanceOf(
+                SurfaceSlotCreation.class, program.expressions().get(0));
+        assertEquals(
+                "until",
+                assertInstanceOf(SurfaceName.class, creation.target()).name());
+        assertInstanceOf(SurfaceAssignment.class, program.expressions().get(1));
+    }
+
+    @Test
+    void contextualUntilIsAnExpressionInSlotCreationArgumentAndGroup() {
+        SurfaceSequence program = new ProtosParser(
+                "result: { a } until(b)\nresult = { a } until(b)\n"
+                        + "foo({ a } until(b), other)\n({ a } until(b))").parseProgram();
+
+        SurfaceSlotCreation creation = assertInstanceOf(
+                SurfaceSlotCreation.class, program.expressions().get(0));
+        assertInstanceOf(SurfaceContextualUntil.class, creation.value());
+        SurfaceAssignment assignment = assertInstanceOf(
+                SurfaceAssignment.class, program.expressions().get(1));
+        assertInstanceOf(SurfaceContextualUntil.class, assignment.value());
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class, program.expressions().get(2));
+        assertEquals(2, call.arguments().size());
+        assertInstanceOf(
+                SurfaceContextualUntil.class, call.arguments().get(0).expression());
+        SurfaceGroup group = assertInstanceOf(
+                SurfaceGroup.class, program.expressions().get(3));
+        assertInstanceOf(SurfaceContextualUntil.class, group.expression());
+    }
+
+    @Test
+    void contextualUntilParticipatesInLaterPostfixSuffixes() {
+        SurfaceSequence program =
+                new ProtosParser("{ a } until(b).name[0](1)").parseProgram();
+
+        SurfaceCall call = assertInstanceOf(
+                SurfaceCall.class, program.expressions().get(0));
+        SurfaceIndex index = assertInstanceOf(SurfaceIndex.class, call.receiver());
+        SurfaceMember member = assertInstanceOf(SurfaceMember.class, index.receiver());
+        assertEquals("name", member.name());
+        SurfaceContextualUntil loop =
+                assertInstanceOf(SurfaceContextualUntil.class, member.receiver());
+        assertEquals(new SourceSpan(0, 14), loop.span());
     }
 
     private SurfaceExpression only(String source) {

@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.398-SNAPSHOT
+
+- `I121-B` (#948, D212/#947): contextual suffix `{ body } until(condition)`.
+  - `TokenCursor.bracedBodyFollowedByContextualUntil()` recognizes, without
+    consuming tokens, a primary `{ ... }` immediately followed (no logical
+    `NEWLINE`) by the bare identifier `until` and a balanced parenthesized
+    suffix with exactly one non-spread argument; every other braced form
+    stays ordinary object construction.
+  - `ProtosParser.parseContextualUntil()` parses the prefix as a
+    parameterless Closure body and builds the new surface node
+    `SurfaceContextualUntil`; the `Canonicalizer` lowers it to the ordinary
+    `untilTrue` send whose receiver is the body Closure and whose argument is
+    an independent condition Closure. No canonical loop node or runtime
+    primitive is added.
+  - Parser source facts record a `ContextualUntilOrigin`; the source-layout
+    view indexes `body`/`condition` paths and classifies the
+    `CONTEXTUAL_UNTIL_BEFORE_KEYWORD`, `CONTEXTUAL_UNTIL_BEFORE_LPAREN` and
+    `CONTEXTUAL_UNTIL_AFTER_LPAREN` comment boundaries; the tool bridge
+    exports `CONTEXTUAL_UNTIL` and the structural formatter prints the suffix
+    on the closing-brace line, preserving those comments.
+  - Static lint, hover, definitions, references and document symbols treat
+    body and condition as separate deferred Closures.
+  - New native conformance suite `until-contextual-syntax.protos`, Java test
+    `ProtosI121ContextualUntilCanonicalizationTest`, and focused parser,
+    source-fact, layout, formatter and static-tool tests.
+  - Maintainer validation: `make check` PASS, `make test` PASS.
+
 ## 0.3.397-SNAPSHOT
 
 - `I121-A` (#948, D212/#947): standard Closure loop protocols `whileFalse`,

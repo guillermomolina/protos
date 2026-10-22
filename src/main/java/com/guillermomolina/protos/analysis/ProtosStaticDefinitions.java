@@ -24,6 +24,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -193,6 +194,17 @@ final class ProtosStaticDefinitions {
                     }
                     if (!done && conditional.falseBranch() != null) {
                         analyzeClosure(conditional.falseBranch());
+                    }
+                    opaqueInvocationBarrier(facts);
+                }
+                case SurfaceContextualUntil loop -> {
+                    // D212 lowers the braced body and the condition to two independent
+                    // parameterless Closures; neither runs in the current activation, so
+                    // neither may consume its facts, and the untilTrue send itself is an
+                    // opaque invocation.
+                    analyzeClosure(loop.body());
+                    if (!done) {
+                        analyze(loop.condition(), new Facts());
                     }
                     opaqueInvocationBarrier(facts);
                 }

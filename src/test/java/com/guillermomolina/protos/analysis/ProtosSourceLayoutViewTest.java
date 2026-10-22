@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
@@ -932,6 +933,138 @@ class ProtosSourceLayoutViewTest {
         assertEquals(
                 "program/expression[0]/trueBranch/body/expression[0]",
                 view.pathOf(inner).orElseThrow().toString());
+    }
+
+    @Test
+    void contextualUntilHasStablePathsAndRealSpans() {
+        String source = "{ n = n - 1 } until(n == 0)\nfoo() { body() }";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-until",
+                                14L,
+                                source));
+
+        SurfaceContextualUntil loop =
+                assertInstanceOf(
+                        SurfaceContextualUntil.class,
+                        view.program().expressions().get(0));
+
+        assertEquals(
+                "program/expression[0]",
+                view.pathOf(loop).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/body",
+                view.pathOf(loop.body()).orElseThrow().toString());
+        assertEquals(
+                "program/expression[0]/condition",
+                view.pathOf(loop.condition()).orElseThrow().toString());
+        assertEquals(
+                "{ n = n - 1 } until(n == 0)",
+                view.sourceText(loop.span()));
+        assertEquals("{ n = n - 1 }", view.sourceText(loop.body().span()));
+        assertEquals("until", view.sourceText(loop.untilSpan()));
+        assertEquals("n == 0", view.sourceText(loop.condition().span()));
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                view.preservationProjection();
+        SurfaceCall call =
+                assertInstanceOf(
+                        SurfaceCall.class,
+                        view.program().expressions().get(1));
+        assertEquals(1, projection.trailingClosures().size());
+        assertEquals(
+                view.pathOf(call).orElseThrow(),
+                projection.trailingClosures().get(0).call());
+    }
+
+    @Test
+    void contextualUntilCommentsAttachToThreeDistinctSuffixBoundaries() {
+        String source = "{ y } /* a */ until /* b */ (/* c */ x)";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-until-comments",
+                                15L,
+                                source));
+
+        SurfaceContextualUntil loop =
+                assertInstanceOf(
+                        SurfaceContextualUntil.class,
+                        view.program().expressions().get(0));
+        String loopPath = view.pathOf(loop).orElseThrow().toString();
+        String conditionPath =
+                view.pathOf(loop.condition()).orElseThrow().toString();
+
+        List<String> texts = List.of("/* a */", "/* b */", "/* c */");
+        List<ProtosSourceLayoutView.CommentBoundaryKind> kinds = List.of(
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_UNTIL_BEFORE_KEYWORD,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_UNTIL_BEFORE_LPAREN,
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_UNTIL_AFTER_LPAREN);
+
+        List<ProtosSourceLayoutView.CommentAttachment> attachments =
+                view.commentAttachments();
+        assertEquals(texts.size(), attachments.size());
+        for (int index = 0; index < attachments.size(); index++) {
+            ProtosSourceLayoutView.CommentAttachment attachment =
+                    attachments.get(index);
+            int start = source.indexOf(texts.get(index));
+            assertEquals(
+                    new SourceSpan(start, start + texts.get(index).length()),
+                    attachment.comment().span());
+            assertEquals(kinds.get(index), attachment.boundaryKind());
+            assertEquals(
+                    ProtosSourceLayoutView.CommentPlacement.EMBEDDED_BETWEEN_TOKENS,
+                    attachment.placement());
+            assertEquals(
+                    loopPath,
+                    attachment.preceding().orElseThrow().toString());
+            assertEquals(
+                    conditionPath,
+                    attachment.following().orElseThrow().toString());
+        }
+
+        assertEquals(kinds, view.preservationProjection().comments().stream()
+                .map(ProtosSourceLayoutView.CommentProjection::boundaryKind)
+                .toList());
+    }
+
+    @Test
+    void multilineBlockCommentBeforeUntilKeepsTheSuffixBoundary() {
+        String source = "{ y } /* one\n two */ until(x)";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-until-multiline",
+                                16L,
+                                source));
+
+        assertInstanceOf(
+                SurfaceContextualUntil.class,
+                view.program().expressions().get(0));
+        assertEquals(1, view.commentAttachments().size());
+        assertEquals(
+                ProtosSourceLayoutView.CommentBoundaryKind.CONTEXTUAL_UNTIL_BEFORE_KEYWORD,
+                view.commentAttachments().get(0).boundaryKind());
+    }
+
+    @Test
+    void commentsInsideContextualUntilBodyAndConditionAreNotSuffixBoundaries() {
+        String source = "{ y /* body */ } until(x /* inner */ > 0)";
+        ProtosSourceLayoutView view =
+                core.sourceLayout(
+                        new ProtosDocumentSnapshot(
+                                "memory:contextual-until-inner",
+                                17L,
+                                source));
+
+        assertEquals(2, view.commentAttachments().size());
+        for (ProtosSourceLayoutView.CommentAttachment attachment
+                : view.commentAttachments()) {
+            assertEquals(
+                    ProtosSourceLayoutView.CommentBoundaryKind.NONE,
+                    attachment.boundaryKind());
+        }
     }
 
     private void assertContextualWhileHeaderComments(

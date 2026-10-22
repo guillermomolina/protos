@@ -30,6 +30,7 @@ import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SequenceSeparat
 import com.guillermomolina.protos.parser.ProtosParserSourceFacts.SingleParameterClosureForm;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
@@ -344,6 +345,93 @@ class ProtosParserSourceFactsTest {
         assertSame(outer, elses.get(1).owner());
         assertSame(outer.falseBranch(), elses.get(1).falseBranch());
         assertEquals(new SourceSpan(33, 37), elses.get(1).elseSpan());
+    }
+
+    @Test
+    void contextualUntilRecordsItsOwnOriginWithExactSpans() {
+        String source = "{ a\nb } until(done(x))";
+        Parsed parsed = parseWithFacts(source);
+
+        SurfaceContextualUntil loop = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                parsed.program().expressions().get(0));
+        List<ProtosParserSourceFacts.ContextualUntilOrigin> origins =
+                parsed.facts().contextualUntilOrigins();
+        assertEquals(1, origins.size());
+        assertSame(loop, origins.get(0).owner());
+        assertSame(loop.body(), origins.get(0).body());
+        int untilStart = source.indexOf("until");
+        assertEquals(new SourceSpan(0, untilStart - 1), loop.body().span());
+        assertEquals(new SourceSpan(untilStart, untilStart + 5), origins.get(0).untilSpan());
+        assertEquals(
+                new SourceSpan(untilStart, source.length()),
+                origins.get(0).suffixSpan());
+        assertEquals(
+                new SourceSpan(untilStart + 6, source.length() - 1),
+                loop.condition().span());
+        assertEquals(new SourceSpan(0, source.length()), loop.span());
+    }
+
+    @Test
+    void contextualUntilBodyIsNeitherTrailingClosureNorObject() {
+        Parsed parsed = parseWithFacts("{ a } until(b)");
+
+        assertEquals(List.of(), parsed.facts().trailingClosureOrigins());
+        assertEquals(1, parsed.facts().contextualUntilOrigins().size());
+        assertTrue(parsed.facts().sequenceSeparators().stream()
+                .noneMatch(fact -> fact.context() == SequenceContext.OBJECT_BODY));
+    }
+
+    @Test
+    void contextualUntilBodySeparatorsAreClosureBodySeparators() {
+        Parsed parsed = parseWithFacts("{ a\nb } until(c)");
+
+        assertEquals(1, parsed.facts().sequenceSeparators().size());
+        assertEquals(
+                SequenceContext.CLOSURE_BODY,
+                parsed.facts().sequenceSeparators().get(0).context());
+    }
+
+    @Test
+    void blockCommentsAroundUntilKeepTheExactUntilSpan() {
+        String source = "{ a } /* one\n two */ until /* three */ (b)";
+        Parsed parsed = parseWithTrivia(source);
+
+        List<ProtosParserSourceFacts.ContextualUntilOrigin> origins =
+                parsed.facts().contextualUntilOrigins();
+        assertEquals(1, origins.size());
+        int untilStart = source.indexOf("until");
+        assertEquals(new SourceSpan(untilStart, untilStart + 5), origins.get(0).untilSpan());
+    }
+
+    @Test
+    void logicalNewlineBeforeUntilRecordsNoContextualUntil() {
+        String source = "{ a } // note\nuntil(b)";
+        Parsed parsed = parseWithTrivia(source);
+
+        assertEquals(2, parsed.program().expressions().size());
+        assertInstanceOf(SurfaceObject.class, parsed.program().expressions().get(0));
+        assertInstanceOf(SurfaceCall.class, parsed.program().expressions().get(1));
+        assertEquals(List.of(), parsed.facts().contextualUntilOrigins());
+    }
+
+    @Test
+    void nestedContextualUntilOriginsAreOrderedInnerFirstWithDistinctOwners() {
+        Parsed parsed = parseWithFacts("{ { a } until(b) } until(c)");
+
+        SurfaceContextualUntil outer = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                parsed.program().expressions().get(0));
+        SurfaceContextualUntil inner = assertInstanceOf(
+                SurfaceContextualUntil.class,
+                outer.body().body().expressions().get(0));
+        List<ProtosParserSourceFacts.ContextualUntilOrigin> origins =
+                parsed.facts().contextualUntilOrigins();
+        assertEquals(2, origins.size());
+        assertSame(inner, origins.get(0).owner());
+        assertEquals(new SourceSpan(8, 13), origins.get(0).untilSpan());
+        assertSame(outer, origins.get(1).owner());
+        assertEquals(new SourceSpan(19, 24), origins.get(1).untilSpan());
     }
 
     private Parsed parseWithTrivia(String source) {

@@ -20,6 +20,7 @@ package com.guillermomolina.protos.parser;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
@@ -156,20 +157,47 @@ public final class ProtosParserSourceFacts {
         }
     }
 
+    /**
+     * D212 contextual suffix {@code { body } until(condition)}: the owning
+     * node, its body Closure (a contextual Closure body, never an object
+     * construction or an ordinary trailing argument), the exact {@code until}
+     * token span, and the parenthesized suffix boundary from the
+     * {@code until} token through the closing {@code ')'}.
+     */
+    public record ContextualUntilOrigin(
+            SurfaceContextualUntil owner,
+            SurfaceClosure body,
+            SourceSpan untilSpan,
+            SourceSpan suffixSpan) {
+        public ContextualUntilOrigin {
+            Objects.requireNonNull(owner, "owner");
+            Objects.requireNonNull(body, "body");
+            Objects.requireNonNull(untilSpan, "untilSpan");
+            Objects.requireNonNull(suffixSpan, "suffixSpan");
+            if (owner.body() != body) {
+                throw new IllegalArgumentException(
+                        "contextual until Closure must be the owner's body");
+            }
+        }
+    }
+
     private final List<SequenceSeparatorFact> sequenceSeparators;
     private final List<SingleParameterClosureSourceForm> singleParameterClosureForms;
     private final List<TrailingClosureOrigin> trailingClosureOrigins;
     private final List<ContextualElseOrigin> contextualElseOrigins;
+    private final List<ContextualUntilOrigin> contextualUntilOrigins;
 
     private ProtosParserSourceFacts(
             List<SequenceSeparatorFact> sequenceSeparators,
             List<SingleParameterClosureSourceForm> singleParameterClosureForms,
             List<TrailingClosureOrigin> trailingClosureOrigins,
-            List<ContextualElseOrigin> contextualElseOrigins) {
+            List<ContextualElseOrigin> contextualElseOrigins,
+            List<ContextualUntilOrigin> contextualUntilOrigins) {
         this.sequenceSeparators = List.copyOf(sequenceSeparators);
         this.singleParameterClosureForms = List.copyOf(singleParameterClosureForms);
         this.trailingClosureOrigins = List.copyOf(trailingClosureOrigins);
         this.contextualElseOrigins = List.copyOf(contextualElseOrigins);
+        this.contextualUntilOrigins = List.copyOf(contextualUntilOrigins);
     }
 
     public List<SequenceSeparatorFact> sequenceSeparators() {
@@ -188,6 +216,10 @@ public final class ProtosParserSourceFacts {
         return contextualElseOrigins;
     }
 
+    public List<ContextualUntilOrigin> contextualUntilOrigins() {
+        return contextualUntilOrigins;
+    }
+
     public static final class Builder {
         private final List<SequenceSeparatorFact> sequenceSeparators =
                 new ArrayList<>();
@@ -196,6 +228,8 @@ public final class ProtosParserSourceFacts {
         private final List<TrailingClosureOrigin> trailingClosureOrigins =
                 new ArrayList<>();
         private final List<ContextualElseOrigin> contextualElseOrigins =
+                new ArrayList<>();
+        private final List<ContextualUntilOrigin> contextualUntilOrigins =
                 new ArrayList<>();
 
         void recordExpressionSeparator(
@@ -262,12 +296,24 @@ public final class ProtosParserSourceFacts {
                     new ContextualElseOrigin(owner, elseSpan, falseBranch));
         }
 
+        void recordContextualUntilOrigin(SurfaceContextualUntil owner) {
+            contextualUntilOrigins.add(
+                    new ContextualUntilOrigin(
+                            owner,
+                            owner.body(),
+                            owner.untilSpan(),
+                            new SourceSpan(
+                                    owner.untilSpan().startOffset(),
+                                    owner.span().endOffset())));
+        }
+
         public ProtosParserSourceFacts build() {
             return new ProtosParserSourceFacts(
                     sequenceSeparators,
                     singleParameterClosureForms,
                     trailingClosureOrigins,
-                    contextualElseOrigins);
+                    contextualElseOrigins,
+                    contextualUntilOrigins);
         }
     }
 }

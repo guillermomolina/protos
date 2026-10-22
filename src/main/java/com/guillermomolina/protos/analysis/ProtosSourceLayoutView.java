@@ -35,6 +35,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -86,6 +87,9 @@ public final class ProtosSourceLayoutView {
         CONTEXTUAL_IF_AFTER_LPAREN,
         CONTEXTUAL_IF_BEFORE_ELSE,
         CONTEXTUAL_IF_AFTER_ELSE,
+        CONTEXTUAL_UNTIL_BEFORE_KEYWORD,
+        CONTEXTUAL_UNTIL_BEFORE_LPAREN,
+        CONTEXTUAL_UNTIL_AFTER_LPAREN,
         DOCUMENT_PREFIX,
         DOCUMENT_SUFFIX
     }
@@ -889,6 +893,15 @@ public final class ProtosSourceLayoutView {
                                 structuralIndex);
             }
 
+            if (boundary.isEmpty()) {
+                boundary =
+                        contextualUntilBoundary(
+                                occurrence.span(),
+                                tokenOccurrences,
+                                sourceFacts,
+                                structuralIndex);
+            }
+
             if (boundary.isPresent()) {
                 ResolvedBoundary resolved =
                         boundary.orElseThrow();
@@ -1099,6 +1112,74 @@ public final class ProtosSourceLayoutView {
                         new ResolvedBoundary(
                                 ownerPath.orElseThrow(),
                                 falseBranchPath.orElseThrow(),
+                                kind,
+                                Optional.empty()));
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    /**
+     * D212 suffix comments: between the body's closing brace and
+     * {@code until}, between {@code until} and its {@code (}, or between that
+     * {@code (} and the first condition token. Comments inside the body stay
+     * Closure-body comments and comments inside the condition stay ordinary
+     * condition comments. All three attach from the contextual until node to
+     * its real condition.
+     */
+    private static Optional<ResolvedBoundary>
+            contextualUntilBoundary(
+                    SourceSpan comment,
+                    List<TokenOccurrence> tokenOccurrences,
+                    ProtosParserSourceFacts sourceFacts,
+                    StructuralIndex structuralIndex) {
+        for (ProtosParserSourceFacts.ContextualUntilOrigin origin
+                : sourceFacts.contextualUntilOrigins()) {
+            int bodyEnd = origin.body().span().endOffset();
+            int conditionStart =
+                    origin.owner().condition().span().startOffset();
+            if (comment.startOffset() < bodyEnd
+                    || comment.endOffset() > conditionStart) {
+                continue;
+            }
+
+            TokenOccurrence open = null;
+            for (TokenOccurrence occurrence : tokenOccurrences) {
+                if (occurrence.span().startOffset()
+                        >= origin.untilSpan().endOffset()) {
+                    open = occurrence;
+                    break;
+                }
+            }
+            if (open == null
+                    || open.token().type() != TokenType.LPAREN) {
+                continue;
+            }
+
+            CommentBoundaryKind kind;
+            if (comment.endOffset()
+                    <= origin.untilSpan().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_UNTIL_BEFORE_KEYWORD;
+            } else if (comment.startOffset()
+                            >= origin.untilSpan().endOffset()
+                    && comment.endOffset() <= open.span().startOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_UNTIL_BEFORE_LPAREN;
+            } else if (comment.startOffset() >= open.span().endOffset()) {
+                kind = CommentBoundaryKind.CONTEXTUAL_UNTIL_AFTER_LPAREN;
+            } else {
+                continue;
+            }
+
+            Optional<StructuralPath> ownerPath =
+                    structuralIndex.pathOf(origin.owner());
+            Optional<StructuralPath> conditionPath =
+                    structuralIndex.pathOf(origin.owner().condition());
+            if (ownerPath.isPresent() && conditionPath.isPresent()) {
+                return Optional.of(
+                        new ResolvedBoundary(
+                                ownerPath.orElseThrow(),
+                                conditionPath.orElseThrow(),
                                 kind,
                                 Optional.empty()));
             }
@@ -1520,6 +1601,14 @@ public final class ProtosSourceLayoutView {
                                 conditional.falseBranch(),
                                 path.child("falseBranch"));
                     }
+                }
+                case SurfaceContextualUntil loop -> {
+                    registerExpression(
+                            loop.body(),
+                            path.child("body"));
+                    registerExpression(
+                            loop.condition(),
+                            path.child("condition"));
                 }
                 case SurfaceArrayConstruction array -> {
                     for (int index = 0;

@@ -1635,6 +1635,44 @@ formatExpression = (node, level, layout) => {
         })
     }
 
+    // D212: the suffix stays on the body's closing line; a logical newline
+    // before until would end the contextual expression and change its parse.
+    if(kind == "CONTEXTUAL_UNTIL") {
+        formatted =
+            formatBracedSequence(
+                node.body.body,
+                level,
+                layout
+            ) +
+            " " +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_UNTIL_BEFORE_KEYWORD",
+                false,
+                layout
+            ) +
+            "until" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_UNTIL_BEFORE_LPAREN",
+                true,
+                layout
+            ) +
+            "(" +
+            contextualHeaderComments(
+                node,
+                "CONTEXTUAL_UNTIL_AFTER_LPAREN",
+                false,
+                layout
+            ) +
+            formatExpression(
+                node.condition,
+                level,
+                layout
+            ) +
+            ")"
+    }
+
     if(kind == "ARRAY_CONSTRUCTION") {
         formatted =
             formatArray(
@@ -1854,6 +1892,15 @@ formatBody: (layout) => {
                     "CONTEXTUAL_IF_AFTER_ELSE")) &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
 
+        contextualUntilComment:
+            ((comment.boundaryKind ==
+                "CONTEXTUAL_UNTIL_BEFORE_KEYWORD") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_UNTIL_BEFORE_LPAREN") ||
+                (comment.boundaryKind ==
+                    "CONTEXTUAL_UNTIL_AFTER_LPAREN")) &&
+            (comment.placement == "EMBEDDED_BETWEEN_TOKENS")
+
         embeddedComment:
             (comment.boundaryKind == "NONE") &&
             (comment.placement == "EMBEDDED_BETWEEN_TOKENS") &&
@@ -1865,6 +1912,7 @@ formatBody: (layout) => {
             trailingClosureComment ||
             contextualWhileHeaderComment ||
             contextualIfComment ||
+            contextualUntilComment ||
             embeddedComment).ifFalse(() => {
             Error().signal()
         })

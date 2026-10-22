@@ -26,6 +26,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -87,6 +88,7 @@ public final class Canonicalizer {
             case SurfaceCall call -> lowerCall(call);
             case SurfaceContextualWhile loop -> lowerContextualWhile(loop);
             case SurfaceContextualIf conditional -> lowerContextualIf(conditional);
+            case SurfaceContextualUntil loop -> lowerContextualUntil(loop);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -187,6 +189,30 @@ public final class Canonicalizer {
                 condition,
                 "whileTrue",
                 List.of(canonicalize(loop.body())),
+                loop.span());
+    }
+
+    /**
+     * D212: {@code { body } until(condition)} is the ordinary
+     * {@code (() => { body }).untilTrue(() => condition)} send. The body and
+     * the condition become two independent zero-parameter lexical Closures,
+     * so body-local declarations are never visible to the condition; no
+     * loop-specific canonical node exists.
+     */
+    private CanonicalExpression lowerContextualUntil(SurfaceContextualUntil loop) {
+        CanonicalExpression body = lowerClosure(loop.body());
+        CanonicalClosure condition =
+                new CanonicalClosure(
+                        List.of(),
+                        new CanonicalSequence(
+                                List.of(canonicalize(loop.condition())),
+                                loop.condition().span()),
+                        loop.condition().span());
+
+        return new CanonicalSend(
+                body,
+                "untilTrue",
+                List.of(condition),
                 loop.span());
     }
 

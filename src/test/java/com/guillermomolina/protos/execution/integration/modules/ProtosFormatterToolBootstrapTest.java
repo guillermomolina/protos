@@ -30,8 +30,10 @@ import com.guillermomolina.protos.analysis.ProtosStaticAnalysisCore;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
+import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -1406,6 +1408,142 @@ final class ProtosFormatterToolBootstrapTest {
                 "foo(n) /* comment */ {body}",
                 "foo(n) /* comment */ { body }",
                 SurfaceCall.class);
+    }
+
+    @Test
+    void i121bFormatsContextualUntilWithTheSuffixOnTheClosingLine()
+            throws Exception {
+        assertFormatsIdempotently(
+                "{work()}until(done())",
+                "{ work() } until(done())",
+                SurfaceContextualUntil.class);
+        assertFormatsIdempotently(
+                "{} until(done)",
+                "{} until(done)",
+                SurfaceContextualUntil.class);
+        assertFormatsIdempotently(
+                "{\n"
+                        + "    work()\n"
+                        + "    n = n - 1\n"
+                        + "}   until(  n == 0  )",
+                "{\n"
+                        + "    work()\n"
+                        + "    n = n - 1\n"
+                        + "} until(n == 0)",
+                SurfaceContextualUntil.class);
+        assertFormatsIdempotently(
+                "{{a}until(b)}until(c)",
+                "{ { a } until(b) } until(c)",
+                SurfaceContextualUntil.class);
+        assertFormatsIdempotently(
+                "{ while(a) { b }\nif(c) { d } else { e } } until(f)",
+                "{\n"
+                        + "    while(a) { b }\n"
+                        + "    if(c) { d } else { e }\n"
+                        + "} until(f)",
+                SurfaceContextualUntil.class);
+    }
+
+    @Test
+    void i121bPreservesContextualUntilCommentsExactlyOnce()
+            throws Exception {
+        assertFormatsContextualUntil(
+                "{ a } /* comment */ until(b)",
+                "{ a } /* comment */ until(b)");
+        assertFormatsContextualUntil(
+                "{ a } until /* comment */ (b)",
+                "{ a } until /* comment */ (b)");
+        assertFormatsContextualUntil(
+                "{ a } until(/* comment */ b)",
+                "{ a } until(/* comment */ b)");
+        assertFormatsContextualUntil(
+                "{a}/* one\n two */until(b)",
+                "{ a } /* one\n two */ until(b)");
+        assertFormatsContextualUntil(
+                "{a}until/* one\n two */(b)",
+                "{ a } until /* one\n two */ (b)");
+        assertFormatsContextualUntil(
+                "{a}until(/* one\n two */b)",
+                "{ a } until(/* one\n two */ b)");
+        assertFormatsContextualUntil(
+                "{y} /* a */ until /* b */ (/* c */ x)",
+                "{ y } /* a */ until /* b */ (/* c */ x)");
+        assertFormatsContextualUntil(
+                "{\n"
+                        + "    first() // inside body\n"
+                        + "    b\n"
+                        + "} until(c)",
+                "{\n"
+                        + "    first() // inside body\n"
+                        + "    b\n"
+                        + "} until(c)");
+    }
+
+    @Test
+    void i121bDoesNotReinterpretUnrelatedObjectLiterals()
+            throws Exception {
+        String source = "{ a }\nuntil(b)";
+        String formatted = formatOnce(source, 36L);
+        ProtosSourceLayoutView view =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i121b-object",
+                                        37L,
+                                        formatted));
+        assertEquals(2, view.program().expressions().size());
+        assertInstanceOf(
+                SurfaceObject.class,
+                view.program().expressions().get(0));
+        assertInstanceOf(
+                SurfaceCall.class,
+                view.program().expressions().get(1));
+        assertEquals(formatted, formatOnce(formatted, 38L));
+
+        String lineComment = "{ a } // note\nuntil(b)";
+        String formattedLineComment = formatOnce(lineComment, 40L);
+        ProtosSourceLayoutView lineCommentView =
+                new ProtosStaticAnalysisCore()
+                        .sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:tool010-i121b-line-comment",
+                                        41L,
+                                        formattedLineComment));
+        assertEquals(2, lineCommentView.program().expressions().size());
+        assertInstanceOf(
+                SurfaceObject.class,
+                lineCommentView.program().expressions().get(0));
+        assertInstanceOf(
+                SurfaceCall.class,
+                lineCommentView.program().expressions().get(1));
+        assertEquals(
+                commentCount(lineComment),
+                commentCount(formattedLineComment),
+                () -> "comments must be preserved exactly once: " + formattedLineComment);
+        assertEquals(formattedLineComment, formatOnce(formattedLineComment, 42L));
+
+        assertFormatsIdempotently(
+                "{ a: 1 }.until(b)",
+                "{ a: 1 }.until(b)",
+                SurfaceCall.class);
+    }
+
+    private static void assertFormatsContextualUntil(
+            String source,
+            String expected)
+            throws Exception {
+        assertFormatsIdempotently(
+                source,
+                expected,
+                SurfaceContextualUntil.class);
+        String formatted = formatOnce(source, 39L);
+        assertFalse(
+                formatted.matches("(?s).*\\}\\s*\\n\\s*until.*"),
+                () -> "the until suffix must stay on the closing line: " + formatted);
+        assertEquals(
+                commentCount(source),
+                commentCount(formatted),
+                () -> "comments must be preserved exactly once: " + formatted);
     }
 
     private static void assertFormatsIdempotently(

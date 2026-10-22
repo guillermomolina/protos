@@ -29,6 +29,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualIf;
+import com.guillermomolina.protos.parser.ast.SurfaceContextualUntil;
 import com.guillermomolina.protos.parser.ast.SurfaceContextualWhile;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
@@ -339,7 +340,9 @@ public final class ProtosParser {
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
             case SUPER -> parseSuperMessageSend();
             case LBRACKET -> parseArrayConstruction();
-            case LBRACE -> parseObjectBody(null);
+            case LBRACE -> cursor.bracedBodyFollowedByContextualUntil()
+                    ? parseContextualUntil()
+                    : parseObjectBody(null);
             case PERCENT -> parseMapConstruction();
             case LPAREN -> cursor.matchingParenthesisFollowedBy(TokenType.FAT_ARROW)
                     ? parseParameterListClosure()
@@ -873,6 +876,32 @@ public final class ProtosParser {
         return conditional;
     }
 
+    /**
+     * D212: parses a recognized {@code { body } until(condition)} suffix
+     * form. The braced prefix is parsed directly as a parameterless Closure
+     * body, so object-only item syntax is not accepted there. Later postfix
+     * suffixes remain available to {@code parsePostfixFoundation()}.
+     */
+    private SurfaceExpression parseContextualUntil() {
+        int start = cursor.current().span().startOffset();
+        SurfaceClosure body =
+                (SurfaceClosure) parseClosureBody(List.of(), start);
+        TokenOccurrence keyword =
+                cursor.consume(TokenType.IDENTIFIER, "'until'");
+        cursor.consume(TokenType.LPAREN, "'(' after 'until'");
+        consumeNewlines();
+        SurfaceExpression condition = parseExpressionFoundation();
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        SurfaceContextualUntil loop = new SurfaceContextualUntil(
+                body,
+                condition,
+                keyword.span(),
+                new SourceSpan(start, close.span().endOffset()));
+        recordContextualUntilOrigin(loop);
+        return loop;
+    }
+
     private SurfaceArgument parseArgument() {
         boolean spread = false;
         int start = cursor.current().span().startOffset();
@@ -1008,6 +1037,12 @@ public final class ProtosParser {
                     owner,
                     elseSpan,
                     falseBranch);
+        }
+    }
+
+    private void recordContextualUntilOrigin(SurfaceContextualUntil owner) {
+        if (sourceFacts != null) {
+            sourceFacts.recordContextualUntilOrigin(owner);
         }
     }
 

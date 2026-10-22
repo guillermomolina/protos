@@ -223,6 +223,24 @@ class ProtosStaticHoverTest {
     }
 
     @Test
+    void contextualUntilExposesBodyAndConditionWithoutAKeywordBinding() {
+        String source = "f: (n) => {\n  { (k) => k } until(((j) => j)(n))\n}";
+        int bodyBrace = source.indexOf('{', source.indexOf("=>") + 4);
+        int keyword = source.indexOf("until");
+        int bodyReference = source.indexOf("k", source.indexOf("=>", bodyBrace));
+        int conditionReference = source.lastIndexOf("j");
+
+        assertTrue(hover(source, keyword).isEmpty());
+        assertEquals(
+                syntax("Closure", "Parameters: none", "Body form: braced"),
+                hover(source, bodyBrace).orElseThrow().sections());
+        assertEquals(span(bodyReference, "k"), hover(source, bodyReference).orElseThrow().span());
+        assertEquals(
+                span(conditionReference, "j"),
+                hover(source, conditionReference).orElseThrow().span());
+    }
+
+    @Test
     void invalidSourceOffsetsAndUninformativePositionsReturnEmpty() {
         assertTrue(hover("f: (value) => {", 4).isEmpty());
 

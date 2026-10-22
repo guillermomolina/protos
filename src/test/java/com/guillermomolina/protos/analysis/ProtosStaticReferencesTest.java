@@ -163,6 +163,44 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void contextualUntilKeywordIsNotAReferenceButGroupedUntilIs() {
+        String source =
+                "f: (until, n) => {\n"
+                        + "  (until)(n)\n"
+                        + "  { n } until(n)\n"
+                        + "}";
+        int declaration = source.indexOf("until");
+        int groupedRead = source.indexOf("until", source.indexOf("(until)"));
+        int contextualKeyword = source.lastIndexOf("until");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration + 1).orElseThrow();
+
+        assertEquals(
+                List.of(new SourceSpan(groupedRead, groupedRead + "until".length())),
+                result.occurrences().stream()
+                        .map(ProtosStaticReferenceResult.Occurrence::span)
+                        .toList());
+        assertTrue(references(source, contextualKeyword).isEmpty());
+    }
+
+    @Test
+    void contextualUntilCapturedReadsAreNotClaimedAsExactReferences() {
+        String source =
+                "f: (n) => {\n"
+                        + "  { n = n - 1 } until(n == 0)\n"
+                        + "}";
+        int declaration = source.indexOf("n");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration).orElseThrow();
+
+        assertTrue(result.occurrences().isEmpty());
+        assertTrue(references(source, source.indexOf("n == 0")).isEmpty());
+        assertTrue(references(source, source.indexOf("n - 1")).isEmpty());
+    }
+
+    @Test
     void contextualIfHeaderIsNotAReferenceButGroupedIfIs() {
         String source =
                 "f: (if, n) => {\n"

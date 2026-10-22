@@ -159,6 +159,51 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
+    void contextualUntilKeywordIsNotALexicalReadOfUntilBinding() {
+        String source =
+                "f: (until, n) => {\n"
+                        + "  (until)(n)\n"
+                        + "  { n } until(n)\n"
+                        + "}";
+        int declaration = source.indexOf("until");
+        int groupedRead = source.indexOf("until", source.indexOf("(until)"));
+        int contextualKeyword = source.lastIndexOf("until");
+
+        ProtosStaticDefinitionResult grouped = definition(source, groupedRead).orElseThrow();
+        assertEquals(
+                new SourceSpan(declaration, declaration + "until".length()),
+                grouped.targets().get(0).span());
+        assertTrue(definition(source, contextualKeyword).isEmpty());
+    }
+
+    @Test
+    void contextualUntilBodyAndConditionAreIndependentDeferredClosures() {
+        String source =
+                "f: (n) => {\n"
+                        + "  { n = n - 1 } until(n == 0)\n"
+                        + "  n\n"
+                        + "}";
+        int bodyRead = source.indexOf("n - 1");
+        int conditionRead = source.indexOf("n == 0");
+        int afterLoop = source.lastIndexOf("n");
+
+        assertTrue(definition(source, bodyRead).isEmpty());
+        assertTrue(definition(source, conditionRead).isEmpty());
+        assertTrue(definition(source, afterLoop).isEmpty());
+
+        String bodyLocal = "{ local: 1 } until(local)";
+        assertTrue(definition(bodyLocal, bodyLocal.lastIndexOf("local")).isEmpty());
+
+        String innerBody = "{ ((k) => k)(1) } until(c)";
+        assertTrue(definition(
+                innerBody, innerBody.indexOf("k", innerBody.indexOf("=>"))).isPresent());
+        String innerCondition = "{ c } until(((k) => k)(1))";
+        assertTrue(definition(
+                innerCondition,
+                innerCondition.indexOf("k", innerCondition.indexOf("=>"))).isPresent());
+    }
+
+    @Test
     void contextualIfHeaderIsNotALexicalReadOfIfBinding() {
         String source =
                 "f: (if, n) => {\n"

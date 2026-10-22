@@ -23,6 +23,24 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.468] - 2026-10-22
+
+### D212 / I121-B — Contextual until suffix expression
+- `spec/PROTOS_GRAMMAR.md`: new contextual production
+  `contextual-until-expression` (`braced-closure-body, "until", "(",
+  expression, ")"`), recognized only for a parentless primary `{ ... }`
+  immediately followed, with no logical `NEWLINE`, by the bare identifier
+  `until` and exactly one non-spread parenthesized argument. Mandatory
+  desugaring is `(() => { body }).untilTrue(() => condition)` with two
+  independent lexical Closures; the form takes precedence over object
+  construction and over a lexical `until` binding, admits later postfix
+  suffixes, and accepts no object-only composition items in its body.
+  `until` stays non-reserved; the reserved-word note, the D210-Q2 section and
+  the Closure-body `{` disjointness passages now name the new form. No
+  `repeat`, prefix `until`, contextual `untilFalse`, `break` or `continue`
+  syntax is introduced; D210-Q2 `while`, D211 `if`/`else` and object
+  construction are unchanged.
+
 ## [0.1.467] - 2026-10-21
 
 ### D212 / I121-A — Standard Closure loop polarities

@@ -104,6 +104,25 @@ class ProtosStaticLintTest {
     }
 
     @Test
+    void contextualUntilBodyIsAClosureNotProvenExecution() {
+        assertTrue(lint(
+                "f: (x) => {\n    { ^1 } until(x)\n    a\n}").isEmpty());
+    }
+
+    @Test
+    void contextualUntilVisitsBodyAndCondition() {
+        String body = "{ ^1; b } until(x)";
+        ProtosStaticLintDiagnostic unreachable = single(body);
+        assertEquals(UNREACHABLE, unreachable.ruleId());
+        assertEquals(
+                new SourceSpan(body.indexOf("b }"), body.indexOf("b }") + 1),
+                unreachable.span());
+
+        String condition = "{ 1 } until(a === { x: 1 })";
+        assertEquals(FRESH, single(condition).ruleId());
+    }
+
+    @Test
     void nestedClosureCreationIsNotExecutionOfItsReturn() {
         assertTrue(lint("f: () => { g: () => { ^1 }; a }").isEmpty());
 

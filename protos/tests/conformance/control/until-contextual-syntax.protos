@@ -1,0 +1,311 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D212 / I121-B: the contextual suffix expression `{ body } until(condition)`
+// is the ordinary send `(() => { body }).untilTrue(() => condition)`. The body
+// and the condition are two independent parameterless lexical Closures, the
+// body runs at least once before each condition evaluation, the result is the
+// last normal body result, and only the exact braced-body suffix shape is
+// contextual; every other `until` spelling keeps its ordinary meaning.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("an immediately true condition runs the body exactly once", () => {
+        bodyCalls: 0
+        result: {
+            bodyCalls = bodyCalls + 1
+            7
+        } until(true)
+        Assertions.require(result == 7)
+        Assertions.require(bodyCalls == 1)
+    }),
+    Test("many iterations return the last body result", () => {
+        n: 0
+        result: { n = n + 1 } until(n == 4)
+        Assertions.require(result == 4)
+        Assertions.require(n == 4)
+    }),
+    Test("the body runs before every condition evaluation", () => {
+        trace: 0
+        n: 0
+        check: () => {
+            trace = (trace * 10) + 1
+            n >= 3
+        }
+        {
+            trace = (trace * 10) + 2
+            n = n + 1
+        } until(check())
+        Assertions.require(trace == 212121)
+    }),
+    Test("the condition is reevaluated after each body", () => {
+        conditionCalls: 0
+        n: 0
+        {
+            n = n + 1
+        } until((() => {
+            conditionCalls = conditionCalls + 1
+            n >= 5
+        })())
+        Assertions.require(conditionCalls == 5)
+        Assertions.require(n == 5)
+    }),
+    Test("last body result keeps its exact value and identity", () => {
+        marker: {}
+        values: [marker, null, false, marker]
+        lastOf: (count) => {
+            n: 0
+            {
+                n = n + 1
+                values[n - 1]
+            } until(n >= count)
+        }
+        Assertions.require(lastOf(1) === marker)
+        Assertions.require(lastOf(2) === null)
+        Assertions.require(lastOf(3) === false)
+        Assertions.require(lastOf(4) === marker)
+        Assertions.require({ null } until(true) === null)
+        Assertions.require({ false } until(true) === false)
+    }),
+    Test("body Future is returned without awaiting it", () => {
+        failure: Error()
+        returned: null
+        result: {
+            returned = (() => { failure.signal() }).future()
+            returned
+        } until(true)
+        Assertions.require(result === returned)
+        observed: Error.handle(
+            () => { returned.value() },
+            (caught) => caught
+        )
+        Assertions.require(observed === failure)
+    }),
+    Test("body-local declarations are not visible in the condition", () => {
+        local: "outer"
+        seen: null
+        {
+            local: "inner"
+            local
+        } until((() => {
+            seen = local
+            true
+        })())
+        Assertions.require(seen == "outer")
+        Assertions.require(local == "outer")
+    }),
+    Test("body and condition share captured outer bindings", () => {
+        limit: 2
+        n: 0
+        holder: {}
+        holder.total: 0
+        {
+            n = n + 1
+            holder.total = holder.total + n
+            if(n == 1) { limit = 4 }
+        } until(n >= limit)
+        Assertions.require(n == 4)
+        Assertions.require(holder.total == 10)
+    }),
+    Test("this is the enclosing receiver inside body and condition", () => {
+        counter: {}
+        counter.n: 0
+        counter.run: () => {
+            { this.n = this.n + 1 } until(this.n >= 3)
+        }
+        Assertions.require(counter.run() == 3)
+        Assertions.require(counter.n == 3)
+    }),
+    Test("contextual and explicit untilTrue agree", () => {
+        marker: {}
+        n: 0
+        explicit: (() => {
+            n = n + 1
+            marker
+        }).untilTrue(() => n >= 3)
+        explicitCount: n
+        n = 0
+        contextual: {
+            n = n + 1
+            marker
+        } until(n >= 3)
+        Assertions.require(explicit === marker)
+        Assertions.require(contextual === marker)
+        Assertions.require(explicitCount == n)
+    }),
+    Test("non-canonical Boolean conditions signal without truthiness", () => {
+        bodyCalls: 0
+        rejects: (condition) => {
+            caught: Error.handle(
+                () => {
+                    { bodyCalls = bodyCalls + 1 } until(condition)
+                    null
+                },
+                (error) => error
+            )
+            caught.parent() === Error
+        }
+        Assertions.require(rejects(42))
+        Assertions.require(rejects(null))
+        Assertions.require(rejects(0))
+        Assertions.require(rejects(""))
+        Assertions.require(rejects(Object))
+        Assertions.require(rejects((() => true).future()))
+        Assertions.require(bodyCalls == 6)
+    }),
+    Test("body Error propagates with identity, skips the condition and runs cleanup", () => {
+        expected: Error()
+        conditionCalls: 0
+        cleanups: 0
+        caught: Error.handle(
+            () => {
+                (() => {
+                    { expected.signal() } until((() => {
+                        conditionCalls = conditionCalls + 1
+                        true
+                    })())
+                }).ensure(() => { cleanups = cleanups + 1 })
+            },
+            (error) => error
+        )
+        Assertions.require(caught === expected)
+        Assertions.require(conditionCalls == 0)
+        Assertions.require(cleanups == 1)
+    }),
+    Test("condition Error propagates with identity", () => {
+        expected: Error()
+        bodyCalls: 0
+        fail: () => {
+            expected.signal()
+            true
+        }
+        caught: Error.handle(
+            () => {
+                { bodyCalls = bodyCalls + 1 } until(fail())
+                null
+            },
+            (error) => error
+        )
+        Assertions.require(caught === expected)
+        Assertions.require(bodyCalls == 1)
+    }),
+    Test("body non-local return leaves the enclosing method", () => {
+        marker: {}
+        conditionCalls: 0
+        afterLoop: 0
+        run: () => {
+            {
+                ^marker
+            } until((() => {
+                conditionCalls = conditionCalls + 1
+                true
+            })())
+            afterLoop = afterLoop + 1
+            null
+        }
+        Assertions.require(run() === marker)
+        Assertions.require(conditionCalls == 0)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("condition non-local return leaves the enclosing method", () => {
+        bodyCalls: 0
+        afterLoop: 0
+        run: () => {
+            { bodyCalls = bodyCalls + 1 } until(^42)
+            afterLoop = afterLoop + 1
+            99
+        }
+        Assertions.require(run() == 42)
+        Assertions.require(bodyCalls == 1)
+        Assertions.require(afterLoop == 0)
+    }),
+    Test("body and condition suspension resume without repeating effects", () => {
+        work: () => {
+            conditionBefore: 0
+            conditionAfter: 0
+            bodyBefore: 0
+            bodyAfter: 0
+            check: () => {
+                conditionBefore = conditionBefore + 1
+                observed: (() => { conditionBefore }).future().value()
+                conditionAfter = conditionAfter + 1
+                observed >= 3
+            }
+            {
+                bodyBefore = bodyBefore + 1
+                (() => { bodyBefore }).future().value()
+                bodyAfter = bodyAfter + 1
+            } until(check())
+            (conditionBefore * 1000) +
+            (conditionAfter * 100) +
+            (bodyBefore * 10) +
+            bodyAfter
+        }
+        Assertions.require(work.future().value() === 3333)
+    }),
+    Test("a lexical untilTrue binding does not replace the ordinary send", () => {
+        shadowCalls: 0
+        untilTrue: (condition) => {
+            shadowCalls = shadowCalls + 1
+            99
+        }
+        n: 0
+        result: { n = n + 1 } until(n >= 2)
+        Assertions.require(result == 2)
+        Assertions.require(shadowCalls == 0)
+    }),
+    Test("a lexical until binding is not consulted by the contextual form", () => {
+        untilCalls: 0
+        until: (...args) => {
+            untilCalls = untilCalls + 1
+            args.size()
+        }
+        n: 0
+        result: { n = n + 1 } until(n >= 2)
+        Assertions.require(result == 2)
+        Assertions.require(untilCalls == 0)
+        Assertions.require(until(1, 2) == 2)
+        Assertions.require((until)(1) == 1)
+        Assertions.require(until(1) { 2 } == 2)
+        Assertions.require(untilCalls == 3)
+    }),
+    Test("member until spellings stay ordinary", () => {
+        holder: {}
+        holder.until: (condition) => condition + 1
+        Assertions.require(holder.until(41) == 42)
+    }),
+    Test("contextual until composes with postfix suffixes", () => {
+        item: { name: "box" }
+        Assertions.require({ item } until(true).name == "box")
+        Assertions.require(({ [1, 2] } until(true))[1] == 2)
+    }),
+    Test("contextual until coexists with contextual while and if/else", () => {
+        trace: ""
+        i: 0
+        {
+            j: 0
+            while(j < 2) {
+                j = j + 1
+                trace = trace + "w"
+            }
+            if(i == 0) { trace = trace + "a" } else { trace = trace + "b" }
+            i = i + 1
+        } until(i == 2)
+        Assertions.require(trace == "wwawwb")
+    })
+]
+tests.freeze()

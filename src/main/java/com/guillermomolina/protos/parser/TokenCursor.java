@@ -21,6 +21,7 @@ import com.guillermomolina.protos.lexer.TokenOccurrence;
 import com.guillermomolina.protos.lexer.Token;
 import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -129,6 +130,109 @@ final class TokenCursor {
         }
 
         return false;
+    }
+
+    /**
+     * D212: non-consuming recognition of the exact contextual suffix shape
+     * {@code { ... } until(condition)} starting at the current {@code '{'}.
+     * The bare {@code until} identifier must immediately follow the matching
+     * outer {@code '}'} (no logical NEWLINE in between) and be immediately
+     * followed by a balanced parenthesized suffix holding exactly one
+     * syntactically present, non-spread top-level argument. Any nonmatching,
+     * incomplete, or unbalanced candidate returns false so that ordinary
+     * object-construction parsing and its error reporting keep authority.
+     */
+    boolean bracedBodyFollowedByContextualUntil() {
+        if (!at(TokenType.LBRACE)) {
+            return false;
+        }
+
+        int bodyClose = matchingCloseOffset(index);
+        if (bodyClose < 0) {
+            return false;
+        }
+
+        int keyword = bodyClose + 1;
+        if (!typeAt(keyword, TokenType.IDENTIFIER)
+                || !tokens.get(keyword).token().lexeme().equals("until")) {
+            return false;
+        }
+
+        int suffixOpen = keyword + 1;
+        if (!typeAt(suffixOpen, TokenType.LPAREN)) {
+            return false;
+        }
+
+        int suffixClose = matchingCloseOffset(suffixOpen);
+        if (suffixClose < 0) {
+            return false;
+        }
+
+        int first = skipNewlines(suffixOpen + 1);
+        if (first >= suffixClose || typeAt(first, TokenType.ELLIPSIS)) {
+            return false;
+        }
+
+        int offset = first;
+        while (offset < suffixClose) {
+            TokenType type = tokens.get(offset).token().type();
+            if (type == TokenType.COMMA) {
+                return false;
+            }
+            if (closerFor(type) != null) {
+                offset = matchingCloseOffset(offset);
+                if (offset < 0) {
+                    return false;
+                }
+            }
+            offset++;
+        }
+
+        return true;
+    }
+
+    /**
+     * Returns the offset of the delimiter closing the opener at
+     * {@code openOffset}, respecting nested parentheses, brackets, and
+     * braces, or -1 when the delimiters are unbalanced or mismatched before
+     * EOF. Comments are trivia and never appear in the token stream.
+     */
+    private int matchingCloseOffset(int openOffset) {
+        ArrayDeque<TokenType> expected = new ArrayDeque<>();
+        for (int offset = openOffset; offset < tokens.size(); offset++) {
+            TokenType type = tokens.get(offset).token().type();
+            TokenType closer = closerFor(type);
+            if (closer != null) {
+                expected.push(closer);
+                continue;
+            }
+
+            if (type == TokenType.RPAREN
+                    || type == TokenType.RBRACKET
+                    || type == TokenType.RBRACE) {
+                if (expected.isEmpty() || expected.pop() != type) {
+                    return -1;
+                }
+                if (expected.isEmpty()) {
+                    return offset;
+                }
+                continue;
+            }
+
+            if (type == TokenType.EOF) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+
+    private static TokenType closerFor(TokenType type) {
+        return switch (type) {
+            case LPAREN -> TokenType.RPAREN;
+            case LBRACKET -> TokenType.RBRACKET;
+            case LBRACE -> TokenType.RBRACE;
+            default -> null;
+        };
     }
 
     List<TokenOccurrence> consumeUntilTopLevel(

@@ -172,7 +172,8 @@ Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `S
 Core v0.1 defines no additional reserved words such as `if`, `else`, `while`,
 `for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`. The
 contextual `while` (D210-Q2) and `if`/`else` (D211) expressions reinterpret exact
-call shapes without reserving these spellings.
+call shapes, and the contextual `until` suffix (D212) reinterprets one exact
+braced-body shape, without reserving these spellings.
 
 Under D131, `match`, `case`, `when`, `exact`, and `captures` have no
 matching-specific contextual structural meaning. They remain ordinary
@@ -1173,7 +1174,7 @@ layout =
     { newline } ;
 ```
 
-The `[ lookahead != "{" ]` guard (see the EBNF notation in Scope) expresses the choice between the two body forms formally in the grammar: `braced-closure-body` begins with the literal `{`, and the single-expression alternative may be entered only when the next parser token in the continuing token sequence after `=>` is not `{`. Every braced body therefore begins with `{`, no expression body may begin with `{`, and a body whose first token is `{` has exactly one derivation — the braced form. An `expression` can begin with `{` only as an `object-expression` with no parent (its `object-body`), so the same rule is what excludes a bare object expression from beginning an expression body; an object-expression body is written with ordinary parenthesized grouping (see Composition with the expression grammar).
+The `[ lookahead != "{" ]` guard (see the EBNF notation in Scope) expresses the choice between the two body forms formally in the grammar: `braced-closure-body` begins with the literal `{`, and the single-expression alternative may be entered only when the next parser token in the continuing token sequence after `=>` is not `{`. Every braced body therefore begins with `{`, no expression body may begin with `{`, and a body whose first token is `{` has exactly one derivation — the braced form. An `expression` can begin with `{` only as an `object-expression` with no parent (its `object-body`) or as a D212 `contextual-until-expression` (see Contextual `until` suffix expression), so the same rule is what excludes a bare object expression from beginning an expression body; an object-expression body is written with ordinary parenthesized grouping (see Composition with the expression grammar).
 
 The parenthesized `parameter-list` is required for a Closure with zero parameters, two or more parameters, a default parameter, or a rest parameter. When a Closure has exactly one parameter and that parameter is a plain parameter (neither a default parameter nor a rest parameter), the parentheses may be omitted and the parameter written as a bare `identifier` before `=>`. The bare form is exactly equivalent to a `parameter-list` containing that one parameter:
 
@@ -1363,7 +1364,7 @@ Invoking an expression-bodied Closure requires explicit grouping where the postf
 (x => x * 2)(10)
 ```
 
-The `{` immediately after `=>` always begins the Closure's braced body; it is never reinterpreted as an object expression merely because expression bodies now exist. The `closure-body` production expresses this decision formally (see the grammar above): `braced-closure-body` requires the literal `{` as its first token, and the single-expression alternative carries the `[ lookahead != "{" ]` guard, so an expression body can never begin with `{`. The two alternatives are therefore disjoint on the token that begins the closure body in the continuing token stream after `=>`: a `{` there is derivable only as the braced form, and any other token begins the single-expression form. An `expression` begins with `{` only as an `object-expression` with no parent, so the same disjointness is what keeps a bare object expression out of expression-body position. An object-expression body therefore requires the ordinary parenthesized grouping that is already valid under the parenthesized-expression grammar:
+The `{` immediately after `=>` always begins the Closure's braced body; it is never reinterpreted as an object expression merely because expression bodies now exist. The `closure-body` production expresses this decision formally (see the grammar above): `braced-closure-body` requires the literal `{` as its first token, and the single-expression alternative carries the `[ lookahead != "{" ]` guard, so an expression body can never begin with `{`. The two alternatives are therefore disjoint on the token that begins the closure body in the continuing token stream after `=>`: a `{` there is derivable only as the braced form, and any other token begins the single-expression form. An `expression` begins with `{` only as an `object-expression` with no parent or as a D212 `contextual-until-expression`, so the same disjointness is what keeps a bare object expression out of expression-body position. An object-expression body therefore requires the ordinary parenthesized grouping that is already valid under the parenthesized-expression grammar:
 
 ```js
 x => ({
@@ -3287,8 +3288,103 @@ while(condition)
 
 Programs may still define and call `while` as an ordinary binding or member
 name through those spellings. Apart from the D211 contextual `if`/`else`
-expression (Optional Control-flow Sugar), no other identifier acquires a
+expression (Optional Control-flow Sugar) and the D212 contextual `until` suffix
+(Contextual `until` suffix expression), no other identifier acquires a
 contextual interpretation.
+
+### Contextual `until` suffix expression (D212)
+
+One exact braced-body shape is reinterpreted contextually:
+
+```ebnf
+contextual-until-expression =
+    braced-closure-body, "until", "(",
+    expression, ")" ;
+```
+
+This is a contextual source production, not a new reserved word: `until`
+continues to be lexed as an ordinary identifier. The production is selected for
+a primary expression that begins with `{` only when all of the following hold
+in the token stream:
+
+- the `{` begins a parentless braced form in primary-expression position (not
+  an `object-body` after a `parent-expression`, a Closure body after `=>`, an
+  attached trailing Closure, a contextual `while`/`if` body, or a D211 `else`
+  branch);
+- the token immediately following the matching outer `}` is the bare,
+  ungrouped identifier `until`, with no separating logical `NEWLINE`;
+- `until` is immediately followed by `(`; and
+- the parenthesized suffix contains exactly one syntactically present
+  argument, which is not a `...` spread, followed by the matching `)`.
+  Commas nested inside inner parentheses, brackets, or braces do not count as
+  suffix arguments. Ordinary newline rules apply inside the parentheses.
+
+Comments are trivia under the ordinary tokenization rules: a block comment may
+appear between `}` and `until`, between `until` and `(`, or after `(`, while a
+line comment leaves a separating `NEWLINE` and therefore prevents the
+contextual form.
+
+When the shape is recognized, the outer `{ ... }` is parsed as a parameterless
+`braced-closure-body`, not as object construction. Its contents follow the
+Closure-body grammar: object-only syntax, in particular a `...expression`
+composition item, does not become valid there merely because the braced form
+is followed by `until`. When the shape is not recognized, the braces keep their
+ordinary `object-expression` meaning and ordinary error reporting applies.
+
+The resulting expression is an ordinary postfix-foundation result, so later
+valid member, call, and index suffixes apply to the complete contextual
+expression.
+
+Mandatory desugaring:
+
+```js
+{ body } until(condition)
+```
+
+is the ordinary message send
+
+```js
+(() => { body }).untilTrue(() => condition)
+```
+
+where the receiver is a fresh parameterless lexical Closure with the braced
+body, and the sole argument is a separate fresh parameterless lexical Closure
+whose body reevaluates `condition` on each activation. The two Closures are
+independent lexical scopes: declarations local to the body are not visible in
+the condition, and both may capture outer lexical bindings. The `until` token
+is not a lexical lookup, and no synthetic name is introduced. The send is
+resolved by ordinary message lookup, including user-defined overrides of
+`untilTrue`; normal completion returns the ordinary result of the selected
+`untilTrue` behavior, whose standard post-test loop behavior is owned by
+`semantics/EXECUTION_AND_CONTROL.md`. No loop-specific canonical node,
+truthiness conversion, or runtime primitive exists.
+
+For this exact shape only, the contextual interpretation takes precedence over
+ordinary object construction and over a lexical binding named `until`: such a
+binding is not consulted. Every other spelling keeps its ordinary meaning,
+including:
+
+```text
+({ body }) until(condition)
+parent { body } until(condition)
+{ body }.until(condition)
+{ body } until
+{ body } until()
+{ body } until(a, b)
+{ body } until(...args)
+{ body }
+until(condition)
+until(condition) { body }
+repeat { body } until(condition)
+{ body } untilTrue(condition)
+```
+
+Programs may still define and call `until` as an ordinary binding or member name
+through those spellings. D212 introduces no `repeat` keyword, no prefix
+`until(condition) { body }` form, no contextual `untilFalse` form, and no
+`break` or `continue` syntax. The D210-Q2 contextual `while` expression, the
+D211 contextual `if`/`else` expression, and the existing object-construction
+grammar are unchanged.
 
 ## Resource Cleanup Syntax Note
 
