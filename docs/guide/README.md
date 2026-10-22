@@ -102,6 +102,12 @@ language-teaching progression under DOC001.
 - [Text styling and encodings](library/text.md) — `std:text/*`.
 - [Semantic versions](library/semver.md) — `std:semver/SemVer`.
 - [Explicit foreign operations](library/interop.md) — `std:interop`.
+- [Numeric functions](library/README.md) — `std:math/Math` and `std:math/Integer`;
+  see also [numeric values](05-values-identity-equality-and-collections.md).
+- [Runtime metadata](library/runtime.md) — `std:runtime` and its four
+  portable String fields.
+- [Runtime inspection](library/inspect.md) — `std:inspect`, available only
+  with explicit inspection authorization (`--inspect` in the CLI).
 
 ## Java integration guides
 
@@ -120,20 +126,21 @@ language-teaching progression under DOC001.
 ## Current guide state
 
 The control-flow dependency that originally blocked chapter 04 is closed.
+The current Core control-flow surface uses contextual
+`if(condition) { ... } else { ... }` (D211), contextual
+`while(condition) { ... }` (D210-Q2), and suffix
+`{ ... } until(condition)` (D212). Each lowers to ordinary Boolean or Closure
+messages. Four standard Closure loop selectors are available: pre-test
+`whileTrue` / `whileFalse` and post-test `untilTrue` / `untilFalse`, each
+returning the last body result (or `null` for zero pre-test iterations).
 
-D044 / specification revision `0.1.381` defines the complete standard Closure
-`while` protocol, D045 / specification revision `0.1.382` clarifies task-scoped
-structured ownership for returned task-backed Futures, and
-[`I023 — Standard while protocol`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md#i023--standard-while-protocol)
-has published the reference implementation plus full conformance closure.
-[`B007`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_BLOCKERS.md#b007--standard-while-protocol-semantics)
-is CLOSED. D180 later renamed the standard Closure loop selector from `while`
-to `whileTrue` without a compatibility alias; all other D044 loop semantics are
-unchanged. D201 later made `whileTrue` return its last normal body result
-(canonical `null` for zero iterations) and added the distinct standard `while`
-selector, which runs the same loop and returns its final canonical `false`.
-D210 later retired that standard `Object.while` selector, keeping
-`Object.whileTrue` and its exact last-body result.
+Historically, D180 renamed the earlier standard `while` selector to
+`whileTrue`; D201 briefly introduced a distinct standard `while` completion
+rule; D210 retired that standard selector. The later D211/D212 contextual
+spellings are **not** standard `.if`, `.else`, `.while`, or `.until` messages.
+These transitions are documented in
+[chapter 04](04-control-flow-through-protocols.md); they do not add compatibility
+aliases for the retired selectors.
 
 `DOC001-E` is CLOSED with
 [chapter 04](04-control-flow-through-protocols.md), which explains the published

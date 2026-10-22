@@ -16,7 +16,7 @@
  */
 
 // Requires explicit runtime inspection authorization.
-// Run with: protos --inspect examples/runtime-introspection/inspect.protos
+// From the repository root: bin/protos --inspect protos/examples/runtime-introspection/inspect.protos
 
 Inspect: import("std:inspect")
 

@@ -69,6 +69,49 @@ The distinction matters because Closures are ordinary values. They can be
 stored, passed, returned, captured, compared by identity where applicable, or
 placed in object slots without being executed merely because they are read.
 
+## Positional arguments, defaults, and rest (D203)
+
+Ordinary Closure calls accept flexible positional argument counts. The caller
+first evaluates the target and supplied argument expressions from left to right;
+only then does the invoked Closure establish its activation and bind parameters,
+also from left to right. In a parameter list, `name: expression` declares a
+default, and a final `...rest` captures surplus positional arguments.
+
+```protos
+pair: (first, second: first + 1, ...rest) => {
+    [first, second, rest.size()]
+}
+
+pair(10)               // [10, 11, 0]
+pair(10, null, 99)     // [10, null, 1]
+
+firstOnly: (value) => value
+firstOnly()            // null
+firstOnly(10, 20)      // 10
+```
+
+The important distinction is **absent** versus **explicitly supplied**:
+
+- An absent non-rest parameter without a default binds canonical `null`.
+- A default runs exactly once **only when its argument is absent**. Passing
+  `null` explicitly uses that `null` and never evaluates the default.
+- Defaults run in the actual invocation context (`this` and `context` retain
+  their ordinary meanings) and can read earlier parameters already bound. A
+  later parameter is not automatically available to an earlier default.
+- Extra supplied arguments are still evaluated. If no rest parameter exists,
+  the Closure ignores their values; this is not an arity error.
+- A trailing rest parameter receives a **fresh frozen Array** containing only
+  the extra supplied values, in order (possibly none). Defaults do not add
+  elements to this Array. `args` is an ordinary name, not an ambient argument
+  vector.
+
+The flexible binding rule applies to **ordinary Closure invocation**, not to
+every standard API's public contract: standard operations such as Boolean
+`ifTrue` and `ifTrueIfFalse` still enforce their own exact argument counts.
+For executable examples, see the
+[`07-call-arguments` tutorial](../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos)
+and the [`rest-arguments` cookbook example](../../protos/examples/closures/rest-arguments.protos).
+
 ## Closures capture lexical contexts by reference
 
 The binding model from chapter 1 applies directly to Closures:
@@ -611,6 +654,10 @@ a Closure escaped.
 9. Remember that nested Closures can retain receiver, `methodHome`, and return
    home information from the invocation in which they were created.
 10. Use `^` only when you intend a non-local return to the captured home.
+11. Omitted Closure arguments bind `null` or evaluate declared defaults;
+    supplying `null` explicitly never triggers a default.
+12. A rest parameter captures only surplus supplied arguments into a fresh
+    frozen Array; ordinary Closure binding does not reject argument counts.
 
 ## Run the executable lessons
 
@@ -618,6 +665,8 @@ The corresponding introductory executable tutorial material is:
 
 - [`../../protos/tutorials/03-closures/01-closure.protos`](../../protos/tutorials/03-closures/01-closure.protos)
 - [`../../protos/tutorials/03-closures/02-captured-state.protos`](../../protos/tutorials/03-closures/02-captured-state.protos)
+- [`../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos`](../../protos/tutorials/07-call-arguments/01-defaults-args-and-rest.protos)
+- [`../../protos/examples/closures/rest-arguments.protos`](../../protos/examples/closures/rest-arguments.protos)
 
 The current conformance corpus also contains focused executable examples for
 receiver-preserving `super` behavior:
@@ -633,7 +682,8 @@ For exact behavior, consult:
 
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   Closure capture, method invocation, extracted Closures, receiver binding,
-  `methodHome`, return homes, and non-local return;
+  `methodHome`, return homes, non-local return, and flexible positional
+  parameter/default/rest binding (D203);
 - [`../../spec/semantics/EXECUTION_AND_CONTROL.md`](../../spec/semantics/EXECUTION_AND_CONTROL.md)
   for `this`, `context`, unqualified receiver fallback, `super`, evaluation
   order, and Sequence completion;

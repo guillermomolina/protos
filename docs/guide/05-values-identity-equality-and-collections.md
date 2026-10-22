@@ -67,21 +67,12 @@ There is no standard `Boolean` prototype whose descendants automatically become
 Booleans. Delegating to `true`, `false`, or an object that exposes similarly
 named selectors does not grant Boolean membership.
 
-This matters for every standard operation that requires a Boolean result:
-
-```protos
-==
-<
-<=
->
->=
-and
-or
-while
-```
-
-The standard contract requires canonical `true` or canonical `false`; there is
-no truthiness conversion.
+Comparison operators (`==`, `<`, `<=`, `>`, `>=`) and lazy Boolean
+`and`/`or` require canonical Boolean results. Standard conditional and loop
+protocols also require canonical Boolean decisions: the contextual
+`if`, `while`, and suffix `until` forms lower to ordinary messages, not
+standard methods named `.if()`, `.while()` or `.until()`. There is no
+truthiness conversion. See [control flow](04-control-flow-through-protocols.md).
 
 ## Identity is semantic
 
@@ -216,7 +207,89 @@ protocols, but the programmer should not reason about `===` using JVM boxing,
 cache ranges, addresses, or allocation behavior.
 
 The detailed numeric model remains owned by the normative specification. The
-important Programming Guide rule here is that Number identity is value-based.
+important Programming Guide rule here is that Number identity is value-based
+within each semantic family. Mathematical equality across families does not
+automatically mean identical numeric-family identity (see below).
+
+## Working with Integer, Float, Fraction, and Complex
+
+Protos has one `Number` hierarchy, with distinct semantic numeric families:
+`SmallInteger` and `BigInteger` are the concrete exact `Integer` families
+(selected automatically by value), `Fraction` is an exact non-integral rational,
+`Float` is IEEE binary64, and `Complex` has real and imaginary components.
+Ordinary Integers are unbounded: arithmetic promotes beyond the signed-64
+range instead of overflowing or wrapping.
+
+```protos
+large: 9223372036854775807 + 1  // BigInteger
+half: 1 / 2                       // exact Fraction
+whole: 6 / 3                      // exact Integer 2
+sum: (1 / 2) + (1 / 2)           // exact Integer 1
+```
+
+`/` between Integers is exact rational division, **not** truncated integer
+division. Integral results normalize to `Integer`; non-integral results become
+canonical `Fraction` values. `Fraction(1, 2)` is **not** a public constructor:
+use ordinary exact arithmetic such as `1 / 2`. An exact zero divisor signals
+an `Error`. For integer-only quotient and remainder, use `div`, `mod`, or `%`
+(with truncation toward zero for `div`).
+
+Mixing `Integer` or `Fraction` with a `Float` produces a `Float`: the exact
+operand is converted to binary64 **before** the arithmetic operation, so
+precision may be lost. `Float(value)` explicitly rounds an exact Integer or
+Fraction to binary64; `Integer(value)` accepts a Float only if it is finite and
+mathematically integral and does not truncate a fractional value.
+
+```protos
+mixed: (1 / 2) + 0.25             // Float 0.75
+rounded: Float(1 / 3)             // rounded binary64 approximation
+(1 / 2) == 0.5                   // true: exact mathematical equality
+(1 / 2) === 0.5                  // false: different semantic families
+(1 / 10) == 0.1                  // false: binary64 0.1 is not exactly 1/10
+```
+
+`Float` division by zero follows IEEE rules (infinities or NaN as appropriate),
+not the exact Integer/Integer zero-divisor `Error`. Numeric equality and ordering
+do **not** first convert exact values to binary64. The exactness distinction is
+important when choosing values as Map or IdentityMap keys.
+
+Create a Complex value with the ordinary `Complex(real, imaginary)` factory.
+Both components must be semantic real numbers; no implicit conversion or
+imaginary-number literal is involved. `real()` and `imaginary()` work on all
+semantic Numbers. Exact Integer-zero imaginary components normalize back to
+the real value, while Float signed zero is retained as a Complex component.
+Complex supports standard `+`, `-`, `*`, and `/`, but no numeric ordering.
+
+```protos
+z: Complex(3, 4)
+z.real()                          // 3
+z.imaginary()                     // 4
+Complex(3, 0) === 3               // true: canonical real result
+Complex(3, 0.0) === 3             // false: Float-zero imaginary part retained
+```
+
+The Standard Library supplies square roots via an **explicit** import; `sqrt`
+is not a `Number` message and is not a Prelude function:
+
+```protos
+Math: import("std:math/Math")
+Math.sqrt(4)                      // exact Integer 2
+Math.sqrt(1 / 4)                  // exact Fraction 1/2
+Math.sqrt(-4)                     // Complex(0, 2)
+Math.sqrt(Complex(3, 4))          // Complex(2, 1)
+```
+
+`Math.sqrt(value)` requires exactly one semantic Number. Exact roots stay
+exact when rational; other roots are binary64 approximations within the
+specified accuracy contract. Negative reals yield principal Complex roots.
+For exact Integer algorithms, `std:math/Integer` separately provides `gcd`,
+`lcm`, `factorial`, `pow`, and `powMod`; these are Standard Library functions,
+not implicit arithmetic or methods on every Number.
+
+See the executable
+[`exact-and-complex.protos` example](../../protos/examples/numbers/exact-and-complex.protos),
+the [`std:math` sources](../../protos/lib/math/Math.protos), and the
+[Standard Library index](library/README.md).
 
 ## `===` and `==` answer different questions
 
@@ -949,6 +1022,10 @@ performance.
 
 ## Run the executable lessons
 
+For arithmetic, [`exact-and-complex.protos`](../../protos/examples/numbers/exact-and-complex.protos)
+demonstrates exact division, mixed Float arithmetic, Complex components, and
+`std:math/Math`.
+
 The current tutorial material includes direct examples for keyed collections:
 
 - [`../../protos/tutorials/05-collections/01-maps.protos`](../../protos/tutorials/05-collections/01-maps.protos)
@@ -975,8 +1052,9 @@ normative authority.
 For exact behavior, consult:
 
 - [`../../spec/semantics/VALUES_AND_COLLECTIONS.md`](../../spec/semantics/VALUES_AND_COLLECTIONS.md)
-  for `null`, Booleans, identity/equality, indexed access, Array, Map,
-  IdentityMap, Bytes, and standard collection/value protocols;
+  for `null`, Booleans, numeric families/arithmetic, identity/equality,
+  indexed access, Array, Map, IdentityMap, Bytes, and standard
+  collection/value protocols;
 - [`../../spec/semantics/OBJECT_MODEL.md`](../../spec/semantics/OBJECT_MODEL.md)
   for open/closed/frozen object state, delegation, slots, and semantic-family
   receiver domains;

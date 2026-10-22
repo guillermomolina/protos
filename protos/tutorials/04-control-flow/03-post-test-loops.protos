@@ -1,0 +1,45 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// Post-test: the BODY Closure is the receiver and runs before the condition.
+// Suffix until is the ordinary body-Closure.untilTrue(condition) send.
+attempts: 0
+last: {
+    attempts = attempts + 1
+    attempts * 10
+} until(attempts >= 3)
+print(last) // 30: last body value
+
+// The explicit untilTrue message produces the same kind of result.
+i: 0
+explicit: (() => {
+    i = i + 1
+    i
+}).untilTrue(() => i >= 2)
+print(explicit) // 2
+
+// untilFalse stops when its CONDITION Closure returns canonical false.
+remaining: 2
+inverse: (() => {
+    remaining = remaining - 1
+    remaining
+}).untilFalse(() => remaining > 0)
+print(inverse) // 0
+
+// Post-test looping always executes its body at least once.
+once: { "once" } until(true)
+print(once)

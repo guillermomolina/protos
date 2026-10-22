@@ -1,0 +1,31 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Exact rational arithmetic, Float mixing, Complex components, and square roots.
+// Each print is a small executable check; the expected output is eight true lines.
+Math: import("std:math/Math")
+IntegerMath: import("std:math/Integer")
+
+half: 1 / 2
+z: Complex(3, 4)
+
+print((half + half) === 1)
+print(((half + 0.25) === 0.75))
+print((half == 0.5) && !(half === 0.5))
+print((1 / 10) != 0.1)
+print(z.real() === 3)
+print(z.imaginary() === 4)
+print(Math.sqrt(1 / 4) === half)
+print((Math.sqrt(-4) === Complex(0, 2)) && (IntegerMath.gcd(84, 30) === 6))

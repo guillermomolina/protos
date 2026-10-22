@@ -23,6 +23,9 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Express conditional control flow | `control-flow/conditional.protos` |
 | Compute Fibonacci recursively | `algorithms/fibonacci-recursive.protos` |
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |
+| Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
+| Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
+| Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |
 | Use value-keyed maps | `collections/maps.protos` |
 | Use identity-keyed maps | `collections/identity-map.protos` |
 | Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
@@ -34,3 +37,10 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
 | Execute work in an isolated parallel domain | `concurrency/parallel-execution.protos` |
 | Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |
+
+Run the metadata example normally from the product repository root:
+`bin/protos protos/examples/runtime-introspection/info.protos`. The
+inspection example requires explicit authority:
+`bin/protos --inspect protos/examples/runtime-introspection/inspect.protos`.
+The inspection command produces implementation-specific diagnostic text;
+do not treat its contents as a stable output format.

@@ -13,7 +13,7 @@ Control flow follows the same design.
 The central idea is:
 
 > Core control flow is expressed through ordinary messages and lazy Closures,
-> not through a separate callback model or special `while` execution syntax.
+> not through a separate callback model or special-purpose control-flow runtime.
 
 That is visible in conditionals, short-circuit Boolean operations, and loops.
 The familiar control-flow role comes from the protocol being invoked; the
@@ -370,6 +370,96 @@ and `while(a, b) { ... }` are ordinary calls, and programs may still define
 another language: it is an expression with Closure semantics and no
 truthiness.
 
+## Four standard loop messages and their polarities
+
+Core has **four** standard loop selectors, installed as ordinary `Object`
+messages with a **Closure receiver** and exactly one Closure argument:
+
+| Standard selector | Receiver | Argument | Test timing | Stop when condition returns |
+|---|---|---|---|---|
+| `whileTrue` | condition Closure | body Closure | before the body | `false` |
+| `whileFalse` | condition Closure | body Closure | before the body | `true` |
+| `untilTrue` | body Closure | condition Closure | after the body | `true` |
+| `untilFalse` | body Closure | condition Closure | after the body | `false` |
+
+The receiver role changes between the two families. These are ordinary
+messages, not four parser constructs:
+
+```protos
+n: 0
+first: (() => n < 3).whileTrue() { n = n + 1 }
+
+remaining: 2
+second: (() => remaining == 0).whileFalse() {
+    remaining = remaining - 1
+}
+
+attempts: 0
+third: (() => { attempts = attempts + 1 }).untilTrue(() => attempts >= 3)
+
+countdown: 2
+fourth: (() => { countdown = countdown - 1 }).untilFalse(() => countdown > 0)
+```
+
+All four return the exact normal result of the **last** body activation, with
+its identity preserved. The pre-test pair can perform no body activations;
+that normal result is canonical `null`. The post-test pair always activates
+the body at least once on normal completion, before testing the condition.
+Each reached callback is invoked with zero supplied arguments under ordinary
+Closure parameter binding.
+
+A condition result must be exactly canonical `true` or `false`: no truthiness,
+implicit `not()`, Boolean conversion, or Future awaiting occurs. A non-Boolean
+result, including a Future, signals `Error`. A body-returned Future is only a
+body value; the loop does not await or adopt it. An Error, non-local return,
+or suspension in a reached callback follows the ordinary control-transfer
+rules, without replaying completed effects. The standard selectors are reached
+by ordinary lookup and can be shadowed; the standard Closure and strict-Boolean
+contracts apply when that standard behavior is the selected one.
+
+There is **no** standard `Object.while` or `Object.until` selector. In everyday
+source, prefer the contextual `while` form above or the `until` form below.
+Use the explicit selectors for the other polarities and when teaching or
+customizing the protocol.
+
+## The contextual `{ body } until(condition)` form
+
+Protos offers a concise post-test spelling:
+
+```protos
+attempts: 0
+result: {
+    attempts = attempts + 1
+    attempts * 10
+} until(attempts >= 3)
+// result == 30: the body ran three times before the final test
+```
+
+It is exactly the ordinary `untilTrue` message, with the **body Closure as
+receiver** and a separate condition Closure as its argument:
+
+```protos
+result: (() => {
+    attempts = attempts + 1
+    attempts * 10
+}).untilTrue(() => attempts >= 3)
+```
+
+The two Closures share captured outer bindings but not body-local declarations.
+The condition is checked after each body activation, including the first.
+Like contextual `while`, this form returns the last body result and participates
+in ordinary message lookup. The `until` spelling itself is not a lexical
+lookup. Only the precise braced-body suffix on the same logical line is
+contextual; `until` is not reserved.
+
+There is **no** prefix `until(condition) { body }` syntax and no contextual
+`whileFalse` or `untilFalse` sugar. To express those polarities, send the
+standard protocol message explicitly.
+
+For runnable introductions, see
+[`02-pre-test-loops.protos`](../../protos/tutorials/04-control-flow/02-pre-test-loops.protos)
+and [`03-post-test-loops.protos`](../../protos/tutorials/04-control-flow/03-post-test-loops.protos).
+
 ## Standard `whileTrue` has a strict contract
 
 The standard behavior is Closure-specific.
@@ -583,18 +673,22 @@ created.
    Closures.
 2. Remember that trailing Closure syntax supplies an ordinary call argument; it
    does not create a separate control construct.
-3. Use `ifTrue` or `ifFalse` for one-branch conditional execution, and
-   `ifTrueIfFalse` when exactly one of two lazy callbacks must be selected and
-   its result is needed; use `if` / `else` for actions whose results are
-   discarded and whose receiver Boolean should keep flowing through a chain.
+3. Prefer contextual `if(condition) { ... } else { ... }` for everyday
+   conditionals whose selected result matters; use `ifTrue`, `ifFalse`, and
+   `ifTrueIfFalse` explicitly to expose or customize the ordinary protocols.
+   The old receiver-preserving `.if()` / `.else()` chain is not standard.
 4. Use `not()` or unary `!` for strict canonical-Boolean negation.
 5. Use `and` and `or` for lazy Boolean short-circuiting, and return an actual
    Boolean from a selected callback.
-6. Model a `whileTrue` condition as a zero-argument Closure that recomputes a
-   canonical Boolean every time it is invoked.
+6. Use `while(condition) { ... }` for everyday pre-test looping (the
+   `whileTrue` send); `whileFalse` reverses the stopping polarity. Their receiver
+   is the condition Closure, tested before every body activation.
 7. Do not rely on truthiness or implicit Future awaiting for loop decisions.
-8. Expect normal loop completion to return `null` after zero iterations and the
-   last normal body result after one or more iterations.
+8. Use `{ ... } until(condition)` for everyday post-test looping (the
+   `untilTrue` send); `untilFalse` reverses the stopping polarity. Their receiver
+   is the body Closure, which runs before the condition at least once. All four
+   selectors return the exact last body result; pre-test zero iterations yield
+   `null`.
 9. Expect Error and valid non-local return to propagate through a reached
    callback normally.
 10. Remember that selector names still participate in ordinary lookup and may be
@@ -640,7 +734,14 @@ Representative loop cases include:
   demonstrates non-local return across a reached body;
 - [`../../protos/tests/conformance/control/while-suspension-and-cancellation.protos`](../../protos/tests/conformance/control/while-suspension-and-cancellation.protos)
   demonstrates repeated condition/body suspension without duplicated completed
-  effects.
+  effects;
+- [`../../protos/tests/conformance/control/loop-standard-polarities.protos`](../../protos/tests/conformance/control/loop-standard-polarities.protos)
+  exercises all four standard loop selectors, receiver roles, exit polarities,
+  callback order, exact body results, and strict decisions;
+- [`../../protos/tests/conformance/control/while-contextual-syntax.protos`](../../protos/tests/conformance/control/while-contextual-syntax.protos)
+  checks the contextual pre-test spelling against `whileTrue`;
+- [`../../protos/tests/conformance/control/until-contextual-syntax.protos`](../../protos/tests/conformance/control/until-contextual-syntax.protos)
+  checks the suffix post-test spelling against `untilTrue`.
 
 These files are conformance evidence, not additional normative authority.
 
@@ -649,16 +750,17 @@ These files are conformance evidence, not additional normative authority.
 For exact behavior, consult:
 
 - [`../../spec/semantics/EXECUTION_AND_CONTROL.md`](../../spec/semantics/EXECUTION_AND_CONTROL.md)
-  for iteration order, strict loop decisions, normal completion, control
-  transfer, suspension, and cancellation composition;
+  for all four loop messages, receiver roles, iteration order, strict
+  decisions, normal completion, transfer, suspension, and cancellation;
 - [`../../spec/semantics/VALUES_AND_COLLECTIONS.md`](../../spec/semantics/VALUES_AND_COLLECTIONS.md)
   for canonical Booleans and the standard `not`, `ifTrue`, `ifFalse`,
-  `ifTrueIfFalse`, `if`, `else`, `and`, and `or` protocols;
+  `ifTrueIfFalse`, `and`, and `or` protocols;
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   Closure receiver domains, ordinary `Object.whileTrue` placement, lookup,
   extraction, shadowing, and activation;
 - [`../../spec/PROTOS_GRAMMAR.md`](../../spec/PROTOS_GRAMMAR.md) for ordinary
-  call/message syntax and trailing Closures;
+  call/message syntax, trailing Closures, and the exact contextual `if`,
+  `while`, and suffix `until` desugarings;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for structured task ownership and Future semantics;
 - [`03-closures-methods-and-receivers.md`](03-closures-methods-and-receivers.md)

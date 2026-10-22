@@ -40,20 +40,47 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 
 | Guide | Modules | Use it for |
 |---|---|---|
+| [Numeric arithmetic and roots](../05-values-identity-equality-and-collections.md#working-with-integer-float-fraction-and-complex) | `std:math/Math`, `std:math/Integer` | `Math.sqrt(value)` over Numbers, and exact Integer algorithms (`gcd`, `lcm`, `factorial`, `pow`, `powMod`) |
 | [Regular expressions](regex.md) | `std:regex/Regex` | Portable, linear-time pattern matching, captures, replacement, and splitting |
 | [Dates, times, and durations](datetime.md) | `std:datetime/*` | Civil dates and times, instants, fixed offsets, durations, periods, ISO 8601 and RFC 3339 text |
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
-| [Runtime metadata](runtime.md) | `std:runtime` | Runtime, distribution, Engine, platform and Context mode |
+| [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
 | [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |
+
+## Runtime facts versus inspection
+
+`Runtime: import("std:runtime")` and `Runtime.info()` require no special
+authority. `info()` returns a fresh frozen snapshot with exactly four
+String slots: `implementation`, `implementationVersion`, `engineVersion`,
+and `platform`. It does **not** expose an execution or debugging mode.
+See the [runtime guide](runtime.md) and the executable
+[`info.protos` example](../../../protos/examples/runtime-introspection/info.protos).
+
+In contrast, `Inspect: import("std:inspect")` requires explicit host
+authorization; even importing the module fails without it. For standalone
+use, launch the existing example from the product repository root:
+
+```sh
+bin/protos --inspect protos/examples/runtime-introspection/inspect.protos
+```
+
+This is a diagnostic API, not a portable representation or JIT-status
+API. See the [inspection guide](inspect.md) and the
+[`inspect.protos` example](../../../protos/examples/runtime-introspection/inspect.protos).
+
+The math entries above describe the **current `main` source**, not the
+feature set of the previously published Protos 0.3.312 artifacts. The next
+distribution will establish its own release-specific module availability.
 
 ## Native and portable JVM distributions
 
-Every module in these guides is written in Protos, sometimes over a private
-native facility, and behaves the same in both release distributions. The one
-exception is `std:inspect`: its public contract is the same in both, but its
+Modules included in Native and portable JVM builds from the same source
+revision are written in Protos, sometimes over a private native facility,
+and follow the same published semantic contracts. The one exception is
+`std:inspect`: its public contract is the same in both, but its
 diagnostic text is implementation-specific, and a physical representation it
 describes may be unavailable on a given runtime, in which case the operation
 signals an ordinary `Error` (see [Runtime inspection](inspect.md)):
