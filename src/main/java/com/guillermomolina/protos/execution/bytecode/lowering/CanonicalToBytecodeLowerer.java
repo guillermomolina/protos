@@ -1608,7 +1608,50 @@ final class CanonicalToBytecodeLowerer {
          * non-suspension.
          */
         boolean emittedTerminalInvocation = currentRootEmittedTerminalInvocation;
-        if (emittedGenericInvocation || emittedTerminalInvocation) {
+        /*
+         * I115 experimental transitive non-suspension:
+         *
+         * I115-H has already replaced this exact two-statement body
+         * with an elided Closure creation and InvokeStaticClosureOneTail.
+         * The admitted callee has one required parameter and a body
+         * consisting only of its parameter read or a literal.
+         *
+         * Restrict the first refinement to a zero-parameter caller
+         * supplying one literal: there can be no caller default,
+         * spread, dynamic operand or additional body operation.
+         *
+         * The plan cell must come from this parse, not an earlier
+         * Bytecode reparse. All other terminal calls retain UNKNOWN.
+         */
+        boolean provenStaticTerminalCall =
+                emittedTerminalInvocation
+                        && !emittedGenericInvocation
+                        && activationDefinition != null
+                        && !compilationFacts.mayObserveReturnHome(
+                                activationDefinition)
+                        && currentRootStaticClosureCall != null
+                        && currentStaticClosurePlanCell != null
+                        && sequence.expressions().size() == 2
+                        && sequence.expressions().get(1)
+                                == currentRootStaticClosureCall.call()
+                        && provenStaticTerminalArgument(
+                                currentRootStaticClosureCall.call()
+                                        .arguments().get(0),
+                                activationDefinition,
+                                rootFacts.bindingAnalysis(),
+                                scopeForThisRoot);
+
+        if (provenStaticTerminalCall) {
+            loweringRefinementAccepted &=
+                    acceptsLoweringRefinement(
+                            publishLoweringRefinement(
+                                    rootPlan,
+                                    "I115 static non-suspending terminal Call1"));
+        }
+
+        if (emittedGenericInvocation
+                || (emittedTerminalInvocation
+                        && !provenStaticTerminalCall)) {
             // A consumed result is kept (REJECTED_CONSUMED is not an error).
             compilationFacts.invalidateNonSuspension(
                     CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
@@ -1626,7 +1669,8 @@ final class CanonicalToBytecodeLowerer {
          */
         result.recordProvablyNonSuspendingBody(
                 !emittedGenericInvocation
-                        && !emittedTerminalInvocation
+                        && (!emittedTerminalInvocation
+                                || provenStaticTerminalCall)
                         && compilationFacts.consumeNonSuspension(
                                         CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
                                         effectiveRoot,
@@ -2346,6 +2390,42 @@ final class CanonicalToBytecodeLowerer {
             return null;
         }
         return new UnaryNormalEntry(parameter.name());
+    }
+
+    /**
+     * I115 experimental transitive proof: an admitted static Call1
+     * evaluates either a literal in a parameterless caller or the
+     * direct lookup of its sole required parameter.
+     *
+     * Binding identity, not spelling, establishes ownership.
+     * Defaults, rest parameters and captured reads remain UNKNOWN.
+     */
+    private static boolean provenStaticTerminalArgument(
+            CanonicalExpression argument,
+            CanonicalClosure caller,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (argument instanceof CanonicalLiteral) {
+            return caller.parameters().isEmpty();
+        }
+        if (!(argument instanceof CanonicalLookup lookup)
+                || caller.parameters().size() != 1) {
+            return false;
+        }
+
+        CanonicalParameter parameter = caller.parameters().get(0);
+        if (parameter.rest() || parameter.defaultValue().isPresent()) {
+            return false;
+        }
+
+        CanonicalBindingIdentity binding =
+                analysis.identityOf(parameter).orElse(null);
+
+        return binding != null
+                && binding.owner() == scope
+                && analysis.resolutionOf(lookup).orElse(null)
+                        instanceof CanonicalBindingResolution.Resolved resolved
+                && resolved.identity() == binding;
     }
 
     /**
