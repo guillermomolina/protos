@@ -58,8 +58,10 @@ import java.util.Objects;
  * {@link ArityException}.
  *
  * <p>PLAT054: an adapter produced by a standard-embedding binding read additionally carries its
- * {@link #embedding} Process. Each execution is then a RootActor host entry (concurrent entry is
- * rejected, an Error escaping an outermost entry fails the RootActor), and it accepts Protos values
+ * {@link #embedding} Process. Conventional execution enters the RootActor with exclusive admission.
+ * I115 temporarily bypasses this admission for proven non-suspending source roots, relaxing
+ * concurrent-entry exclusion; its fallback keeps conventional RootActor semantics.
+ * Host execution accepts Protos values
  * and exact Java integer and String scalars (PLAT054-3B) as arguments, which ordinary binding
  * applies with its defaults and rest (D203 flexible arity). A Closure
  * without a compact Bytecode target (a native body, or a non-standard {@code call} selection) runs
@@ -86,8 +88,16 @@ final class ProtosHostExecutableClosure implements TruffleObject {
     final ProtosLanguageContext owner;
     /** The compact Bytecode target; null only for an embedding adapter on the generic path. */
     final RootCallTarget target;
-    /** The standard-embedding Process whose RootActor each execution enters; null for sessions. */
+    /** Standard-embedding Process; null for session adapters. */
     final ProtosEmbeddedProcess embedding;
+
+    /**
+     * I115: effective-root non-suspension proof, captured once
+     * when the host executable is prepared.
+     *
+     * This does not prove independence from RootActor state.
+     */
+    final boolean fastNonSuspendingHostEntry;
 
     private ProtosHostExecutableClosure(
             ProtosClosureValue closure,
@@ -100,6 +110,11 @@ final class ProtosHostExecutableClosure implements TruffleObject {
         this.owner = owner;
         this.target = target;
         this.embedding = embedding;
+        this.fastNonSuspendingHostEntry =
+                embedding != null
+                        && target != null
+                        && target.getRootNode() instanceof ProtosBytecodeRootNode root
+                        && root.provablyNonSuspendingBody();
     }
 
     /**
@@ -199,6 +214,32 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 throws ArityException, UnsupportedTypeException {
             Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
+
+            /*
+             * I115: GraalPy-shaped minimum host entry.
+             *
+             * A source root proven non-suspending does not need a
+             * host suspension extent. The temporary semantic
+             * deviation is that this entry does not acquire the
+             * RootActor's exclusive admission token.
+             *
+             * The Process check is intentionally non-atomic.
+             */
+            if (receiver.fastNonSuspendingHostEntry
+                    && embedding.permitsUnadmittedNonSuspendingHostEntry()) {
+                try {
+                    ProtosPreparedCalls.OrdinarySourceCall prepared =
+                            receiver.prepare(supplied);
+                    return finishNonSuspendingHostEntry(
+                            prepared,
+                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
+                                    prepared, cachedTarget, call));
+                } catch (ProtosSignalException failure) {
+                    embedding.fastHostEntryFailed(failure);
+                    throw failure;
+                }
+            }
+
             Thread token = embedding == null ? null : embedding.enterRootActor();
             HostEntryExtent previous =
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
@@ -253,6 +294,27 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                     embedding.exitRootActor(token);
                 }
             }
+        }
+
+        /**
+         * I115: completion of a root admitted by its effective
+         * non-suspension proof.
+         *
+         * An unexpected continuation is a violated optimization
+         * precondition. Never expose the private continuation to
+         * the host or try to resume without a host-entry extent.
+         */
+        private static Object finishNonSuspendingHostEntry(
+                ProtosPreparedCalls.OrdinarySourceCall prepared,
+                Object outcome) {
+            if (ProtosTailCallContinuation.isPending(outcome)) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                ProtosTailCallContinuation.abandon(outcome);
+                prepared.complete();
+                throw new IllegalStateException(
+                        "I115 non-suspending host-entry proof was violated");
+            }
+            return prepared.finish(outcome);
         }
 
         /**
@@ -367,7 +429,13 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * I102: the B5 direct Closure call of this adapter's Closure from its caller provenance.
      */
     private ProtosPreparedCalls.OrdinarySourceCall prepare(Object[] supplied) {
+        if (supplied.length == 0) {
+            return (ProtosPreparedCalls.OrdinarySourceCall)
+                    ProtosClosureCallPreparation.finishDirectClosureCallZero(
+                            closure, target, caller);
+        }
         return (ProtosPreparedCalls.OrdinarySourceCall)
-                ProtosClosureCallPreparation.finishDirectClosureCall(closure, target, supplied, caller);
+                ProtosClosureCallPreparation.finishDirectClosureCall(
+                        closure, target, supplied, caller);
     }
 }

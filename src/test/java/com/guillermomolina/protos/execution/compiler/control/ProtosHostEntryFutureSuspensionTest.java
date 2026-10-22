@@ -203,6 +203,173 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
     }
 
+    /**
+     * I115: the fast-entry certificate is fixed when the
+     * embedding adapter is prepared. It is not inferred from
+     * whether a particular invocation happens to suspend.
+     */
+    @Test
+    void nonSuspendingHostEntryIsSelectedFromEffectiveRootFacts() {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            trivial: () => { 1 }
+                            identity: (value) => { value }
+                            suspending: () => { gate.value() }
+                            """);
+
+            ProtosHostExecutableClosure trivial;
+            ProtosHostExecutableClosure identity;
+            ProtosHostExecutableClosure suspending;
+
+            context.enter();
+            try {
+                trivial =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("trivial").orElseThrow());
+                identity =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("identity").orElseThrow());
+                suspending =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("suspending").orElseThrow());
+            } finally {
+                context.leave();
+            }
+
+            assertTrue(
+                    trivial.fastNonSuspendingHostEntry,
+                    "literal root is admitted without suspension");
+            assertTrue(
+                    identity.fastNonSuspendingHostEntry,
+                    "ordinary identity root is non-suspending");
+            assertFalse(
+                    suspending.fastNonSuspendingHostEntry,
+                    "Future observation retains the conventional entry");
+
+            assertTrue(f.process.permitsUnadmittedNonSuspendingHostEntry());
+
+            for (int index = 0; index < 5; index++) {
+                assertEquals(1, f.member("trivial").execute().asInt());
+                assertEquals(index, f.member("identity").execute(index).asInt());
+                assertCompactState(f);
+            }
+        }
+    }
+
+    /**
+     * I115: an already-admitted RootActor selects the
+     * conventional nested host-entry path, even when the
+     * source root has a non-suspension certificate.
+     */
+    @Test
+    void occupiedRootActorFallsBackToConventionalEntry() {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, "trivial: () => { 1 }");
+            Value trivial = f.member("trivial");
+
+            Thread token = f.process.enterRootActor();
+            try {
+                assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
+
+                assertEquals(1, trivial.execute().asInt());
+
+                assertFalse(
+                        f.process.permitsUnadmittedNonSuspendingHostEntry(),
+                        "nested invocation must preserve outer admission");
+                assertCompactState(f);
+            } finally {
+                f.process.exitRootActor(token);
+            }
+
+            assertTrue(f.process.permitsUnadmittedNonSuspendingHostEntry());
+            assertEquals(1, trivial.execute().asInt());
+            assertCompactState(f);
+        }
+    }
+
+    /**
+     * I115 / PERF042: report the exact host-entry eligibility
+     * of the primitive-closure-call benchmark workload.
+     */
+    @Test
+    void benchmarkClosureCallHostEntryEligibility() {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            run: () => {
+                                identity: (value) => { value }
+                                identity(1)
+                            }
+                            """);
+
+            ProtosHostExecutableClosure adapter;
+
+            context.enter();
+            try {
+                adapter =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("run").orElseThrow());
+            } finally {
+                context.leave();
+            }
+
+            boolean proven =
+                    adapter.target != null
+                            && adapter.target.getRootNode()
+                                    instanceof ProtosBytecodeRootNode root
+                            && root.provablyNonSuspendingBody();
+
+            assertEquals(
+                    proven,
+                    adapter.fastNonSuspendingHostEntry,
+                    "embedding eligibility must match the root proof");
+
+            System.out.println("I115_PRIMITIVE_CLOSURE_ROOT_PROVEN=" + proven);
+            System.out.println(
+                    "I115_PRIMITIVE_CLOSURE_FAST_ENTRY="
+                            + adapter.fastNonSuspendingHostEntry);
+
+            assertEquals(1, f.member("run").execute().asInt());
+        }
+    }
+
+    /**
+     * I115: termination must reject a retained fast-path
+     * executable rather than execute through a stopped Process.
+     */
+    @Test
+    void terminatedProcessRejectsNonSuspendingHostEntry() {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, "trivial: () => { 1 }");
+            Value trivial = f.member("trivial");
+
+            assertEquals(1, trivial.execute().asInt());
+            assertCompactState(f);
+
+            f.process.processForTesting().requestTerminationForRuntime();
+
+            assertFalse(f.process.isLive());
+            assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
+
+            PolyglotException rejected =
+                    assertThrows(PolyglotException.class, trivial::execute);
+            assertFalse(rejected.isInternalError());
+        }
+    }
+
     @Test
     void alreadyResolvedFutureReturnsImmediately() {
         try (Context context = newContext()) {

@@ -8,6 +8,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.8-SNAPSHOT
+
+- `I115` (host entry / Call0): introduce a fast host-to-guest execution path for
+  extracted source-backed Closures in standard Polyglot embedding when their
+  effective root is proven non-suspending. Cache the proof at adapter creation
+  and invoke the prepared guest call through its direct target.
+  - For eligible `Value.execute()` calls, avoid conventional per-call RootActor
+    admission and host-entry extent management; preserve argument conversion,
+    owning-Context checks, B5 call preparation and return projection. Keep the
+    ordinary admission/suspension path for unproven or ineligible cases.
+  - Reject an unexpected pending continuation as a violated non-suspension
+    precondition; retain fatal-error handling on the fast route. Extend
+    host-entry/Future and canonical-callable interop test coverage.
+  - **Historical semantic limitation:** the fast route deliberately omits
+    exclusive RootActor admission. Its non-atomic owner/liveness check allows
+    concurrency, reentrancy and termination races; non-suspension is not an
+    equivalence proof for Actor isolation. The new design note
+    `docs/design/I115_HOST_ENTRY_TEMPORARY_DEVIATION.md` is expressly
+    non-normative. This snapshot does not establish full semantic conformance.
+  - Reconstructed from original I115 commit
+    `1510fdb7ccc8384da89eb2b534c046e3ab867df1`. No behavioral tests
+    have been run on this versioned replay.
+
 ## 0.4.7-SNAPSHOT
 
 - `I115-R` (GraalPy-inspired caller handling / PERF038-I / PLAT066-C):
