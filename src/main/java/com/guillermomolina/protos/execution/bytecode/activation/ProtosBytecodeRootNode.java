@@ -279,6 +279,92 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @CompilationFinal private boolean guestExceptionCrossed;
 
     /*
+     * I115 (GraalPy IndirectCallData.CallerFlagsAssumptionSet): what this
+     * physical root has needed from its own caller reference. Until a need
+     * is registered, every site that would satisfy it is compiled as a
+     * deoptimization instead of the work (for NEEDS_EXACT_ACTIVATION, the
+     * publication of a still-compact activation and of its deferred caller
+     * chain behind the publishDeferredCaller boundary). The first execution
+     * that needs it invalidates that code, registers the need monotonically
+     * and replaces the stability Assumption, so the site converges after
+     * one invalidation per need. The state belongs to this root only; it is
+     * never shared with other roots or Contexts.
+     *
+     * NEEDS_CALLER_PRELUDE (GraalPy CallerFlags / CallContext): this root
+     * reads an inherited prelude through its caller slot. It is registered
+     * where such a read finds the prelude untransported
+     * (ProtosFrameArguments#inheritsUntransportedCallerPrelude) and
+     * consulted by the producers that enter this root with a deferred
+     * caller (InvokeClosureOneTail, InvokeMethodOneTail): from then on they
+     * pass a ProtosCallerFrameReference carrying the caller's prelude, and
+     * a producer whose callee has not requested it prepares nothing. The
+     * producer reads the need from its cached callee root, so the
+     * stability Assumption is the dependency that recompiles it.
+     *
+     * Only needs with a request point and a consumer at HEAD are defined.
+     */
+    static final int NEEDS_EXACT_ACTIVATION = 1;
+    static final int NEEDS_CALLER_PRELUDE = 2;
+
+    private final CallerNeeds callerNeeds = new CallerNeeds();
+
+    /**
+     * I115: requests {@code need} for this root; see {@link CallerNeeds}.
+     * Constant-folded to nothing once the need is registered.
+     */
+    final void requestCallerNeed(int need) {
+        callerNeeds.request(need);
+    }
+
+    /** I115 test and diagnostic access: whether {@code need} is registered. */
+    final boolean hasCallerNeed(int need) {
+        return callerNeeds.has(need);
+    }
+
+    /** I115: the Assumption that the registered caller needs do not change. */
+    final Assumption callerNeedsStability() {
+        return callerNeeds.stability();
+    }
+
+    private static final class CallerNeeds {
+        @CompilationFinal private int registered;
+        @CompilationFinal private Assumption stable =
+                com.oracle.truffle.api.Truffle.getRuntime()
+                        .createAssumption("Protos root caller needs");
+
+        boolean has(int need) {
+            return stable.isValid() && (registered & need) == need;
+        }
+
+        Assumption stability() {
+            return stable;
+        }
+
+        void request(int need) {
+            if (!has(need)) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                register(need);
+            }
+        }
+
+        /*
+         * Interpreter only. The new state is complete before the previous
+         * Assumption is invalidated, so code compiled against the new
+         * Assumption always observes the registered need.
+         */
+        private synchronized void register(int need) {
+            if ((registered & need) == need && stable.isValid()) {
+                return;
+            }
+            registered |= need;
+            Assumption previous = stable;
+            stable = com.oracle.truffle.api.Truffle.getRuntime()
+                    .createAssumption("Protos root caller needs");
+            previous.invalidate();
+        }
+    }
+
+    /*
      * PERF038-H / I107: conservative source-root execution capability. It is
      * the consumed EFFECTIVE_ROOT non-suspension proof of this emitted root
      * (CanonicalCompilationFacts): parameter binding, every default that may
@@ -519,10 +605,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Specialization(guards = "!hasPublishedActivation(frame)")
-        public static Object unpublished(boolean callerReference, @Bind VirtualFrame frame) {
-            return callerReference
-                    ? frame.getArguments()
-                    : ProtosFrameArguments.activation(frame);
+        public static Object unpublished(
+                boolean callerReference,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            if (callerReference) {
+                /*
+                 * I115: every caller-reference consumer is a send or call
+                 * selection that reads this root's prelude; an inherited one
+                 * its caller did not transport is this root's caller need.
+                 */
+                Object[] arguments = frame.getArguments();
+                if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)) {
+                    root.requestCallerNeed(NEEDS_CALLER_PRELUDE);
+                }
+                return arguments;
+            }
+            // I115: publishing this root's own activation is a caller need.
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            return ProtosFrameArguments.activation(frame);
         }
 
         @NonIdempotent
@@ -1453,22 +1554,42 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return lookupCapturedFallbackAtRoot(arguments, name);
         }
 
+        /*
+         * I115: after publication the read keeps its own nearer-scope proof
+         * (built from the published activation's captured chain, the same
+         * chain the compact form reads), so it neither publishes a caller
+         * nor walks the nearer scopes' membership on every execution.
+         */
         @Specialization(guards = "!isCompact(frame)")
         public static Object materialized(
                 int frameOrdinal,
                 String name,
                 int lexicalDepth,
-                @Bind VirtualFrame frame) {
+                @Bind VirtualFrame frame,
+                @Cached(
+                                value = "createPublishedNearerScopeAbsence(frame, name, lexicalDepth)",
+                                uncached = "unprovenNearerScopeAbsence(lexicalDepth)")
+                        CapturedNearerScopeAbsence nearerAbsence) {
             return ProtosCapturedLexicalAccess.readCapturedFrameLocal(
                     frameOrdinal,
                     ProtosFrameArguments.activation(frame.getArguments()),
                     name,
-                    lexicalDepth);
+                    lexicalDepth,
+                    nearerAbsence);
         }
 
         @NonIdempotent
         static boolean isCompact(VirtualFrame frame) {
             return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+        }
+
+        static CapturedNearerScopeAbsence createPublishedNearerScopeAbsence(
+                VirtualFrame frame, String name, int lexicalDepth) {
+            return CapturedNearerScopeAbsence.create(
+                    ProtosFrameArguments.activation(frame.getArguments())
+                            .capturedLexicalEnvironmentForRuntime(),
+                    name,
+                    lexicalDepth);
         }
 
         static CapturedNearerScopeAbsence createNearerScopeAbsence(
@@ -7862,14 +7983,94 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * I115-J/I115-M EXPERIMENTAL: GraalPy-style direct integer operations.
      * Each operation specializes on Long carriers and falls back to an
      * Integer value (Long carrier or ProtosIntegerValue) in the same node.
-     * No protocol lookup, user-defined numeric methods, generic numeric
-     * fallback or overflow promotion is supported by this experimental lane.
+     * No protocol lookup, user-defined numeric methods or generic numeric
+     * fallback is supported by this experimental lane. An overflowed result
+     * (or a large operand it produced) is computed by the exact Integer
+     * service, so it promotes exactly as the generic operation does.
      */
     private static long experimentalInteger(Object value) {
         if (value instanceof Long carrier) {
             return carrier.longValue();
         }
         return ((ProtosIntegerValue) value).longValue();
+    }
+
+    /*
+     * Whether value is a signed-64 Integer (Long carrier or small guest
+     * Integer). A large Integer reaches the compact lane only as the exact
+     * result of an overflowed operation (experimentalIntegerResult).
+     */
+    private static boolean isExperimentalSmallInteger(Object value) {
+        return value instanceof Long || value instanceof ProtosIntegerValue;
+    }
+
+    /* Exact Integer comparison of two admitted compact Integers. */
+    private static int experimentalCompare(Object left, Object right) {
+        if (isExperimentalSmallInteger(left) && isExperimentalSmallInteger(right)) {
+            return Long.compare(experimentalInteger(left), experimentalInteger(right));
+        }
+        return experimentalCompareLarge(left, right);
+    }
+
+    @TruffleBoundary
+    private static int experimentalCompareLarge(Object left, Object right) {
+        return ProtosNumericValueSupport.compareIntegers(
+                ProtosNumericValueSupport.guestValue(left),
+                ProtosNumericValueSupport.guestValue(right));
+    }
+
+    private static final int EXPERIMENTAL_ADD = 0;
+    private static final int EXPERIMENTAL_SUBTRACT = 1;
+    private static final int EXPERIMENTAL_MULTIPLY = 2;
+
+    /*
+     * I115-M: the exact Integer result of an admitted compact operation that
+     * left the Long fast path: signed-64 operands whose result overflows, or
+     * a large operand. The ordinary exact Integer service normalizes the
+     * result (a value beyond signed-64 is minted with the BigInteger
+     * prototype of the invocation's Prelude), exactly as the generic '+',
+     * '-' and '*' do; no host ArithmeticException reaches the guest.
+     */
+    private static Object experimentalIntegerResult(
+            int operation, Object left, Object right, VirtualFrame frame) {
+        if (isExperimentalSmallInteger(left) && isExperimentalSmallInteger(right)) {
+            long a = experimentalInteger(left);
+            long b = experimentalInteger(right);
+            long result;
+            boolean overflow;
+            switch (operation) {
+                case EXPERIMENTAL_ADD -> {
+                    result = a + b;
+                    overflow = ((a ^ result) & (b ^ result)) < 0;
+                }
+                case EXPERIMENTAL_SUBTRACT -> {
+                    result = a - b;
+                    overflow = ((a ^ b) & (a ^ result)) < 0;
+                }
+                default -> {
+                    long high = Math.multiplyHigh(a, b);
+                    result = a * b;
+                    overflow = !((high == 0L && result >= 0L) || (high == -1L && result < 0L));
+                }
+            }
+            if (!overflow) {
+                return ProtosNumericValueSupport.integer(result);
+            }
+        }
+        return experimentalExactInteger(operation, left, right, frame.getArguments());
+    }
+
+    @TruffleBoundary
+    private static Object experimentalExactInteger(
+            int operation, Object left, Object right, Object[] frameArguments) {
+        ProtosPrelude prelude = ProtosFrameArguments.preludeOrNull(frameArguments);
+        Object a = ProtosNumericValueSupport.guestValue(left);
+        Object b = ProtosNumericValueSupport.guestValue(right);
+        return switch (operation) {
+            case EXPERIMENTAL_ADD -> ProtosNumericValueSupport.addIntegers(a, b, prelude);
+            case EXPERIMENTAL_SUBTRACT -> ProtosNumericValueSupport.subtractIntegers(a, b, prelude);
+            default -> ProtosNumericValueSupport.multiplyIntegers(a, b, prelude);
+        };
     }
 
     /**
@@ -7900,7 +8101,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static boolean doInteger(Object left, Object right) {
-            return experimentalInteger(left) < experimentalInteger(right);
+            return experimentalCompare(left, right) < 0;
         }
     }
 
@@ -7913,7 +8114,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static boolean doInteger(Object left, Object right) {
-            return experimentalInteger(left) <= experimentalInteger(right);
+            return experimentalCompare(left, right) <= 0;
         }
     }
 
@@ -7926,7 +8127,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static boolean doInteger(Object left, Object right) {
-            return experimentalInteger(left) > experimentalInteger(right);
+            return experimentalCompare(left, right) > 0;
         }
     }
 
@@ -7939,7 +8140,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static boolean doInteger(Object left, Object right) {
-            return experimentalInteger(left) >= experimentalInteger(right);
+            return experimentalCompare(left, right) >= 0;
         }
     }
 
@@ -7952,7 +8153,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static Object doInteger(Object left, Object right) {
-            return (experimentalInteger(left) < experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            return (experimentalCompare(left, right) < 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
         }
     }
 
@@ -7965,7 +8166,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static Object doInteger(Object left, Object right) {
-            return (experimentalInteger(left) <= experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            return (experimentalCompare(left, right) <= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
         }
     }
 
@@ -7978,7 +8179,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static Object doInteger(Object left, Object right) {
-            return (experimentalInteger(left) > experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            return (experimentalCompare(left, right) > 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
         }
     }
 
@@ -7991,55 +8192,49 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(replaces = "doLong")
         public static Object doInteger(Object left, Object right) {
-            return (experimentalInteger(left) >= experimentalInteger(right)) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+            return (experimentalCompare(left, right) >= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
         }
     }
 
     @Operation
     public static final class ExperimentalIntegerAdd {
-        @Specialization
+        @Specialization(rewriteOn = ArithmeticException.class)
         public static Object doLong(long left, long right) {
             return ProtosNumericValueSupport.integer(Math.addExact(left, right));
         }
 
+        // I115-M: overflow and large operands keep exact Integer semantics.
         @Specialization(replaces = "doLong")
-        public static Object doInteger(Object left, Object right) {
-            return ProtosNumericValueSupport.integer(
-                    Math.addExact(
-                            experimentalInteger(left),
-                            experimentalInteger(right)));
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_ADD, left, right, frame);
         }
     }
 
     @Operation
     public static final class ExperimentalIntegerSubtract {
-        @Specialization
+        @Specialization(rewriteOn = ArithmeticException.class)
         public static Object doLong(long left, long right) {
             return ProtosNumericValueSupport.integer(Math.subtractExact(left, right));
         }
 
+        // I115-M: overflow and large operands keep exact Integer semantics.
         @Specialization(replaces = "doLong")
-        public static Object doInteger(Object left, Object right) {
-            return ProtosNumericValueSupport.integer(
-                    Math.subtractExact(
-                            experimentalInteger(left),
-                            experimentalInteger(right)));
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_SUBTRACT, left, right, frame);
         }
     }
 
     @Operation
     public static final class ExperimentalIntegerMultiply {
-        @Specialization
+        @Specialization(rewriteOn = ArithmeticException.class)
         public static Object doLong(long left, long right) {
             return ProtosNumericValueSupport.integer(Math.multiplyExact(left, right));
         }
 
+        // I115-M: overflow and large operands keep exact Integer semantics.
         @Specialization(replaces = "doLong")
-        public static Object doInteger(Object left, Object right) {
-            return ProtosNumericValueSupport.integer(
-                    Math.multiplyExact(
-                            experimentalInteger(left),
-                            experimentalInteger(right)));
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_MULTIPLY, left, right, frame);
         }
     }
 
@@ -9124,7 +9319,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * per-instance facts: a source Closure owning no local {@code call},
      * with an unobservable ReturnHome and the cached template plan. The
      * entry passes the caller reference unmaterialized (B5 slot 3 may be the
-     * caller's own compact frame arguments). It also records whether its
+     * caller's own compact frame arguments). I115: when the cached callee
+     * root has registered NEEDS_CALLER_PRELUDE, the entry instead passes a
+     * {@link ProtosCallerFrameReference} carrying the caller's prelude
+     * ({@link #callerArgument}); otherwise nothing is prepared. It also records whether its
      * effective target carries the consumed EFFECTIVE_ROOT non-suspension
      * proof: a PROVEN entry compiles no suspension transport; an UNKNOWN
      * entry keeps the I114 terminal transport.
@@ -9150,7 +9348,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "cachedProjectionStability != null",
                     "cachedFacts != null",
                     "cachedHomeProven",
-                    "admittedTailTarget(cachedFacts.target())"
+                    "admittedTailTarget(cachedFacts.target())",
+                    "cachedCallee != null"
                 },
                 assumptions = {
                     "cachedFacts.rootCallStability()",
@@ -9162,6 +9361,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object supplied0,
                 @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
@@ -9182,12 +9382,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         boolean cachedHomeProven,
                 @Cached("provenNonSuspending(cachedFacts.target())")
                         boolean cachedProven,
+                @Cached(value = "calleeRootOrNull(cachedFacts)", adopt = false)
+                        ProtosBytecodeRootNode cachedCallee,
                 @Cached("create(cachedFacts.target())")
                         DirectCallNode node) {
             return enterAdmitted(
                     cachedProven,
                     cachedClosure,
-                    caller,
+                    callerArgument(root, cachedCallee, cachedClosure, caller),
                     supplied0,
                     node,
                     bytecodeNode,
@@ -9228,7 +9430,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "projectionRequired == cachedProjectionRequired",
                     "cachedFacts != null",
                     "cachedTarget != null",
-                    "cachedAdmitted"
+                    "cachedAdmitted",
+                    "cachedCallee != null"
                 },
                 assumptions = "cachedFacts.rootCallStability()",
                 limit = "3")
@@ -9236,6 +9439,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object supplied0,
                 @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
@@ -9265,12 +9469,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         boolean cachedAdmitted,
                 @Cached("provenNonSuspending(cachedTarget)")
                         boolean cachedProven,
+                @Cached(value = "calleeRootOrNull(cachedFacts)", adopt = false)
+                        ProtosBytecodeRootNode cachedCallee,
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
             return enterAdmitted(
                     cachedProven,
                     admittedClosure,
-                    caller,
+                    callerArgument(root, cachedCallee, admittedClosure, caller),
                     supplied0,
                     node,
                     bytecodeNode,
@@ -9285,12 +9491,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object supplied0,
                 @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
                 @Cached IndirectCallNode indirectCall) {
             return prepareAndEnter(
-                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+                    receiver, root, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
         }
 
         @Specialization
@@ -9299,12 +9506,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 Object supplied0,
                 @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("callerReference(frame)") Object caller,
                 @Cached IndirectCallNode indirectCall) {
             return prepareAndEnter(
-                    receiver, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+                    receiver, root, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
         }
 
         /*
@@ -9314,6 +9522,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          */
         private static Object prepareAndEnter(
                 Object receiver,
+                ProtosBytecodeRootNode root,
                 Object caller,
                 Object supplied0,
                 IndirectCallNode indirectCall,
@@ -9322,9 +9531,87 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return ProtosTailCallContinuation.executeTerminalPreparedCall(
                     ProtosClosureCallPreparation.prepareClosureCallOneFallback(
                             ProtosNumericValueSupport.guestValue(receiver),
-                            PrepareSendArguments.exactCaller(caller),
+                            exactCaller(root, caller),
                             ProtosNumericValueSupport.guestValue(supplied0)),
                     indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        /**
+         * I115 (GraalPy CalleeContext / ReadFrameNode): the exact activation
+         * the terminal Call1/Send1 caller reference of {@code root} denotes,
+         * shared by both terminal operations. A published activation is
+         * returned by identity. A still-compact reference is this root's own
+         * admitted call header: publishing it is the root's
+         * {@link ProtosBytecodeRootNode#NEEDS_EXACT_ACTIVATION} need, registered once, after which
+         * {@link ProtosFrameArguments#resolveAdmittedCaller} publishes the
+         * invocation's single activation through the existing mechanism.
+         */
+        static ProtosActivation exactCaller(ProtosBytecodeRootNode root, Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation;
+            }
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
+            return ProtosFrameArguments.resolveAdmittedCaller(caller);
+        }
+
+        /**
+         * I115: the prelude of the terminal caller reference of {@code root},
+         * by the admitted B5 accessors, without publishing anything (shared
+         * by both terminal operations). When the prelude is inherited and
+         * the caller did not transport it, the read registers {@code root}'s
+         * {@link ProtosBytecodeRootNode#NEEDS_CALLER_PRELUDE} once and
+         * recovers the value through the general walker; later calls into
+         * {@code root} transport it.
+         */
+        static ProtosPrelude admittedCallerPrelude(
+                ProtosBytecodeRootNode root, Object caller) {
+            if (caller instanceof ProtosActivation activation) {
+                return activation.preludeOrNullForRuntime();
+            }
+            Object[] arguments = (Object[]) caller;
+            if (ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)) {
+                root.requestCallerNeed(NEEDS_CALLER_PRELUDE);
+            }
+            return ProtosFrameArguments.admittedPreludeOrNull(arguments);
+        }
+
+        /**
+         * I115 (GraalPy ExecutionContext.CallContext.prepareCall): the B5
+         * caller slot an admitted terminal call passes to {@code callee}.
+         * Unless {@code callee} requested the caller prelude, the caller
+         * reference is passed unchanged and nothing is prepared; the need is
+         * read from the cached callee root under its stability Assumption, so
+         * compiled code without a registered need contains no preparation. A
+         * published caller already answers every request, and a Closure with
+         * its own prelude never reads the inherited one. Otherwise the
+         * caller's prelude, which the caller reads without walking its own
+         * caller chain, is transported in a {@link ProtosCallerFrameReference};
+         * nothing is published.
+         */
+        static Object callerArgument(
+                ProtosBytecodeRootNode root,
+                ProtosBytecodeRootNode callee,
+                ProtosClosureValue closure,
+                Object caller) {
+            if (!callee.hasCallerNeed(NEEDS_CALLER_PRELUDE)
+                    || !(caller instanceof Object[] callerArguments)
+                    || closure.preludeOrNullForRuntime() != null) {
+                return caller;
+            }
+            return ProtosFrameArguments.callerFrameReference(
+                    callerArguments, admittedCallerPrelude(root, caller));
+        }
+
+        /**
+         * Installation only: the admitted target's root, whose caller needs
+         * are consulted. Cached without adoption: it is another root.
+         */
+        static ProtosBytecodeRootNode calleeRootOrNull(DirectClosureExecutableFacts facts) {
+            return facts != null
+                            && facts.target() != null
+                            && facts.target().getRootNode() instanceof ProtosBytecodeRootNode callee
+                    ? callee
+                    : null;
         }
 
         /*
@@ -9602,6 +9889,194 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return PrepareSendArguments
                     .fastOrdinarySendTarget(admittedClosure, enteredContext);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * PERF038-I: terminal immediate method Send1 (GraalPy
+     * {@code CallUnaryMethodNode} shape). The final expression of a genuine
+     * source root, after which the root only returns. The selector is a
+     * constant operand; the receiver and the supplied value are the dynamic
+     * operands, evaluated once, left to right; the caller is this root's own
+     * caller reference. Selection happens here, after both operands.
+     *
+     * <p>{@link #guardedSource} is the {@link TryDirectSendOne} PIC (receiver
+     * identity, entered Context, caller prelude, the selection's stability
+     * Assumption, at most three entries) restricted to the same admitted
+     * targets: a source Closure method with an unobservable ReturnHome whose
+     * root proves non-suspension. Selection and target creation occur only at
+     * installation. A hit enters the selected Closure with its method home
+     * through the B5+ header, carrying the caller reference unmaterialized as
+     * {@link InvokeClosureOneTail} does; no prepared call, caller activation
+     * or extracted Closure is created, and the result (possibly a primitive
+     * carrier) is projected by the root's return epilogue.
+     *
+     * <p>I115 (GraalJS JSFunctionCallNode / GraalPy CallContext): the hit
+     * reads the caller prelude through the admitted B5 accessor shared with
+     * {@link InvokeClosureOneTail} ({@link
+     * InvokeClosureOneTail#admittedCallerPrelude}), writes the six Method
+     * Call1 slots directly, and passes the caller as a lightweight reference;
+     * no header validator and no boundary run on it. Only {@link #generic}
+     * resolves the caller, through {@link InvokeClosureOneTail#exactCaller},
+     * which registers this root's exact-activation need.
+     *
+     * <p>Every other case (native, foreign, structured, observable home,
+     * possibly suspending target, failing selection) is prepared and executed
+     * terminally by {@link #generic} inside this operation. {@code generic}
+     * does not replace the direct tier, so a site that temporarily misses can
+     * hit a valid entry again.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "selector")
+    public static final class InvokeMethodOneTail {
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "!isPrimitiveCarrier(receiver)",
+                    "!isForeignReceiver(receiver)",
+                    "receiver == cachedReceiver",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedSend != null",
+                    "admitted(cachedSend)",
+                    "cachedCallee != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static Object guardedSource(
+                String selector,
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind("callerReference(frame)") Object caller,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(root, caller)")
+                        ProtosPrelude prelude,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
+                        GuardedSendTarget cachedSend,
+                @Cached(value = "calleeRootOrNull(cachedSend)", adopt = false)
+                        ProtosBytecodeRootNode cachedCallee,
+                @Cached("create(cachedSend.target())")
+                        DirectCallNode node) {
+            Object[] frameArguments =
+                    ProtosFrameArguments.compactAdmittedTerminalMethodCallOneNoHome(
+                            cachedSend.closure(),
+                            receiver,
+                            cachedSend.methodHome(),
+                            callerArgument(cachedCallee, cachedSend.closure(), caller, prelude),
+                            supplied0);
+            try {
+                return node.call(frameArguments);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                // The no-home bridge of TryDirectSendOne.
+                throw bridged.transfer();
+            }
+        }
+
+        /*
+         * The complete ordinary Send1 preparation on the already evaluated
+         * operands, then the terminal execution of the selected invocation.
+         * Primitive carrier operands are projected before selection; only
+         * here is the deferred caller resolved.
+         */
+        @Specialization
+        @InliningCutoff
+        public static Object generic(
+                String selector,
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return ProtosTailCallContinuation.executeTerminalPreparedCall(
+                    ProtosSendPreparation.prepareSendOneFallback(
+                            ProtosNumericValueSupport.guestValue(receiver),
+                            selector,
+                            InvokeClosureOneTail.exactCaller(root, caller),
+                            ProtosNumericValueSupport.guestValue(supplied0)),
+                    indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        static boolean admitted(GuardedSendTarget send) {
+            return TryDirectSendOne.admitted(send);
+        }
+
+        /** A primitive receiver carrier is projected by {@link #generic} first. */
+        static boolean isPrimitiveCarrier(Object receiver) {
+            return ProtosNumericValueSupport.isPrimitiveCarrier(receiver);
+        }
+
+        static GuardedSendTarget createGuardedSendForPrelude(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            return TryDirectSendOne.createGuardedSendForPrelude(
+                    receiver, selector, prelude, enteredContext);
+        }
+
+        @NonIdempotent
+        static Object callerReference(VirtualFrame frame) {
+            return InvokeClosureOneTail.callerReference(frame);
+        }
+
+        /*
+         * I115: the caller reference is this root's own published activation
+         * or admitted call header, so the admitted B5 Prelude accessor
+         * applies; no general header validation and no caller walk run on a
+         * hit, and an untransported inherited prelude registers this root's
+         * NEEDS_CALLER_PRELUDE.
+         */
+        static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, Object caller) {
+            return InvokeClosureOneTail.admittedCallerPrelude(root, caller);
+        }
+
+        /*
+         * I115: InvokeClosureOneTail#callerArgument with the prelude the PIC
+         * guard already read, so a requested transport costs no further read.
+         */
+        static Object callerArgument(
+                ProtosBytecodeRootNode callee,
+                ProtosClosureValue closure,
+                Object caller,
+                ProtosPrelude prelude) {
+            if (!callee.hasCallerNeed(NEEDS_CALLER_PRELUDE)
+                    || !(caller instanceof Object[] callerArguments)
+                    || closure.preludeOrNullForRuntime() != null) {
+                return caller;
+            }
+            return ProtosFrameArguments.callerFrameReference(callerArguments, prelude);
+        }
+
+        /**
+         * Installation only: the selected target's root, whose caller needs
+         * are consulted. Cached without adoption: it is another root.
+         */
+        static ProtosBytecodeRootNode calleeRootOrNull(GuardedSendTarget send) {
+            return send != null
+                            && send.target() != null
+                            && send.target().getRootNode() instanceof ProtosBytecodeRootNode callee
+                    ? callee
+                    : null;
+        }
+
+        static boolean isForeignReceiver(Object receiver) {
+            return PrepareSendArguments.isForeignReceiver(receiver);
         }
 
         @NonIdempotent

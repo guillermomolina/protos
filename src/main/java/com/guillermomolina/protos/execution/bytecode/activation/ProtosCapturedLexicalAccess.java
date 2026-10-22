@@ -737,6 +737,39 @@ final class ProtosCapturedLexicalAccess {
         return ProtosCapturedLexicalAccess.lookupCapturedFallback(activation, name);
     }
 
+    /**
+     * I115: {@link #readCapturedFrameLocal} for a published activation at a
+     * site that retains a {@link CapturedNearerScopeAbsence} proof. The
+     * activation's captured chain is the invoked Closure's own, exactly the
+     * chain the compact form of the same site reads, so the proof selects the
+     * owner without asking each nearer scope for membership and the owner
+     * frame is read directly. Only the current Context is consulted on the
+     * activation (it may hold a late-created binding once published); a
+     * retired proof, a mismatching owner and every miss take the exact
+     * fallback, which keeps D179 C0 removal and recreation.
+     */
+    static Object readCapturedFrameLocal(
+            int frameOrdinal,
+            ProtosActivation activation,
+            String name,
+            int lexicalDepth,
+            CapturedNearerScopeAbsence nearerAbsence) {
+        if (lexicalDepth > 0
+                && !activation.currentContextHasLocalSlotForRuntime(name)) {
+            Object value =
+                    readOwnerFrameBindingOrNull(
+                            nearerAbsence.ownerOrNull(
+                                    activation.capturedLexicalEnvironmentForRuntime(),
+                                    name),
+                            name,
+                            frameOrdinal);
+            if (value != null) {
+                return value;
+            }
+        }
+        return lookupCapturedFallback(activation, name);
+    }
+
     /** The captured frame-binding write target of a statically resolved binding. */
     static CapturedLexicalWriteTarget resolveCapturedFrameWriteTarget(
             int frameOrdinal,

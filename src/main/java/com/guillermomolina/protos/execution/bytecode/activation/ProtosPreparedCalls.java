@@ -688,7 +688,8 @@ final class ProtosPreparedCalls {
             if (activation != null) {
                 return activation.task().orElse(null);
             }
-            return ProtosFrameArguments.compactTask(targetArguments);
+            // I115: targetArguments were built by an admitted B5 producer.
+            return ProtosFrameArguments.admittedCompactTask(targetArguments);
         }
     }
 

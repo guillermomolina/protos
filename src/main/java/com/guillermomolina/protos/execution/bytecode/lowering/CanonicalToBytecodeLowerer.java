@@ -1325,6 +1325,15 @@ final class CanonicalToBytecodeLowerer {
             epilogProjectsReturnCarrier =
                     experimentalCompact.guestIntegerReturn() == null
                             && !experimentalCompact.guestIntegerLiteralReturn();
+            /*
+             * I115-M: the compact subset (literals, root locals, Integer
+             * operations, inline whileTrue and structured Boolean control)
+             * emits no send, callback, prepared invocation or Yield, so the
+             * emitted root cannot suspend; it publishes that refinement as
+             * the I101-B direct scalar-local body does.
+             */
+            loweringRefinementAccepted = acceptsLoweringRefinement(
+                    publishLoweringRefinement(rootPlan, "I115-M compact root"));
         } else if (activationDefinition == null
                 && sequence.expressions().size() == 1
                 && sequence.expressions().get(0) instanceof CanonicalCreate create
@@ -1488,6 +1497,27 @@ final class CanonicalToBytecodeLowerer {
                     builder.beginReturn();
                     beginStatement(builder, last);
                     emitTerminalClosureCall(builder, (CanonicalCall) last);
+                    endStatement(builder);
+                    builder.endReturn();
+                } else if (admitsTerminalMethodSend(last)) {
+                    /*
+                     * PERF038-I: the final immediate Send1 is the root's
+                     * terminal invocation, exactly as a terminal Call1. No
+                     * sequenceResult, prepared-call or miss local and no
+                     * TryDirectSendOne: InvokeMethodOneTail owns selection,
+                     * its fallback and the terminal execution. A retained
+                     * numeric carrier is projected by the return epilogue.
+                     */
+                    epilogProjectsReturnCarrier = true;
+                    if (expressions.size() > 1) {
+                        emitDiscardedPrefix(
+                                builder,
+                                expressions.subList(0, expressions.size() - 1));
+                    }
+                    // Return is the root's last operation: no implicit fallthrough.
+                    builder.beginReturn();
+                    beginStatement(builder, last);
+                    emitTerminalMethodSend(builder, (CanonicalSend) last);
                     endStatement(builder);
                     builder.endReturn();
                 } else {
@@ -4314,6 +4344,52 @@ final class CanonicalToBytecodeLowerer {
             }
         }
         return true;
+    }
+
+    /**
+     * PERF038-I: an immediate method Send1 that is the final expression of a
+     * genuine source root, with both operands direct terminal values (so
+     * nothing composed remains after the invocation). Primitive numeric
+     * operator sends keep their established Integer lowering; every other
+     * selector is admitted regardless of its name.
+     */
+    private boolean admitsTerminalMethodSend(CanonicalExpression last) {
+        if (!(last instanceof CanonicalSend send)
+                || currentActivationLocal != null
+                || currentInlineCallbackFrameNative
+                || currentInlineClosureCallBody
+                || !currentNormalCallbackScalarLocals.isEmpty()
+                || send.arguments().size() != 1
+                || hasSpreadArgument(send.arguments())
+                || primitiveNumericSendCandidate(send)) {
+            return false;
+        }
+        return isTerminalCallOperand(send.receiver())
+                && isTerminalCallOperand(send.arguments().get(0));
+    }
+
+    /**
+     * PERF038-I: emits an admitted terminal Send1
+     * ({@link #admitsTerminalMethodSend}) as one {@code InvokeMethodOneTail}
+     * operation whose selector is a constant operand. The receiver and the
+     * argument are its only dynamic operands, evaluated once, left to right;
+     * a number literal argument stays a primitive carrier. The send keeps
+     * its CallTag over its exact span.
+     */
+    private void emitTerminalMethodSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send) {
+        currentRootEmittedTerminalInvocation = true;
+        builder.beginSourceSection(
+                send.span().startOffset(),
+                send.span().length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginInvokeMethodOneTail(send.message());
+        emitTerminalCallOperand(builder, send.receiver());
+        emitTerminalCallOneArgument(builder, send.arguments().get(0));
+        builder.endInvokeMethodOneTail();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
     }
 
     private static boolean isTerminalCallOperand(CanonicalExpression expression) {
