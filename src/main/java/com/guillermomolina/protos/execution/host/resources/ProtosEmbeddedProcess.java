@@ -315,6 +315,20 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
     }
 
     /**
+     * I115 temporary fast-entry policy.
+     *
+     * This is deliberately not an atomic admission operation.
+     * Concurrent fast entries may overlap each other, or race
+     * with a conventional RootActor entry.
+     *
+     * The semantic deviation must remain documented until an
+     * equivalent pay-as-you-grow admission is implemented.
+     */
+    boolean permitsUnadmittedNonSuspendingHostEntry() {
+        return !stopped && entryOwner.get() == null;
+    }
+
+    /**
      * Admits one host entry into the RootActor. Returns the entering thread for an outermost
      * entry, or {@code null} for a nested same-thread re-entry (whose escaping Error still has an
      * enclosing guest handler boundary). A concurrent entry from another thread is rejected, never
@@ -357,6 +371,16 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
             stopped = true;
             rootActor.failForRuntime(failure.error());
         }
+    }
+
+    /**
+     * Fatal Error from an I115 unadmitted outermost host entry.
+     * No artificial admission token is manufactured.
+     */
+    @TruffleBoundary
+    void fastHostEntryFailed(ProtosSignalException failure) {
+        stopped = true;
+        rootActor.failForRuntime(failure.error());
     }
 
     boolean isLive() {

@@ -114,6 +114,9 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         try (ProtosStandaloneHostedSession session = open(new RecordingStream())) {
             ProtosHostExecutableClosure adapter =
                     session.prepareTopLevel("run").hostExecutableForTesting();
+            assertFalse(
+                    adapter.fastNonSuspendingHostEntry,
+                    "session adapters do not use embedding fast admission");
             Object[] arguments =
                     session.processContextForTesting()
                             .callForRuntime(
