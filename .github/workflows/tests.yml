@@ -36,6 +36,9 @@ jobs:
       - name: Verify repository toolchain
         run: python3 tools/verify_toolchain.py --mode check --scope development
 
+      - name: Trust checked-out repository
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Restore Maven dependency cache
         uses: actions/cache@v6
         with:
