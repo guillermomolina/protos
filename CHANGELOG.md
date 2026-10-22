@@ -8,6 +8,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.7-SNAPSHOT
+
+- `I115-R` (GraalPy-inspired caller handling / PERF038-I / PLAT066-C):
+  introduce `ProtosCallerFrameReference` for admitted terminal calls, preserving
+  the exact caller's B5 header and optionally transporting its effective Prelude
+  without eagerly publishing a `ProtosActivation`.
+  - Record per-root caller needs (`NEEDS_EXACT_ACTIVATION` and
+    `NEEDS_CALLER_PRELUDE`) with monotonic, invalidatable assumptions so
+    subsequent calls prepare only requested information; retain validating
+    general accessors for unadmitted and malformed representations.
+  - Extend the terminal-call specialization to eligible one-argument method
+    sends through `InvokeMethodOneTail`, preserving selection and fallbacks;
+    refine compact-root non-suspension and captured lexical access paths.
+  - Use exact Integer services on compact arithmetic overflow and results
+    outside signed-64 range; this repairs numerical overflow handling but
+    does not establish general user-defined method-selection equivalence.
+  - Include terminal-call, deferred-caller, compact-frame and compiler-graph
+    tests, plus the non-normative GraalPy caller-optimization report.
+  - **Historical limitation:** this intermediate implementation retains
+    experimental compact and caller paths. Its design report does not grant
+    normative approval to all proposed relaxations; a complete semantic,
+    suspension and performance gate is not asserted for this replay.
+  - Reconstructed from original I115 commit
+    `d9b803ca4299d4195964e5bcbd56e43d929b858a`.
+    No behavioral tests have been run on the versioned replay.
+
 ## 0.4.6-SNAPSHOT
 
 - `I115-Q` (PLAT066-C / PERF039) extends the experimental compact Bytecode DSL lowering for literal Integer returns and constant Boolean control.
