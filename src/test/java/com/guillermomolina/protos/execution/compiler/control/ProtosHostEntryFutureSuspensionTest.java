@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
@@ -255,6 +256,10 @@ final class ProtosHostEntryFutureSuspensionTest {
                     suspending.fastNonSuspendingHostEntry,
                     "Future observation retains the conventional entry");
 
+            assertTrue(trivial.fastNoHomeHostEntry);
+            assertTrue(identity.fastNoHomeHostEntry);
+            assertFalse(suspending.fastNoHomeHostEntry);
+
             assertTrue(f.process.permitsUnadmittedNonSuspendingHostEntry());
 
             for (int index = 0; index < 5; index++) {
@@ -342,7 +347,273 @@ final class ProtosHostEntryFutureSuspensionTest {
                     "I115_PRIMITIVE_CLOSURE_FAST_ENTRY="
                             + adapter.fastNonSuspendingHostEntry);
 
-            assertEquals(1, f.member("run").execute().asInt());
+            assertTrue(
+                    proven,
+                    "the emitted static terminal Call1 is non-suspending");
+            assertTrue(
+                    adapter.fastNonSuspendingHostEntry,
+                    "the embedding must consume the refined root proof");
+
+            for (int index = 0; index < 5; index++) {
+                assertEquals(1, f.member("run").execute().asInt());
+                assertCompactState(f);
+            }
+        }
+    }
+
+    /**
+     * I115: an embedding Call1 uses the existing selected B5
+     * frame, retaining exact Closure and caller provenance.
+     */
+    @Test
+    void oneArgumentHostCallUsesSelectedB5Preparation() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f = new Fixture(context, "identity: (value) => { value }");
+
+            context.enter();
+            try {
+                ProtosHostExecutableClosure adapter =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("identity").orElseThrow());
+
+                assertTrue(adapter.fastNonSuspendingHostEntry);
+
+                ProtosIntegerValue supplied = new ProtosIntegerValue(7);
+
+                ProtosPreparedCalls.OrdinarySourceCall prepared =
+                        adapter.prepare(new Object[] {supplied}, null);
+
+                try {
+                    Object[] frame = prepared.targetArguments();
+
+                    assertEquals(
+                            ProtosFrameArguments.HEADER_LENGTH + 1,
+                            frame.length);
+                    assertSame(adapter.closure, frame[0]);
+                    assertSame(adapter.caller, frame[3]);
+                    assertSame(
+                            supplied,
+                            frame[ProtosFrameArguments.HEADER_LENGTH]);
+                    assertSame(adapter.target, prepared.bodyTarget());
+                } finally {
+                    prepared.complete();
+                }
+            } finally {
+                context.leave();
+            }
+
+            assertEquals(7, f.member("identity").execute(7).asInt());
+            assertEquals(-7, f.member("identity").execute(-7).asInt());
+            assertCompactState(f);
+        }
+    }
+
+    /**
+     * I115: a dynamic terminal call and a potentially
+     * suspending argument or parameter default cannot borrow
+     * the static Call1 certificate.
+     */
+    @Test
+    void staticCallProofRejectsDynamicAndSuspendingEntries() {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            dynamic: (callback) => {
+                                callback(1)
+                            }
+                            suspendingArgument: () => {
+                                identity: (value) => { value }
+                                identity(gate.value())
+                            }
+                            suspendingDefault: (value: gate.value()) => {
+                                identity: (item) => { item }
+                                identity(1)
+                            }
+                            """);
+
+            for (String name : java.util.List.of(
+                    "dynamic",
+                    "suspendingArgument",
+                    "suspendingDefault")) {
+                ProtosHostExecutableClosure adapter;
+
+                context.enter();
+                try {
+                    adapter =
+                            (ProtosHostExecutableClosure)
+                                    f.process.readSelectedMember(
+                                            f.module,
+                                            f.module.readLocalSlot(name).orElseThrow());
+                } finally {
+                    context.leave();
+                }
+
+                assertFalse(
+                        adapter.fastNonSuspendingHostEntry,
+                        name + " must retain conventional host admission");
+            }
+        }
+    }
+
+    /**
+     * I115: transitive static Call1 may forward its caller's
+     * required parameter without acquiring suspension machinery.
+     * Defaults and captured arguments remain unproven.
+     */
+    @Test
+    void staticCallProofAcceptsRequiredCallerParameter() {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            forwarded: (value) => {
+                                identity: (item) => { item }
+                                identity(value)
+                            }
+                            withDefault: (value: gate.value()) => {
+                                identity: (item) => { item }
+                                identity(value)
+                            }
+                            withCapture: () => {
+                                identity: (item) => { item }
+                                identity(before)
+                            }
+                            """);
+
+            for (String name : java.util.List.of(
+                    "forwarded",
+                    "withDefault",
+                    "withCapture")) {
+                ProtosHostExecutableClosure adapter;
+
+                context.enter();
+                try {
+                    adapter =
+                            (ProtosHostExecutableClosure)
+                                    f.process.readSelectedMember(
+                                            f.module,
+                                            f.module.readLocalSlot(name).orElseThrow());
+                } finally {
+                    context.leave();
+                }
+
+                assertEquals(
+                        name.equals("forwarded"),
+                        adapter.fastNonSuspendingHostEntry,
+                        name + " must have the expected static proof");
+            }
+
+            for (int value : new int[] {0, 1, 7, -7}) {
+                assertEquals(
+                        value,
+                        f.member("forwarded").execute(value).asInt());
+                assertCompactState(f);
+            }
+
+            assertEquals(0, f.member("withCapture").execute().asInt());
+            assertCompactState(f);
+        }
+    }
+
+    /**
+     * I115: indirect host execution shares direct admission.
+     * The negative case retains the ordinary RootActor path.
+     */
+    @Test
+    void indirectHostEntryUsesNonSuspendingProof() throws Exception {
+        try (Context context = newContext()) {
+            Fixture f =
+                    new Fixture(
+                            context,
+                            """
+                            trivial: () => { 1 }
+                            identity: (value) => { value }
+                            suspending: () => { gate.value() }
+                            """);
+
+            f.resolve(9);
+
+            context.enter();
+            try {
+                ProtosHostExecutableClosure trivial =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("trivial").orElseThrow());
+                ProtosHostExecutableClosure identity =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("identity").orElseThrow());
+                ProtosHostExecutableClosure suspending =
+                        (ProtosHostExecutableClosure)
+                                f.process.readSelectedMember(
+                                        f.module,
+                                        f.module.readLocalSlot("suspending").orElseThrow());
+
+                assertTrue(trivial.fastNonSuspendingHostEntry);
+                assertTrue(identity.fastNonSuspendingHostEntry);
+                assertFalse(suspending.fastNonSuspendingHostEntry);
+
+                IndirectCallNode indirect = IndirectCallNode.create();
+
+                Object literal =
+                        ProtosHostExecutableClosure.Execute.indirect(
+                                trivial, new Object[0], null, indirect);
+
+                assertEquals(
+                        "1",
+                        com.guillermomolina.protos.runtime
+                                .ProtosNumericValueSupport.integerDecimalText(literal));
+
+                Object forwarded =
+                        ProtosHostExecutableClosure.Execute.indirect(
+                                identity, new Object[] {37}, null, indirect);
+
+                assertEquals(
+                        "37",
+                        com.guillermomolina.protos.runtime
+                                .ProtosNumericValueSupport.integerDecimalText(forwarded));
+
+                assertCompactState(f);
+
+                // A resolved Future still has no static proof.
+                Object ordinary =
+                        ProtosHostExecutableClosure.Execute.indirect(
+                                suspending, new Object[0], null, indirect);
+
+                assertEquals(
+                        "9",
+                        com.guillermomolina.protos.runtime
+                                .ProtosNumericValueSupport.integerDecimalText(ordinary));
+
+                // An occupied RootActor requires conventional admission.
+                Thread token = f.process.enterRootActor();
+                try {
+                    assertFalse(
+                            f.process.permitsUnadmittedNonSuspendingHostEntry());
+
+                    Object nested =
+                            ProtosHostExecutableClosure.Execute.indirect(
+                                    trivial, new Object[0], null, indirect);
+
+                    assertEquals(
+                            "1",
+                            com.guillermomolina.protos.runtime
+                                    .ProtosNumericValueSupport.integerDecimalText(nested));
+                } finally {
+                    f.process.exitRootActor(token);
+                }
+
+                assertCompactState(f);
+            } finally {
+                context.leave();
+            }
         }
     }
 

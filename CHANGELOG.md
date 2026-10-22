@@ -8,6 +8,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.9-SNAPSHOT
+
+- `I115` (host-to-guest Call0/Call1 fast entry): streamline the admitted
+  non-suspending Polyglot `Value.execute()` path and extend static terminal
+  `Call1` non-suspension evidence to a narrowly proved local-Closure pattern.
+  - Refine effective-root non-suspension for a static terminal one-argument
+    Closure call only when the callee body and supplied argument satisfy
+    structural restrictions; retain UNKNOWN for unproved calls.
+  - Cache host-entry eligibility for Closures with unobservable invocation
+    `ReturnHome`, use direct compact Call0/Call1 B5 frame preparation and
+    admit eligible host arguments without an extra supplied-argument array.
+    The frame itself is still allocated, and fallback preserves normal
+    conversion, call handling and suspension machinery.
+  - Expand host-entry/Future tests for the static proof, argument provenance,
+    fast and fallback routes, and correctness of eligible calls.
+  - **Historical semantic limitation:** this optimization continues the
+    temporary non-atomic RootActor admission bypass introduced in 0.4.8.
+    Non-suspension alone does not establish concurrent-entry, reentrancy or
+    termination equivalence, nor does the narrow static proof establish
+    complete language conformance.
+  - Reconstructed from original I115 commit
+    `a0372478c1bad7faa22fbb6871324f451f0f3972`. No behavioral tests
+    were run on this versioned historical replay.
+
 ## 0.4.8-SNAPSHOT
 
 - `I115` (host entry / Call0): introduce a fast host-to-guest execution path for

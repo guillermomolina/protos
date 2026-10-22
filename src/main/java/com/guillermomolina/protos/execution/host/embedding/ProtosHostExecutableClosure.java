@@ -98,6 +98,8 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * This does not prove independence from RootActor state.
      */
     final boolean fastNonSuspendingHostEntry;
+    /** I115: cached eligibility for a host call without a ReturnHome lifecycle. */
+    final boolean fastNoHomeHostEntry;
 
     private ProtosHostExecutableClosure(
             ProtosClosureValue closure,
@@ -115,6 +117,9 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                         && target != null
                         && target.getRootNode() instanceof ProtosBytecodeRootNode root
                         && root.provablyNonSuspendingBody();
+        this.fastNoHomeHostEntry =
+                fastNonSuspendingHostEntry
+                        && closure.hasUnobservableInvocationReturnHomeForRuntime();
     }
 
     /**
@@ -212,8 +217,48 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 @Cached("receiver.target") RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)") DirectCallNode call)
                 throws ArityException, UnsupportedTypeException {
-            Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
+
+            /*
+             * I115: admit a proven no-home Call0/Call1 directly
+             * from the host argument array. The B5 frame is the
+             * first and only argument-array allocation.
+             */
+            Object[] fallbackSupplied = null;
+            if (receiver.fastNoHomeHostEntry && arguments.length <= 1) {
+                Object supplied0 =
+                        receiver.admitSmallFastHostArgument(arguments, node);
+
+                if (embedding.permitsUnadmittedNonSuspendingHostEntry()) {
+                    Object[] frame =
+                            arguments.length == 0
+                                    ? ProtosFrameArguments
+                                            .compactDirectClosureCallZeroNoHome(
+                                                    receiver.closure, receiver.caller)
+                                    : ProtosFrameArguments
+                                            .compactDirectClosureCallOneNoHome(
+                                                    receiver.closure, receiver.caller, supplied0);
+                    try {
+                        return finishNoHomeHostEntry(call.call(frame));
+                    } catch (ProtosBytecodeControlTransferException bridged) {
+                        throw bridged.transfer();
+                    } catch (ProtosSignalException failure) {
+                        embedding.fastHostEntryFailed(failure);
+                        throw failure;
+                    }
+                }
+
+                // A rejected fast admission reuses its converted argument.
+                fallbackSupplied =
+                        arguments.length == 0
+                                ? NO_SUPPLIED_ARGUMENTS
+                                : new Object[] {supplied0};
+            }
+
+            Object[] supplied =
+                    fallbackSupplied != null
+                            ? fallbackSupplied
+                            : receiver.admitArguments(arguments, node);
 
             /*
              * I115: GraalPy-shaped minimum host entry.
@@ -271,8 +316,69 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 @Bind("$node") Node node,
                 @Cached IndirectCallNode call)
                 throws ArityException, UnsupportedTypeException {
-            Object[] supplied = receiver.admitArguments(arguments, node);
             ProtosEmbeddedProcess embedding = receiver.embedding;
+
+            /*
+             * I115: admit a proven no-home Call0/Call1 directly
+             * from the host argument array. The B5 frame is the
+             * first and only argument-array allocation.
+             */
+            Object[] fallbackSupplied = null;
+            if (receiver.fastNoHomeHostEntry && arguments.length <= 1) {
+                Object supplied0 =
+                        receiver.admitSmallFastHostArgument(arguments, node);
+
+                if (embedding.permitsUnadmittedNonSuspendingHostEntry()) {
+                    Object[] frame =
+                            arguments.length == 0
+                                    ? ProtosFrameArguments
+                                            .compactDirectClosureCallZeroNoHome(
+                                                    receiver.closure, receiver.caller)
+                                    : ProtosFrameArguments
+                                            .compactDirectClosureCallOneNoHome(
+                                                    receiver.closure, receiver.caller, supplied0);
+                    try {
+                        return finishNoHomeHostEntry(call.call(receiver.target, frame));
+                    } catch (ProtosBytecodeControlTransferException bridged) {
+                        throw bridged.transfer();
+                    } catch (ProtosSignalException failure) {
+                        embedding.fastHostEntryFailed(failure);
+                        throw failure;
+                    }
+                }
+
+                // A rejected fast admission reuses its converted argument.
+                fallbackSupplied =
+                        arguments.length == 0
+                                ? NO_SUPPLIED_ARGUMENTS
+                                : new Object[] {supplied0};
+            }
+
+            Object[] supplied =
+                    fallbackSupplied != null
+                            ? fallbackSupplied
+                            : receiver.admitArguments(arguments, node);
+
+            /*
+             * I115: a megamorphic executable retains the same
+             * non-suspending host admission as a direct PIC hit.
+             * Only target dispatch changes to IndirectCallNode.
+             */
+            if (receiver.fastNonSuspendingHostEntry
+                    && embedding.permitsUnadmittedNonSuspendingHostEntry()) {
+                try {
+                    ProtosPreparedCalls.OrdinarySourceCall prepared =
+                            receiver.prepare(supplied);
+                    return finishNonSuspendingHostEntry(
+                            prepared,
+                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                                    prepared, call));
+                } catch (ProtosSignalException failure) {
+                    embedding.fastHostEntryFailed(failure);
+                    throw failure;
+                }
+            }
+
             Thread token = embedding == null ? null : embedding.enterRootActor();
             HostEntryExtent previous =
                     embedding == null ? null : embedding.beginHostEntryExtent(token);
@@ -304,6 +410,21 @@ final class ProtosHostExecutableClosure implements TruffleObject {
          * precondition. Never expose the private continuation to
          * the host or try to resume without a host-entry extent.
          */
+        /**
+         * I115: no prepared-call carrier or ReturnHome lifecycle exists
+         * for this statically admitted host entry. Only a forbidden
+         * continuation and host-facing value projection remain.
+         */
+        private static Object finishNoHomeHostEntry(Object outcome) {
+            if (ProtosTailCallContinuation.isPending(outcome)) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                ProtosTailCallContinuation.abandon(outcome);
+                throw new IllegalStateException(
+                        "I115 no-home host-entry proof was violated");
+            }
+            return ProtosNumericValueSupport.guestValue(outcome);
+        }
+
         private static Object finishNonSuspendingHostEntry(
                 ProtosPreparedCalls.OrdinarySourceCall prepared,
                 Object outcome) {
@@ -373,13 +494,34 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 }
             }
         }
+        requireOwningContext(node);
+        return admitted.length == 0 ? NO_SUPPLIED_ARGUMENTS : admitted;
+    }
+
+    /**
+     * I115: admit Call0/Call1 without copying the host argument array.
+     * The null result denotes Call0 only; it is never a guest value.
+     */
+    private Object admitSmallFastHostArgument(Object[] arguments, Node node)
+            throws UnsupportedTypeException {
+        Object admitted = null;
+        if (arguments.length == 1) {
+            Object argument = arguments[0];
+            admitted =
+                    ProtosValueLookup.isProtosValue(argument)
+                            ? argument
+                            : admitHostScalar(arguments, argument);
+        }
+        requireOwningContext(node);
+        return admitted;
+    }
+
+    private void requireOwningContext(Node node) {
         if (ProtosLanguageContext.current(node) != owner) {
-            // The framework never enters another Context for this value; a foreign target is fatal.
             CompilerDirectives.transferToInterpreterAndInvalidate();
             throw new IllegalStateException(
                     "host executable Closure entered outside its owning Context");
         }
-        return admitted.length == 0 ? NO_SUPPLIED_ARGUMENTS : admitted;
     }
 
     /**
@@ -390,7 +532,10 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * rejected before any guest code runs; nothing is converted lossily or through {@code
      * toString()}.
      */
-    @TruffleBoundary
+    /**
+     * I115: keep exact Java integer admission visible to Graal.
+     * Text validation and rejected foreign types remain cold boundaries.
+     */
     private static Object admitHostScalar(Object[] arguments, Object argument)
             throws UnsupportedTypeException {
         if (argument instanceof Integer
@@ -399,6 +544,12 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                 || argument instanceof Byte) {
             return ProtosNumericValueSupport.integer(((Number) argument).longValue());
         }
+        return admitHostTextOrReject(arguments, argument);
+    }
+
+    @TruffleBoundary
+    private static Object admitHostTextOrReject(Object[] arguments, Object argument)
+            throws UnsupportedTypeException {
         if (argument instanceof String text) {
             try {
                 return new ProtosStringValue(text);
@@ -433,6 +584,11 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             return (ProtosPreparedCalls.OrdinarySourceCall)
                     ProtosClosureCallPreparation.finishDirectClosureCallZero(
                             closure, target, caller);
+        }
+        if (supplied.length == 1) {
+            return (ProtosPreparedCalls.OrdinarySourceCall)
+                    ProtosClosureCallPreparation.finishDirectClosureCallOne(
+                            closure, target, supplied[0], caller);
         }
         return (ProtosPreparedCalls.OrdinarySourceCall)
                 ProtosClosureCallPreparation.finishDirectClosureCall(
