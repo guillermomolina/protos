@@ -306,6 +306,11 @@ final class CanonicalToBytecodeLowerer {
      * ordinary creation and call.
      */
     private CanonicalClosure staticUnaryCalleeRequest;
+
+    // I115-R2: exact module binding for a recursive Closure.
+    private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
+            experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
+    private CanonicalClosure currentExperimentalRootDefinition;
     private final java.util.Set<CanonicalClosure> staticUnaryCalleeRoots =
             java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
@@ -725,6 +730,14 @@ final class CanonicalToBytecodeLowerer {
             return existing;
         }
 
+        // I115-R2: publish the pending cell before emitting its root.
+        // Freezing the cell still happens after create() completes.
+        ProtosClosureExecutionPlanCell cell = existing;
+        if (cell == null) {
+            cell = ProtosClosureExecutionPlanCell.pendingGroup();
+            bytecodeClosurePlans.put(definition, cell);
+        }
+
         ProtosBytecodeRootNode nestedRoot =
                 lowerNestedClosureRoot(builder, definition);
         // I096-B1: after the nested root restored this root's state.
@@ -733,9 +746,6 @@ final class CanonicalToBytecodeLowerer {
         if (existing != null) {
             return existing;
         }
-
-        ProtosClosureExecutionPlanCell cell = ProtosClosureExecutionPlanCell.pendingGroup();
-        bytecodeClosurePlans.put(definition, cell);
         /*
          * lowerNestedClosureRoot's own currentRootAnalysis save/restore has
          * already unwound by this point, so this recomputes the exact same
@@ -830,6 +840,24 @@ final class CanonicalToBytecodeLowerer {
                         sequence,
                         activationDefinition,
                         bindingAnalysisFor(sequence, activationDefinition));
+        // I115-R2: discover the module binding before nested root lowering.
+        if (activationDefinition == null) {
+            CanonicalBindingAnalysis analysis =
+                    rootPlan.rootFacts().bindingAnalysis();
+            CanonicalLexicalScope scope = rootPlan.rootFacts().scope();
+            for (CanonicalExpression expression : sequence.expressions()) {
+                if (expression instanceof CanonicalCreate create
+                        && create.target().isEmpty()
+                        && create.value() instanceof CanonicalClosure definition) {
+                    CanonicalBindingIdentity identity =
+                            analysis.identityOf(create).orElse(null);
+                    if (identity != null && identity.owner() == scope) {
+                        experimentalRecursiveBindings.put(definition, identity);
+                    }
+                }
+            }
+        }
+
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
@@ -920,6 +948,8 @@ final class CanonicalToBytecodeLowerer {
          * body of its enclosing root.
          */
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
+        CanonicalClosure savedExperimentalDefinition =
+                currentExperimentalRootDefinition;
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
@@ -971,6 +1001,7 @@ final class CanonicalToBytecodeLowerer {
                     java.util.Collections.newSetFromMap(
                             new java.util.IdentityHashMap<>());
             currentRootAnalysis = analysisForThisRoot;
+            currentExperimentalRootDefinition = activationDefinition;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
@@ -996,6 +1027,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootEmittedContinuationPath = savedContinuationPath;
             currentRootEmittedTerminalInvocation = savedTerminalInvocation;
             currentRootAnalysis = savedAnalysis;
+            currentExperimentalRootDefinition = savedExperimentalDefinition;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
@@ -1272,21 +1304,28 @@ final class CanonicalToBytecodeLowerer {
                         defaultChildResult,
                         defaultResumeValue,
                         requiredPrefixCount);
-            } else if (unaryEntry != null
+            } else if ((unaryEntry != null
+                            || (experimentalCompact != null
+                                    && activationDefinition.parameters().size() == 1))
                     && currentActivationLocal == null
                     && currentRootFrameNativeLocals != null
                     && currentRootFrameNativeLayout != null) {
-                int ordinal = frameNativeOrdinal(unaryEntry.name());
+                // I115-R1: the compact unary admission shares the
+                // existing I104 unary binding operation.
+                String parameterName = unaryEntry != null
+                        ? unaryEntry.name()
+                        : activationDefinition.parameters().get(0).name();
+                int ordinal = frameNativeOrdinal(parameterName);
                 if (ordinal < 0) {
                     throw new AssertionError(
-                            "I104-A admitted parameter without a frame local");
+                            "I115-R1 admitted parameter without a frame local");
                 }
 
                 builder.emitBindUnaryFrameParameter(
                         currentRootFrameNativeLocals,
                         currentRootFrameNativeLayout,
                         ordinal,
-                        unaryEntry.name());
+                        parameterName);
                 staticUnaryEntryEmitted = staticUnaryCallee;
             } else {
                 emitClosureParameterBindings(
@@ -4345,6 +4384,31 @@ final class CanonicalToBytecodeLowerer {
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition) {
         java.util.List<CanonicalExpression> expressions = sequence.expressions();
+
+        /*
+         * I115-R4 EXPERIMENTAL:
+         *
+         * A module consisting entirely of named Closure creations
+         * may use the existing frame-native binding operations.
+         *
+         * Its first creation performs the durable-authority
+         * transition. The module does not require an eager
+         * InstallFrameLexicalAuthority instruction.
+         *
+         * This also admits a terminal Closure creation, whose
+         * resulting value is returned by the ordinary terminal
+         * expression lowering.
+         */
+        if (activationDefinition == null
+                && currentActivationLocal == null
+                && expressions.size() >= 2
+                && expressions.stream().allMatch(expression ->
+                        expression instanceof CanonicalCreate create
+                                && create.target().isEmpty()
+                                && create.value() instanceof CanonicalClosure)) {
+            return true;
+        }
+
         if (activationDefinition != null
                 || currentActivationLocal != null
                 || expressions.size() < 2
@@ -8245,6 +8309,26 @@ final class CanonicalToBytecodeLowerer {
                     builder.endAccessInlineCapturedFrameLocal();
                     return;
                 }
+                /*
+                 * I115-R3: a captured binding in the immediate enclosing
+                 * lexical scope can use the existing single-operation
+                 * root reader. The operation owns frame selection and
+                 * fallback instead of emitting a physical Bytecode
+                 * branch with a temporary selected-owner frame.
+                 *
+                 * Experimental: prefer GraalPy-style compact bytecode
+                 * over the materialized-owner local-accessor route.
+                 */
+                if (ownerLocal != null
+                        && currentActivationLocal == null
+                        && captured.lexicalDepth() == 1) {
+                    builder.emitReadCapturedFrameLocalAtRoot(
+                            frameBackedOrdinal(captured.identity()),
+                            captured.identity().name(),
+                            captured.lexicalDepth());
+                    return;
+                }
+
                 if (ownerLocal != null) {
                     emitGuestCapturedMaterializedRead(
                             builder, captured, ownerLocal, false, carrierOperand);
@@ -10018,16 +10102,37 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure activationDefinition,
             CanonicalCompilationFacts.RootFacts rootFacts) {
         if (activationDefinition == null
-                || !activationDefinition.parameters().isEmpty()
                 || sequence.expressions().isEmpty()
                 || currentRootAnalysis == null
                 || rootFacts.scope() == null) {
             return null;
         }
         CanonicalLexicalScope scope = rootFacts.scope();
+        java.util.List<CanonicalParameter> parameters =
+                activationDefinition.parameters();
+
+        // I115-R1 EXPERIMENTAL: admit one required scalar Integer
+        // parameter using the existing unary frame entry. The type
+        // assumption belongs only to the I115 experimental branch.
+        // Calls, defaults, rest and arbitrary body expressions remain
+        // outside the compact subset.
+        boolean unaryInteger = parameters.size() == 1
+                && !parameters.get(0).rest()
+                && parameters.get(0).defaultValue().isEmpty()
+                && scope.declaresName(parameters.get(0).name());
+
+        if (!parameters.isEmpty() && !unaryInteger) {
+            return null;
+        }
+
+        ExperimentalCompactKinds kinds = new ExperimentalCompactKinds();
+        if (unaryInteger) {
+            kinds.put(
+                    scope.identity(parameters.get(0).name()),
+                    ExperimentalCompactKind.INTEGER);
+        }
         if (admitExperimentalCompactSequence(
-                        sequence, scope, new ExperimentalCompactKinds(), false)
-                == null) {
+                        sequence, scope, kinds, false) == null) {
             return null;
         }
         CanonicalExpression terminal =
@@ -10081,6 +10186,66 @@ final class CanonicalToBytecodeLowerer {
      * when the expression's result may be consumed; the last expression of
      * a callback body is treated as consumed whenever its control is.
      */
+    /*
+     * I115-R2 EXPERIMENTAL: the call references this same Closure's
+     * exact module declaration. Dynamic Object.call selection and
+     * lexical retargeting are intentionally not preserved.
+     */
+    /*
+     * I115-R2 EXPERIMENTAL: admit a unary recursive self-call when its
+     * nearest statically declared lexical owner is a module binding of
+     * the same name as this exact Closure's registered declaration.
+     *
+     * Binding identities from independent analyses cannot be compared
+     * by Java reference identity. Candidate and CapturedResolved are
+     * accepted here because this experimental path deliberately omits
+     * dynamic presence and retargeting semantics.
+     */
+    private boolean experimentalRecursiveSelfCall(CanonicalCall call) {
+        if (currentExperimentalRootDefinition == null
+                || currentRootAnalysis == null
+                || call.arguments().size() != 1
+                || !(call.receiver() instanceof CanonicalLookup lookup)) {
+            return false;
+        }
+
+        CanonicalBindingIdentity registered =
+                experimentalRecursiveBindings.get(
+                        currentExperimentalRootDefinition);
+
+        CanonicalBindingResolution resolution =
+                currentRootAnalysis.resolutionOf(lookup).orElse(null);
+
+        CanonicalBindingIdentity resolved = null;
+        int depth = -1;
+
+        if (resolution
+                instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            resolved = captured.identity();
+            depth = captured.lexicalDepth();
+        } else if (resolution
+                instanceof CanonicalBindingResolution.Candidate candidate) {
+            resolved = candidate.identity();
+            depth = candidate.lexicalDepth();
+        }
+
+        boolean admitted =
+                registered != null
+                        && registered.owner().kind()
+                                == CanonicalLexicalScope.Kind.ROOT
+                        && registered.name().equals(lookup.name())
+                        && resolved != null
+                        && resolved.owner().kind()
+                                == CanonicalLexicalScope.Kind.ROOT
+                        && resolved.name().equals(registered.name())
+                        && depth > 0
+                        && currentRootAnalysis
+                                .scopeOf(currentExperimentalRootDefinition)
+                                .isPresent();
+
+        return admitted;
+    }
+
     private boolean experimentalGuestReturnScan(
             CanonicalExpression expression,
             boolean value,
@@ -10218,6 +10383,15 @@ final class CanonicalToBytecodeLowerer {
                 || expression instanceof CanonicalAssign) {
             return admitExperimentalCompactBinding(
                     expression, scope, kinds, callback);
+        }
+        if (expression instanceof CanonicalCall call) {
+            return experimentalRecursiveSelfCall(call)
+                            && admitExperimentalCompactExpression(
+                                    call.arguments().get(0),
+                                    scope, kinds, callback)
+                                    == ExperimentalCompactKind.INTEGER
+                    ? ExperimentalCompactKind.INTEGER
+                    : null;
         }
         if (!(expression instanceof CanonicalSend send)) {
             return null;
@@ -10592,6 +10766,19 @@ final class CanonicalToBytecodeLowerer {
             emitExperimentalCompactStore(builder, expression, name, value);
             builder.emitLoadLocal(experimentalCompactLocal(name));
             builder.endBlock();
+        } else if (expression instanceof CanonicalCall call
+                && experimentalRecursiveSelfCall(call)) {
+            // I115-R2: existing static unary ABI; Graal owns inlining.
+            ProtosClosureExecutionPlanCell plan =
+                    bytecodeClosurePlans.get(
+                            currentExperimentalRootDefinition);
+            if (plan == null) {
+                throw new AssertionError(
+                        "I115-R2 recursive plan cell missing");
+            }
+            builder.beginInvokeStaticClosureOneTail(plan);
+            emitExperimentalCompactValue(builder, call.arguments().get(0));
+            builder.endInvokeStaticClosureOneTail();
         } else {
             CanonicalSend send = (CanonicalSend) expression;
             if ("whileTrue".equals(send.message())) {

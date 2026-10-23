@@ -525,6 +525,25 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         .toList();
 
         /*
+         * I115-R3: immediate captured reads may use the compact
+         * root operation. The semantic assertions in the calling
+         * tests still execute after this structural check.
+         */
+        if (instructionNames.contains("c.ReadCapturedFrameLocalAtRoot")) {
+            assertEquals(
+                    1,
+                    instructionNames.stream()
+                            .filter("c.ReadCapturedFrameLocalAtRoot"::equals)
+                            .count());
+            assertTrue(
+                    instructionNames.stream()
+                            .noneMatch(name ->
+                                    name.contains("SelectCapturedMaterializedOwnerFrame")
+                                            || name.startsWith("load.local.mat")));
+            return;
+        }
+
+        /*
          * BUG018-C: the fast path selects the PRESENT owner frame, then loads
          * the value with the builtin LoadLocalMaterialized of the owner local.
          */
