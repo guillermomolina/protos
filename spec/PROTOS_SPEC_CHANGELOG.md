@@ -23,6 +23,26 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.469] - 2026-10-23
+
+### D213 / LIB023-A — Standard Library Array copy/edit operations and default sort comparator
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: new section "Standard Library
+  Array copy/edit operations (D213 / LIB023-A)". `std:collections/Array`
+  publishes `append(array, value)`, `concat(left, right)`,
+  `slice(array, start, end)`, `insertAt(array, index, value)`,
+  `removeAt(array, index)` and `reverse(array)`. Each answers a fresh, open,
+  independently stored standard Array with shallow, identity-preserving
+  element copies and never mutates its sources. Array arguments must satisfy
+  `Array.recognizes` (open, closed and frozen sources are readable); indexes
+  must satisfy `Integer.recognizes` and the strict bounds
+  `0 <= start <= end <= size`, `0 <= index <= size` (insertAt) and
+  `0 <= index < size` (removeAt), with no numeric conversion, negative
+  indexing or host-width limit. `sort(array, less)` now defaults `less` to
+  `(left, right) => left < right` only when the argument is absent; explicit
+  `null` is not defaulted, and stability and comparator errors are unchanged.
+  Core Arrays keep fixed length and dense elements; no syntax, Core selector
+  or public module is added.
+
 ## [0.1.468] - 2026-10-22
 
 ### D212 / I121-B — Contextual until suffix expression

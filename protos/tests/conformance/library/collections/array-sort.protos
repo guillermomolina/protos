@@ -88,6 +88,58 @@ tests: Array(
             ok
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("array sort default comparator orders ascending", () => {
+        Arrays: import("std:collections/Array")
+        source: Array(3, 1, 2)
+        sorted: Arrays.sort(source)
+        Assertions.require(sorted !== source)
+        Assertions.require(sorted.size() == 3)
+        Assertions.require(((sorted[0] == 1) && (sorted[1] == 2)) && (sorted[2] == 3))
+        Assertions.require(((source[0] == 3) && (source[1] == 1)) && (source[2] == 2))
+    }),
+    Test("array sort default comparator empty answers fresh array", () => {
+        Arrays: import("std:collections/Array")
+        source: Array()
+        sorted: Arrays.sort(source)
+        Assertions.require(sorted !== source)
+        Assertions.require(sorted.size() == 0)
+    }),
+    Test("array sort default comparator singleton answers fresh array", () => {
+        Arrays: import("std:collections/Array")
+        source: Array(7)
+        sorted: Arrays.sort(source)
+        Assertions.require(sorted !== source)
+        Assertions.require(sorted.size() == 1)
+        Assertions.require(sorted[0] == 7)
+    }),
+    Test("array sort explicit descending comparator", () => {
+        Arrays: import("std:collections/Array")
+        sorted: Arrays.sort(Array(1, 3, 2), (left, right) => left > right)
+        Assertions.require(((sorted[0] == 3) && (sorted[1] == 2)) && (sorted[2] == 1))
+    }),
+    Test("array sort explicit null comparator does not use default", () => {
+        Assertions.signals(Error, () => {
+            Arrays: import("std:collections/Array")
+            Arrays.sort(Array(2, 1), null)
+        })
+    }),
+    Test("array sort trivial inputs ignore explicit null comparator", () => {
+        Arrays: import("std:collections/Array")
+        empty: Arrays.sort(Array(), null)
+        singleton: Arrays.sort(Array(5), null)
+        Assertions.require(empty.size() == 0)
+        Assertions.require((singleton.size() == 1) && (singleton[0] == 5))
+    }),
+    Test("array sort custom comparator stays stable for equal keys", () => {
+        Arrays: import("std:collections/Array")
+        first: Array(2, "a")
+        second: Array(1, "b")
+        third: Array(2, "c")
+        fourth: Array(1, "d")
+        sorted: Arrays.sort(Array(first, second, third, fourth), (left, right) => left[0] < right[0])
+        Assertions.require((sorted[0] === second) && (sorted[1] === fourth))
+        Assertions.require((sorted[2] === first) && (sorted[3] === third))
     })
 )
 tests.freeze()

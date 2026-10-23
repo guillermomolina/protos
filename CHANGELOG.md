@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.399-SNAPSHOT
+
+- `LIB023-A` (#953, D213/#949): Standard Library Array copy/edit operations
+  and default sort comparator.
+  - `std:collections/Array` adds `append`, `concat`, `slice`, `insertAt`,
+    `removeAt` and `reverse`, written in ordinary Protos source. Each answers
+    a fresh, open, independently stored Array with shallow element copies and
+    never writes to its source. Array arguments are checked with
+    `Array.recognizes`; indexes are checked with `Integer.recognizes` and
+    exact strict bounds, with no numeric conversion or negative indexing.
+    `slice` and `removeAt` preallocate their result with a local O(n)
+    doubling helper; `insertAt` shifts the suffix in place in its own result.
+  - `sort(array, less)` defaults `less` to `(left, right) => left < right`
+    when the argument is omitted; an explicit `null` is not defaulted. The
+    merge sort algorithm is unchanged.
+  - New native conformance suite `array-copy-edits.protos` (registered in
+    the conformance manifest); `array-sort.protos`,
+    `array-common-contracts.protos` and `module-surface-and-imports.protos`
+    gain default-comparator, open-result and public-surface cases.
+  - Specification 0.1.469: new `VALUES_AND_COLLECTIONS.md` section;
+    guide chapter 05 and the Standard Library guide index document the new
+    functions.
+  - Maintainer validation: tests PASS.
+
 ## 0.3.398-SNAPSHOT
 
 - `I121-B` (#948, D212/#947): contextual suffix `{ body } until(condition)`.

@@ -37,14 +37,58 @@ tests: Array(
                 left < right
             })
 
+            appended: Arrays.append(Array(1), 2)
+            combined: Arrays.concat(Array(1), Array(2))
+            sliced: Arrays.slice(Array(1, 2), 0, 1)
+            inserted: Arrays.insertAt(Array(1), 0, 0)
+            removed: Arrays.removeAt(Array(1, 2), 0)
+            reversed: Arrays.reverse(Array(1, 2))
+
             mapped.lib001Probe: 1
             filtered.lib001Probe: 2
             sorted.lib001Probe: 3
+            appended.lib001Probe: 4
+            combined.lib001Probe: 5
+            sliced.lib001Probe: 6
+            inserted.lib001Probe: 7
+            removed.lib001Probe: 8
+            reversed.lib001Probe: 9
 
-            ((mapped.lib001Probe == 1) && (filtered.lib001Probe == 2)) &&
+            ok: ((mapped.lib001Probe == 1) && (filtered.lib001Probe == 2)) &&
                 (sorted.lib001Probe == 3)
+            (appended.lib001Probe == 4).ifFalse(() => { ok = false })
+            (combined.lib001Probe == 5).ifFalse(() => { ok = false })
+            (sliced.lib001Probe == 6).ifFalse(() => { ok = false })
+            (inserted.lib001Probe == 7).ifFalse(() => { ok = false })
+            (removed.lib001Probe == 8).ifFalse(() => { ok = false })
+            (reversed.lib001Probe == 9).ifFalse(() => { ok = false })
+            ok
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("array copy edit results from closed and frozen sources are open", () => {
+        Arrays: import("std:collections/Array")
+        closed: Array(1, 2)
+        closed.close()
+        frozen: Array(1, 2)
+        frozen.freeze()
+        Array(closed, frozen).each((source) => {
+            results: Array(
+                Arrays.append(source, 3),
+                Arrays.concat(source, source),
+                Arrays.slice(source, 0, 2),
+                Arrays.insertAt(source, 0, 0),
+                Arrays.removeAt(source, 0),
+                Arrays.reverse(source)
+            )
+            results.each((result) => {
+                result[0] = 42
+                Assertions.require(result[0] == 42)
+                result.lib001Probe: 10
+                Assertions.require(result.lib001Probe == 10)
+            })
+        })
+        null
     })
 )
 tests.freeze()

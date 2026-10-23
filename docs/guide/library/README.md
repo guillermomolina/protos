@@ -41,6 +41,7 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | Guide | Modules | Use it for |
 |---|---|---|
 | [Numeric arithmetic and roots](../05-values-identity-equality-and-collections.md#working-with-integer-float-fraction-and-complex) | `std:math/Math`, `std:math/Integer` | `Math.sqrt(value)` over Numbers, and exact Integer algorithms (`gcd`, `lcm`, `factorial`, `pow`, `powMod`) |
+| [Array algorithms](../05-values-identity-equality-and-collections.md#core-collections-and-standard-library-algorithms-are-different-layers) | `std:collections/Array` | Copy/edit operations `append`, `concat`, `slice`, `insertAt`, `removeAt`, `reverse` that answer new Arrays, and `sort` with a default `<` comparator |
 | [Regular expressions](regex.md) | `std:regex/Regex` | Portable, linear-time pattern matching, captures, replacement, and splitting |
 | [Dates, times, and durations](datetime.md) | `std:datetime/*` | Civil dates and times, instants, fixed offsets, durations, periods, ISO 8601 and RFC 3339 text |
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |

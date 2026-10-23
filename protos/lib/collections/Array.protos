@@ -144,7 +144,12 @@ reduce: (array, reducer, ...initial) => {
 /// by `less(left, right)`. A comparator result other than canonical `true` or
 /// `false` signals `InvalidComparatorResult`, and two elements each less than
 /// the other signal `InvalidComparatorOrder`. The source is not mutated.
-sort: (array, less) => {
+/// When `less` is omitted it defaults to `(left, right) => left < right`, the
+/// ordinary `<` protocol of the elements; that default defines no total order
+/// over arbitrary values, so elements whose `<` fails or answers a non-Boolean
+/// signal exactly as with an explicit comparator. An explicit `null` is an
+/// ordinary comparator argument and does not select the default.
+sort: (array, less: (left, right) => left < right) => {
     snapshot: Array(...array)
 
     merge: (left, right) => {
@@ -248,6 +253,179 @@ sort: (array, less) => {
     }
 
     sortRange(0, snapshot.size())
+}
+
+/// Answers a fresh open Array holding the elements of `array` followed by
+/// `value` as one single element, even when `value` is itself an Array. The
+/// copy is shallow and `array` is not mutated. A non-Array `array` (one that
+/// `Array.recognizes` rejects) signals an Error.
+append: (array, value) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Array(...array, value)
+}
+
+/// Answers a fresh open Array holding the elements of `left` followed by the
+/// elements of `right`, flattened exactly one level. The copy is shallow,
+/// neither operand is mutated, and the result never shares indexed storage
+/// with either operand, even when both are the same Array or both are empty.
+/// An operand that `Array.recognizes` rejects signals an Error.
+concat: (left, right) => {
+    Array.recognizes(left).ifFalse(() => {
+        Error().signal()
+    })
+    Array.recognizes(right).ifFalse(() => {
+        Error().signal()
+    })
+    Array(...left, ...right)
+}
+
+/// Answers a fresh open Array holding the elements of a shallow snapshot of
+/// `array` at the half-open index range `[start, end)`. `start` and `end` must
+/// be Integers with `0 <= start <= end <= size`; anything else, including a
+/// Float, a negative bound, or an arbitrarily large Integer, signals an Error
+/// without numeric conversion. The result is never a view or an alias of
+/// `array`, even for the full or an empty range.
+slice: (array, start, end) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(start).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(end).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    size: snapshot.size()
+
+    (((0 <= start) && (start <= end)) && (end <= size)).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Answers a fresh Array of `count` null placeholders in O(count).
+    sized: null
+    sized = (count) => {
+        result: Array()
+        if(count > 0) {
+            half: sized(count.div(2))
+            result = Array(...half, ...half)
+            if((count % 2) == 1) {
+                result = Array(...result, null)
+            }
+        }
+        result
+    }
+
+    count: end - start
+    result: sized(count)
+    index: 0
+    while(index < count) {
+        result[index] = snapshot[start + index]
+        index = index + 1
+    }
+    result
+}
+
+/// Answers a fresh open Array holding the elements of `array` with `value`
+/// inserted as one single element at `index`, shifting later elements one
+/// position up. `index` must be an Integer with `0 <= index <= size`; `size`
+/// itself appends. Anything else signals an Error before any element is moved.
+/// The copy is shallow and `array` is not mutated.
+insertAt: (array, index, value) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(index).ifFalse(() => {
+        Error().signal()
+    })
+
+    result: Array(...array, value)
+    n: result.size() - 1
+
+    ((0 <= index) && (index <= n)).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Shift the suffix from the end so no pending element is overwritten.
+    position: n
+    while(position > index) {
+        result[position] = result[position - 1]
+        position = position - 1
+    }
+    result[index] = value
+    result
+}
+
+/// Answers a fresh open Array holding the elements of a shallow snapshot of
+/// `array` without the element at `index`, keeping the order and identity of
+/// the remaining elements. `index` must be an Integer with
+/// `0 <= index < size`; anything else, including any index of an empty Array,
+/// signals an Error. `array` is not mutated. Unlike `Bytes.removeAt`, this
+/// answers a new Array rather than editing a receiver.
+removeAt: (array, index) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(index).ifFalse(() => {
+        Error().signal()
+    })
+
+    snapshot: Array(...array)
+    n: snapshot.size()
+
+    ((0 <= index) && (index < n)).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Answers a fresh Array of `count` null placeholders in O(count).
+    sized: null
+    sized = (count) => {
+        result: Array()
+        if(count > 0) {
+            half: sized(count.div(2))
+            result = Array(...half, ...half)
+            if((count % 2) == 1) {
+                result = Array(...result, null)
+            }
+        }
+        result
+    }
+
+    result: sized(n - 1)
+    target: 0
+    while(target < (n - 1)) {
+        source: target
+        if(target >= index) {
+            source = target + 1
+        }
+        result[target] = snapshot[source]
+        target = target + 1
+    }
+    result
+}
+
+/// Answers a fresh open Array holding the elements of `array` in reverse
+/// order. The copy is shallow, `array` is not mutated, and no comparator or
+/// other callback is invoked.
+reverse: (array) => {
+    Array.recognizes(array).ifFalse(() => {
+        Error().signal()
+    })
+
+    result: Array(...array)
+    left: 0
+    right: result.size() - 1
+    while(left < right) {
+        swap: result[left]
+        result[left] = result[right]
+        result[right] = swap
+        left = left + 1
+        right = right - 1
+    }
+    result
 }
 
 // Parallel algorithms (D160): Standard Library policy composed only from the

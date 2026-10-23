@@ -883,6 +883,83 @@ Standard Library facilities of `std:collections/Array` built on the isolated
 parallel substrate; their Core placement boundary is owned by
 `../concurrency/PARALLEL_EXECUTION.md` §71.6 and §71.6E.
 
+## Standard Library Array copy/edit operations (D213 / LIB023-A)
+
+The Standard Library module `std:collections/Array` owns the following
+ordinary functions. They are Standard Library facilities composed from the
+standard Array construction, spread, size, and indexed-access semantics above;
+they are not Core Array selectors.
+
+```text
+append(array, value)
+concat(left, right)
+slice(array, start, end)
+insertAt(array, index, value)
+removeAt(array, index)
+reverse(array)
+```
+
+Result contract. Each successful call answers a fresh, open standard Array
+whose identity differs from every argument, and whose indexed storage is its own: later indexed or slot mutation
+of the result never affects an argument and vice versa. Elements are copied
+shallowly; every element keeps its exact identity (value-identity elements
+keep their value). No source Array is mutated, and the result is never a view,
+alias, or copy-on-write reference observable as shared state. A source that
+contains itself yields a result that contains the source, not the result.
+
+- `append(array, value)` answers the elements of `array` followed by `value`
+  as exactly one element, even when `value` is itself an Array.
+- `concat(left, right)` answers the elements of `left` followed by the
+  elements of `right`, flattened exactly one level. When `left` and `right`
+  are the same Array, its element sequence appears twice. Two empty operands
+  still answer a fresh empty Array.
+- `slice(array, start, end)` answers the elements at the half-open index range
+  `[start, end)` of a shallow snapshot of `array`, requiring
+  `0 <= start <= end <= size`.
+- `insertAt(array, index, value)` answers the elements of `array` with
+  `value` inserted as exactly one element at `index`, requiring
+  `0 <= index <= size`; `index == size` is equivalent to `append`.
+- `removeAt(array, index)` answers the elements of `array` without the element
+  at `index`, requiring `0 <= index < size`, and keeps the order and identity
+  of the remaining elements. It is unrelated to the receiver-mutating
+  `Bytes.removeAt`.
+- `reverse(array)` answers the elements of `array` in reverse order. It is
+  non-mutating and invokes no comparator or other callback.
+
+Inserting an Array with `append` or `insertAt` adds one element that is that
+Array; only `concat` contributes the contents of an Array operand.
+
+Argument domains. Every Array argument must satisfy `Array.recognizes`
+(§ Exact standard-owner semantic-domain recognition): open, closed, and frozen
+standard Arrays, including Arrays produced by a descendant Array factory, are
+accepted and remain readable; an ordinary object that merely delegates to
+`Array` or imitates `size`, `at`, or `each` is rejected. Every index or bound
+must satisfy `Integer.recognizes` and the stated mathematical inequalities over
+the exact Integer value. There is no conversion from Float or any other
+family, no negative or from-the-end indexing, no truncation, and no host
+machine-width limit: an arbitrarily large Integer outside the range is
+rejected as out of range. Sizes and elements are obtained through the exact
+standard spread and indexed semantics of the recognized source, so overriding
+slots such as `size`, `at`, or `each` on a source Array does not change the
+result. A violated domain or bound signals an ordinary `Error` before any
+result is exposed.
+
+Default `sort` comparator. `sort(array, less)` gains the default parameter
+`less: (left, right) => left < right`. The default applies only when the
+argument is absent under ordinary Closure parameter binding
+(`CALLABLES.md`); an explicit `null` or any other supplied value is used as
+the comparator. The default uses the elements' ordinary `<` protocol and
+defines no total order over arbitrary values. The existing stability,
+comparison order, snapshot, `InvalidComparatorResult`, and
+`InvalidComparatorOrder` behavior is unchanged, and Arrays of zero or one
+element still invoke no comparator.
+
+Effects and limits. Errors, effects, and non-local control transfers are the
+ordinary ones of the composed operations; extra arguments follow ordinary
+flexible Closure invocation and are ignored. These functions do not make Core
+Arrays resizable (Core Arrays keep fixed length and dense elements), and they
+introduce no syntax, no Core selector, and no new public module.
+
 # Actor-suspension integration for Map comparison scopes
 
 ### Map comparison scopes and Actor-local suspension

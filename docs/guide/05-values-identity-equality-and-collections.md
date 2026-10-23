@@ -951,6 +951,54 @@ them composed from `closure.parallel(...)` and Futures (see chapter 09).
 Those algorithms do not replace the Core `Array` family or introduce a second
 runtime Array representation.
 
+The same module also provides copy/edit operations and a default ascending
+sort:
+
+```protos
+Arrays: import("std:collections/Array")
+
+values: Array(10, 20, 30)
+
+appended: Arrays.append(values, 40)
+combined: Arrays.concat(values, Array(40, 50))
+middle: Arrays.slice(values, 1, 3)
+inserted: Arrays.insertAt(values, 1, 15)
+removed: Arrays.removeAt(values, 1)
+reversed: Arrays.reverse(values)
+sorted: Arrays.sort(Array(30, 10, 20))
+```
+
+The resulting contents are:
+
+```text
+appended = [10, 20, 30, 40]
+combined = [10, 20, 30, 40, 50]
+middle   = [20, 30]
+inserted = [10, 15, 20, 30]
+removed  = [10, 30]
+reversed = [30, 20, 10]
+sorted   = [10, 20, 30]
+```
+
+The bracketed lists on the right are explanatory pictures of each Array's
+elements. They are not Protos values, and they do not mean that the result
+is structurally equal (`==`) to some other Array.
+
+Core Arrays still have a fixed length. None of these functions grows or edits
+`values`; each answers a **new** open Array with its own identity and storage,
+and `values` remains `[10, 20, 30]`. A few rules to keep in mind:
+
+- Indexes are strict: they must be Integers within range (`0 <= start <= end
+  <= size` for `slice`, `0 <= index <= size` for `insertAt`,
+  `0 <= index < size` for `removeAt`). Floats, negative indexes, and
+  out-of-range values signal an `Error`; nothing is converted or clamped.
+- Copies are shallow: nested objects are shared by identity, not cloned.
+- `append` and `insertAt` add an Array argument as one element; only `concat`
+  splices another Array's elements in.
+- `sort(array)` without a comparator uses the ordinary `<` of the elements,
+  so it suits numbers but is not a total order over arbitrary values. An
+  explicit `null` comparator is not replaced by the default.
+
 ## Set and IdentitySet are Standard Library abstractions
 
 Current Standard Library modules include:
