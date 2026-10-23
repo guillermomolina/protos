@@ -8,6 +8,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.10-SNAPSHOT
+
+- `I115-R4` (experimental recursive factorial / Tier 1 graph evidence):
+  extend compact Bytecode DSL lowering to selected unary Integer Closure roots
+  and statically recognized recursive self-calls, retaining the signed-64
+  `long` carrier model and using the existing static unary call path.
+  - Register recursive module Closure bindings before nested root lowering
+    and publish pending execution-plan cells early enough for recursive
+    references to use the existing `InvokeStaticClosureOneTail` operation.
+  - Admit certain module-level sequences consisting of named Closure
+    creations to the frame-native authority path, and collapse immediate
+    enclosing-scope captured reads into `ReadCapturedFrameLocalAtRoot`.
+  - Add a deterministic `factorial(20)` correctness and Bytecode DSL census
+    fixture, optional Tier 1 compiler-graph capture, and update captured-read
+    structural oracles to recognize the revised lowering shape.
+  - **Historical semantic limitation:** the experimental static recursive
+    admission intentionally does not preserve every dynamic Object.call
+    selection, module-binding retargeting, or dynamic presence guarantee.
+    Physical instruction counts and opt-in compiler graphs are evidence,
+    not a complete semantic or performance acceptance gate.
+  - Reconstructed from original I115 commit
+    `ce5d7af4a73fa630db7f526bb456b8115707385f`.
+    No behavioral tests have been run on the versioned historical replay.
+
 ## 0.4.9-SNAPSHOT
 
 - `I115` (host-to-guest Call0/Call1 fast entry): streamline the admitted

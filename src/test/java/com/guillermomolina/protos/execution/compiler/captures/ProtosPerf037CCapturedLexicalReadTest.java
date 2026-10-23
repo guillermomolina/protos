@@ -68,17 +68,16 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         withCore(module -> {
             ProtosClosureValue run =
                     closure("holder: { value: 1 }\nrun: () => { holder.value }\nrun", module);
-            List<Instruction> selections =
-                    instructionsOf(run, "SelectCapturedMaterializedOwnerFrameAtRoot");
-            assertEquals(1, selections.size(), () -> "expected one root selection in " + names(run));
-            assertEquals("holder", constantArgument(selections.get(0), "name"));
+            List<Instruction> reads =
+                    instructionsOf(run, "ReadCapturedFrameLocalAtRoot");
+            assertEquals(1, reads.size(), () -> "expected one compact read in " + names(run));
+            assertEquals("holder", constantArgument(reads.get(0), "name"));
             assertTrue(
-                    (Integer) constantArgument(selections.get(0), "lexicalDepth") >= 1,
+                    (Integer) constantArgument(reads.get(0), "lexicalDepth") >= 1,
                     "the proven lexical depth is an immediate constant operand");
-            assertEquals(
-                    "holder",
-                    constantArgument(
-                            single(instructionsOf(run, "ReadCapturedFallbackAtRoot")), "name"));
+            assertTrue(
+                    instructionsOf(run, "SelectCapturedMaterializedOwnerFrameAtRoot").isEmpty());
+            assertTrue(instructionsOf(run, "ReadCapturedFallbackAtRoot").isEmpty());
 
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("1", integerValue(call(run, module)));
@@ -432,10 +431,12 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             evaluate(
                     "makeSlot: (initial) => {\n"
                             + "  slot: initial\n"
-                            + "  () => { slot }\n"
+                            + "  () => { () => { slot } }\n"
                             + "}\n"
-                            + "readerA: makeSlot(1)\n"
-                            + "readerB: makeSlot(2)\n",
+                            + "factoryA: makeSlot(1)\n"
+                            + "factoryB: makeSlot(2)\n"
+                            + "readerA: factoryA()\n"
+                            + "readerB: factoryB()\n",
                     module);
             ProtosClosureValue readerA = closure("readerA", module);
             ProtosClosureValue readerB = closure("readerB", module);
@@ -455,13 +456,17 @@ final class ProtosPerf037CCapturedLexicalReadTest {
             assertTrue(continuity.isValid(), "reads never invalidate the token");
 
             // Removal in the other activation invalidates the shared token only.
-            ProtosObjectValue ownerB = readerB.capturedLexicalEnvironmentForRuntime().context();
+            ProtosObjectValue ownerB =
+                    ProtosLexicalEnvironment.at(readerB.capturedLexicalEnvironmentForRuntime(), 1)
+                            .context();
             ownerB.removeLocalSlot("slot");
             assertFalse(continuity.isValid(), "the token is shared by the layout");
             assertEquals("1", integerValue(call(readerA, module)), "a still PRESENT owner is read through the physical check");
             assertSlotNotFound(module, () -> call(readerB, module));
 
-            ProtosObjectValue ownerA = readerA.capturedLexicalEnvironmentForRuntime().context();
+            ProtosObjectValue ownerA =
+                    ProtosLexicalEnvironment.at(readerA.capturedLexicalEnvironmentForRuntime(), 1)
+                            .context();
             ownerA.removeLocalSlot("slot");
             assertSlotNotFound(module, () -> call(readerA, module));
             assertSlotNotFound(module, () -> call(readerA, module));
@@ -490,12 +495,15 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                     "slot: 0\n"
                             + "makeSlot: () => {\n"
                             + "  slot: 1\n"
-                            + "  () => { slot }\n"
+                            + "  () => { () => { slot } }\n"
                             + "}\n"
-                            + "reader: makeSlot()\n",
+                            + "factory: makeSlot()\n"
+                            + "reader: factory()\n",
                     module);
             ProtosClosureValue reader = closure("reader", module);
-            ProtosObjectValue owner = reader.capturedLexicalEnvironmentForRuntime().context();
+            ProtosObjectValue owner =
+                    ProtosLexicalEnvironment.at(reader.capturedLexicalEnvironmentForRuntime(), 1)
+                            .context();
             owner.removeLocalSlot("slot");
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("0", integerValue(call(reader, module)), "D179 C0: an ABSENT owner reveals the farther binding");
