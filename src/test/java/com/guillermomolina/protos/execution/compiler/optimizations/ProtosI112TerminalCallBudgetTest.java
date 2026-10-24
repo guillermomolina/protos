@@ -68,6 +68,21 @@ final class ProtosI112TerminalCallBudgetTest {
             run()
             """;
 
+    private static final String FACTORIAL_RUN = """
+            factorial: (n) => {
+                result: 1
+
+                (n > 1).ifTrue() {
+                    result = n * factorial(n - 1)
+                }
+
+                result
+            }
+
+            run: () => { factorial(20) }
+            run()
+            """;
+
     /** PLAT062-T design target: 15 enumerated FULL instructions plus one of margin. */
     private static final int TARGET_IDENTITY_FULL = 16;
 
@@ -149,7 +164,7 @@ final class ProtosI112TerminalCallBudgetTest {
                 for (String required : List.of(
                         "c.EnterRoot",
                         "c.BindUnaryFrameParameter",
-                        "c.ReadRootFrameLocal",
+                        "load.local",
                         "c.EpilogForReturn")) {
                     assertTrue(
                             names(identity).contains(required),
@@ -271,7 +286,7 @@ final class ProtosI112TerminalCallBudgetTest {
                         () -> "InvokeClosureOneTail in run\n" + census.fullReport());
                 for (String required : List.of(
                         "c.BindUnaryFrameParameter",
-                        "c.ReadRootFrameLocal")) {
+                        "load.local")) {
                     assertTrue(
                             identity.contains(required),
                             () -> required + " missing in identity\n" + census.fullReport());
@@ -376,7 +391,7 @@ final class ProtosI112TerminalCallBudgetTest {
                 }
                 for (String required : List.of(
                         "c.BindUnaryFrameParameter",
-                        "c.ReadRootFrameLocal")) {
+                        "load.local")) {
                     assertTrue(
                             identity.contains(required),
                             () -> required + " missing in identity\n" + census.fullReport());
@@ -384,6 +399,75 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 assertInteger(
                         1,
+                        census.module().getCallTarget().call(
+                                harness.moduleActivation()));
+            });
+        }
+    }
+
+    /**
+     * I115-R6 (experimental): {@code run} reads the module-owned
+     * {@code factorial} with one {@code ReadGlobal} (GraalPy
+     * {@code ReadGlobal}): no captured owner selection, no conditional
+     * bytecode and no caller materialization.
+     */
+    @Test
+    void factorialRunUsesOneModuleGlobalReadAndSixFullInstructions()
+            throws Exception {
+
+        try (Harness harness =
+                     new Harness(false)) {
+
+            harness.run(() -> {
+                Census census = census(
+                        FACTORIAL_RUN, "i115-r6-factorial-run", 3);
+
+                List<Integer> runs = new ArrayList<>();
+                for (int index = 1; index < census.roots().size(); index++) {
+                    if (census.roots().get(index).getSourceSection() != null
+                            && census.roots().get(index).getSourceSection()
+                                    .getCharacters().toString()
+                                    .contains("factorial(20)")) {
+                        runs.add(index);
+                    }
+                }
+                assertEquals(1, runs.size(), () -> "one run root\n" + census.fullReport());
+                List<String> run = names(census.signatures().get(runs.get(0)));
+
+                assertEquals(
+                        List.of(
+                                "c.EnterRoot",
+                                "c.ReadGlobal",
+                                "load.constant",
+                                "c.InvokeClosureOneTail",
+                                "c.EpilogForReturn",
+                                "return"),
+                        run,
+                        () -> "run physical sequence\n" + census.fullReport());
+                assertEquals(6, run.size(), () -> "run FULL count\n" + census.fullReport());
+                assertEquals(
+                        1,
+                        count(run, "c.ReadGlobal"),
+                        () -> "one ReadGlobal in run\n" + census.fullReport());
+                for (String absent : List.of(
+                        "c.SelectCapturedMaterializedOwnerFrameAtRoot",
+                        "c.IsCapturedOwnerFrameSelected",
+                        "c.ReadCapturedFallbackAtRoot",
+                        "store.local",
+                        "load.local.mat",
+                        "branch",
+                        "branch.false",
+                        "merge.conditional",
+                        "c.CurrentActivation",
+                        "c.CurrentCallerReference")) {
+                    assertEquals(
+                            0,
+                            count(run, absent),
+                            () -> absent + " in run\n" + census.fullReport());
+                }
+
+                assertInteger(
+                        2432902008176640000L,
                         census.module().getCallTarget().call(
                                 harness.moduleActivation()));
             });

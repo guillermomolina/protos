@@ -8285,6 +8285,31 @@ final class CanonicalToBytecodeLowerer {
 
             if (resolution.isPresent()
                     && resolution.orElseThrow()
+                            instanceof CanonicalBindingResolution.CapturedResolved captured
+                    && captured.identity().owner().kind()
+                            == CanonicalLexicalScope.Kind.ROOT) {
+                if (currentInlineCallbackFrameNative) {
+                    // CanonicalBindingAnalysis rejects such callbacks.
+                    throw new AssertionError(
+                            "I115-R6 module-global read admitted into an "
+                                    + "inline callback frame: "
+                                    + captured.identity().name());
+                }
+                /*
+                 * I115-R6 (experimental): a read proven to a module
+                 * declaration reads the module scope directly
+                 * (GraalPy ReadGlobal): no nearer-scope selection, no
+                 * receiver fallback, no conditional bytecode.
+                 */
+                builder.emitReadGlobal(
+                        frameBackedOrdinal(captured.identity()),
+                        captured.identity().name(),
+                        captured.lexicalDepth());
+                return;
+            }
+
+            if (resolution.isPresent()
+                    && resolution.orElseThrow()
                             instanceof CanonicalBindingResolution.CapturedResolved captured) {
                 BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
                 if (ownerLocal != null && currentInlineCallbackFrameNative) {
@@ -8304,25 +8329,15 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
                 /*
-                 * I115-R3: a captured binding in the immediate enclosing
-                 * lexical scope can use the existing single-operation
-                 * root reader. The operation owns frame selection and
-                 * fallback instead of emitting a physical Bytecode
-                 * branch with a temporary selected-owner frame.
+                 * I115-R5: a statically identified captured owner uses the
+                 * generated materialized-local read below. Its owner-frame
+                 * selection retains the existing guarded cache and its
+                 * LoadLocalMaterialized handles cross-root frame kinds.
                  *
-                 * Experimental: prefer GraalPy-style compact bytecode
-                 * over the materialized-owner local-accessor route.
+                 * R4's compact single-operation reader reduced DSL size
+                 * but expanded the factorial run Tier 1 graph. Keep that
+                 * reader for captures without a known owner local.
                  */
-                if (ownerLocal != null
-                        && currentActivationLocal == null
-                        && captured.lexicalDepth() == 1) {
-                    builder.emitReadCapturedFrameLocalAtRoot(
-                            frameBackedOrdinal(captured.identity()),
-                            captured.identity().name(),
-                            captured.lexicalDepth());
-                    return;
-                }
-
                 if (ownerLocal != null) {
                     emitGuestCapturedMaterializedRead(
                             builder, captured, ownerLocal, false, carrierOperand);

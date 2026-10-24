@@ -65,6 +65,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -1602,6 +1603,101 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
             return CapturedNearerScopeAbsence.unproven(lexicalDepth);
+        }
+    }
+
+    /*
+     * I115-R6 (experimental): a bare read statically resolved to a module
+     * (ROOT) declaration reads the exact module scope of the invoked
+     * Closure's captured chain, with no nearer-scope absence guard and no
+     * receiver fallback. The value is read on every execution: the
+     * frame-backed authority first, then the module's general authority;
+     * only ABSENT consults the scopes outside the module, cold.
+     */
+    @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
+    @ConstantOperand(type = String.class, name = "name")
+    @ConstantOperand(type = int.class, name = "lexicalDepth")
+    public static final class ReadGlobal {
+        @Specialization(guards = "isCompact(frame)")
+        public static Object compact(
+                int frameOrdinal,
+                String name,
+                int lexicalDepth,
+                @Bind VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return readModuleGlobal(
+                    arguments,
+                    ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments),
+                    frameOrdinal,
+                    name,
+                    lexicalDepth);
+        }
+
+        @Specialization(guards = "!isCompact(frame)")
+        public static Object materialized(
+                int frameOrdinal,
+                String name,
+                int lexicalDepth,
+                @Bind VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            return readModuleGlobal(
+                    arguments,
+                    ProtosFrameArguments.publishedActivation(arguments)
+                            .capturedLexicalEnvironmentForRuntime(),
+                    frameOrdinal,
+                    name,
+                    lexicalDepth);
+        }
+
+        @NonIdempotent
+        static boolean isCompact(VirtualFrame frame) {
+            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+        }
+
+        private static Object readModuleGlobal(
+                Object[] arguments,
+                ProtosLexicalEnvironment capturedEnvironment,
+                int frameOrdinal,
+                String name,
+                int lexicalDepth) {
+            ProtosLexicalEnvironment moduleEnvironment =
+                    ProtosLexicalEnvironment.at(capturedEnvironment, lexicalDepth - 1);
+            if (moduleEnvironment == null) {
+                return readOutsideModuleGlobal(arguments, null, name);
+            }
+            // Java null is the frame-authority miss sentinel, never guest null.
+            Object value =
+                    ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
+                            moduleEnvironment, name, frameOrdinal);
+            if (value != null) {
+                return value;
+            }
+            java.util.Optional<Object> present =
+                    moduleEnvironment.readLocalSlotForRuntime(name);
+            if (present.isPresent()) {
+                return present.get();
+            }
+            return readOutsideModuleGlobal(arguments, moduleEnvironment.outer(), name);
+        }
+
+        /* ABSENT in the module: only the scopes outside it (the prelude). */
+        @TruffleBoundary
+        private static Object readOutsideModuleGlobal(
+                Object[] arguments,
+                ProtosLexicalEnvironment outside,
+                String name) {
+            for (ProtosLexicalEnvironment scope = outside;
+                    scope != null;
+                    scope = scope.outer()) {
+                java.util.Optional<Object> present = scope.readLocalSlotForRuntime(name);
+                if (present.isPresent()) {
+                    return present.get();
+                }
+            }
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newSlotNotFound(
+                            ProtosFrameArguments.activation(arguments)));
         }
     }
 
