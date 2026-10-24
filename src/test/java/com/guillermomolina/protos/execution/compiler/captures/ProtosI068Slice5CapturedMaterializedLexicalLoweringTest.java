@@ -124,21 +124,30 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(ProtosInstructionNames::of)
                                 .toList();
 
+                assertEquals(
+                        CanonicalLexicalScope.Kind.ROOT,
+                        resolution.identity().owner().kind());
+
                 /*
-                 * PERF013 Slice B1: the module root and this Closure are
-                 * lowered into the same shared BytecodeRootNodes group (Slice
-                 * A), so this proven capture now takes the direct
-                 * MaterializedLocalAccessor fast path instead of the runtime
-                 * frame-lexical-binding-authority path.
+                 * I115-R6 (experimental): a read proven to a module (ROOT)
+                 * declaration lowers to one direct module-global read
+                 * instead of the captured owner-frame selection.
                  */
-                assertTrue(
+                assertEquals(
+                        1,
                         instructionNames.stream()
-                                .anyMatch(
-                                        name ->
-                                                name.contains(
-                                                        "SelectCapturedMaterializedOwnerFrame")),
+                                .filter("c.ReadGlobal"::equals)
+                                .count(),
                         () ->
-                                "captured read did not lower to SelectCapturedMaterializedOwnerFrame: "
+                                "module-owned read did not lower to one ReadGlobal: "
+                                        + instructionNames);
+                assertTrue(
+                        instructionIndexContaining(
+                                        instructionNames,
+                                        "SelectCapturedMaterializedOwnerFrame")
+                                < 0,
+                        () ->
+                                "module-owned read still selects a captured owner frame: "
                                         + instructionNames);
 
                 /*
@@ -413,7 +422,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
 
     @Test
-    void lateNearerCreationRetargetsCapturedRead()
+    void moduleGlobalReadIgnoresLateNearerCreation()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -466,16 +475,21 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 module.executionDomain());
 
                 /*
-                 * Static analysis proved the outer x before this dynamic
-                 * creation existed. D179 C0 still requires this later nearer
-                 * PRESENT binding to retarget subsequent lexical lookup.
+                 * I115-R6 (experimental divergence from D179 C0): x is
+                 * statically proven to the module declaration, so a later
+                 * nearer PRESENT x does not retarget this ROOT-bound read.
                  */
                 invocation.context().createLocalSlot("x", nearer);
 
                 Object result =
                         plan.executeBytecodeActivationForTesting(invocation);
 
-                assertSame(nearer, result);
+                assertSame(outer, result);
+                assertSame(
+                        nearer,
+                        invocation.context()
+                                .readLocalSlot("x")
+                                .orElseThrow());
                 assertSame(
                         outer,
                         module.context()
@@ -557,7 +571,11 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 Object result =
                         plan.executeBytecodeActivationForTesting(invocation);
 
-                assertSame(replacement, result);
+                /*
+                 * I115-R6: the write reached the nearer binding, while the
+                 * later ROOT-bound read of x still returns the module's.
+                 */
+                assertSame(outer, result);
 
                 /*
                  * The write must retarget to the now-nearer current context.
@@ -666,20 +684,30 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(ProtosInstructionNames::of)
                                 .toList();
 
+                assertEquals(
+                        CanonicalLexicalScope.Kind.ROOT,
+                        resolution.identity().owner().kind());
+
                 /*
-                 * PERF013 Slice B1: module root, outer Closure, and inner
-                 * Closure all share one physical BytecodeRootNodes group
-                 * (Slice A), so this depth-two proven capture also takes the
-                 * direct MaterializedLocalAccessor fast path.
+                 * I115-R6 (experimental): the depth-two read is proven to
+                 * the module declaration, so it is one direct ReadGlobal
+                 * addressing the module at depth 2.
                  */
+                assertEquals(
+                        1,
+                        instructionNames.stream()
+                                .filter("c.ReadGlobal"::equals)
+                                .count(),
+                        () ->
+                                "depth-two module read did not use one ReadGlobal: "
+                                        + instructionNames);
                 assertTrue(
                         instructionIndexContaining(
                                         instructionNames,
                                         "SelectCapturedMaterializedOwnerFrame")
-                                >= 0,
+                                < 0,
                         () ->
-                                "depth-two capture did not use "
-                                        + "SelectCapturedMaterializedOwnerFrame: "
+                                "depth-two module read still selects a captured owner frame: "
                                         + instructionNames);
 
                 /*
@@ -1036,6 +1064,28 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                         .orElseThrow());
 
                 assertEquals(1, resolution.lexicalDepth());
+                assertEquals(
+                        CanonicalLexicalScope.Kind.ROOT,
+                        resolution.identity().owner().kind());
+
+                java.util.List<String> instructionNames =
+                        plan.bytecodeActivationRootForTesting()
+                                .getBytecodeNode()
+                                .getInstructionsAsList()
+                                .stream()
+                                .map(ProtosInstructionNames::of)
+                                .toList();
+
+                // I115-R6: the module-owned x is read by one ReadGlobal.
+                assertEquals(
+                        1,
+                        instructionNames.stream()
+                                .filter("c.ReadGlobal"::equals)
+                                .count(),
+                        () ->
+                                "module-owned read in object-body method did not "
+                                        + "use one ReadGlobal: "
+                                        + instructionNames);
 
                 ProtosClosureValue bound =
                         method.bindMethod(object, object);
@@ -1139,14 +1189,19 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(ProtosInstructionNames::of)
                                 .toList();
 
-                assertTrue(
-                        instructionIndexContaining(
-                                        instructionNames,
-                                        "ReadCapturedFrameLocal")
-                                >= 0,
+                assertEquals(
+                        CanonicalLexicalScope.Kind.ROOT,
+                        resolution.identity().owner().kind());
+
+                // I115-R6: the rematerialized ROOT owner keeps the ReadGlobal lowering.
+                assertEquals(
+                        1,
+                        instructionNames.stream()
+                                .filter("c.ReadGlobal"::equals)
+                                .count(),
                         () ->
-                                "reparsed captured lookup lost its "
-                                        + "frame-native lowering: "
+                                "reparsed module-owned lookup lost its "
+                                        + "ReadGlobal lowering: "
                                         + instructionNames);
 
                 com.oracle.truffle.api.source.SourceSection section =
@@ -1295,6 +1350,114 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
         }
     }
 
+    /**
+     * I115-R6 (experimental): a ROOT-bound read never falls back to the
+     * bound receiver. Once the module x is removed, the read fails with
+     * SlotNotFound instead of returning the receiver's x.
+     */
+    @Test
+    void moduleGlobalReadDoesNotFallBackToBoundReceiverAfterRemoval()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivationWithSlotNotFound();
+
+                ProtosObjectValue outer =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue receiverValue =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("seed", outer);
+
+                String characters =
+                        "x: seed\n"
+                                + "() => x";
+                Source source =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        characters,
+                                        "i115-r6-no-receiver-fallback.protos")
+                                .build();
+
+                CanonicalSequence sequence = canonicalize(characters);
+                CanonicalClosure definition =
+                        assertInstanceOf(
+                                CanonicalClosure.class,
+                                sequence.expressions().get(1));
+                CanonicalLookup capturedRead =
+                        assertInstanceOf(
+                                CanonicalLookup.class,
+                                definition.body().expressions().get(0));
+
+                ProtosBytecodeRootNode root =
+                        new CanonicalToBytecodeLowerer(language, source)
+                                .lowerRoot(sequence);
+
+                ProtosClosureValue closure =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                root.getCallTarget().call(module));
+                ProtosClosureExecutionPlan plan =
+                        closure.executionPlan().orElseThrow();
+
+                CanonicalBindingResolution.CapturedResolved resolution =
+                        assertInstanceOf(
+                                CanonicalBindingResolution.CapturedResolved.class,
+                                plan.bytecodeBindingAnalysisForTesting()
+                                        .resolutionOf(capturedRead)
+                                        .orElseThrow());
+                assertEquals(
+                        CanonicalLexicalScope.Kind.ROOT,
+                        resolution.identity().owner().kind());
+
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                receiver.createLocalSlot("x", receiverValue);
+                ProtosClosureValue bound = closure.bindMethod(receiver, receiver);
+
+                module.context().removeLocalSlot("x");
+
+                ProtosActivation invocation =
+                        ProtosActivation.forClosureInvocation(
+                                bound,
+                                java.util.List.of(),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain());
+
+                // SlotNotFound, never the receiver's x nor a generic Error.
+                ProtosSignalException failure = assertThrows(
+                        ProtosSignalException.class,
+                        () ->
+                                bound.executionPlan()
+                                        .orElseThrow()
+                                        .executeBytecodeActivationForTesting(
+                                                invocation));
+                ProtosObjectValue slotNotFound =
+                        com.guillermomolina.protos.runtime.ProtosCoreErrors.prototype(
+                                module,
+                                com.guillermomolina.protos.runtime.ProtosCoreErrors
+                                        .StandardError.SLOT_NOT_FOUND);
+                assertSame(
+                        module.prelude().orElseThrow().bindings()
+                                .readLocalSlot("SlotNotFound").orElseThrow(),
+                        slotNotFound,
+                        "the fixture's standard SlotNotFound prototype");
+                assertSame(
+                        slotNotFound,
+                        failure.error().parent().orElse(null),
+                        "the Error must be a SlotNotFound occurrence");
+                assertTrue(receiver.hasLocalSlot("x"));
+                assertFalse(module.context().hasLocalSlot("x"));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
     private static int instructionIndexContaining(
             java.util.List<String> instructionNames,
             String fragment) {
@@ -1339,6 +1502,33 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
         bindings.createLocalSlot(
                 "Error",
                 new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.createLocalSlot(
+                "Array",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
+        bindings.freeze();
+
+        return new ProtosPrelude(bindings, contextPrototype)
+                .newModuleActivation();
+    }
+
+    /**
+     * The {@link #moduleActivation} fixture plus the standard SlotNotFound
+     * prototype that ReadGlobal's ABSENT error construction requires.
+     */
+    private static ProtosActivation moduleActivationWithSlotNotFound() {
+        ProtosStandardObjectProtocol.install();
+
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings =
+                new ProtosObjectValue(contextPrototype);
+        ProtosObjectValue errorPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot("Error", errorPrototype);
+        bindings.createLocalSlot(
+                "SlotNotFound",
+                new ProtosObjectValue(errorPrototype));
         bindings.createLocalSlot(
                 "Array",
                 new ProtosObjectValue(ProtosObjectValue.rootObject()));

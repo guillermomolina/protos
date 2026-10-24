@@ -68,16 +68,27 @@ final class ProtosPerf037CCapturedLexicalReadTest {
         withCore(module -> {
             ProtosClosureValue run =
                     closure("holder: { value: 1 }\nrun: () => { holder.value }\nrun", module);
-            List<Instruction> reads =
-                    instructionsOf(run, "ReadCapturedFrameLocalAtRoot");
-            assertEquals(1, reads.size(), () -> "expected one compact read in " + names(run));
+            // I115-R6: holder is module-owned (ROOT), so it is one ReadGlobal.
+            List<Instruction> reads = instructionsOf(run, "ReadGlobal");
+            assertEquals(
+                    1,
+                    reads.size(),
+                    () -> "expected one module-global read in " + names(run));
             assertEquals("holder", constantArgument(reads.get(0), "name"));
             assertTrue(
                     (Integer) constantArgument(reads.get(0), "lexicalDepth") >= 1,
                     "the proven lexical depth is an immediate constant operand");
-            assertTrue(
-                    instructionsOf(run, "SelectCapturedMaterializedOwnerFrameAtRoot").isEmpty());
-            assertTrue(instructionsOf(run, "ReadCapturedFallbackAtRoot").isEmpty());
+            assertTrue(instructionsOf(
+                    run, "ReadCapturedFrameLocalAtRoot").isEmpty());
+            assertTrue(instructionsOf(
+                    run, "SelectCapturedMaterializedOwnerFrameAtRoot").isEmpty());
+            assertTrue(instructionsOf(
+                    run, "IsCapturedOwnerFrameSelected").isEmpty());
+            assertTrue(instructionsOf(
+                    run, "ReadCapturedFallbackAtRoot").isEmpty());
+            assertFalse(
+                    names(run).contains("load.local.mat"),
+                    "a module-global read uses no materialized local read");
 
             for (int call = 0; call < WARM_UP_CALLS; call++) {
                 assertEquals("1", integerValue(call(run, module)));
@@ -238,23 +249,33 @@ final class ProtosPerf037CCapturedLexicalReadTest {
                 assertEquals("1", integerValue(call(reader, module)));
             }
 
+            /*
+             * I115-R6 (experimental divergence from D179 C0): slot is
+             * module-owned (ROOT), so a later nearer binding, even
+             * PRESENT(null), does not shadow the module read.
+             */
+            assertEquals(1, instructionsOf(reader, "ReadGlobal").size(), () -> names(reader).toString());
             ProtosObjectValue nearer = reader.capturedLexicalEnvironmentForRuntime().context();
             nearer.createLocalSlot("slot", ProtosNullValue.INSTANCE);
-            assertSame(ProtosNullValue.INSTANCE, call(reader, module));
+            assertEquals("1", integerValue(call(reader, module)), "a nearer binding does not retarget a ROOT read");
 
-            module.context().removeLocalSlot("slot");
+            // PRESENT(null) in the module is not ABSENT.
+            module.context().assignLocalSlot("slot", ProtosNullValue.INSTANCE);
             assertSame(
                     ProtosNullValue.INSTANCE,
                     call(reader, module),
-                    "a nearer PRESENT(null) binding is not ABSENT");
+                    "a module PRESENT(null) binding is not ABSENT");
 
-            nearer.removeLocalSlot("slot");
+            module.context().removeLocalSlot("slot");
             ProtosSignalException absent =
                     assertThrows(ProtosSignalException.class, () -> call(reader, module));
             assertSame(
                     ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.SLOT_NOT_FOUND),
                     absent.error().parent().orElse(null),
-                    "ABSENT along the whole chain, with no receiver slot, is SlotNotFound");
+                    "an ABSENT module binding is SlotNotFound, never the nearer one");
+
+            nearer.removeLocalSlot("slot");
+            assertSlotNotFound(module, () -> call(reader, module));
         });
         System.out.println("PERF037C_PRESENT_NULL_VERSUS_ABSENT=PASS");
     }

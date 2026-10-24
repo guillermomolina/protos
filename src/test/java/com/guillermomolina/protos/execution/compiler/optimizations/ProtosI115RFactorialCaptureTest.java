@@ -554,6 +554,81 @@ final class ProtosI115RFactorialCaptureTest {
         }
     }
 
+    /** I115-R5 historical run() FULL DSL count, before the R6 module-global read. */
+    private static final int I115_R5_RUN_DSL_FULL_HISTORICAL = 17;
+
+    /** I115-R6 run() FULL DSL sequence (GraalPy run() has 6). */
+    private static final List<String> I115_R6_RUN_DSL_FULL = List.of(
+            "c.EnterRoot",
+            "c.ReadGlobal",
+            "load.constant",
+            "c.InvokeClosureOneTail",
+            "c.EpilogForReturn",
+            "return");
+
+    /*
+     * I115-R6 (experimental): run() reads the module-owned factorial with
+     * one ReadGlobal. R5 used the generated materialized captured read
+     * (owner-frame selection, load.local.mat and a conditional fallback)
+     * at I115_R5_RUN_DSL_FULL_HISTORICAL instructions.
+     */
+    @Test
+    void capturedModuleBindingUsesModuleGlobalRead()
+            throws Exception {
+        Path file = Path.of(
+                "target", "i115-r-factorial",
+                "r6-module-global.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(
+                file, I115_R2_SOURCE, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            var prepared = session.prepareTopLevel("run");
+            ProtosBytecodeRootNode root = assertInstanceOf(
+                    ProtosBytecodeRootNode.class,
+                    prepared.hostExecutableForTesting()
+                            .target.getRootNode());
+
+            List<String> names = root.getBytecodeNode()
+                    .getInstructionsAsList().stream()
+                    .map(ProtosInstructionNames::of)
+                    .toList();
+
+            assertEquals(
+                    I115_R6_RUN_DSL_FULL,
+                    names,
+                    "I115-R6 run() FULL DSL sequence");
+
+            for (String retired : List.of(
+                    "SelectCapturedMaterializedOwnerFrameAtRoot",
+                    "IsCapturedOwnerFrameSelected",
+                    "ReadCapturedFallbackAtRoot",
+                    "ReadCapturedFrameLocalAtRoot",
+                    "load.local.mat")) {
+                assertTrue(
+                        names.stream().noneMatch(
+                                name -> name.contains(retired)),
+                        "Module-owned read kept a captured path: " + retired);
+            }
+
+            assertEquals(
+                    EXPECTED, prepared.executable().execute().asLong());
+
+            System.out.println(
+                    "I115_R5_RUN_DSL_FULL_HISTORICAL="
+                            + I115_R5_RUN_DSL_FULL_HISTORICAL);
+            System.out.println(
+                    "I115_R6_RUN_DSL_FULL=" + names.size());
+            System.out.println(
+                    "I115_R6_MODULE_GLOBAL_READ=PASS");
+        }
+    }
+
     @Test
     void compactRecursiveFactorialBoundaryInputs() throws Exception {
         String source = I115_R2_SOURCE + """

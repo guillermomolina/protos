@@ -137,6 +137,12 @@ final class CanonicalBindingAnalysis {
                             captured.identity().name())) {
                 return false;
             }
+
+            // I115-R6: a module-owned read stays an exact ReadGlobal.
+            if (captured.identity().owner().kind()
+                    == CanonicalLexicalScope.Kind.ROOT) {
+                return false;
+            }
         }
 
         for (CanonicalAssign assign : assignResolutions.keySet()) {
@@ -198,9 +204,15 @@ final class CanonicalBindingAnalysis {
                     && resolved.identity().owner() == ownScope) {
                 continue;
             }
-            if (!directParentCapture(
-                    enclosing.resolutionOf(entry.getKey()).orElse(null),
-                    parentScope, parentFrameNames)) {
+            CanonicalBindingResolution parent =
+                    enclosing.resolutionOf(entry.getKey()).orElse(null);
+            if (!directParentCapture(parent, parentScope, parentFrameNames)) {
+                return false;
+            }
+            // I115-R6: a module-owned read stays an exact ReadGlobal.
+            if (((CanonicalBindingResolution.CapturedResolved) parent)
+                            .identity().owner().kind()
+                    == CanonicalLexicalScope.Kind.ROOT) {
                 return false;
             }
         }

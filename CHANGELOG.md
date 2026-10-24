@@ -8,6 +8,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.11-SNAPSHOT
+
+- `I115-R6` (experimental GraalPy-style module-global reads): introduce the
+  `ReadGlobal` Bytecode DSL operation for lexically resolved ROOT/module
+  bindings; read the live module authority directly, without materializing
+  the caller or emitting captured-owner selection and conditional fallback.
+  - Keep module presence, mutation and `PRESENT(null)` observable; only an
+    ABSENT module binding consults outer scopes such as the Prelude through
+    a cold fallback. Do not fall back to the receiver.
+  - Reject inline-callback admission for module-owned reads and leave
+    other captured reads on their existing owner-selection paths.
+  - Extend capture, structural and factorial tests. The original I115-R6
+    report records a reduction of factorial `run()` FULL DSL instructions
+    from 17 (R5) to 6 (R6); this is historical evidence, not a measurement
+    made on this versioned replay.
+  - **Historical semantic divergence:** the statically resolved module read
+    ignores a nearer binding created later, contrary to D179 C0's late
+    lexical-retargeting behavior. The added design note is non-normative,
+    grants no approval for changing `spec/`, and does not establish complete
+    Protos semantic equivalence or a final performance gate.
+  - Reconstructed from original I115 commit
+    `48db4247d1d63e31a75fe908fe731b13536a0009`. No behavioral tests were
+    run on this versioned historical replay.
+
 ## 0.4.10-SNAPSHOT
 
 - `I115-R4` (experimental recursive factorial / Tier 1 graph evidence):

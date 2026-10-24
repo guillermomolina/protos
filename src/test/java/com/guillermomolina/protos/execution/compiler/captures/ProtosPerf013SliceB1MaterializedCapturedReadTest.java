@@ -118,7 +118,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
 
-                assertMaterializedFastPath(plan, capturedRead);
+                assertExpectedReadPathForOwner(plan, capturedRead);
 
                 module.context().assignLocalSlot("x", second);
 
@@ -220,7 +220,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
 
-                assertMaterializedFastPath(plan, capturedRead);
+                assertExpectedReadPathForOwner(plan, capturedRead);
 
                 Object result = plan.executeBytecodeActivationForTesting(invocationOf(module, closure));
                 assertSame(ProtosNullValue.INSTANCE, result);
@@ -259,7 +259,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
 
-                assertMaterializedFastPath(plan, capturedRead);
+                assertExpectedReadPathForOwner(plan, capturedRead);
 
                 module.context().removeLocalSlot("x");
 
@@ -307,7 +307,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
 
-                assertMaterializedFastPath(plan, capturedRead);
+                assertExpectedReadPathForOwner(plan, capturedRead);
 
                 module.context().removeLocalSlot("x");
                 module.context().createLocalSlot("x", recreated);
@@ -322,7 +322,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
     }
 
     @Test
-    void nearerLateCreationRetargetsCapturedReadAwayFromMaterializedOwner() throws Exception {
+    void nearerLateCreationDoesNotRetargetModuleGlobalRead() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -350,24 +350,25 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow();
 
-                assertMaterializedFastPath(plan, capturedRead);
+                assertExpectedReadPathForOwner(plan, capturedRead);
 
                 ProtosActivation invocation = invocationOf(module, closure);
                 /*
-                 * D179 C0: a binding that appears in a nearer current context
-                 * after static analysis/materialization must still win over
-                 * the statically proven, now-materialized outer owner.
+                 * I115-R6 (experimental divergence from D179 C0): x is
+                 * statically proven to the module declaration, so a binding
+                 * that appears later in a nearer current context does not
+                 * retarget this ROOT-bound read.
                  */
                 invocation.context().createLocalSlot("x", nearer);
 
                 Object result = plan.executeBytecodeActivationForTesting(invocation);
-                assertSame(nearer, result);
+                assertSame(outer, result);
                 assertSame(outer, module.context().readLocalSlot("x").orElseThrow());
             } finally {
                 context.leave();
             }
         }
-        System.out.println("NEARER_LATE_CREATION_RETARGETING=PASS");
+        System.out.println("I115_R6_NEARER_LATE_CREATION_IGNORED_BY_MODULE_GLOBAL=PASS");
     }
 
     @Test
@@ -479,16 +480,28 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .map(ProtosInstructionNames::of)
                                 .toList();
 
+                CanonicalLookup reparsedRead =
+                        assertInstanceOf(
+                                CanonicalLookup.class, reparsedDefinition.body().expressions().get(0));
+                CanonicalBindingResolution.CapturedResolved resolution =
+                        assertInstanceOf(
+                                CanonicalBindingResolution.CapturedResolved.class,
+                                rebuilt.bytecodeBindingAnalysisForTesting()
+                                        .resolutionOf(reparsedRead)
+                                        .orElseThrow());
+                assertEquals(CanonicalLexicalScope.Kind.ROOT, resolution.identity().owner().kind());
+
                 /*
                  * The rebuild lowers the Closure in isolation, in a brand new
                  * BytecodeRootNodes group that does not include the module
-                 * root: the owner BytecodeLocal is unavailable, so the exact
-                 * old runtime-authority fallback path must still be used.
+                 * root. I115-R6: the ROOT owner is still statically proven,
+                 * so the read is one ReadGlobal, which needs no owner
+                 * BytecodeLocal.
                  */
-                assertTrue(
-                        instructionNames.stream()
-                                .anyMatch(name -> name.contains("ReadCapturedFrameLocal")),
-                        () -> "isolated rebuild lost its safe fallback path: " + instructionNames);
+                assertEquals(
+                        1,
+                        instructionNames.stream().filter("c.ReadGlobal"::equals).count(),
+                        () -> "isolated rebuild did not use one ReadGlobal: " + instructionNames);
                 assertTrue(
                         instructionNames.stream()
                                 .noneMatch(
@@ -510,11 +523,12 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
         System.out.println("OLD_SAFE_FALLBACK=PASS");
     }
 
-    private static void assertMaterializedFastPath(
+    private static void assertExpectedReadPathForOwner(
             ProtosClosureExecutionPlan plan, CanonicalLookup capturedRead) {
-        assertInstanceOf(
-                CanonicalBindingResolution.CapturedResolved.class,
-                plan.bytecodeBindingAnalysisForTesting().resolutionOf(capturedRead).orElseThrow());
+        CanonicalBindingResolution.CapturedResolved captured =
+                assertInstanceOf(
+                        CanonicalBindingResolution.CapturedResolved.class,
+                        plan.bytecodeBindingAnalysisForTesting().resolutionOf(capturedRead).orElseThrow());
 
         java.util.List<String> instructionNames =
                 plan.bytecodeActivationRootForTesting()
@@ -523,6 +537,26 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         .stream()
                         .map(ProtosInstructionNames::of)
                         .toList();
+
+        /*
+         * I115-R6 (experimental): a read proven to a module (ROOT)
+         * declaration is one direct ReadGlobal, never a captured owner-frame
+         * selection or materialized load.
+         */
+        if (captured.identity().owner().kind() == CanonicalLexicalScope.Kind.ROOT) {
+            assertEquals(
+                    1,
+                    instructionNames.stream().filter("c.ReadGlobal"::equals).count(),
+                    () -> "module-owned read did not lower to one ReadGlobal: " + instructionNames);
+            assertTrue(
+                    instructionNames.stream()
+                            .noneMatch(name ->
+                                    name.contains("SelectCapturedMaterializedOwnerFrame")
+                                            || name.startsWith("load.local.mat")
+                                            || name.equals("c.ReadCapturedFrameLocalAtRoot")),
+                    () -> "module-owned read kept a captured read path: " + instructionNames);
+            return;
+        }
 
         /*
          * I115-R3: immediate captured reads may use the compact
