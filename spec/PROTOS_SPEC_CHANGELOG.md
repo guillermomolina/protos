@@ -23,6 +23,38 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.470] - 2026-10-24
+
+### D214 — Standard Library Vector and Matrix (architecture C1, semantics D214-S1)
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` (normative owner): new section
+  "Standard Library Vector and Matrix (D214-S1)". The explicit module
+  `std:math/LinearAlgebra` exports `Vector` and `Matrix` as ordinary
+  constructors of ordinary identity-bearing objects with private numeric
+  storage and frozen standard prototypes (C1); no syntax, Core family or
+  Prelude binding is added. Elements admit only genuine Number values
+  (SmallInteger, BigInteger, Fraction, Float, Complex; heterogeneous allowed),
+  checked by constructors and `atPut` without conversion or guest callbacks.
+  Vector is dense, fixed-length and unoriented; Matrix is dense, rectangular
+  and fixed-shape; `Vector(3)` holds the single element `3`;
+  `Matrix(rows, columns, ...values)` requires exactly `rows * columns`
+  row-major values; `Matrix(0, n)` and `Matrix(n, 0)` stay distinct; no
+  padding or shape inference. Indexed API: Vector `size`/`at`/`atPut`/`v[i]`,
+  Matrix `rows`/`columns`/`at`/`atPut` (no `m[row, column]`); `atPut` answers
+  the value and checks frozen state, bounds, then admission. Algebraic API:
+  `add`, `scale`, `dot`, `matvec`, `matmul`, `transpose`, `copy` with strict
+  dimensions, fresh open unaliased results, no broadcasting or dtype, and
+  canonical Number arithmetic without redefined-method kernels. D214-F1 strict
+  reductions: ascending-index sums seeded with the first product, empty
+  contraction is exact Integer `0`, no reassociation or FMA, parallelism only
+  across cells. `dot` is Hermitian (conjugates the first operand); `matvec`
+  and `matmul` are bilinear, using the existing coupled Complex product.
+  Representation R1 (private references) with R2 adaptive primitive storage
+  only as an invisible future optimization. Identity equality/hash; close
+  permits and freeze forbids element replacement; Actor/P transfer shares
+  frozen prototypes and copies payload and slots preserving graph identity.
+  The Core statement that no `Real`, `Vector` or `Matrix` prototype exists is
+  retained and clarified.
+
 ## [0.1.469] - 2026-10-23
 
 ### D213 / LIB023-A — Standard Library Array copy/edit operations and default sort comparator

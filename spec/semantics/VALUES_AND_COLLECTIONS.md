@@ -1267,6 +1267,158 @@ guest collection for that complete vector. This uses the existing Array and
 frozen-object mechanisms for rest bindings rather than defining a second
 privileged argument-collection object model.
 
+## Standard Library Vector and Matrix (D214-S1)
+
+This section is the normative owner of the Standard Library Vector and Matrix
+contract approved under D214 with architecture C1 and semantics D214-S1. It
+adds no syntax, no Core value family, no Core selector, and no Prelude binding.
+Core still defines no `Vector` or `Matrix` prototype (**Numeric Model**).
+
+### Module and architecture
+
+The explicit Standard Library module `std:math/LinearAlgebra` exports the
+members `Vector` and `Matrix`. They are available only through an explicit
+import of that module; no Prelude or ambient binding exists.
+
+Under architecture C1, every Vector and every Matrix is an ordinary Protos
+object with ordinary identity. Its numeric payload is private
+implementation-internal storage, not a slot and not reflectively enumerable.
+Each instance delegates to the standard Vector or Matrix prototype of the
+module; those standard prototypes are frozen.
+
+The module members `Vector` and `Matrix` act as ordinary constructors invoked
+with ordinary call syntax. Their invocation, argument binding, and failure
+follow ordinary callable semantics.
+
+### Numeric admission
+
+A Vector or Matrix element is admitted only when it is a genuine Protos Number
+value of a standard numeric family: SmallInteger, BigInteger, Fraction, Float,
+or Complex (**Standard numeric families and prototypes**). Contents may be
+heterogeneous: different elements of one Vector or Matrix may belong to
+different numeric families.
+
+`null`, Boolean values, String values, ordinary objects that merely delegate to
+a Number prototype, and foreign or host values that imitate numbers are
+rejected. Admission is checked by every constructor and by every `atPut`.
+Admission never converts a value and never invokes guest code: no user
+callback, user-defined method, or redefined numeric selector participates in
+the check. A rejected value is an ordinary failure; the admitted value is
+stored as supplied.
+
+### Shape
+
+A Vector is dense, has a fixed length, and has no orientation (it is neither a
+row nor a column). A Matrix is dense, rectangular, and has fixed dimensions
+`rows` and `columns`.
+
+Every index and every dimension must be an exact non-negative Integer
+(`Integer.recognizes`); no conversion, negative indexing, or host-width limit
+applies. Zero-sized shapes are permitted, and `Matrix(0, n)` and `Matrix(n, 0)`
+are distinct shapes whose `rows()` and `columns()` preserve the supplied
+dimensions.
+
+- `Vector(x, ...)` answers a Vector whose elements are exactly the supplied
+  arguments, in order. In particular `Vector(3)` answers a one-element Vector
+  whose single element is `3`; it is not a length request. `Vector()` answers
+  the empty Vector.
+- `Matrix(rows, columns, ...values)` requires exactly `rows * columns` values,
+  supplied in logical row-major order; any other count fails.
+- Explicit spread at the call site is permitted for supplying elements or
+  values.
+
+No constructor pads, fills with implicit zeros, or infers a shape.
+
+### Indexed API
+
+Vector publishes `size()`, `at(i)`, `atPut(i, value)`, and the indexing form
+`v[i]`, which has the same read meaning as `at(i)`. Matrix publishes `rows()`,
+`columns()`, `at(row, column)`, and `atPut(row, column, value)`. No `m[row,
+column]` or `m[row]` form is defined for Matrix.
+
+Valid Vector indexes are `0 <= i < size()`; valid Matrix positions are
+`0 <= row < rows()` and `0 <= column < columns()`.
+
+`atPut` answers the assigned value. It validates in this order: first that the
+receiver is not frozen, then the bounds of every index, then numeric admission
+of the value. The first failing check determines the failure, and a
+failed `atPut` leaves the receiver unchanged. A write replaces exactly one
+existing element and never changes a shape.
+
+### Algebraic API
+
+Vector publishes `add(other)`, `scale(number)`, `dot(other)`, and `copy()`.
+Matrix publishes `add(other)`, `scale(number)`, `matvec(vector)`,
+`matmul(matrix)`, `transpose()`, and `copy()`.
+
+- `add` requires an operand of the same kind and exactly the same shape.
+- `scale` requires an admitted Number.
+- `dot` requires two Vectors of equal size.
+- `matvec` requires a Vector whose size equals `columns()` and answers a
+  Vector of size `rows()`.
+- `matmul` requires a Matrix whose `rows()` equals the receiver's `columns()`
+  and answers a Matrix of shape `rows() × other.columns()`.
+- `transpose` answers a Matrix of shape `columns() × rows()`.
+
+Dimension compatibility is strict; there is no broadcasting, no implicit
+reshaping, and no public dtype. Every Vector or Matrix result is a fresh, open
+object with no observable aliasing of the indexed storage of any operand.
+
+Each scalar operation is the canonical Number arithmetic of **Numeric Model**,
+including **Standard Complex arithmetic**. No kernel invokes callbacks or
+numeric methods redefined by user objects; the Number operands are genuine by
+admission. Public dispatch of the Vector and Matrix methods themselves remains
+ordinary message lookup.
+
+### Strict Float reductions, D214-F1
+
+D214-F1 is the reduction rule of this section. It is unrelated to the existing
+Complex signed-zero rule `F1` of **Standard Complex arithmetic**.
+
+Every contraction (`dot`, each `matvec` result element, each `matmul` result
+cell) forms its products and sums them in ascending order of the internal
+contraction index. A non-empty reduction starts with the first product; it is
+not initialized with Float `0` or Integer `0`. An empty contraction produces
+exact Integer `0`.
+
+Reassociation, FMA contraction, and any backend that alters the canonical
+result are not permitted. Parallelism is permitted only across independent
+result cells, each still reduced in D214-F1 order.
+
+### Complex products
+
+`Vector.dot` is Hermitian: it conjugates each element of the first operand
+(the receiver) before multiplying. `Matrix.matvec` and `Matrix.matmul` are
+bilinear and conjugate nothing.
+
+Each product uses the coupled Complex multiplication already defined by
+**Standard Complex arithmetic**: the finite coordinates of each Complex product
+are rounded exactly once under that existing scalar contract. The products are
+then summed in D214-F1 order. This section does not modify the existing IEEE
+Float or Complex semantics.
+
+### Representation
+
+The reference representation R1 stores private element references (for
+example an `Object[]`). Adaptive primitive storage R2 is permitted only as a
+future invisible optimization. No representation choice is observable: there
+is no observable dtype and no container promotion or demotion observable on
+`atPut`.
+
+### Identity, state, and transfer
+
+Equality and hashing of Vector and Matrix values are ordinary identity
+equality and identity hashing unless a program redefines them.
+
+Ordinary object state applies. A closed Vector or Matrix still permits `atPut`
+to replace existing elements; a frozen one rejects it. `copy()` and
+`transpose()` create independent results.
+
+Actor and isolated-parallel (P) transfer shares the frozen standard
+prototypes. It copies the indexed payload together with ordinary slots,
+preserving object-graph identity and cycles, with no mutable aliasing between
+actors. Private copy-on-write is permitted only when it is not observable.
+
 ## Numeric Model
 
 Core v0.1 defines one portable numeric model. Numeric family is semantic state, not an implementation representation, and no arithmetic result may depend on host integer width, boxing, tagging, or storage strategy.
@@ -1364,7 +1516,9 @@ collection, Vector, or Matrix: its identity, equality, hashing, and arithmetic
 are exactly the numeric rules of this section, never collection or linear-algebra
 rules, and no standard operation implicitly converts a Complex value to or from a
 collection. Core defines no `Real`, `Vector`, or `Matrix` prototype and no
-algebraic protocol hierarchy for Complex.
+algebraic protocol hierarchy for Complex. D214 introduces Vector and Matrix only through
+the Standard Library module `std:math/LinearAlgebra` (**Standard Library Vector
+and Matrix (D214-S1)**), not as Core prototypes.
 
 Core v0.1 defines no standard width-specific numeric semantic family, prototype, or
 prelude binding. Width- or range-specific representations may exist inside an
