@@ -502,7 +502,8 @@ public final class ProtosParallelRuntime {
                                             }));
                 }
                 ProtosClosureValue y=x.parallelProjectionDeferred(
-                        List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,rematerializer);
+                        List.of(p.newExecutionContext(),p.bindings()),
+                        ProtosNullValue.INSTANCE,p,rematerializer);
                 memo.put(v,y);deferPopulation(x,y,a,memo);return y;
             }
             if(v instanceof ProtosArrayValue x){

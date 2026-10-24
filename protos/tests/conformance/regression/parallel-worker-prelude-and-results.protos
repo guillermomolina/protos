@@ -1,0 +1,95 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// BUG026: P Closure projections see the frozen standard Prelude (§71.15)
+// without capturing caller contexts; Array result graphs keep their shape.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("prelude Integer is visible inside the P worker", () => {
+        Assertions.require(((n) => { Integer.recognizes(n) }).parallel(84).value() == true)
+    }),
+    Test("Array constructor inside P returns its elements", () => {
+        result: ((n) => { Array(1, n) }).parallel(84).value()
+        Assertions.require(result.size() == 2)
+        Assertions.require(result[0] == 1)
+        Assertions.require(result[1] == 84)
+    }),
+    Test("empty Array literal inside P returns an empty Array", () => {
+        result: (() => { [] }).parallel().value()
+        Assertions.require(Array.recognizes(result))
+        Assertions.require(result.size() == 0)
+    }),
+    Test("Boolean and String literals cross P", () => {
+        Assertions.require((() => { true }).parallel().value() == true)
+        Assertions.require((() => { "hello" }).parallel().value() == "hello")
+    }),
+    Test("nested Array keeps every element", () => {
+        result: (() => { Array(Array(1, 2), Array(Array(3)), 4) }).parallel().value()
+        Assertions.require(result.size() == 3)
+        Assertions.require(result[0].size() == 2)
+        Assertions.require(result[0][0] == 1)
+        Assertions.require(result[0][1] == 2)
+        Assertions.require(result[1][0][0] == 3)
+        Assertions.require(result[2] == 4)
+    }),
+    Test("shared reference inside a P result keeps identity", () => {
+        result: (() => {
+            cell: Array(7)
+            Array(cell, cell)
+        }).parallel().value()
+        Assertions.require(result[0] === result[1])
+        result[0][0] = 8
+        Assertions.require(result[1][0] == 8)
+    }),
+    Test("cyclic Array reference survives transfer", () => {
+        result: (() => {
+            s: Array(0)
+            s[0] = s
+            s
+        }).parallel().value()
+        Assertions.require(result[0] === result)
+    }),
+    Test("Array argument mutated inside P leaves caller Array intact", () => {
+        source: Array(1, 2)
+        result: ((a) => {
+            a[0] = 99
+            a
+        }).parallel(source).value()
+        Assertions.require(result[0] == 99)
+        Assertions.require(source[0] == 1)
+        Assertions.require(!(result === source))
+    }),
+    Test("caller local name is not captured by the P worker", () => {
+        bug026CallerLocal: 41
+        future: (() => { bug026CallerLocal }).parallel()
+        Assertions.signals(SlotNotFound, () => { future.value() })
+    }),
+    Test("standard Prelude reference is available inside the P worker", () => {
+        Assertions.require((() => { Integer.recognizes(SlotNotFound) == false }).parallel().value() == true)
+        Assertions.require((() => { Array.recognizes(Array()) }).parallel().value() == true)
+    }),
+    Test("nontransferable Future result still signals NonParallelValue", () => {
+        future: (() => { (() => { 1 }).future() }).parallel()
+        Assertions.signals(NonParallelValue, () => { future.value() })
+    }),
+    Test("transferable Error keeps its category", () => {
+        future: (() => { SlotNotFound().signal() }).parallel()
+        Assertions.signals(SlotNotFound, () => { future.value() })
+    })
+]
+tests.freeze()

@@ -44,6 +44,7 @@ regression/receiver-delegation-and-lookup.protos	suite-native	-
 regression/super-dispatch.protos	suite-native	-
 regression/nonlocal-and-escaped-return.protos	suite-native	-
 regression/deep-recursive-closure-call-stack-capacity.protos	suite-native	-
+regression/parallel-worker-prelude-and-results.protos	suite-native	-
 future/all.protos	suite-native	-
 future/cancellation-and-terminal-errors.protos	suite-native	-
 future/construction-and-identity.protos	suite-native	-

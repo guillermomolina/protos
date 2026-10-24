@@ -144,4 +144,123 @@ class ProtosParallelExecutionTest{
    assertEquals(0,d.liveTaskCount());
   }
  }
+
+ /*
+  * BUG026: P Closure projections must see the frozen standard Prelude as their outer lexical scope
+  * (§71.15) without capturing the caller's contexts; the full Closure.parallel -> worker -> Future
+  * path is observed through real terminal Future states.
+  */
+ private static void awaitTerminal(ProtosHostedExecutionTestFixture h,ProtosActorExecutionDomain d,ProtosFutureValue f){
+  long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+  while(f.isPending()&&System.nanoTime()<deadline){dispatchHosted(h,d);Thread.onSpinWait();}
+  assertFalse(f.isPending(),"P Future must reach a terminal state");
+ }
+ private static Object resolvedP(ProtosHostedExecutionTestFixture h,String s){
+  var d=h.activation().executionDomain();
+  var f=assertInstanceOf(ProtosFutureValue.class,evalHosted(h,s));
+  awaitTerminal(h,d,f);
+  assertEquals(ProtosFutureValue.State.RESOLVED,f.state(),s);
+  return f.resolvedValue().orElseThrow();
+ }
+ private static ProtosObjectValue failedP(ProtosHostedExecutionTestFixture h,String s){
+  var d=h.activation().executionDomain();
+  var f=assertInstanceOf(ProtosFutureValue.class,evalHosted(h,s));
+  awaitTerminal(h,d,f);
+  assertEquals(ProtosFutureValue.State.FAILED,f.state(),s);
+  assertTrue(f.resolvedValue().isEmpty());
+  return f.failedError().orElseThrow();
+ }
+ private static void assertErrorCategory(ProtosPrelude p,String category,ProtosObjectValue error){
+  Object expected=p.bindings().readLocalSlot(category).orElseThrow();
+  Object current=error;
+  while(current instanceof ProtosObjectValue o){if(o==expected)return;current=o.parent().orElse(null);}
+  fail("Error does not delegate to "+category);
+ }
+ private static String integerText(Object v){return ProtosNumericValueSupport.integerDecimalText(v);}
+
+ @Test void parallelClosureSeesStandardPrelude()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   assertSame(ProtosBooleanValue.TRUE,resolvedP(h,"((n) => { Integer.recognizes(n) }).parallel(84)"));
+   var pair=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,"((n) => { Array(1, n) }).parallel(84)"));
+   assertEquals(2,pair.indexedSize());
+   assertEquals("1",integerText(pair.indexedAt(0)));
+   assertEquals("84",integerText(pair.indexedAt(1)));
+   var empty=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,"(() => { [] }).parallel()"));
+   assertEquals(0,empty.indexedSize());
+   assertEquals("hello",assertInstanceOf(ProtosStringValue.class,resolvedP(h,"(() => { \"hello\" }).parallel()")).value());
+   assertSame(ProtosBooleanValue.TRUE,resolvedP(h,"(() => { true }).parallel()"));
+   dispatchHosted(h,h.activation().executionDomain());
+   assertEquals(0,h.activation().executionDomain().liveTaskCount());
+  }
+ }
+
+ @Test void parallelArrayResultGraphsTransferWithIdentity()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var result=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,
+       "src: Array(1, 2)\n"
+           + "((a) => {\n"
+           + "    cell: Array(7)\n"
+           + "    a[0] = 99\n"
+           + "    holder: { items: Array(5, 6) }\n"
+           + "    Array([], Array(1, 2), Array(Array(3), 4), Array(cell, cell), holder, a)\n"
+           + "}).parallel(src)"));
+   assertEquals(6,result.indexedSize());
+   assertEquals(0,assertInstanceOf(ProtosArrayValue.class,result.indexedAt(0)).indexedSize());
+   var numbers=assertInstanceOf(ProtosArrayValue.class,result.indexedAt(1));
+   assertEquals(2,numbers.indexedSize());
+   assertEquals("1",integerText(numbers.indexedAt(0)));
+   assertEquals("2",integerText(numbers.indexedAt(1)));
+   var nested=assertInstanceOf(ProtosArrayValue.class,result.indexedAt(2));
+   assertEquals(2,nested.indexedSize());
+   var inner=assertInstanceOf(ProtosArrayValue.class,nested.indexedAt(0));
+   assertEquals(1,inner.indexedSize());
+   assertEquals("3",integerText(inner.indexedAt(0)));
+   assertEquals("4",integerText(nested.indexedAt(1)));
+   var aliased=assertInstanceOf(ProtosArrayValue.class,result.indexedAt(3));
+   assertEquals(2,aliased.indexedSize());
+   assertSame(aliased.indexedAt(0),aliased.indexedAt(1),"internal alias must survive transfer");
+   assertEquals("7",integerText(assertInstanceOf(ProtosArrayValue.class,aliased.indexedAt(0)).indexedAt(0)));
+   var holder=assertInstanceOf(ProtosObjectValue.class,result.indexedAt(4));
+   var items=assertInstanceOf(ProtosArrayValue.class,holder.readLocalSlot("items").orElseThrow());
+   assertEquals(2,items.indexedSize());
+   assertEquals("5",integerText(items.indexedAt(0)));
+   assertEquals("6",integerText(items.indexedAt(1)));
+   var source=assertInstanceOf(ProtosArrayValue.class,evalHosted(h,"src"));
+   var returned=assertInstanceOf(ProtosArrayValue.class,result.indexedAt(5));
+   assertNotSame(source,returned,"mutable argument must be copied, not shared");
+   assertEquals("99",integerText(returned.indexedAt(0)));
+   assertEquals("1",integerText(source.indexedAt(0)),"caller argument must not be modified by P");
+   assertEquals("2",integerText(source.indexedAt(1)));
+
+   var cyclic=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,
+       "(() => {\n    s: Array(0)\n    s[0] = s\n    s\n}).parallel()"));
+   assertEquals(1,cyclic.indexedSize());
+   assertSame(cyclic,cyclic.indexedAt(0),"self-reference must survive transfer");
+  }
+ }
+
+ @Test void parallelClosureDoesNotCaptureCallerLocals()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   evalHosted(h,"bug026Secret: 41");
+   assertErrorCategory(p,"SlotNotFound",failedP(h,"(() => { bug026Secret }).parallel()"));
+   assertEquals("42",integerText(resolvedP(h,"((s) => { s + 1 }).parallel(bug026Secret)")));
+  }
+ }
+
+ @Test void parallelFailuresAndNonTransferableResults()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   assertErrorCategory(p,"SlotNotFound",failedP(h,"(() => { SlotNotFound().signal() }).parallel()"));
+   assertErrorCategory(p,"NonParallelValue",failedP(h,"(() => { (() => { 1 }).future() }).parallel()"));
+   var ok=assertInstanceOf(ProtosArrayValue.class,resolvedP(h,"(() => { Array(1) }).parallel()"));
+   assertEquals(1,ok.indexedSize());
+   assertErrorCategory(p,"SlotNotFound",failedP(h,
+       "(() => {\n    partial: Array(1, 2)\n    SlotNotFound().signal()\n    partial\n}).parallel()"));
+   dispatchHosted(h,h.activation().executionDomain());
+   assertEquals(0,h.activation().executionDomain().liveTaskCount());
+  }
+ }
 }

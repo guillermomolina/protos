@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.400-SNAPSHOT
+
+- `BUG026` (#958): parallel Closures see the standard Prelude.
+  - The P Closure projection built by `ProtosParallelRuntime` now uses the
+    fresh P execution context as the inner scope and the frozen standard
+    Prelude bindings as the outer scope (§71.15). Standard names such as
+    `Array` and `Integer`, and `[]` literals, therefore resolve inside a P
+    worker. Caller lexical contexts are still not captured.
+  - New `ProtosParallelExecutionTest` cases cover Prelude visibility,
+    Array result-graph transfer with alias and cycle preservation, lexical
+    isolation, and failed and non-transferable outcomes.
+  - New native conformance suite
+    `regression/parallel-worker-prelude-and-results.protos` (registered in
+    the conformance manifest); `array-parallel-map.protos` gains
+    Array-returning, empty-Array and identity/isolation cases.
+
 ## 0.3.399-SNAPSHOT
 
 - `LIB023-A` (#953, D213/#949): Standard Library Array copy/edit operations

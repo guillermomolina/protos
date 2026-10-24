@@ -88,6 +88,42 @@ tests: Array(
         future: Arrays.parallelMap(Array(1, 2), (value) => { value })
         future.cancel()
         Assertions.signals(Cancelled, () => { future.value() })
+    }),
+    Test("array parallel map callback returns Arrays", () => {
+        mapped: Arrays.parallelMap(Array(1, 2, 3), (value) => {
+            Array(value, value * 2)
+        }).value()
+        Assertions.require(mapped.size() == 3)
+        Assertions.require(Array.recognizes(mapped[0]))
+        Assertions.require(Array.recognizes(mapped[1]))
+        Assertions.require(Array.recognizes(mapped[2]))
+        Assertions.require(sameElements(mapped[0], Array(1, 2)))
+        Assertions.require(sameElements(mapped[1], Array(2, 4)))
+        Assertions.require(sameElements(mapped[2], Array(3, 6)))
+    }),
+    Test("array parallel map callback returns empty Arrays", () => {
+        mapped: Arrays.parallelMap(Array(1, 2, 3), (value) => { [] }).value()
+        Assertions.require(mapped.size() == 3)
+        Assertions.require(Array.recognizes(mapped[0]))
+        Assertions.require(Array.recognizes(mapped[1]))
+        Assertions.require(Array.recognizes(mapped[2]))
+        Assertions.require(mapped[0].size() == 0)
+        Assertions.require(mapped[1].size() == 0)
+        Assertions.require(mapped[2].size() == 0)
+    }),
+    Test("array parallel map returned Arrays keep identity and isolation", () => {
+        callerCell: Array(0)
+        mapped: Arrays.parallelMap(Array(callerCell, callerCell), (cell) => {
+            cell[0] = 99
+            inner: Array(cell[0])
+            Array(inner, inner)
+        }).value()
+        Assertions.require(mapped[0][0] === mapped[0][1])
+        Assertions.require(mapped[1][0] === mapped[1][1])
+        Assertions.require(!(mapped[0][0] === mapped[1][0]))
+        mapped[0][0][0] = 1
+        Assertions.require(mapped[1][0][0] == 99)
+        Assertions.require(callerCell[0] == 0)
     })
 )
 tests.freeze()
