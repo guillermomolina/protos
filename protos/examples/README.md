@@ -4,11 +4,14 @@ This directory is a task-oriented cookbook: **how do I do X in Protos?** It is i
 
 All Protos source files use the canonical `.protos` extension. Examples are non-normative; `spec/` remains authoritative.
 
+[`ROSETTA_CODE.md`](ROSETTA_CODE.md) maps exact external Rosetta Code tasks to their canonical sources in this tree, tracks their correctness status, and records any possible future Rosetta Code publication.
+
 Print-dependent cookbook programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including concurrent examples whose `Future.value()` suspension must run inside the Process RootActor task.
 
 | Task | Example |
 | --- | --- |
 | Print a value | `hello-world.protos` |
+| Print the exact Rosetta Code Hello world/Text message | `basics/rosetta-hello-world-text.protos` |
 | Create and modify slots | `basics/slots.protos` |
 | Create an object | `objects/object-literal.protos` |
 | Delegate behavior | `objects/delegation.protos` |
@@ -21,8 +24,16 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Share captured mutable state across closures | `closures/shared-captured-state.protos` |
 | Inherit callable behavior through delegation | `objects/inherited-callability.protos` |
 | Express conditional control flow | `control-flow/conditional.protos` |
-| Compute Fibonacci recursively | `algorithms/fibonacci-recursive.protos` |
+| Compute Fibonacci with recursive and iterative variants | `algorithms/fibonacci-recursive.protos` |
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |
+| Run FizzBuzz over 1 through 100 | `algorithms/fizzbuzz.protos` |
+| Compute the greatest common divisor | `algorithms/greatest-common-divisor.protos` |
+| Simulate the 100 doors problem | `algorithms/100-doors.protos` |
+| Search a sorted integer Array with binary search | `algorithms/binary-search.protos` |
+| Sort an Array with bubble sort | `algorithms/bubble-sort.protos` |
+| Store, compose and invert first-class functions | `closures/first-class-functions.protos` |
+| Capture independent values in a collection of Closures | `closures/value-capture.protos` |
+| Delegate optional behavior to a helper object | `objects/rosetta-delegates.protos` |
 | Work with exact Fractions, Float mixing, Complex numbers and square roots | `numbers/exact-and-complex.protos` |
 | Show portable runtime metadata (`std:runtime`) | `runtime-introspection/info.protos` |
 | Inspect the runtime (`std:inspect`, requires `--inspect`) | `runtime-introspection/inspect.protos` |

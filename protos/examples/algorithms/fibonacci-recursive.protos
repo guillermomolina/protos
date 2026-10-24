@@ -25,4 +25,20 @@ fibonacci: (n) => {
     result
 }
 
+fibonacciIterative: (n) => {
+    previous: 0
+    current: 1
+    next: 0
+    index: 0
+
+    while(index < n) {
+        next = previous + current
+        previous = current
+        current = next
+        index = index + 1
+    }
+
+    previous
+}
+
 print(fibonacci(10))
