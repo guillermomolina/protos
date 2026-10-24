@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.401-SNAPSHOT
+
+- `LIB024` (#957, D214/#955): Standard Library `std:math/LinearAlgebra`
+  Vector and Matrix (D214 C1/S1).
+  - The new module `std:math/LinearAlgebra` exports the frozen standard
+    prototypes `Vector` and `Matrix`, provisioned by Core bootstrap through
+    the standard-module member seam; there is no Prelude binding.
+  - `ProtosVectorValue` and `ProtosMatrixValue` are ordinary objects with
+    private R1 numeric storage that is not a slot. Matrix keeps its exact
+    semantic Integer dimensions, including zero-volume BigInteger shapes.
+  - `ProtosStandardLinearAlgebraProtocol` installs Vector `size`, `at`,
+    `atPut`, `add`, `scale`, `dot`, `copy` and Matrix `rows`, `columns`,
+    `at`, `atPut`, `add`, `scale`, `matvec`, `matmul`, `transpose`, `copy`,
+    with genuine-Number admission, the frozen → bounds → Number `atPut`
+    order, D214-F1 strict reductions and Hermitian `dot`.
+  - `ProtosComplexArithmetic` gains the internal `canonicalNumberBinary`
+    (ADD/MULTIPLY) and `conjugateNumber` entries, reusing the existing
+    Integer, real and coupled Complex rules without guest callbacks.
+  - Actor and P transfer copy Vector/Matrix payloads through definitive
+    memoized shells, preserving identity, cycles, slots and state while
+    sharing the frozen standard prototypes.
+  - New Test Tool corpus `protos/corpus/library/math/linear-algebra` (leaf
+    `protos/library/math/linear-algebra`, three suite-native cases), new
+    `ProtosStandardLinearAlgebraProtocolTest`, and extended Actor, P and
+    Test Tool infrastructure tests.
+
 ## 0.3.400-SNAPSHOT
 
 - `BUG026` (#958): parallel Closures see the standard Prelude.

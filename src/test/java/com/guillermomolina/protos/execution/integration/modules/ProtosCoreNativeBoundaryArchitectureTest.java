@@ -61,6 +61,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/protocols/io/ProtosStandardTcpListenerProtocol.java", 3),
                     Map.entry("execution/protocols/values/ProtosStandardArrayProtocol.java", 7),
+                    // LIB024 std:math/LinearAlgebra Vector/Matrix protocols through one define helper.
+                    Map.entry("execution/protocols/values/ProtosStandardLinearAlgebraProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/protocols/io/ProtosStandardEncodingProtocol.java", 2),
                     Map.entry("execution/protocols/io/ProtosStandardTextReaderProtocol.java", 2),
@@ -167,8 +169,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(37, actualCore.size());
-        assertEquals(141, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(38, actualCore.size());
+        assertEquals(142, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }

@@ -1,0 +1,119 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Dense numeric `Vector` and `Matrix` values over semantic Core Numbers.
+//!
+//! The module exports the frozen standard prototypes `Vector` and `Matrix`.
+//! They are available only through an explicit import; there is no Prelude
+//! binding:
+//!
+//! ```protos
+//! LA: import("std:math/LinearAlgebra")
+//! Vector: LA.Vector
+//! Matrix: LA.Matrix
+//! v: Vector(1, 2, 3)
+//! m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)
+//! ```
+//!
+//! Bind the members before calling them: `LA.Vector(1)` is a message send
+//! whose selected slot is a prototype rather than a Closure, so it signals an
+//! Error under ordinary message-send rules.
+//!
+//! Every Vector and Matrix is an ordinary object with ordinary identity that
+//! delegates to its standard prototype. Its numbers are private storage, not
+//! slots. Equality and hashing are ordinary identity unless a program
+//! redefines them.
+//!
+//! ## Elements
+//!
+//! An element must be a genuine Number: an Integer, a Fraction, a Float, or a
+//! Complex, possibly of different families in one value. `null`, Booleans,
+//! Strings, and objects that merely delegate to a Number prototype are
+//! rejected with an Error. Nothing is converted and no guest code runs.
+//!
+//! ## Vector
+//!
+//! - `Vector(x, ...)` answers a Vector of exactly the supplied elements, in
+//!   order: `Vector()` is empty and `Vector(3)` holds the single element `3`.
+//!   Explicit spread works: `Vector(...[1, 2, 3])`.
+//! - `size()` answers the length.
+//! - `at(i)` and `v[i]` answer the element at `0 <= i < size()`.
+//! - `atPut(i, value)` replaces one element and answers `value`.
+//! - `add(other)` answers the element-wise sum with a Vector of equal size.
+//! - `scale(number)` answers every element multiplied by `number`.
+//! - `dot(other)` answers the Hermitian inner product with a Vector of equal
+//!   size: `sum(conjugate(self[i]) * other[i])`. Only the receiver's elements
+//!   are conjugated: `Vector(Complex(0, 1)).dot(Vector(Complex(0, 1)))`
+//!   is `1`.
+//! - `copy()` answers an independent Vector with the same elements.
+//!
+//! ## Matrix
+//!
+//! - `Matrix(rows, columns, ...values)` answers a `rows × columns` Matrix of
+//!   exactly `rows * columns` values in row-major order; any other count fails.
+//!   `Matrix(0, n)` and `Matrix(n, 0)` are distinct empty shapes.
+//! - `rows()` and `columns()` answer the dimensions as supplied.
+//! - `at(row, column)` answers the element at `0 <= row < rows()` and
+//!   `0 <= column < columns()`. There is no `m[row]` or `m[row, column]` form.
+//! - `atPut(row, column, value)` replaces one element and answers `value`.
+//! - `add(other)` answers the element-wise sum with a Matrix of the same shape.
+//! - `scale(number)` answers every element multiplied by `number`.
+//! - `matvec(vector)` answers the Vector of size `rows()` of
+//!   `sum(self.at(row, k) * vector[k])`; `vector.size()` must be `columns()`.
+//! - `matmul(other)` answers the `rows() × other.columns()` Matrix of
+//!   `sum(self.at(row, k) * other.at(k, column))`; `other.rows()` must be
+//!   `columns()`.
+//! - `transpose()` answers the independent `columns() × rows()` transpose.
+//! - `copy()` answers an independent Matrix with the same shape and elements.
+//!
+//! `matvec` and `matmul` conjugate nothing.
+//!
+//! ```protos
+//! m: Matrix(2, 2, 1, 2, 3, 4)
+//! m.matvec(Vector(1, 1))            // Vector(3, 7)
+//! m.matmul(Matrix(2, 1, 1, 0))      // Matrix(2, 1, 1, 3)
+//! m.transpose().at(0, 1)               // 3
+//! ```
+//!
+//! ## Rules
+//!
+//! Indexes and dimensions are exact non-negative Integers of any size; a
+//! negative, non-Integer, or out-of-range index signals an Error. Shapes must
+//! match exactly: there is no broadcasting, reshaping, padding, or dtype.
+//!
+//! `atPut` checks that the receiver is not frozen, then the bounds, then the
+//! value, and a failed write changes nothing. A closed Vector or Matrix still
+//! accepts `atPut` on existing elements; a frozen one rejects it.
+//!
+//! Every Vector or Matrix result is a fresh open object that shares no
+//! storage with its operands, and no operation mutates an operand.
+//!
+//! Each scalar operation is the standard Number arithmetic, including the
+//! coupled Complex multiplication. Every contraction (`dot`, each `matvec`
+//! element, each `matmul` cell) sums its products in ascending index order,
+//! starting from the first product, never from `0` or `0.0`; an empty
+//! contraction answers the exact Integer `0`. Float results therefore follow
+//! that exact order:
+//!
+//! ```protos
+//! Vector(1.0e16, 1.0, -1.0e16).dot(Vector(1, 1, 1))   // 0.0
+//! Vector(-1.0).dot(Vector(0.0))                       // -0.0
+//! Vector().dot(Vector())                              // 0
+//! ```
+
+// D214 C1/S1: `Vector` and `Matrix` are the exact frozen runtime-owned standard
+// prototypes, installed as initial members of this module before this source
+// executes. They are not redeclared here so that every module instance
+// publishes the same prototypes.

@@ -263,4 +263,227 @@ class ProtosParallelExecutionTest{
    assertEquals(0,h.activation().executionDomain().liveTaskCount());
   }
  }
+
+ /*
+  * LIB024: P transfer memoizes the definitive Vector/Matrix shell before copying its private
+  * payload, so self-cycles, mutual cycles and shared paths resolve to the same destination object.
+  */
+ @Test void linearAlgebraTransferPublishesDefinitiveShellsAndCopiesPayload()throws Exception{
+  var p=core();
+  var source=p.newModuleActivation();
+  var vectorPrototype=linearAlgebraMember(p,"Vector");
+  var matrixPrototype=linearAlgebraMember(p,"Matrix");
+  Object half=ProtosNumericValueSupport.divideIntegersExactly(
+      new ProtosIntegerValue(1),new ProtosIntegerValue(2),p);
+  Object complex=ProtosComplexNumericSupport.normalize(
+      new ProtosIntegerValue(1),new ProtosFloatValue(-0.0d),p);
+  Object hugeRows=ProtosNumericValueSupport.integerFromHost(java.math.BigInteger.ONE.shiftLeft(70),p);
+  var vector=new ProtosVectorValue(vectorPrototype,List.of(new ProtosIntegerValue(1),half,complex));
+  var matrix=new ProtosMatrixValue(matrixPrototype,new ProtosIntegerValue(1),new ProtosIntegerValue(2),
+      List.of(complex,new ProtosFloatValue(0.5d)));
+  var empty=new ProtosMatrixValue(matrixPrototype,hugeRows,new ProtosIntegerValue(0),List.of());
+  vector.createLocalSlot("self",vector);
+  vector.createLocalSlot("matrix",matrix);
+  matrix.createLocalSlot("vector",vector);
+  matrix.close();
+  empty.freeze();
+
+  boolean[] semanticRecords=new boolean[1];
+  var captured=ProtosParallelRuntime.captureValuesForTesting(
+      List.of(vector,matrix,vector,empty),source,semanticRecords);
+  assertTrue(semanticRecords[0]);
+  var delivered=ProtosParallelRuntime.materializeValuesForTesting(captured,p.newModuleActivation());
+
+  var copiedVector=assertInstanceOf(ProtosVectorValue.class,delivered.get(0));
+  var copiedMatrix=assertInstanceOf(ProtosMatrixValue.class,delivered.get(1));
+  var copiedEmpty=assertInstanceOf(ProtosMatrixValue.class,delivered.get(3));
+  assertNotSame(vector,copiedVector);
+  assertNotSame(matrix,copiedMatrix);
+  assertSame(copiedVector,delivered.get(2));
+  assertSame(copiedVector,copiedVector.readLocalSlot("self").orElseThrow());
+  assertSame(copiedMatrix,copiedVector.readLocalSlot("matrix").orElseThrow());
+  assertSame(copiedVector,copiedMatrix.readLocalSlot("vector").orElseThrow());
+  assertSame(vectorPrototype,copiedVector.parent().orElseThrow());
+  assertSame(matrixPrototype,copiedMatrix.parent().orElseThrow());
+  assertTrue(copiedVector.isOpen());
+  assertTrue(copiedMatrix.isClosed());
+  assertTrue(copiedEmpty.isFrozen());
+  assertTrue(ProtosIdentity.identical(hugeRows,copiedEmpty.rowsValue()));
+  assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(0),copiedEmpty.columnsValue()));
+
+  var elements=copiedVector.indexedSnapshot();
+  assertTrue(ProtosNumericValueSupport.isFraction(elements.get(1)));
+  assertTrue(ProtosComplexNumericSupport.isComplex(elements.get(2)));
+  assertNotSame(half,elements.get(1));
+  assertNotSame(complex,elements.get(2));
+  assertTrue(ProtosIdentity.identical(half,elements.get(1)));
+  assertTrue(ProtosIdentity.identical(complex,elements.get(2)));
+  assertSame(elements.get(2),copiedMatrix.indexedAt(new ProtosIntegerValue(0),new ProtosIntegerValue(0)));
+  // Public reads after materialization yield Numbers, never inert transfer descriptors.
+  for(int index=0;index<copiedVector.indexedSize();index++){
+   Object element=copiedVector.indexedAt(new ProtosIntegerValue(index));
+   assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
+   assertFalse(ProtosNumericValueSupport.isFractionTransferDescriptor(element));
+   assertFalse(ProtosComplexNumericSupport.isTransferDescriptor(element));
+  }
+  for(Object element:copiedMatrix.indexedSnapshot())assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
+
+  // No mutable aliasing with the origin in either direction.
+  vector.indexedPut(new ProtosIntegerValue(0),new ProtosIntegerValue(9));
+  copiedMatrix.indexedPut(new ProtosIntegerValue(0),new ProtosIntegerValue(1),new ProtosIntegerValue(8));
+  assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(1),copiedVector.indexedAt(new ProtosIntegerValue(0))));
+  assertTrue(ProtosIdentity.identical(new ProtosFloatValue(0.5d),
+      matrix.indexedAt(new ProtosIntegerValue(0),new ProtosIntegerValue(1))));
+ }
+
+ @Test void linearAlgebraResultsThroughPMatchOrdinaryExecution()throws Exception{
+  var p=new ProtosCoreBootstrap().bootstrap(
+      Path.of("protos","lib","core"),
+      new ProtosStandardLibraryModuleResolver(Path.of("protos","lib")));
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   // Every P probe answers exactly one Number: Vector/Matrix results are reduced to scalars
+   // inside the worker, so no collection crosses the P result boundary (BUG026 #958).
+   String[] probes={
+       "vec.dot(vec)",
+       "vec.dot(extra)",
+       "mat.matvec(other).at(0)",
+       "mat.matvec(other).at(1)",
+       "mat.matmul(mat).at(0, 0)",
+       "mat.matmul(mat).at(1, 1)",
+       "mat.transpose().at(0, 1)",
+       "mat.transpose().at(1, 0)",
+       "vec.scale(2).at(3)",
+       "vec.scale(1 / 2).at(1)",
+       "vec.add(extra).at(2)",
+       "vec.add(extra).at(3)",
+       "vec.copy().at(3)",
+       "mat.copy().at(1, 1)",
+       "vec.copy().size()",
+       "mat.copy().rows()",
+       "vec.size()",
+       "mat.rows()",
+       "mat.columns()"
+   };
+   StringBuilder probeSource=new StringBuilder("probes: [\n");
+   for(int index=0;index<probes.length;index++){
+    probeSource.append("    (vec, mat, other, extra) => ").append(probes[index])
+        .append(index+1<probes.length?",\n":"\n");
+   }
+   probeSource.append("]\n");
+   var pair=assertInstanceOf(ProtosArrayValue.class,evalHosted(h,
+       "LA: import(\"std:math/LinearAlgebra\")\n"
+           + "Vector: LA.Vector\n"
+           + "Matrix: LA.Matrix\n"
+           + "v: Vector(1, 1 / 2, 2.5, Complex(1, 2))\n"
+           + "u: Vector(2, 1 / 3, -0.0, Complex(0, 1))\n"
+           + "m: Matrix(2, 2, 1, 1 / 3, 0.1, Complex(0, 1))\n"
+           + "w: Vector(3, -0.0)\n"
+           + probeSource
+           + "ordinary: Array()\n"
+           + "futures: Array()\n"
+           + "probes.each((probe) => {\n"
+           + "    ordinary = Array(...ordinary, probe(v, m, w, u))\n"
+           + "    futures = Array(...futures, probe.parallel(v, m, w, u))\n"
+           + "})\n"
+           + "[ordinary, futures]"));
+   var expected=assertInstanceOf(ProtosArrayValue.class,pair.indexedAt(0)).indexedSnapshot();
+   var futures=assertInstanceOf(ProtosArrayValue.class,pair.indexedAt(1)).indexedSnapshot();
+   assertEquals(probes.length,expected.size());
+   assertEquals(probes.length,futures.size());
+   for(int index=0;index<probes.length;index++){
+    String probe=probes[index];
+    var f=assertInstanceOf(ProtosFutureValue.class,futures.get(index));
+    while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}
+    assertEquals(ProtosFutureValue.State.RESOLVED,f.state(),
+        () -> probe+" failed in P with "+standardErrorName(h.activation(),f));
+    Object actual=f.resolvedValue().orElseThrow();
+    assertTrue(ProtosNumericValueSupport.isCurrentNumber(expected.get(index)),probes[index]);
+    assertTrue(ProtosNumericValueSupport.isCurrentNumber(actual),probes[index]);
+    assertTrue(ProtosIdentity.identical(expected.get(index),actual),probes[index]);
+   }
+   dispatchHosted(h,d);
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
+
+ /*
+  * LIB024 after BUG026: Vector and Matrix results return from the worker as complete values
+  * delegating to the shared standard prototypes, equal element-wise to ordinary execution, with
+  * internal aliasing preserved and no Number transfer descriptor observable.
+  */
+ @Test void linearAlgebraCollectionResultsReturnFromP()throws Exception{
+  var p=new ProtosCoreBootstrap().bootstrap(
+      Path.of("protos","lib","core"),
+      new ProtosStandardLibraryModuleResolver(Path.of("protos","lib")));
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   var pair=assertInstanceOf(ProtosArrayValue.class,evalHosted(h,
+       "LA: import(\"std:math/LinearAlgebra\")\n"
+           + "Vector: LA.Vector\n"
+           + "Matrix: LA.Matrix\n"
+           + "v: Vector(1, 1 / 2, 2.5, Complex(1, 2))\n"
+           + "m: Matrix(2, 2, 1, 1 / 3, 0.1, Complex(0, 1))\n"
+           + "w: Vector(3, -0.0)\n"
+           + "work: (vec, mat, other) => {\n"
+           + "    sum: vec.add(vec)\n"
+           + "    [sum, sum, vec.scale(2), mat.matvec(other), mat.matmul(mat), mat.transpose(), mat.copy()]\n"
+           + "}\n"
+           + "[work(v, m, w), work.parallel(v, m, w)]"));
+   var expected=assertInstanceOf(ProtosArrayValue.class,pair.indexedAt(0)).indexedSnapshot();
+   var f=assertInstanceOf(ProtosFutureValue.class,pair.indexedAt(1));
+   while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}
+   assertEquals(ProtosFutureValue.State.RESOLVED,f.state(),
+       () -> "P failed with "+standardErrorName(h.activation(),f));
+   var actual=assertInstanceOf(ProtosArrayValue.class,f.resolvedValue().orElseThrow()).indexedSnapshot();
+   assertEquals(expected.size(),actual.size());
+   // One worker-side identity returned twice stays one caller-side identity.
+   assertSame(actual.get(0),actual.get(1));
+   for(int index=0;index<expected.size();index++){
+    Object want=expected.get(index);
+    Object got=actual.get(index);
+    assertNotSame(want,got);
+    assertSame(((ProtosObjectValue)want).parent().orElseThrow(),((ProtosObjectValue)got).parent().orElseThrow());
+    assertTrue(((ProtosObjectValue)got).isOpen());
+    List<Object> wantElements;
+    List<Object> gotElements;
+    if(want instanceof ProtosVectorValue wantVector){
+     var gotVector=assertInstanceOf(ProtosVectorValue.class,got,"result "+index);
+     wantElements=wantVector.indexedSnapshot();
+     gotElements=gotVector.indexedSnapshot();
+    }else{
+     var wantMatrix=assertInstanceOf(ProtosMatrixValue.class,want);
+     var gotMatrix=assertInstanceOf(ProtosMatrixValue.class,got,"result "+index);
+     assertTrue(ProtosIdentity.identical(wantMatrix.rowsValue(),gotMatrix.rowsValue()));
+     assertTrue(ProtosIdentity.identical(wantMatrix.columnsValue(),gotMatrix.columnsValue()));
+     wantElements=wantMatrix.indexedSnapshot();
+     gotElements=gotMatrix.indexedSnapshot();
+    }
+    assertEquals(wantElements.size(),gotElements.size());
+    for(int element=0;element<wantElements.size();element++){
+     Object value=gotElements.get(element);
+     assertTrue(ProtosNumericValueSupport.isCurrentNumber(value),"result "+index+" element "+element);
+     assertTrue(ProtosIdentity.identical(wantElements.get(element),value),"result "+index+" element "+element);
+    }
+   }
+   dispatchHosted(h,d);
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
+
+ /* Names the standard Error family of a FAILED Future, for an assertion message only. */
+ private static String standardErrorName(ProtosActivation a,ProtosFutureValue f){
+  Object kind=f.failedError().map(e->e.parent().orElse(null)).orElse(null);
+  for(var standard:ProtosCoreErrors.StandardError.values()){
+   if(kind==ProtosCoreErrors.prototype(a,standard))return standard.prototypeName();
+  }
+  return "a non-standard Error";
+ }
+
+ private static ProtosObjectValue linearAlgebraMember(ProtosPrelude p,String name){
+  ProtosObjectValue context=p.newExecutionContext();
+  p.installStandardModuleMembersForRuntime(
+      new com.guillermomolina.protos.runtime.modules.ProtosModuleKey("std:math/LinearAlgebra"),context);
+  return (ProtosObjectValue)context.readLocalSlot(name).orElseThrow();
+ }
 }

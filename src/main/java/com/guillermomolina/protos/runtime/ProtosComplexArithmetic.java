@@ -28,8 +28,9 @@ import java.math.BigInteger;
  * bodies. Those native bodies cannot invoke guest behavior synchronously, so the result of
  * {@code real op Complex} must be computable here; keeping the Complex-receiver direction in the
  * same kernel prevents two diverging encodings of the separable, exceptional and signed-zero
- * rules. Nothing here sends a message to a guest value, and no Integer or Float operation that
- * never meets a Complex operand reaches this class.
+ * rules. Nothing here sends a message to a guest value, and no Integer or Float operator that
+ * never meets a Complex operand reaches this class; only the {@code std:math/LinearAlgebra}
+ * kernels use {@link #canonicalNumberBinary} for every Number pair (D214, LIB024).
  *
  * <p>Coupled finite Float results (rule {@code R}) cannot use host double arithmetic, which rounds
  * each product and sum, nor Smith's algorithm or fused multiply-add, which do not round the whole
@@ -119,6 +120,63 @@ public final class ProtosComplexArithmetic {
                 prelude);
     }
 
+    /**
+     * The canonical standard result of {@code left op right} for two genuine Numbers of any
+     * family, for the {@code std:math/LinearAlgebra} kernels (D214, LIB024). Only {@code ADD} and
+     * {@code MULTIPLY} are admitted.
+     *
+     * <p>A Complex operand takes {@link #binary}, two Integers the exact Integer service with its
+     * signed-64 fast path, two Floats one binary64 operation, and every other real pair the
+     * exact-rational and operand-first binary64 rules of this kernel. These are the results of the
+     * frozen standard Number behaviors; no message is sent and no impostor is admitted. Throws
+     * {@link IllegalArgumentException} for an operand that is not a genuine Number.
+     */
+    @TruffleBoundary
+    public static Object canonicalNumberBinary(
+            Operation operation, Object left, Object right, ProtosPrelude prelude) {
+        if (operation != Operation.ADD && operation != Operation.MULTIPLY) {
+            throw new IllegalArgumentException("unsupported canonical operation: " + operation);
+        }
+        if (!ProtosNumericValueSupport.isCurrentNumber(left)
+                || !ProtosNumericValueSupport.isCurrentNumber(right)) {
+            throw new IllegalArgumentException("operand is not a genuine Number");
+        }
+        Object complexResult = binary(operation, left, right, prelude);
+        if (complexResult != null) {
+            return complexResult;
+        }
+        if (ProtosNumericValueSupport.isCurrentInteger(left)
+                && ProtosNumericValueSupport.isCurrentInteger(right)) {
+            return operation == Operation.ADD
+                    ? ProtosNumericValueSupport.addIntegers(left, right, prelude)
+                    : ProtosNumericValueSupport.multiplyIntegers(left, right, prelude);
+        }
+        if (left instanceof ProtosFloatValue x && right instanceof ProtosFloatValue y) {
+            return new ProtosFloatValue(
+                    operation == Operation.ADD ? x.value() + y.value() : x.value() * y.value());
+        }
+        return real(operation, left, right, prelude);
+    }
+
+    /**
+     * The conjugate of a genuine Number: a real Number unchanged, and a Complex with its real
+     * part kept and its imaginary part exactly negated (a Float keeps its signed zero). Throws
+     * {@link IllegalArgumentException} for any other value.
+     */
+    @TruffleBoundary
+    public static Object conjugateNumber(Object value, ProtosPrelude prelude) {
+        if (!ProtosNumericValueSupport.isCurrentNumber(value)) {
+            throw new IllegalArgumentException("operand is not a genuine Number");
+        }
+        if (!ProtosComplexNumericSupport.isComplex(value)) {
+            return value;
+        }
+        return complex(
+                ProtosComplexNumericSupport.real(value),
+                negate(ProtosComplexNumericSupport.imaginary(value), prelude),
+                prelude);
+    }
+
     private static Object complex(Object real, Object imaginary, ProtosPrelude prelude) {
         return ProtosComplexNumericSupport.normalize(real, imaginary, prelude);
     }
@@ -130,7 +188,7 @@ public final class ProtosComplexArithmetic {
      * instead of sending the component's own operator: the native Integer and Float callers
      * cannot call guest code, and the standard real behaviors live on frozen Core prototypes, so
      * no override can make a send observably differ. It is not a public arithmetic path; real
-     * operands that never meet a Complex never reach it.
+     * operands that never meet a Complex reach it only through {@link #canonicalNumberBinary}.
      */
 
     private static Object real(Operation operation, Object x, Object y, ProtosPrelude prelude) {

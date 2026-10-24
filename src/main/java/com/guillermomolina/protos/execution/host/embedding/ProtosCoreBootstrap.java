@@ -449,6 +449,11 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue bufferedWriterFactory =
                 ProtosStandardBufferedByteIoProtocol.createWriterFactory(
                         bufferedBytesPrototype, bootstrapActivation);
+        // D214 C1/S1: Vector and Matrix are std:math/LinearAlgebra members, not Prelude bindings.
+        Map<String, ProtosObjectValue> linearAlgebraMembers =
+                ProtosStandardLinearAlgebraProtocol.createModuleMembers();
+        ProtosObjectValue vectorPrototype = linearAlgebraMembers.get("Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMembers.get("Matrix");
 
         if (bootstrapContext.hasLocalSlot("_coreRootObject")) {
             throw new IllegalStateException(
@@ -481,7 +486,9 @@ public final class ProtosCoreBootstrap {
                 ipAddressPrototype,
                 ipEndpointPrototype,
                 bufferedReaderFactory,
-                bufferedWriterFactory);
+                bufferedWriterFactory,
+                vectorPrototype,
+                matrixPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -494,7 +501,9 @@ public final class ProtosCoreBootstrap {
                 ipAddressPrototype,
                 ipEndpointPrototype,
                 bufferedReaderFactory,
-                bufferedWriterFactory);
+                bufferedWriterFactory,
+                vectorPrototype,
+                matrixPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -509,7 +518,9 @@ public final class ProtosCoreBootstrap {
                         ipAddressPrototype,
                         ipEndpointPrototype,
                         bufferedReaderFactory,
-                        bufferedWriterFactory),
+                        bufferedWriterFactory,
+                        vectorPrototype,
+                        matrixPrototype),
                 semanticTransferFamilies,
                 lazyStandardModuleMembers());
     }
@@ -539,7 +550,7 @@ public final class ProtosCoreBootstrap {
 
     /**
      * Exact runtime-owned initial members of standard modules (D172, D167, AUD006-A3, D187,
-     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B, LIB021-A, I090-C).
+     * LIB015-B1, LIB015-C1, LIB020-A, LIB020-B, LIB021-A, I090-C, LIB024).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
@@ -548,7 +559,9 @@ public final class ProtosCoreBootstrap {
             ProtosObjectValue ipAddressPrototype,
             ProtosObjectValue ipEndpointPrototype,
             ProtosObjectValue bufferedReaderFactory,
-            ProtosObjectValue bufferedWriterFactory) {
+            ProtosObjectValue bufferedWriterFactory,
+            ProtosObjectValue vectorPrototype,
+            ProtosObjectValue matrixPrototype) {
         // std:text/ANSI receives the same facilities as the modules that mint their families.
         ProtosObjectValue styleFacility = ProtosSealedFamilyFacility.createFacility();
         ProtosObjectValue styledTextFacility = ProtosSealedFamilyFacility.createFacility();
@@ -565,6 +578,9 @@ public final class ProtosCoreBootstrap {
                 Map.entry(
                         new ProtosModuleKey("std:io/BufferedWriter"),
                         Map.of("BufferedWriter", bufferedWriterFactory)),
+                Map.entry(
+                        new ProtosModuleKey("std:math/LinearAlgebra"),
+                        Map.of("Vector", vectorPrototype, "Matrix", matrixPrototype)),
                 Map.entry(
                         ProtosCommandLineArrayConstructionFacility.MODULE_KEY,
                         Map.of(

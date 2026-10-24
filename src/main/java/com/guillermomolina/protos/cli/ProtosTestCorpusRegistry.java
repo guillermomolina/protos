@@ -67,6 +67,12 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/math/linear-algebra",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/library/crypto/sha256",
                 "repository-explicit",
                 "libraryFilesystem");

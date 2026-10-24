@@ -598,6 +598,41 @@ public final class ProtosParallelRuntime {
                 });
                 return y;
             }
+            if(v instanceof ProtosVectorValue x){
+                // LIB024: the definitive shell is memoized before its numeric payload is copied.
+                List<Object> elements=x.indexedSnapshot();
+                Object copiedParent=copy(x.parent().orElseThrow(),a,memo);
+                ProtosVectorValue y=ProtosVectorValue.transferShellForRuntime(
+                        copiedParent,elements.size());
+                memo.put(v,y);
+                defer(memo,() -> {
+                    for(int index=0;index<elements.size();index++){
+                        y.transferPutForRuntime(index,copy(elements.get(index),a,memo));
+                    }
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
+            }
+            if(v instanceof ProtosMatrixValue x){
+                // LIB024: the exact dimensions cross with the definitive shell, which is
+                // memoized before its numeric payload is copied.
+                List<Object> elements=x.indexedSnapshot();
+                Object copiedParent=copy(x.parent().orElseThrow(),a,memo);
+                ProtosMatrixValue y=ProtosMatrixValue.transferShellForRuntime(
+                        copiedParent,
+                        copy(x.rowsValue(),a,memo),
+                        copy(x.columnsValue(),a,memo));
+                memo.put(v,y);
+                defer(memo,() -> {
+                    for(int index=0;index<elements.size();index++){
+                        y.transferPutForRuntime(index,copy(elements.get(index),a,memo));
+                    }
+                    slots(x,y,a,memo);
+                    state(x,y);
+                });
+                return y;
+            }
             if(v instanceof ProtosObjectValue x){
                 if(x.parent().orElse(null)==p.contextPrototype())throw new NonParallel();
                 Object parent=copy(x.parent().orElseThrow(),a,memo);ProtosObjectValue y=new ProtosObjectValue(parent);memo.put(v,y);

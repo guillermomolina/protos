@@ -89,6 +89,18 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/math/linear-algebra") {
+        selected = planFromEntries(
+            "math/linear-algebra/",
+            Array(
+            Array("construction-and-indexing.protos", "suite-native", "-"),
+            Array("algebra-and-reductions.protos", "suite-native", "-"),
+            Array("identity-and-state.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     if(corpusId == "protos/corpus/library/crypto/sha256") {
         selected = planFromEntries(
             "crypto/sha256/",

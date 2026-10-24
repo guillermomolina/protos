@@ -572,6 +572,9 @@ public final class ProtosCli {
                                         "protos/corpus/library/math/integer",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/math/linear-algebra",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                         "protos/corpus/library/crypto/sha256",
                                         libraryRoot),
                                 new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

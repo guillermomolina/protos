@@ -755,6 +755,218 @@ final class ProtosActorValueTransferTest {
         assertFalse(array.isFrozen());
     }
 
+    // LIB024: Vector and Matrix copy their private numeric payload with ordinary slots and state.
+    @Test
+    void linearAlgebraValuesCopyPayloadSlotsAndStateWhileSharingStandardPrototypes()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue vectorPrototype = linearAlgebraMember(prelude, "Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMember(prelude, "Matrix");
+        Object big = ProtosNumericValueSupport.integerFromHost(BigInteger.ONE.shiftLeft(80), prelude);
+        ProtosVectorValue vector =
+                new ProtosVectorValue(
+                        vectorPrototype,
+                        List.of(new ProtosIntegerValue(1), big, new ProtosFloatValue(-0.0d)));
+        ProtosMatrixValue matrix =
+                new ProtosMatrixValue(
+                        matrixPrototype,
+                        new ProtosIntegerValue(1),
+                        new ProtosIntegerValue(2),
+                        List.of(new ProtosIntegerValue(3), new ProtosFloatValue(2.5d)));
+        vector.createLocalSlot("self", vector);
+        vector.createLocalSlot("other", matrix);
+        matrix.createLocalSlot("self", matrix);
+        matrix.createLocalSlot("other", vector);
+        vector.close();
+        matrix.freeze();
+
+        List<Object> result =
+                ProtosActorValueTransfer.snapshotArguments(List.of(vector, matrix, vector), source);
+
+        assertFalse(ProtosActorValueTransfer.requiresMaterialization(result));
+        ProtosVectorValue copiedVector = assertInstanceOf(ProtosVectorValue.class, result.get(0));
+        ProtosMatrixValue copiedMatrix = assertInstanceOf(ProtosMatrixValue.class, result.get(1));
+        assertNotSame(vector, copiedVector);
+        assertNotSame(matrix, copiedMatrix);
+        assertSame(copiedVector, result.get(2));
+        assertSame(vectorPrototype, copiedVector.parent().orElseThrow());
+        assertSame(matrixPrototype, copiedMatrix.parent().orElseThrow());
+        assertSame(copiedVector, copiedVector.readLocalSlot("self").orElseThrow());
+        assertSame(copiedMatrix, copiedVector.readLocalSlot("other").orElseThrow());
+        assertSame(copiedMatrix, copiedMatrix.readLocalSlot("self").orElseThrow());
+        assertSame(copiedVector, copiedMatrix.readLocalSlot("other").orElseThrow());
+        assertTrue(copiedVector.isClosed());
+        assertTrue(copiedMatrix.isFrozen());
+
+        assertEquals(3, copiedVector.indexedSize());
+        for (int index = 0; index < 3; index++) {
+            assertTrue(
+                    ProtosIdentity.identical(
+                            vector.indexedSnapshot().get(index),
+                            copiedVector.indexedSnapshot().get(index)));
+        }
+        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(1), copiedMatrix.rowsValue()));
+        assertTrue(ProtosIdentity.identical(new ProtosIntegerValue(2), copiedMatrix.columnsValue()));
+        assertTrue(
+                ProtosIdentity.identical(
+                        new ProtosFloatValue(2.5d),
+                        copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(1))));
+
+        // A closed Vector keeps atPut; neither side can reach the other's payload.
+        vector.indexedPut(new ProtosIntegerValue(0), new ProtosIntegerValue(99));
+        assertTrue(
+                ProtosIdentity.identical(
+                        new ProtosIntegerValue(1), copiedVector.indexedAt(new ProtosIntegerValue(0))));
+        copiedVector.indexedPut(new ProtosIntegerValue(1), new ProtosIntegerValue(7));
+        assertTrue(ProtosIdentity.identical(big, vector.indexedAt(new ProtosIntegerValue(1))));
+        ArrayList<String> names = new ArrayList<>();
+        copiedVector.appendLocalBindingsTo(names, new ArrayList<>());
+        assertEquals(java.util.Set.of("self", "other"), java.util.Set.copyOf(names));
+    }
+
+    @Test
+    void linearAlgebraFractionAndComplexElementsMaterializeInTheDestination() throws Exception {
+        ProtosPrelude sourcePrelude = core();
+        // Actors share one Prelude, whose frozen LinearAlgebra prototypes are shared anchors.
+        ProtosPrelude destinationPrelude = sourcePrelude;
+        ProtosActivation source = sourcePrelude.newModuleActivation();
+        ProtosObjectValue vectorPrototype = linearAlgebraMember(sourcePrelude, "Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMember(sourcePrelude, "Matrix");
+        Object half =
+                ProtosNumericValueSupport.divideIntegersExactly(
+                        new ProtosIntegerValue(1), new ProtosIntegerValue(2), sourcePrelude);
+        Object complex =
+                ProtosComplexNumericSupport.normalize(
+                        new ProtosIntegerValue(3), new ProtosFloatValue(-0.0d), sourcePrelude);
+        ProtosVectorValue vector =
+                new ProtosVectorValue(vectorPrototype, List.of(half, complex, half));
+        ProtosMatrixValue matrix =
+                new ProtosMatrixValue(
+                        matrixPrototype,
+                        new ProtosIntegerValue(2),
+                        new ProtosIntegerValue(1),
+                        List.of(complex, half));
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("left", vector);
+        holder.createLocalSlot("right", vector);
+        holder.createLocalSlot("matrix", matrix);
+
+        List<Object> snapshot = ProtosActorValueTransfer.snapshotArguments(List.of(holder), source);
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(
+                        snapshot, destinationPrelude.newModuleActivation());
+
+        ProtosObjectValue copiedHolder = assertInstanceOf(ProtosObjectValue.class, delivered.get(0));
+        ProtosVectorValue copiedVector =
+                assertInstanceOf(
+                        ProtosVectorValue.class, copiedHolder.readLocalSlot("left").orElseThrow());
+        ProtosMatrixValue copiedMatrix =
+                assertInstanceOf(
+                        ProtosMatrixValue.class, copiedHolder.readLocalSlot("matrix").orElseThrow());
+        // One object shared by two paths of the graph stays one object.
+        assertSame(copiedVector, copiedHolder.readLocalSlot("right").orElseThrow());
+        assertSame(vectorPrototype, copiedVector.parent().orElseThrow());
+        List<Object> elements = copiedVector.indexedSnapshot();
+        assertTrue(ProtosNumericValueSupport.isFraction(elements.get(0)));
+        assertTrue(ProtosComplexNumericSupport.isComplex(elements.get(1)));
+        assertNotSame(half, elements.get(0));
+        assertNotSame(complex, elements.get(1));
+        assertTrue(ProtosIdentity.identical(half, elements.get(0)));
+        assertTrue(ProtosIdentity.identical(complex, elements.get(1)));
+        assertSame(elements.get(0), elements.get(2));
+        assertSame(
+                elements.get(1),
+                copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0)));
+        for (Object element : copiedMatrix.indexedSnapshot()) {
+            assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
+        }
+        // Elements read through the public accessors are Numbers, never inert descriptors.
+        for (int index = 0; index < copiedVector.indexedSize(); index++) {
+            Object element = copiedVector.indexedAt(new ProtosIntegerValue(index));
+            assertTrue(ProtosNumericValueSupport.isCurrentNumber(element));
+            assertFalse(ProtosNumericValueSupport.isFractionTransferDescriptor(element));
+            assertFalse(ProtosComplexNumericSupport.isTransferDescriptor(element));
+        }
+        assertTrue(
+                ProtosComplexNumericSupport.isComplex(
+                        copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0))));
+        assertTrue(
+                ProtosNumericValueSupport.isFraction(
+                        copiedMatrix.indexedAt(new ProtosIntegerValue(1), new ProtosIntegerValue(0))));
+    }
+
+    @Test
+    void linearAlgebraDetachedSnapshotKeepsStateAndCyclesAndFailsAtomically() throws Exception {
+        ProtosPrelude sourcePrelude = core();
+        ProtosActivation source = sourcePrelude.newModuleActivation();
+        ProtosObjectValue vectorPrototype = linearAlgebraMember(sourcePrelude, "Vector");
+        ProtosObjectValue matrixPrototype = linearAlgebraMember(sourcePrelude, "Matrix");
+        Object half =
+                ProtosNumericValueSupport.divideIntegersExactly(
+                        new ProtosIntegerValue(1), new ProtosIntegerValue(2), sourcePrelude);
+        ProtosVectorValue vector = new ProtosVectorValue(vectorPrototype, List.of(half));
+        ProtosMatrixValue matrix =
+                new ProtosMatrixValue(
+                        matrixPrototype,
+                        new ProtosIntegerValue(1),
+                        new ProtosIntegerValue(1),
+                        List.of(half));
+        vector.createLocalSlot("self", vector);
+        vector.createLocalSlot("matrix", matrix);
+        matrix.createLocalSlot("vector", vector);
+        vector.freeze();
+        matrix.close();
+
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(List.of(vector, matrix), source);
+        assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+        List<?> delivered =
+                ProtosActorValueTransfer.materializeArguments(
+                        snapshot, sourcePrelude.newModuleActivation());
+        ProtosVectorValue copiedVector = assertInstanceOf(ProtosVectorValue.class, delivered.get(0));
+        ProtosMatrixValue copiedMatrix = assertInstanceOf(ProtosMatrixValue.class, delivered.get(1));
+        assertSame(copiedVector, copiedVector.readLocalSlot("self").orElseThrow());
+        assertSame(copiedMatrix, copiedVector.readLocalSlot("matrix").orElseThrow());
+        assertSame(copiedVector, copiedMatrix.readLocalSlot("vector").orElseThrow());
+        assertTrue(copiedVector.isFrozen());
+        assertTrue(copiedMatrix.isClosed());
+        Object element = copiedVector.indexedAt(new ProtosIntegerValue(0));
+        assertTrue(ProtosNumericValueSupport.isFraction(element));
+        assertSame(
+                element,
+                copiedMatrix.indexedAt(new ProtosIntegerValue(0), new ProtosIntegerValue(0)));
+        assertThrows(
+                IllegalStateException.class,
+                () -> copiedVector.indexedPut(new ProtosIntegerValue(0), new ProtosIntegerValue(1)));
+
+        // A non-transferable slot rejects the whole snapshot; no partial container is published.
+        ProtosVectorValue failing = new ProtosVectorValue(vectorPrototype, List.of(half));
+        failing.createLocalSlot(
+                "behavior", ProtosClosureValue.nativeClosure((activation, supplied) -> half));
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("vector", failing);
+        assertNonTransferable(
+                source, () -> ProtosActorValueTransfer.snapshotArguments(List.of(holder), source));
+        assertNonTransferable(
+                source, () -> ProtosActorValueTransfer.snapshotValue(failing, source));
+        assertSame(half, failing.indexedAt(new ProtosIntegerValue(0)));
+        assertTrue(failing.isOpen());
+    }
+
+    private static ProtosObjectValue linearAlgebraMember(ProtosPrelude prelude, String name) {
+        ProtosObjectValue context = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(
+                new com.guillermomolina.protos.runtime.modules.ProtosModuleKey(
+                        "std:math/LinearAlgebra"),
+                context);
+        ProtosObjectValue member = (ProtosObjectValue) context.readLocalSlot(name).orElseThrow();
+        assertTrue(member.isFrozen());
+        assertTrue(prelude.isStandardModuleMemberForRuntime(member));
+        return member;
+    }
+
     private static ProtosPrelude core() throws Exception {
         return new ProtosCoreBootstrap().bootstrap(CORE);
     }

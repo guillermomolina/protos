@@ -1,0 +1,102 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB024 (D214 C1/S1): Vector/Matrix identity, private payload, independent results and state.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+LA: import("std:math/LinearAlgebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+tests: [
+    Test("equal contents keep distinct identities", () => {
+        v: Vector(1, 2)
+        w: Vector(1, 2)
+        Assertions.require((v === w) === false)
+        Assertions.require((v == w) === false)
+        Assertions.require(v === v)
+        Assertions.require(v == v)
+        m: Matrix(1, 2, 1, 2)
+        n: Matrix(1, 2, 1, 2)
+        Assertions.require((m === n) === false)
+        Assertions.require((m == n) === false)
+        Assertions.require((v.copy() === v) === false)
+        Assertions.require((m.copy() === m) === false)
+        Assertions.require((m.transpose() === m) === false)
+        Assertions.require((m.transpose().transpose() === m) === false)
+    }),
+    Test("the numeric payload is not a slot", () => {
+        v: Vector(1, 2)
+        m: Matrix(1, 2, 1, 2)
+        Assertions.require(v.slotNames().size() == 0)
+        Assertions.require(m.slotNames().size() == 0)
+        Assertions.require(m.rows() == 1)
+        v.label: 7
+        Assertions.require(v.slotNames().size() == 1)
+        Assertions.require(v.label == 7)
+        Assertions.require(v.size() == 2)
+    }),
+    Test("results are fresh open values with independent storage", () => {
+        v: Vector(1, 2)
+        copy: v.copy()
+        scaled: v.scale(1)
+        sum: v.add(Vector(0, 0))
+        copy.atPut(0, 10)
+        scaled.atPut(0, 20)
+        sum.atPut(0, 30)
+        Assertions.require(v.at(0) === 1)
+        v.atPut(1, 9)
+        Assertions.require(copy.at(1) === 2)
+        Assertions.require(scaled.at(1) === 2)
+        Assertions.require(sum.at(1) === 2)
+        copy.extra: 1
+        Assertions.require(copy.extra == 1)
+
+        m: Matrix(2, 2, 1, 2, 3, 4)
+        t: m.transpose()
+        c: m.copy()
+        t.atPut(0, 1, 40)
+        c.atPut(0, 0, 50)
+        Assertions.require(m.at(1, 0) === 3)
+        Assertions.require(m.at(0, 0) === 1)
+        m.atPut(1, 1, 60)
+        Assertions.require(t.at(1, 1) === 4)
+        Assertions.require(c.at(1, 1) === 4)
+        Assertions.require(m.matvec(Vector(1, 1)).parent() === LA.Vector)
+        Assertions.require(m.matmul(m).parent() === LA.Matrix)
+    }),
+    Test("frozen operands still produce open results", () => {
+        v: Vector(1, 2)
+        m: Matrix(1, 2, 1, 2)
+        v.freeze()
+        m.freeze()
+        copy: v.copy()
+        Assertions.require(copy.atPut(0, 5) === 5)
+        Assertions.require(m.copy().atPut(0, 0, 5) === 5)
+        Assertions.require(m.transpose().atPut(1, 0, 5) === 5)
+        Assertions.require(v.dot(v) === 5)
+        Assertions.signals(Error, () => { v.label: 1 })
+        Assertions.signals(Error, () => { v.atPut(0, 1) })
+    }),
+    Test("ordinary dispatch remains redefinable on instances", () => {
+        v: Vector(1, 2)
+        v.size: () => 42
+        Assertions.require(v.size() == 42)
+        Assertions.require(Vector(1, 2).size() == 2)
+        Assertions.require(v.dot(v) === 5)
+    })
+]
+tests.freeze()

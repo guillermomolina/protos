@@ -365,6 +365,15 @@ public final class ProtosActorValueTransfer {
                 shell = new ProtosArrayValue(destinationParent, placeholders);
             } else if (object instanceof ProtosBytesValue) {
                 shell = new ProtosBytesValue(destinationParent);
+            } else if (object instanceof ProtosVectorValue vector) {
+                // LIB024: the private numeric payload is copied by population, never shared.
+                shell = ProtosVectorValue.transferShellForRuntime(
+                        destinationParent, vector.indexedSize());
+            } else if (object instanceof ProtosMatrixValue matrix) {
+                shell = ProtosMatrixValue.transferShellForRuntime(
+                        destinationParent,
+                        copy(matrix.rowsValue()),
+                        copy(matrix.columnsValue()));
             } else {
                 shell = new ProtosObjectValue(destinationParent);
             }
@@ -424,6 +433,18 @@ public final class ProtosActorValueTransfer {
                     ProtosBytesValue destinationBytes = (ProtosBytesValue) destination;
                     for (Object octet : sourceBytes.indexedSnapshot()) {
                         destinationBytes.indexedAdd(copy(octet));
+                    }
+                } else if (sourceObject instanceof ProtosVectorValue sourceVector) {
+                    ProtosVectorValue destinationVector = (ProtosVectorValue) destination;
+                    List<Object> elements = sourceVector.indexedSnapshot();
+                    for (int index = 0; index < elements.size(); index++) {
+                        destinationVector.transferPutForRuntime(index, copy(elements.get(index)));
+                    }
+                } else if (sourceObject instanceof ProtosMatrixValue sourceMatrix) {
+                    ProtosMatrixValue destinationMatrix = (ProtosMatrixValue) destination;
+                    List<Object> elements = sourceMatrix.indexedSnapshot();
+                    for (int index = 0; index < elements.size(); index++) {
+                        destinationMatrix.transferPutForRuntime(index, copy(elements.get(index)));
                     }
                 }
 

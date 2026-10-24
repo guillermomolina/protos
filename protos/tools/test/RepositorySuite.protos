@@ -57,6 +57,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/library/math/linear-algebra",
+            "protos/corpus/library/math/linear-algebra",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
             "protos/library/crypto/sha256",
             "protos/corpus/library/crypto/sha256",
             "protos/test/ordinary"

@@ -1,0 +1,165 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// LIB024 (D214 C1/S1): Vector/Matrix algebra, D214-F1 strict reductions and Complex products.
+// Float results are compared with `===`, so signed zeros and NaN are exact.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+LA: import("std:math/LinearAlgebra")
+Vector: LA.Vector
+Matrix: LA.Matrix
+
+nan: 0.0 / 0.0
+inf: 1.0 / 0.0
+negativeZero: -0.0
+
+sameVector: (vector, expected) => {
+    equal: vector.size() == expected.size()
+    if(equal) {
+        index: 0
+        while(index < expected.size()) {
+            if((vector.at(index) === expected[index]) === false) {
+                equal = false
+            }
+            index = index + 1
+        }
+    }
+    equal
+}
+
+// The same contraction as dot, as a 1 × n matvec, and as a 1 × n by n × 1 matmul.
+contractions: (left, right) => {
+    n: left.size()
+    [
+        Vector(...left).dot(Vector(...right)),
+        Matrix(1, n, ...left).matvec(Vector(...right)).at(0),
+        Matrix(1, n, ...left).matmul(Matrix(n, 1, ...right)).at(0, 0)
+    ]
+}
+
+allSame: (results, expected) => {
+    (results[0] === expected) && (results[1] === expected) && (results[2] === expected)
+}
+
+tests: [
+    Test("vector algebra", () => {
+        v: Vector(1, 1 / 2)
+        w: Vector(3, 0.5)
+        Assertions.require(sameVector(v.add(w), [4, 1.0]))
+        Assertions.require(sameVector(v.scale(4), [4, 2]))
+        Assertions.require(v.dot(w) === 3.25)
+        Assertions.require(sameVector(v.copy(), [1, 1 / 2]))
+        Assertions.require(sameVector(v, [1, 1 / 2]))
+        Assertions.require(sameVector(w, [3, 0.5]))
+    }),
+    Test("matrix algebra", () => {
+        m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)
+        n: Matrix(3, 2, 7, 8, 9, 10, 11, 12)
+        sum: m.add(m)
+        Assertions.require((sum.at(1, 2) === 12) && (sum.rows() == 2) && (sum.columns() == 3))
+        Assertions.require(m.scale(0 - 1).at(0, 1) === (0 - 2))
+        Assertions.require(sameVector(m.matvec(Vector(1, 0, 0 - 1)), [0 - 2, 0 - 2]))
+        p: m.matmul(n)
+        Assertions.require((p.rows() == 2) && (p.columns() == 2))
+        Assertions.require(p.at(0, 0) === 58)
+        Assertions.require(p.at(0, 1) === 64)
+        Assertions.require(p.at(1, 0) === 139)
+        Assertions.require(p.at(1, 1) === 154)
+        t: m.transpose()
+        Assertions.require((t.rows() == 3) && (t.columns() == 2))
+        Assertions.require((t.at(0, 1) === 4) && (t.at(2, 0) === 3))
+        c: m.copy()
+        Assertions.require((c.rows() == 2) && (c.at(1, 2) === 6))
+        Assertions.require(m.at(0, 0) === 1)
+    }),
+    Test("strict shapes without broadcasting", () => {
+        v: Vector(1, 2)
+        m: Matrix(2, 3, 1, 2, 3, 4, 5, 6)
+        Assertions.signals(Error, () => { v.add(Vector(1)) })
+        Assertions.signals(Error, () => { v.add(1) })
+        Assertions.signals(Error, () => { v.dot(Vector(1, 2, 3)) })
+        Assertions.signals(Error, () => { v.scale(Vector(2)) })
+        Assertions.signals(Error, () => { v.scale("2") })
+        Assertions.signals(Error, () => { v.scale(Number {}) })
+        Assertions.signals(Error, () => { m.add(m.transpose()) })
+        Assertions.signals(Error, () => { m.add(Matrix(1, 1, 1)) })
+        Assertions.signals(Error, () => { m.matvec(v) })
+        Assertions.signals(Error, () => { m.matvec(m) })
+        Assertions.signals(Error, () => { m.matmul(m) })
+        Assertions.signals(Error, () => { m.matmul(v) })
+        Assertions.signals(Error, () => { m.scale(m) })
+        Assertions.signals(Error, () => { m.transpose(1) })
+        Assertions.signals(Error, () => { v.copy(1) })
+    }),
+    Test("empty contractions are exact Integer zero", () => {
+        Assertions.require(SmallInteger.recognizes(Vector().dot(Vector())))
+        Assertions.require(Vector().dot(Vector()) === 0)
+        zeros: Matrix(2, 0).matmul(Matrix(0, 3))
+        Assertions.require((zeros.rows() == 2) && (zeros.columns() == 3))
+        Assertions.require(zeros.at(1, 2) === 0)
+        Assertions.require(sameVector(Matrix(2, 0).matvec(Vector()), [0, 0]))
+        Assertions.require(Matrix(0, 2).matvec(Vector(1, 2)).size() == 0)
+    }),
+    Test("D214-F1 starts with the first product in ascending order", () => {
+        Assertions.require(allSame(contractions([0 - 1.0], [0.0]), negativeZero))
+        Assertions.require(allSame(contractions([1.0e16, 1.0, 0 - 1.0e16], [1, 1, 1]), 0.0))
+        Assertions.require(allSame(contractions([1.0e16, 0 - 1.0e16, 1.0], [1, 1, 1]), 1.0))
+        Assertions.require(allSame(contractions([1.0, 2.0], [1.0, 3.0]), 7.0))
+        Assertions.require(allSame(contractions([6.0], [1]), 6.0))
+    }),
+    Test("D214-F1 special values", () => {
+        Assertions.require(allSame(contractions([nan, 1.0], [1.0, 1.0]), nan))
+        Assertions.require(allSame(contractions([inf, 0 - inf], [1.0, 1.0]), nan))
+        Assertions.require(allSame(contractions([inf, 2.0], [0 - 1.0, 1.0]), 0 - inf))
+        tiny: 4.9e-324
+        Assertions.require(allSame(contractions([tiny, tiny], [1.0, 1.0]), tiny * 2))
+    }),
+    Test("exact and mixed families", () => {
+        Assertions.require(allSame(contractions([1 / 2, 1 / 3], [1, 1]), 5 / 6))
+        Assertions.require(allSame(contractions([1 / 2, 1 / 2], [2, 2]), 2))
+        Assertions.require(allSame(contractions([1, 0.5], [2, 2]), 3.0))
+        big: 1180591620717411303424
+        Assertions.require(allSame(contractions([big, 0 - 1], [big, big]), (big * big) - big))
+    }),
+    Test("dot is Hermitian on the receiver only", () => {
+        i: Complex(0, 1)
+        Assertions.require(Vector(i).dot(Vector(i)) === 1)
+        Assertions.require(Vector(1).dot(Vector(i)) === i)
+        Assertions.require(Vector(i).dot(Vector(1)) === Complex(0, 0 - 1))
+        z: Complex(1 / 2, 1)
+        Assertions.require(Vector(z).dot(Vector(z)) === (Complex(1 / 2, 0 - 1) * z))
+        w: Complex(1.0, negativeZero)
+        Assertions.require(Vector(w).dot(Vector(1.0)) === Complex(1.0, 0.0))
+    }),
+    Test("matvec and matmul are bilinear", () => {
+        i: Complex(0, 1)
+        Assertions.require(Matrix(1, 1, i).matvec(Vector(i)).at(0) === (0 - 1))
+        Assertions.require(Matrix(1, 1, i).matmul(Matrix(1, 1, i)).at(0, 0) === (0 - 1))
+        w: Complex(1.0, negativeZero)
+        Assertions.require(Matrix(1, 1, w).matvec(Vector(1.0)).at(0) === w)
+    }),
+    Test("Complex products keep the standard scalar contract", () => {
+        x: 1.0 + 9.313225746154785e-10
+        z: Complex(x, 1.0)
+        u: Complex(0.5, 0 - 2.0)
+        Assertions.require(Matrix(1, 1, z).matvec(Vector(z)).at(0) === (z * z))
+        Assertions.require(Matrix(1, 1, z).matmul(Matrix(1, 1, z)).at(0, 0) === (z * z))
+        Assertions.require(Vector(z).dot(Vector(z)) === (Complex(x, 0 - 1.0) * z))
+        Assertions.require(Matrix(1, 2, z, u).matvec(Vector(u, z)).at(0) === ((z * u) + (u * z)))
+        Assertions.require(Vector(z, u).dot(Vector(u, z)) === ((Complex(x, 0 - 1.0) * u) + (Complex(0.5, 2.0) * z)))
+    })
+]
+tests.freeze()
