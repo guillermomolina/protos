@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.402-SNAPSHOT
+
+- `I124` (#963, PLAT068 R2-Float): packed binary64 storage for all-Float
+  Matrix products.
+  - `ProtosMatrixValue` keeps its elements in one private volatile storage
+    reference that is either R1 element references or R2 packed `double[]`
+    values. Construction and transfer shells start in R1; reads reify genuine
+    Floats and snapshots stay independent, so the state is not observable.
+  - An all-Float Matrix, frozen or not, enters R2 once on its first eligible
+    `matmul`; the packing is published by compare-and-set and reused. A
+    Float `atPut` updates one lane; any other Number returns the same Matrix
+    to R1. Validation order and failure atomicity are unchanged.
+  - `Matrix.matmul` on two all-Float operands with a positive contraction
+    runs a host binary64 kernel with strict D214-F1 ordering (first product
+    seeds the cell, ascending k, no FMA or reassociation) and answers a
+    Matrix born in R2, so chained products neither box nor repack. All other
+    cases keep the canonical generic path.
+  - `ProtosStandardLinearAlgebraProtocolTest` gains R1/R2 admission,
+    persistence, mutation, frozen, concurrent first-packing and bit-exact
+    D214-F1 coverage.
+
 ## 0.3.401-SNAPSHOT
 
 - `LIB024` (#957, D214/#955): Standard Library `std:math/LinearAlgebra`

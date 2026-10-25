@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -24,16 +26,51 @@ import java.util.Objects;
 /**
  * A Standard Library {@code std:math/LinearAlgebra} Matrix (D214 C1/S1, LIB024).
  *
- * <p>An ordinary Protos object with private R1 storage: the exact semantic Integer dimensions
- * and the dense row-major element references, none of which is a slot. The dimensions are kept
- * as supplied, never narrowed to a host width, so a zero-volume shape such as {@code 0 × n} or
- * {@code n × 0} keeps a BigInteger {@code n}. A host index is derived only after the semantic
- * bounds prove that it is physically representable.
+ * <p>An ordinary Protos object with private storage: the exact semantic Integer dimensions and
+ * the dense row-major elements, none of which is a slot. The dimensions are kept as supplied,
+ * never narrowed to a host width, so a zero-volume shape such as {@code 0 × n} or {@code n × 0}
+ * keeps a BigInteger {@code n}. A host index is derived only after the semantic bounds prove that
+ * it is physically representable.
+ *
+ * <p>The elements live in exactly one of two mutually exclusive private states (PLAT068 R2-Float,
+ * I124): R1, the element references, and R2, the binary64 values of an all-Float Matrix. Every
+ * Matrix is constructed in R1 except a Float kernel result, which is born in R2. An R1 Matrix
+ * whose elements are all Floats enters R2 when a Float kernel first asks for its packed values,
+ * and stays there until a non-Float write returns it to R1; a frozen Matrix packs persistently
+ * too, since packing changes no element. The state is invisible: reads reify semantic Floats and
+ * snapshots are independent, so no guest operation observes which is active.
+ *
+ * <p>The state is one volatile reference, either an {@code Object[]} (R1) or a {@code double[]}
+ * (R2), so a transition is a single atomic store that safely publishes the completely filled
+ * array. Readers load it once per operation. Packing installs its array by compare-and-set, so
+ * concurrent first readers of a frozen Matrix agree on one persistent packing. Writes stay
+ * confined to the owning Actor, as for every mutable object.
  */
 public final class ProtosMatrixValue extends ProtosObjectValue {
     private final Object rows;
     private final Object columns;
-    private final Object[] elements;
+    private static final VarHandle STORAGE;
+
+    static {
+        try {
+            STORAGE =
+                    MethodHandles.lookup()
+                            .findVarHandle(ProtosMatrixValue.class, "storage", Object.class);
+        } catch (ReflectiveOperationException unavailable) {
+            throw new ExceptionInInitializerError(unavailable);
+        }
+    }
+
+    /*
+     * R1 element references (Object[]) or R2 binary64 values (double[]). An R2 array never
+     * escapes except as trusted read-only kernel input.
+     */
+    private volatile Object storage;
+    /*
+     * R1 only: a cached proof that some element is not a Float; any write clears it. A lost or
+     * stale cache only costs a rescan, so it needs no ordering of its own.
+     */
+    private boolean knownNotAllFloat;
 
     /**
      * A {@code rows × columns} Matrix of exactly {@code elements} in row-major order. Throws
@@ -54,14 +91,38 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
         }
         this.rows = rows;
         this.columns = columns;
-        this.elements = owned;
+        this.storage = owned;
     }
 
     private ProtosMatrixValue(Object parent, Object rows, Object columns, Object[] owned) {
         super(parent);
         this.rows = rows;
         this.columns = columns;
-        this.elements = owned;
+        this.storage = owned;
+    }
+
+    private ProtosMatrixValue(Object parent, Object rows, Object columns, double[] owned) {
+        super(parent);
+        this.rows = rows;
+        this.columns = columns;
+        this.storage = owned;
+    }
+
+    /**
+     * Float kernel results only: a fresh Matrix born in R2 that takes ownership of {@code
+     * packed}, its row-major binary64 elements. The caller must hold the only reference to {@code
+     * packed} and drop it. Throws {@link IllegalArgumentException} for a dimension that is not a
+     * non-negative Integer or a length other than {@code rows * columns}.
+     */
+    public static ProtosMatrixValue ownedPackedFloatsForRuntime(
+            Object parent, Object rows, Object columns, double[] packed) {
+        Objects.requireNonNull(packed, "packed");
+        requireDimension(rows);
+        requireDimension(columns);
+        if (!hasVolume(rows, columns, packed.length)) {
+            throw new IllegalArgumentException("matrix element count does not match its shape");
+        }
+        return new ProtosMatrixValue(parent, rows, columns, packed);
     }
 
     /**
@@ -136,32 +197,85 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
 
     /** The element at the semantic Integer position; see {@link #linearIndex} for failures. */
     public Object indexedAt(Object row, Object column) {
-        return elements[linearIndex(row, column)];
+        Object current = storage;
+        int index = linearIndex(row, column, current);
+        return current instanceof double[] packed
+                ? new ProtosFloatValue(packed[index])
+                : ((Object[]) current)[index];
     }
 
     /**
      * Replaces one element, validating frozen state, then the row and column bounds, then numeric
-     * admission, before any write; a failure leaves the storage unchanged. Answers the value.
+     * admission, before any write; a failure leaves the storage unchanged. A Float written in R2
+     * replaces its lane; any other Number written in R2 first returns the Matrix to R1, keeping
+     * every other element as a Float. Answers the value.
      */
     public Object indexedPut(Object row, Object column, Object value) {
         if (isFrozen()) {
             throw new IllegalStateException("matrix is frozen");
         }
-        int existing = linearIndex(row, column);
+        Object current = storage;
+        int existing = linearIndex(row, column, current);
         ProtosVectorValue.requireNumber(value);
-        elements[existing] = value;
+        if (current instanceof double[] packed) {
+            if (value instanceof ProtosFloatValue floating) {
+                packed[existing] = floating.value();
+                return value;
+            }
+            Object[] unpacked = unpackedFloats(packed);
+            unpacked[existing] = value;
+            knownNotAllFloat = true;
+            storage = unpacked;
+            return value;
+        }
+        ((Object[]) current)[existing] = value;
+        knownNotAllFloat = false;
         return value;
     }
 
     /** An independent row-major copy of the current elements, unaffected by later writes. */
     public List<Object> indexedSnapshot() {
-        return List.of(elements.clone());
+        Object current = storage;
+        return List.of(
+                current instanceof double[] packed
+                        ? unpackedFloats(packed)
+                        : ((Object[]) current).clone());
+    }
+
+    /**
+     * Float kernels only: the row-major binary64 elements when every element is a genuine Float,
+     * else {@code null}; nothing is ever coerced. The answer is the persistent R2 storage itself,
+     * trusted read-only kernel input that must not be written, retained or published; it is
+     * public only because the kernels live in another package, and no guest operation reaches
+     * it. An R1 Matrix of Floats, frozen or not, enters R2 here exactly once, so later kernels
+     * reuse the same values without rescanning.
+     */
+    public double[] readonlyPackedFloatsForRuntime() {
+        Object current = storage;
+        if (current instanceof double[] packed) {
+            return packed;
+        }
+        if (knownNotAllFloat) {
+            return null;
+        }
+        Object[] references = (Object[]) current;
+        double[] packed = new double[references.length];
+        for (int index = 0; index < packed.length; index++) {
+            if (!(references[index] instanceof ProtosFloatValue floating)) {
+                knownNotAllFloat = true;
+                return null;
+            }
+            packed[index] = floating.value();
+        }
+        // A concurrent first reader of a frozen Matrix may have packed it already; keep its array.
+        Object witness = STORAGE.compareAndExchange(this, current, packed);
+        return witness == current ? packed : (double[]) witness;
     }
 
     /**
      * Transfer population only: stores a genuine Number or an inert Fraction/Complex transfer
      * descriptor at a row-major position of a detached snapshot; destination materialization
-     * replaces it by a Number before guest code can observe the Matrix.
+     * replaces it by a Number before guest code can observe the Matrix. Transfer shells are R1.
      */
     public void transferPutForRuntime(int index, Object value) {
         Objects.requireNonNull(value, "value");
@@ -170,7 +284,24 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
                 && !ProtosComplexNumericSupport.isTransferDescriptor(value)) {
             throw new IllegalArgumentException("matrix transfer element is not numeric");
         }
-        elements[Objects.checkIndex(index, elements.length)] = value;
+        if (!(storage instanceof Object[] references)) {
+            throw new IllegalStateException("matrix transfer population requires a transfer shell");
+        }
+        references[Objects.checkIndex(index, references.length)] = value;
+        knownNotAllFloat = false;
+    }
+
+    /* Fresh R1 references reifying every R2 lane as a genuine Float. */
+    private static Object[] unpackedFloats(double[] packed) {
+        Object[] unpacked = new Object[packed.length];
+        for (int index = 0; index < unpacked.length; index++) {
+            unpacked[index] = new ProtosFloatValue(packed[index]);
+        }
+        return unpacked;
+    }
+
+    private static int physicalLength(Object current) {
+        return current instanceof double[] packed ? packed.length : ((Object[]) current).length;
     }
 
     /*
@@ -179,7 +310,7 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
      * semantically first; a valid position implies a positive volume equal to the host element
      * count, so both dimensions and the linear index are then host-representable.
      */
-    private int linearIndex(Object row, Object column) {
+    private int linearIndex(Object row, Object column, Object current) {
         if (!ProtosNumericValueSupport.isCurrentInteger(row)
                 || !ProtosNumericValueSupport.isCurrentInteger(column)) {
             throw new IllegalArgumentException("matrix index is not an Integer");
@@ -194,7 +325,7 @@ public final class ProtosMatrixValue extends ProtosObjectValue {
                 (long) ProtosNumericValueSupport.exactInt(row)
                                 * ProtosNumericValueSupport.exactInt(columns)
                         + ProtosNumericValueSupport.exactInt(column);
-        return Objects.checkIndex((int) linear, elements.length);
+        return Objects.checkIndex((int) linear, physicalLength(current));
     }
 
     private static boolean withinDimension(Object index, Object dimension) {

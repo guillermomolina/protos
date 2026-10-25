@@ -44,7 +44,8 @@ import java.util.Objects;
  * element. Every contraction is reduced under D214-F1: ascending contraction index, the first
  * product as the initial accumulator, and the exact Integer {@code 0} for an empty contraction.
  * Every Vector or Matrix result is a fresh open object delegating directly to the standard
- * prototype of its kind, with storage of its own.
+ * prototype of its kind, with storage of its own. An all-Float {@code matmul} computes in host
+ * binary64 over packed Matrix storage and answers a packed result (PLAT068 R2-Float, I124).
  */
 public final class ProtosStandardLinearAlgebraProtocol {
     private ProtosStandardLinearAlgebraProtocol() {}
@@ -281,6 +282,19 @@ public final class ProtosStandardLinearAlgebraProtocol {
                         ProtosNumericValueSupport.integerSignum(contraction) == 0
                                 ? 0
                                 : ProtosNumericValueSupport.exactInt(contraction);
+                if (inner > 0) {
+                    double[] leftFloats = matrix.readonlyPackedFloatsForRuntime();
+                    double[] rightFloats =
+                            leftFloats == null ? null : other.readonlyPackedFloatsForRuntime();
+                    if (rightFloats != null) {
+                        return newPackedMatrix(
+                                activation,
+                                matrixPrototype,
+                                resultRows,
+                                resultColumns,
+                                floatMatmul(leftFloats, rightFloats, rows, columns, inner));
+                    }
+                }
                 List<Object> left = matrix.indexedSnapshot();
                 List<Object> right = other.indexedSnapshot();
                 ProtosPrelude prelude = prelude(activation);
@@ -362,6 +376,29 @@ public final class ProtosStandardLinearAlgebraProtocol {
                 Operation.MULTIPLY, left, right, prelude);
     }
 
+    /*
+     * The all-Float matmul kernel (PLAT068 R2-Float, I124): the generic loop above with each
+     * canonical Float product and sum as one host binary64 operation, so every cell is exactly
+     * the generic D214-F1 result. The first product seeds the cell, later products are added in
+     * ascending k, and nothing is reassociated, fused or split into partial sums.
+     */
+    private static double[] floatMatmul(
+            double[] left, double[] right, int rows, int columns, int inner) {
+        double[] cells = new double[rows * columns];
+        for (int row = 0; row < rows; row++) {
+            int leftRow = row * inner;
+            for (int column = 0; column < columns; column++) {
+                double accumulator = left[leftRow] * right[column];
+                for (int k = 1; k < inner; k++) {
+                    double product = left[leftRow + k] * right[k * columns + column];
+                    accumulator = accumulator + product;
+                }
+                cells[row * columns + column] = accumulator;
+            }
+        }
+        return cells;
+    }
+
     private static Object[] scaled(List<Object> elements, Object scalar, ProtosPrelude prelude) {
         Object[] products = new Object[elements.size()];
         for (int index = 0; index < products.length; index++) {
@@ -385,6 +422,20 @@ public final class ProtosStandardLinearAlgebraProtocol {
             Object[] elements) {
         try {
             return new ProtosMatrixValue(matrixPrototype, rows, columns, Arrays.asList(elements));
+        } catch (IllegalArgumentException rejected) {
+            throw invalid(activation);
+        }
+    }
+
+    private static ProtosMatrixValue newPackedMatrix(
+            ProtosActivation activation,
+            ProtosObjectValue matrixPrototype,
+            Object rows,
+            Object columns,
+            double[] owned) {
+        try {
+            return ProtosMatrixValue.ownedPackedFloatsForRuntime(
+                    matrixPrototype, rows, columns, owned);
         } catch (IllegalArgumentException rejected) {
             throw invalid(activation);
         }

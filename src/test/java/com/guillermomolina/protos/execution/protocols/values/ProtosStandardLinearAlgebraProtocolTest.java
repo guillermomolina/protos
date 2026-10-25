@@ -20,7 +20,9 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -41,6 +43,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosVectorValue;
+import java.lang.reflect.Field;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -688,6 +691,348 @@ final class ProtosStandardLinearAlgebraProtocolTest {
         assertContents(first, integer(1), integer(2));
     }
 
+    /* ---- I. PLAT068 R2-Float packed storage (I124) ---- */
+
+    @Test
+    void floatMatmulPacksLazilyOnceAndAnswersPackedResultsForChains() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue m = matrix(a, prelude, 2, 2, floats(1.0d, 2.0d, 3.0d, 4.0d));
+        assertNotNull(references(m));
+        assertNull(packed(m));
+
+        ProtosMatrixValue first = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, m));
+        double[] backing = packed(m);
+        assertNotNull(backing);
+        assertNull(references(m));
+        assertNotNull(packed(first));
+        assertNull(references(first));
+        assertNotSame(backing, packed(first));
+        assertSame(matrixPrototype(prelude), first.parent().orElseThrow());
+        assertTrue(first.isOpen());
+        assertContents(first, floats(7.0d, 10.0d, 15.0d, 22.0d));
+
+        ProtosMatrixValue again = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, m));
+        assertSame(backing, packed(m));
+        double[] firstBacking = packed(first);
+        ProtosMatrixValue chained =
+                assertInstanceOf(ProtosMatrixValue.class, invoke(first, "matmul", a, again));
+        assertSame(firstBacking, packed(first));
+        assertNotNull(packed(chained));
+        assertContents(chained, floats(199.0d, 290.0d, 435.0d, 634.0d));
+        assertContents(m, floats(1.0d, 2.0d, 3.0d, 4.0d));
+
+        // A rectangular 2 × 3 by 3 × 1 product keeps its exact shape.
+        ProtosMatrixValue wide = matrix(a, prelude, 2, 3, floats(1.0d, 2.0d, 3.0d, 4.0d, 5.0d, 6.0d));
+        ProtosMatrixValue column = matrix(a, prelude, 3, 1, floats(1.0d, 0.0d, -1.0d));
+        ProtosMatrixValue rectangular =
+                assertInstanceOf(ProtosMatrixValue.class, invoke(wide, "matmul", a, column));
+        assertTrue(ProtosIdentity.identical(integer(2), rectangular.rowsValue()));
+        assertTrue(ProtosIdentity.identical(integer(1), rectangular.columnsValue()));
+        assertNotNull(packed(rectangular));
+        assertContents(rectangular, floats(-2.0d, -2.0d));
+    }
+
+    @Test
+    void nonFloatOperandsNeverEnterTheFloatKernel() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue floats = matrix(a, prelude, 1, 2, floats(0.5d, 2.0d));
+        Object[][] mixedColumns = {
+            {new ProtosFloatValue(2.0d), integer(3)},
+            {new ProtosFloatValue(2.0d), big(BigInteger.ONE.shiftLeft(70), prelude)},
+            {new ProtosFloatValue(2.0d), fraction(1, 2, prelude)},
+            {new ProtosFloatValue(2.0d), complex(integer(0), integer(1), prelude)},
+        };
+        for (Object[] values : mixedColumns) {
+            ProtosMatrixValue mixed = matrix(a, prelude, 2, 1, values);
+            ProtosMatrixValue product =
+                    assertInstanceOf(ProtosMatrixValue.class, invoke(floats, "matmul", a, mixed));
+            assertNull(packed(mixed));
+            assertNull(packed(product));
+            Object expected =
+                    ProtosComplexArithmetic.canonicalNumberBinary(
+                            ProtosComplexArithmetic.Operation.ADD,
+                            new ProtosFloatValue(1.0d),
+                            ProtosComplexArithmetic.canonicalNumberBinary(
+                                    ProtosComplexArithmetic.Operation.MULTIPLY,
+                                    new ProtosFloatValue(2.0d),
+                                    values[1],
+                                    prelude),
+                            prelude);
+            assertContents(product, expected);
+            assertContents(mixed, values);
+            // The reversed product leaves the mixed receiver in R1 too.
+            invoke(mixed, "matmul", a, floats);
+            assertNull(packed(mixed));
+        }
+        // An Integer-only product keeps exact Integers.
+        ProtosMatrixValue exact = matrix(a, prelude, 1, 1, integer(3));
+        ProtosMatrixValue square = assertInstanceOf(ProtosMatrixValue.class, invoke(exact, "matmul", a, exact));
+        assertNull(packed(square));
+        assertContents(square, integer(9));
+    }
+
+    @Test
+    void packedWritesUpdateLanesOrReturnTheSameMatrixToReferences() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        Object evaluated =
+                evaluate(
+                        """
+                        LA: import("std:math/LinearAlgebra")
+                        Tagged: LA.Matrix { label: 7 }
+                        [Tagged(1, 2, 1.0, 2.0), Tagged]
+                        """,
+                        a);
+        List<Object> pair = elements(evaluated);
+        ProtosMatrixValue m = assertInstanceOf(ProtosMatrixValue.class, pair.get(0));
+        m.createLocalSlot("note", integer(9));
+        ProtosMatrixValue column = matrix(a, prelude, 2, 1, floats(1.0d, 1.0d));
+        invoke(m, "matmul", a, column);
+        double[] backing = packed(m);
+        assertNotNull(backing);
+
+        Object half = new ProtosFloatValue(0.5d);
+        assertSame(half, invoke(m, "atPut", a, integer(0), integer(1), half));
+        assertSame(backing, packed(m));
+        assertContents(m, floats(1.0d, 0.5d));
+        assertFloat(0.5d, List.of(invoke(m, "at", a, integer(0), integer(1))));
+
+        // Failed writes change neither the state nor the contents.
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(2), integer(1)));
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), new ProtosStringValue("x")));
+        for (Object impostor : impostors(prelude)) {
+            assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), impostor));
+        }
+        assertSame(backing, packed(m));
+        assertContents(m, floats(1.0d, 0.5d));
+
+        Object third = fraction(1, 3, prelude);
+        assertSame(third, invoke(m, "atPut", a, integer(0), integer(0), third));
+        assertNull(packed(m));
+        assertNotNull(references(m));
+        assertContents(m, third, new ProtosFloatValue(0.5d));
+        assertInstanceOf(ProtosFloatValue.class, m.indexedAt(integer(0), integer(1)));
+        assertSame(pair.get(1), m.parent().orElseThrow());
+        assertTrue(ProtosIdentity.identical(integer(9), m.readLocalSlot("note").orElseThrow()));
+        assertTrue(ProtosIdentity.identical(integer(1), m.rowsValue()));
+        assertTrue(ProtosIdentity.identical(integer(2), m.columnsValue()));
+
+        // Heterogeneous contents keep the generic product; restoring Floats re-admits it.
+        assertContents(
+                assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, column)),
+                ProtosComplexArithmetic.canonicalNumberBinary(
+                        ProtosComplexArithmetic.Operation.ADD,
+                        ProtosComplexArithmetic.canonicalNumberBinary(
+                                ProtosComplexArithmetic.Operation.MULTIPLY,
+                                third,
+                                new ProtosFloatValue(1.0d),
+                                prelude),
+                        new ProtosFloatValue(0.5d),
+                        prelude));
+        assertNull(packed(m));
+        invoke(m, "atPut", a, integer(0), integer(0), new ProtosFloatValue(2.0d));
+        invoke(m, "matmul", a, column);
+        assertNotNull(packed(m));
+        assertContents(m, floats(2.0d, 0.5d));
+
+        // Frozen first, in either state.
+        m.freeze();
+        assertSignals(() -> invoke(m, "atPut", a, integer(9), integer(9), new ProtosStringValue("x")));
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), new ProtosFloatValue(3.0d)));
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), integer(3)));
+        assertContents(m, floats(2.0d, 0.5d));
+        assertContents(
+                assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, column)),
+                floats(2.5d));
+    }
+
+    @Test
+    void frozenReferenceMatricesComputePackedProductsWithoutChangingState() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue m = matrix(a, prelude, 1, 2, floats(3.0d, -0.0d));
+        ProtosMatrixValue column = matrix(a, prelude, 2, 1, floats(2.0d, 1.0d));
+        m.createLocalSlot("note", integer(9));
+        m.freeze();
+        assertNotNull(references(m));
+        assertNull(packed(m));
+
+        ProtosMatrixValue first = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, column));
+        double[] backing = packed(m);
+        assertNotNull(backing);
+        assertNull(references(m));
+        ProtosMatrixValue second = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "matmul", a, column));
+        assertSame(backing, packed(m));
+        assertNotSame(first, second);
+        assertNotNull(packed(first));
+        assertFalse(first.isFrozen());
+        assertContents(first, floats(6.0d));
+        assertContents(second, floats(6.0d));
+
+        assertTrue(m.isFrozen());
+        assertContents(m, floats(3.0d, -0.0d));
+        assertFloat(-0.0d, List.of(invoke(m, "at", a, integer(0), integer(1))));
+        assertSame(matrixPrototype(prelude), m.parent().orElseThrow());
+        assertTrue(ProtosIdentity.identical(integer(9), m.readLocalSlot("note").orElseThrow()));
+        assertTrue(ProtosIdentity.identical(integer(1), m.rowsValue()));
+        assertTrue(ProtosIdentity.identical(integer(2), m.columnsValue()));
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), new ProtosFloatValue(1.0d)));
+        assertSignals(() -> invoke(m, "atPut", a, integer(0), integer(0), integer(1)));
+        assertSame(backing, packed(m));
+        assertContents(m, floats(3.0d, -0.0d));
+    }
+
+    @Test
+    void concurrentFirstPackingOfAFrozenMatrixPublishesOnePersistentArray() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        int volume = 4096;
+        double[] values = new double[volume];
+        for (int index = 0; index < volume; index++) {
+            values[index] = index - 0.5d;
+        }
+        ProtosMatrixValue m = matrix(a, prelude, 1, volume, floats(values));
+        m.freeze();
+        int readers = 8;
+        java.util.concurrent.CyclicBarrier start = new java.util.concurrent.CyclicBarrier(readers);
+        java.util.concurrent.ExecutorService pool =
+                java.util.concurrent.Executors.newFixedThreadPool(readers);
+        try {
+            List<java.util.concurrent.Future<double[]>> seen = new ArrayList<>();
+            for (int reader = 0; reader < readers; reader++) {
+                seen.add(pool.submit(() -> {
+                    start.await();
+                    return m.readonlyPackedFloatsForRuntime();
+                }));
+            }
+            List<double[]> answers = new ArrayList<>();
+            for (java.util.concurrent.Future<double[]> answer : seen) {
+                answers.add(answer.get(10, java.util.concurrent.TimeUnit.SECONDS));
+            }
+            double[] persistent = packed(m);
+            assertNotNull(persistent);
+            for (double[] packed : answers) {
+                assertSame(persistent, packed);
+            }
+            for (int index = 0; index < volume; index++) {
+                assertEquals(
+                        Double.doubleToRawLongBits(values[index]),
+                        Double.doubleToRawLongBits(persistent[index]));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertContents(m, floats(values));
+    }
+
+    @Test
+    void packedMatricesKeepIndependentSnapshotsCopiesAndAlgebra() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue identity = matrix(a, prelude, 2, 2, floats(1.0d, 0.0d, 0.0d, 1.0d));
+        ProtosMatrixValue m = assertInstanceOf(
+                ProtosMatrixValue.class,
+                invoke(matrix(a, prelude, 2, 2, floats(1.0d, 2.0d, 3.0d, 4.0d)), "matmul", a, identity));
+        assertNotNull(packed(m));
+
+        List<Object> snapshot = m.indexedSnapshot();
+        ProtosMatrixValue copy = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "copy", a));
+        ProtosMatrixValue transposed = assertInstanceOf(ProtosMatrixValue.class, invoke(m, "transpose", a));
+        invoke(m, "atPut", a, integer(0), integer(0), new ProtosFloatValue(-1.0d));
+        assertContents(snapshot, floats(1.0d, 2.0d, 3.0d, 4.0d));
+        assertContents(copy, floats(1.0d, 2.0d, 3.0d, 4.0d));
+        assertContents(transposed, floats(1.0d, 3.0d, 2.0d, 4.0d));
+        invoke(copy, "matmul", a, identity);
+        assertNotSame(packed(m), packed(copy));
+        invoke(copy, "atPut", a, integer(1), integer(1), new ProtosFloatValue(8.0d));
+        assertContents(m, floats(-1.0d, 2.0d, 3.0d, 4.0d));
+
+        assertContents(
+                assertInstanceOf(ProtosMatrixValue.class, invoke(m, "add", a, m)),
+                floats(-2.0d, 4.0d, 6.0d, 8.0d));
+        assertContents(
+                assertInstanceOf(ProtosMatrixValue.class, invoke(m, "scale", a, integer(2))),
+                floats(-2.0d, 4.0d, 6.0d, 8.0d));
+        assertContents(
+                assertInstanceOf(
+                        ProtosVectorValue.class,
+                        invoke(m, "matvec", a, vector(a, prelude, floats(1.0d, 1.0d)))),
+                floats(1.0d, 7.0d));
+        Object evaluated =
+                evaluate(
+                        """
+                        LA: import("std:math/LinearAlgebra")
+                        Matrix: LA.Matrix
+                        unit: Matrix(2, 2, 1.0, 0.0, 0.0, 1.0)
+                        packed: Matrix(2, 2, 1.0, 2.0, 3.0, 4.0).matmul(unit)
+                        square: packed.matmul(packed)
+                        [square.at(1, 1), square.rows(), square == square, square === packed]
+                        """,
+                        a);
+        List<Object> outcomes = elements(evaluated);
+        assertFloat(22.0d, List.of(outcomes.get(0)));
+        assertTrue(ProtosIdentity.identical(integer(2), outcomes.get(1)));
+        assertSame(ProtosBooleanValue.TRUE, outcomes.get(2));
+        assertSame(ProtosBooleanValue.FALSE, outcomes.get(3));
+    }
+
+    @Test
+    void packedKernelReproducesStrictD214F1Rounding() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        double big = 1.0e16d;
+        double x = 1.0d + Math.scalb(1.0d, -30);
+
+        assertFloat(-0.0d, packedProducts(a, prelude, floats(-1.0d), floats(0.0d)));
+        assertFloat(0.0d, packedProducts(a, prelude, floats(big, 1.0d, -big), floats(1.0d, 1.0d, 1.0d)));
+        assertFloat(1.0d, packedProducts(a, prelude, floats(big, -big, 1.0d), floats(1.0d, 1.0d, 1.0d)));
+        // x*x - 1 rounds the product first; a fused multiply-add would keep 2^-60.
+        assertTrue(Math.fma(x, x, -1.0d) != x * x - 1.0d, "fused and separate rounding differ");
+        assertFloat(x * x - 1.0d, packedProducts(a, prelude, floats(x, -1.0d), floats(x, 1.0d)));
+        assertFloat(Double.NaN, packedProducts(a, prelude, floats(Double.NaN, 1.0d), floats(1.0d, 1.0d)));
+        assertFloat(
+                Double.NaN,
+                packedProducts(
+                        a, prelude,
+                        floats(Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY),
+                        floats(1.0d, 1.0d)));
+        assertFloat(
+                Double.POSITIVE_INFINITY,
+                packedProducts(a, prelude, floats(Double.MAX_VALUE, Double.MAX_VALUE), floats(2.0d, 2.0d)));
+        assertFloat(
+                Double.NEGATIVE_INFINITY,
+                packedProducts(a, prelude, floats(Double.POSITIVE_INFINITY, 2.0d), floats(-1.0d, 1.0d)));
+        assertFloat(
+                2 * Double.MIN_VALUE,
+                packedProducts(a, prelude, floats(Double.MIN_VALUE, Double.MIN_VALUE), floats(1.0d, 1.0d)));
+        assertFloat(Double.MIN_NORMAL, packedProducts(a, prelude, floats(Double.MIN_NORMAL * 2), floats(0.5d)));
+        assertFloat(0.0d, packedProducts(a, prelude, floats(Double.MIN_VALUE), floats(0.5d)));
+        assertFloat(6.0d, packedProducts(a, prelude, floats(1.0d), floats(6.0d)));
+    }
+
+    @Test
+    void floatMatricesWithEmptyContractionOrVolumeKeepExactIntegerResults() throws Exception {
+        ProtosPrelude prelude = prelude();
+        ProtosActivation a = prelude.newModuleActivation();
+        ProtosMatrixValue wide = matrix(a, prelude, 2, 0);
+        ProtosMatrixValue tall = matrix(a, prelude, 0, 2);
+        ProtosMatrixValue zeros = assertInstanceOf(ProtosMatrixValue.class, invoke(wide, "matmul", a, tall));
+        assertNull(packed(zeros));
+        for (Object zero : zeros.indexedSnapshot()) {
+            assertInstanceOf(ProtosIntegerValue.class, zero);
+            assertTrue(ProtosIdentity.identical(integer(0), zero));
+        }
+        ProtosMatrixValue row = matrix(a, prelude, 1, 2, floats(1.0d, 2.0d));
+        ProtosMatrixValue empty =
+                assertInstanceOf(ProtosMatrixValue.class, invoke(row, "matmul", a, matrix(a, prelude, 2, 0)));
+        assertTrue(ProtosIdentity.identical(integer(1), empty.rowsValue()));
+        assertTrue(ProtosIdentity.identical(integer(0), empty.columnsValue()));
+        assertTrue(empty.indexedSnapshot().isEmpty());
+        assertNull(packed(row));
+    }
+
     /* ---- Helpers ---- */
 
     private static ProtosPrelude prelude() throws Exception {
@@ -739,6 +1084,42 @@ final class ProtosStandardLinearAlgebraProtocolTest {
                                 matrix(a, prelude, right.length, 1, right)),
                         "at", a, integer(0), integer(0));
         return List.of(dot, matvec, matmul);
+    }
+
+    /* matmul of a 1 × n by n × 1 all-Float pair through the packed kernel, then again packed. */
+    private static List<Object> packedProducts(
+            ProtosActivation a, ProtosPrelude prelude, Object[] left, Object[] right) {
+        ProtosMatrixValue row = matrix(a, prelude, 1, left.length, left);
+        ProtosMatrixValue column = matrix(a, prelude, right.length, 1, right);
+        ProtosMatrixValue first =
+                assertInstanceOf(ProtosMatrixValue.class, invoke(row, "matmul", a, column));
+        ProtosMatrixValue second =
+                assertInstanceOf(ProtosMatrixValue.class, invoke(row, "matmul", a, column));
+        assertNotNull(packed(row));
+        assertNotNull(packed(column));
+        assertNotNull(packed(first));
+        return List.of(
+                invoke(first, "at", a, integer(0), integer(0)),
+                second.indexedSnapshot().get(0));
+    }
+
+    /* Test-side inspection of the private PLAT068 storage states; no guest surface exposes them. */
+    private static double[] packed(ProtosMatrixValue matrix) {
+        return storage(matrix) instanceof double[] packed ? packed : null;
+    }
+
+    private static Object[] references(ProtosMatrixValue matrix) {
+        return storage(matrix) instanceof Object[] references ? references : null;
+    }
+
+    private static Object storage(ProtosMatrixValue matrix) {
+        try {
+            Field field = ProtosMatrixValue.class.getDeclaredField("storage");
+            field.setAccessible(true);
+            return field.get(matrix);
+        } catch (ReflectiveOperationException unavailable) {
+            throw new AssertionError(unavailable);
+        }
     }
 
     private static Object[] floats(double... values) {
