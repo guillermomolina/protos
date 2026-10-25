@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -81,7 +80,9 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "BindClosureParameter");
             assertContains(names, "BindUnaryFrameParameter");
             assertNone(names, "BindClosureFrameParameter");
-            assertContains(names, "ReadRootFrameLocal");
+            // I115-H1: the compact root reads the bound parameter as an ordinary local.
+            assertContains(names, "load.local");
+            assertNone(names, "ReadRootFrameLocal");
             assertEquals(
                     0,
                     constantOrdinalOf(identity, "BindUnaryFrameParameter"),
@@ -160,14 +161,26 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                     "(...value) => { value }",
                     "(a, b) => { a }",
                     "(value) => { context\nvalue }",
-                    "(value) => { value + 1 }",
-                    "(value) => { result: value\nresult }",
                     "(value) => { () => value }")) {
                 ProtosClosureValue closure = closure(source, module);
                 assertNone(
                         instructionNames(closure),
                         "BindUnaryFrameParameter");
             }
+
+            /*
+             * I115-H1-FIX: a unary body using '+' gets no static numeric
+             * entry. Its parameter is an ordinary unary binding, and the
+             * send keeps the shared guarded numeric site with its ordinary
+             * dispatch fallback.
+             */
+            ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
+            List<String> plusNames = instructionNames(plus);
+            assertContains(plusNames, "TryPrimitiveNumericAdd");
+            assertContains(plusNames, "PrepareSendOne");
+            assertNone(plusNames, "ExperimentalInteger");
+            assertNone(plusNames, "InvokeStaticClosureOneTail");
+            assertEquals("42", integerValue(enter(fastDirect(plus, module, integer(41)))));
         });
 
         // PLAT067-B: an attached debugger never selects another entry.
@@ -181,6 +194,15 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             ProtosIntegerValue value = integer(17);
             assertSame(value, enter(fastDirect(identity, module, value)));
+
+            // The debugger keeps the same shared numeric site and no other ABI.
+            ProtosClosureValue plus = closure("(value) => { value + 1 }", module);
+            List<String> plusNames = instructionNames(plus);
+            assertContains(plusNames, "TryPrimitiveNumericAdd");
+            assertContains(plusNames, "PrepareSendOne");
+            assertNone(plusNames, "ExperimentalInteger");
+            assertNone(plusNames, "InvokeStaticClosureOneTail");
+            assertEquals("18", integerValue(enter(fastDirect(plus, module, value))));
         });
     }
 
@@ -561,7 +583,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             "() => { left: 1\nalias: left\nright: 2\n"
                                     + "alias = right\nleft + alias }",
                             module);
-            assertContains(instructionNames(scalar), "ExperimentalIntegerAdd");
+            assertContains(instructionNames(scalar), "TryPrimitiveNumericAdd");
+            assertNone(instructionNames(scalar), "ExperimentalInteger");
             assertNone(instructionNames(scalar), "IsCompactLocalFrame");
 
             Object[] direct =
@@ -841,19 +864,24 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             /*
              * I115-M: all three parameterless bodies are admitted to the
-             * whole-root compact lane, which computes the sum with one
-             * ExperimentalIntegerAdd instead of a lowering-time fold or an
-             * ordinary numeric send; the mutated alias needs neither the
-             * numeric dispatch nor the compact-frame test.
+             * whole-root compact lane. I115-H1-FIX: it computes the sum at
+             * the one shared guarded TryPrimitiveNumericAdd site, whose MISS
+             * keeps the ordinary send; the mutated alias needs no
+             * compact-frame test.
              */
             for (ProtosClosureValue candidate : List.of(direct, locals, aliases)) {
-                assertEquals("3", integerValue(enter(fastDirect(candidate, module))));
+                ProtosPreparedCalls.PreparedClosureCall prepared =
+                        fastDirect(candidate, module);
+                assertEquals("3", integerValue(enter(prepared)));
+                // The site's lazy caller reference answers the compact arguments.
+                assertSame(candidate, prepared.targetArguments()[0],
+                        "the numeric HIT materializes no activation");
                 List<String> names = instructionNames(candidate);
-                assertContains(names, "ExperimentalIntegerAdd");
-                assertNone(names, "TryPrimitiveNumeric");
+                assertEquals(1, countOf(names, "c.TryPrimitiveNumericAdd"));
+                assertContains(names, "PrepareSendOne");
+                assertNone(names, "ExperimentalInteger");
                 assertNone(names, "IsCompactLocalFrame");
                 assertNone(names, "InstallFrameLexicalAuthority");
-                assertNone(names, "CurrentActivation");
             }
         });
     }
@@ -861,19 +889,21 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     /**
      * PLAT067-B: an attached debugger observes the one proof-optimized
      * lowering. A caller that publishes the activation still receives the
-     * folded result through the same root, the eliminated bindings are not
-     * fabricated on the observed context, and the folded send has no CallTag,
-     * exactly as without a debugger. The three surviving statements keep their
+     * result through the same root, and the shared numeric send keeps its
+     * CallTag, exactly as without a debugger. I115-H1-FIX: the compact root
+     * folds nothing, so left and right are genuine bindings; a root that may
+     * promote establishes them through CreateCurrentFrameLocal, so the
+     * published Context observes exactly them, with their values. The three statements keep their
      * passive StatementTag + ExpressionTag over their exact source sections,
      * which BytecodeConfig.DEFAULT never materializes.
      */
     @Test
-    void perf043FoldWithAttachedDebuggerFabricatesNoEliminatedBinding() throws Exception {
+    void perf043AttachedDebuggerObservesTheCompactBindings() throws Exception {
         withCoreAndDebugger(module -> {
             ProtosClosureValue sum =
                     closure("() => { left: 1\nright: 2\nleft + right }", module);
-            // I115-M: the compact lane adds at run time (no lowering-time fold).
-            assertContains(instructionNames(sum), "ExperimentalIntegerAdd");
+            // I115-H1-FIX: the compact lane adds at the shared numeric site.
+            assertContains(instructionNames(sum), "TryPrimitiveNumericAdd");
 
             Object[] arguments =
                     ProtosFrameArguments.compactDirectClosureCall(
@@ -892,10 +922,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             assertSame(activation, arguments[0]);
             assertSame(observed, activation.context());
-            assertTrue(observed.readLocalSlot("left").isEmpty(),
-                    "an eliminated binding is never fabricated");
-            assertTrue(observed.readLocalSlot("right").isEmpty(),
-                    "an eliminated binding is never fabricated");
+            assertEquals(List.of("left", "right"),
+                    List.copyOf(observed.localSlotsSnapshot().keySet()),
+                    "the observed Context holds exactly the established bindings");
+            assertEquals("1", integerValue(observed.readLocalSlot("left").orElseThrow()));
+            assertEquals("2", integerValue(observed.readLocalSlot("right").orElseThrow()));
 
             ProtosBytecodeRootNode root =
                     sum.executionPlan()
@@ -911,10 +942,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                             .map(tag -> tag.getSourceSection().getCharacters().toString())
                             .toList());
             assertEquals(statements, collectTags(tree, StandardTags.ExpressionTag.class));
+            // I115-H1-FIX: the shared numeric site is a surviving dynamic send.
             assertEquals(
-                    0,
-                    collectTags(tree, StandardTags.CallTag.class).size(),
-                    "the folded send is not a surviving call");
+                    List.of("left + right"),
+                    collectTags(tree, StandardTags.CallTag.class).stream()
+                            .map(tag -> tag.getSourceSection().getCharacters().toString())
+                            .toList(),
+                    "the dispatched send keeps its CallTag over its source");
         });
     }
 
@@ -969,12 +1003,15 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 root.getRootNodes().ensureComplete();
                 var calls = collectTags(root.getBytecodeNode().getTagTree(),
                         StandardTags.CallTag.class);
-                // I115-M: every candidate, the mutated alias included, is a
-                // compact root: no ordinary send survives, so no CallTag.
-                assertEquals(0, calls.size(),
+                // I115-H1-FIX: every candidate, the mutated alias included, is
+                // a compact root whose '+' sends are each one shared numeric
+                // site, a surviving dynamic send with its own CallTag.
+                int sends = candidate == nested ? 2 : candidate == tree ? 3 : 1;
+                assertEquals(sends, calls.size(),
                         "Only surviving dynamic sends retain CallTag");
-                assertContains(instructionNames(candidate), "ExperimentalIntegerAdd");
-                assertNone(instructionNames(candidate), "TryPrimitiveNumeric");
+                assertEquals(sends,
+                        countOf(instructionNames(candidate), "c.TryPrimitiveNumericAdd"));
+                assertNone(instructionNames(candidate), "ExperimentalInteger");
             }
 
             for (var candidate : List.of(locals, aliases)) {
@@ -997,29 +1034,39 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     void i101GuardedLongArithmeticFoldsRecursivelyAndFailsClosed()
             throws Exception {
         withCore(module -> {
-            String[][] accepted = {
-                    {"() => { 1 + 1 + 1 }", "3"},
-                    {"() => { (1 + 1) + 1 }", "3"},
-                    {"() => { 1 + (1 + 1) }", "3"},
-                    {"() => { (1 + 2) * 3 }", "9"},
-                    {"() => { 10 - 3 - 2 }", "5"},
-                    {"() => { 6 / 3 }", "2"},
-                    {"() => { 1 + 2 * 3 }", "7"},
-                    {"() => { x: 1; y: x + 2; z: y * 3; z }", "9"}
+            // '/' is outside the compact lane: the general lowerer folds it.
+            ProtosClosureValue divided = closure("() => { 6 / 3 }", module);
+            assertFalse(
+                    hasFoldedIntegerArithmetic(divided),
+                    "Proven arithmetic must not retain a runtime descriptor");
+            assertNone(instructionNames(divided), "TryPrimitiveNumeric");
+            assertEquals("2", integerValue(enter(fastDirect(divided, module))));
+
+            /*
+             * I115-H1-FIX: these bodies are compact roots; each send is one
+             * shared guarded numeric site (with its guarded PERF043 fold
+             * candidate) whose MISS keeps the ordinary send.
+             */
+            Object[][] compact = {
+                    {"() => { 1 + 1 + 1 }", "3", 2},
+                    {"() => { (1 + 1) + 1 }", "3", 2},
+                    {"() => { 1 + (1 + 1) }", "3", 2},
+                    {"() => { (1 + 2) * 3 }", "9", 2},
+                    {"() => { 10 - 3 - 2 }", "5", 2},
+                    {"() => { 1 + 2 * 3 }", "7", 2},
+                    {"() => { x: 1; y: x + 2; z: y * 3; z }", "9", 2}
             };
 
-            for (String[] example : accepted) {
-                ProtosClosureValue candidate = closure(example[0], module);
-                assertFalse(
-                        hasFoldedIntegerArithmetic(candidate),
-                        "Proven arithmetic must not retain a runtime descriptor");
-                assertNone(
-                        instructionNames(candidate),
-                        "TryPrimitiveNumeric");
+            for (Object[] example : compact) {
+                String source = (String) example[0];
+                ProtosClosureValue candidate = closure(source, module);
+                List<String> names = instructionNames(candidate);
+                assertEquals(example[2], countOf(names, "c.TryPrimitiveNumeric"), source);
+                assertNone(names, "ExperimentalInteger");
                 assertEquals(
                         example[1],
                         integerValue(enter(fastDirect(candidate, module))),
-                        example[0]);
+                        source);
             }
 
             for (String example : List.of(
@@ -1036,13 +1083,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
 
             /*
              * I115-M: overflowing Integer literals are admitted to the compact
-             * lane; they are not folded and their operation keeps exact
-             * Integer semantics, promoting beyond signed-64.
+             * lane; they are not folded and the shared numeric operation
+             * keeps exact Integer semantics, promoting beyond signed-64.
              */
             String[][] overflowing = {
-                    {"() => { 9223372036854775807 + 1 }", "ExperimentalIntegerAdd",
+                    {"() => { 9223372036854775807 + 1 }", "TryPrimitiveNumericAdd",
                             "9223372036854775808"},
-                    {"() => { 9223372036854775807 * 2 }", "ExperimentalIntegerMultiply",
+                    {"() => { 9223372036854775807 * 2 }", "TryPrimitiveNumericMultiply",
                             "18446744073709551614"}
             };
             for (String[] example : overflowing) {
@@ -1140,6 +1187,180 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         });
     }
 
+    /**
+     * I115-H1-FIX: a compact root keeps its bindings in Bytecode locals.
+     * When a numeric send MISSes into an ordinary send, the root first
+     * promotes those locals to its activation's lexical authority, so a
+     * selected method that observes the caller's activation sees the exact
+     * bindings the compact code uses, and an authorized mutation through
+     * that activation is the one the compact code then reads. A published
+     * Context that copied, or did not share, the locals fails every step.
+     */
+    @Test
+    void numericMissObserverSharesTheCompactBindingAuthority() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { seen: 5\nresult: gate + seen\n"
+                            + "seen = seen + result\nseen }",
+                    module);
+            List<String> names = instructionNames(run);
+            assertContains(names, "TryPrimitiveNumericAdd");
+            assertContains(names, "PromoteFrameLexicalAuthority");
+            assertNone(names, "InstallFrameLexicalAuthority");
+
+            ProtosObjectValue gate =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue[] observedContext = new ProtosObjectValue[1];
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            run, module, null, new Object[] {gate});
+            gate.createLocalSlot("+", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        // The caller's activation, published by the promotion.
+                        ProtosActivation caller =
+                                assertInstanceOf(ProtosActivation.class, arguments[0]);
+                        ProtosObjectValue context = caller.context();
+                        observedContext[0] = context;
+                        assertEquals("5", integerValue(supplied.get(0)));
+                        assertEquals("5", integerValue(
+                                context.readLocalSlot("seen").orElseThrow()),
+                                "the observer sees the compact binding and its value");
+                        context.assignLocalSlot("seen", integer(7));
+                        return integer(100);
+                    }));
+
+            Object raw = target(run).call(arguments);
+            // seen = 7 (written through the observed Context) + 100.
+            assertEquals("107", integerValue(
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                            .guestValue(raw)),
+                    "the compact code reads the observer's mutation");
+            ProtosActivation published =
+                    assertInstanceOf(ProtosActivation.class, arguments[0]);
+            assertSame(observedContext[0], published.context(),
+                    "one Context for the whole activation");
+            assertEquals("107", integerValue(
+                    published.context().readLocalSlot("seen").orElseThrow()),
+                    "the compact write after the MISS is visible to the same authority");
+            assertTrue(published.context().readLocalSlot("result").isPresent());
+
+            // A HIT at the same site publishes nothing.
+            ProtosPreparedCalls.PreparedClosureCall hit =
+                    fastDirect(run, module, integer(1));
+            // seen = 5 + (1 + 5).
+            assertEquals("11", integerValue(enter(hit)));
+            assertSame(run, hit.targetArguments()[0],
+                    "the numeric HIT keeps the compact activation");
+        });
+    }
+
+    /**
+     * I115-H1-FIX: the establishment history across a promotion. The real
+     * order is gate (entry), first, then mid and later after the MISS. The
+     * observer at the MISS sees exactly the bindings established so far, in
+     * that order, with mid still ABSENT; the creations after the promotion
+     * are recorded by the installed authority through CreateCurrentFrameLocal,
+     * so the final snapshot keeps the real order and values. A HIT of the
+     * same root materializes nothing.
+     */
+    @Test
+    void promotionPreservesTheRealEstablishmentOrder() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { first: 1\nmid: gate + 2\nlater: first + mid\nlater }",
+                    module);
+            List<String> names = instructionNames(run);
+            assertContains(names, "PromoteFrameLexicalAuthority");
+            assertContains(names, "CreateCurrentFrameLocal");
+
+            // E: the HIT path stays compact; 1 + (3 + 2).
+            ProtosPreparedCalls.PreparedClosureCall hit =
+                    fastDirect(run, module, integer(3));
+            assertEquals("6", integerValue(enter(hit)));
+            assertSame(run, hit.targetArguments()[0],
+                    "the numeric HIT materializes no activation");
+
+            ProtosObjectValue gate =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            List<java.util.Map<String, Object>> atMiss = new java.util.ArrayList<>();
+            Object[] arguments =
+                    ProtosFrameArguments.compactDirectClosureCall(
+                            run, module, null, new Object[] {gate});
+            gate.createLocalSlot("+", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> {
+                        ProtosActivation caller =
+                                assertInstanceOf(ProtosActivation.class, arguments[0]);
+                        atMiss.add(caller.context().localSlotsSnapshot());
+                        return integer(10);
+                    }));
+
+            Object raw = target(run).call(arguments);
+            assertEquals("11", integerValue(
+                    com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                            .guestValue(raw)));
+
+            // B: the promotion adopted the real history; mid is ABSENT.
+            assertEquals(1, atMiss.size());
+            java.util.Map<String, Object> before = atMiss.get(0);
+            assertEquals(List.of("gate", "first"), List.copyOf(before.keySet()));
+            assertSame(gate, before.get("gate"));
+            assertEquals("1", integerValue(before.get("first")));
+
+            // C, D: the later creations are recorded after the promotion.
+            ProtosActivation published =
+                    assertInstanceOf(ProtosActivation.class, arguments[0]);
+            java.util.Map<String, Object> after =
+                    published.context().localSlotsSnapshot();
+            assertEquals(
+                    List.of("gate", "first", "mid", "later"),
+                    List.copyOf(after.keySet()));
+            assertEquals("10", integerValue(after.get("mid")));
+            assertEquals("11", integerValue(after.get("later")));
+        });
+    }
+
+    /**
+     * I115-H1-FIX: A. The inner creation of second's value executes before
+     * second, but the layout declares second first, so adopting PRESENT
+     * locals in layout order would not be the real history. The compact
+     * lowering cannot prove the order and rejects the root, which keeps the
+     * general lowerer (no compact promotion) and its exact result.
+     */
+    @Test
+    void outOfLayoutCreationOrderIsNotCompact() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { first: 1\nsecond: gate + (inner: 2)\n"
+                            + "later: first + second\nlater }",
+                    module);
+            List<String> names = instructionNames(run);
+            assertNone(names, "PromoteFrameLexicalAuthority");
+            assertNone(names, "Experimental");
+            // 1 + (3 + 2).
+            assertEquals("6", integerValue(enter(fastDirect(run, module, integer(3)))));
+        });
+    }
+
+    /**
+     * I115-H1-FIX: a creation under conditional control is not compact: its
+     * establishment is neither static nor unconditional, so the compact
+     * subset cannot prove its order and the root keeps the general lowerer,
+     * whose frame-native creation records it.
+     */
+    @Test
+    void conditionalCreationKeepsTheGeneralLowerer() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { (gate < 1).ifTrue() {\nmade: 1\n}\n0 }", module);
+            List<String> names = instructionNames(run);
+            assertNone(names, "IsCanonicalBooleanValue");
+            assertNone(names, "PromoteFrameLexicalAuthority");
+            assertNone(names, "ExperimentalCanonicalBooleanCondition");
+            assertEquals("0", integerValue(enter(fastDirect(run, module, integer(0)))));
+            assertEquals("0", integerValue(enter(fastDirect(run, module, integer(5)))));
+        });
+    }
+
     @Test
     void perf043FoldedAdditionIsIsolatedBetweenContextsAndPreludes()
             throws Exception {
@@ -1164,9 +1385,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                                 "() => { left: 1\nright: 2\nleft + right }",
                                 module);
 
-                // I115-M: both are compact roots computing the sum at run time.
-                assertContains(instructionNames(direct), "ExperimentalIntegerAdd");
-                assertContains(instructionNames(locals), "ExperimentalIntegerAdd");
+                // I115-H1-FIX: both are compact roots whose sum is the shared
+                // numeric site, admitted against this Context's own Prelude.
+                assertContains(instructionNames(direct), "TryPrimitiveNumericAdd");
+                assertContains(instructionNames(locals), "TryPrimitiveNumericAdd");
 
                 assertEquals(
                         "3",
@@ -1175,8 +1397,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                         "3",
                         integerValue(enter(fastDirect(locals, module))));
 
-                assertNone(instructionNames(direct), "TryPrimitiveNumeric");
-                assertNone(instructionNames(locals), "TryPrimitiveNumeric");
+                assertNone(instructionNames(direct), "ExperimentalInteger");
+                assertNone(instructionNames(locals), "ExperimentalInteger");
             });
         }
 
@@ -1194,10 +1416,11 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue nonTerminal =
                     closure("() => { 1 + 2\n7 }", module);
 
-            // I115-M: every parameterless body here is a compact root, which
-            // computes its Integer operations at run time instead of folding.
-            assertContains(instructionNames(nonTerminal), "ExperimentalIntegerAdd");
-            assertNone(instructionNames(nonTerminal), "TryPrimitiveNumeric");
+            // I115-M: every parameterless body here is a compact root.
+            // I115-H1-FIX: each '+' is one shared numeric site, evaluated
+            // at run time, whose operands are each evaluated once.
+            assertEquals(1, countOf(instructionNames(nonTerminal), "c.TryPrimitiveNumericAdd"));
+            assertNone(instructionNames(nonTerminal), "ExperimentalInteger");
             assertEquals(
                     "7",
                     integerValue(enter(fastDirect(nonTerminal, module))));
@@ -1205,8 +1428,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue nested =
                     closure("() => { (1 + 2) + 3 }", module);
 
-            assertEquals(2, countOf(instructionNames(nested), "c.ExperimentalIntegerAdd"));
-            assertNone(instructionNames(nested), "TryPrimitiveNumeric");
+            assertEquals(2, countOf(instructionNames(nested), "c.TryPrimitiveNumericAdd"));
+            assertNone(instructionNames(nested), "ExperimentalInteger");
             assertEquals("6", integerValue(enter(fastDirect(nested, module))));
 
             ProtosClosureValue tree =
@@ -1215,20 +1438,19 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertEquals(
                     "10",
                     integerValue(enter(fastDirect(tree, module))));
-            assertEquals(3, countOf(instructionNames(tree), "c.ExperimentalIntegerAdd"));
-            assertNone(instructionNames(tree), "TryPrimitiveNumeric");
+            assertEquals(3, countOf(instructionNames(tree), "c.TryPrimitiveNumericAdd"));
+            assertNone(instructionNames(tree), "ExperimentalInteger");
 
             ProtosClosureValue nestedOverflow =
                     closure(
                             "() => { (9223372036854775806 + 1) + 1 }",
                             module);
 
+            // The inner sum fits; the outer one overflows and is promoted exactly.
             assertEquals(
                     "9223372036854775808",
                     integerValue(enter(fastDirect(nestedOverflow, module))));
-            // The inner sum fits; the outer one overflows and is promoted exactly.
-            assertFalse(hasFoldedIntegerArithmetic(nestedOverflow));
-            assertEquals(2, countOf(instructionNames(nestedOverflow), "c.ExperimentalIntegerAdd"));
+            assertEquals(2, countOf(instructionNames(nestedOverflow), "c.TryPrimitiveNumericAdd"));
 
             ProtosClosureValue dynamic =
                     closure("(value) => { value + 2 }", module);
@@ -1545,19 +1767,29 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosClosureValue locals = closure("(a) => { b: a\nc: b\nc = a\nc }", module);
             List<String> names = instructionNames(locals);
             assertNone(names, "CurrentActivation");
-            assertContains(names, "CreateCurrentFrameLocal");
-            assertContains(names, "ResolveRootFrameLocalWriteTarget");
-            assertContains(names, "AssignRootFrameLocal");
+            /*
+             * I115-H1: the compact root binds its parameter with the I104
+             * unary operation and keeps every other binding in ordinary
+             * locals: no frame-local creation or assignment machinery.
+             */
+            assertContains(names, "BindUnaryFrameParameter");
+            assertContains(names, "store.local");
+            assertContains(names, "load.local");
+            assertNone(names, "CreateCurrentFrameLocal");
+            assertNone(names, "ResolveRootFrameLocalWriteTarget");
+            assertNone(names, "AssignRootFrameLocal");
             ProtosIntegerValue a = integer(4);
             ProtosPreparedCalls.PreparedClosureCall prepared = fastDirect(locals, module, a);
             assertSame(a, enter(prepared));
             assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
 
             ProtosClosureValue single = closure("(a) => { b: a\nb }", module);
-            assertNotEquals(
-                    constantOrdinalOf(single, "BindClosureFrameParameter"),
-                    constantOrdinalOf(single, "CreateCurrentFrameLocal"),
-                    "PERF030: the creation index is its own instruction constant");
+            assertNone(instructionNames(single), "BindClosureFrameParameter");
+            assertNone(instructionNames(single), "CreateCurrentFrameLocal");
+            assertEquals(
+                    0,
+                    constantOrdinalOf(single, "BindUnaryFrameParameter"),
+                    "PERF029: the parameter index is an instruction constant");
             assertSame(a, enter(fastDirect(single, module, a)));
 
             ProtosPreparedCalls.PreparedClosureCall duplicate =

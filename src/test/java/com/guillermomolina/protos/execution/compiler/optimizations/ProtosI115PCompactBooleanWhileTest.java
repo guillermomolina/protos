@@ -19,26 +19,43 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.LocalVariable;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Consumer;
+import org.graalvm.polyglot.Context;
 import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
 /**
  * I115-P (EXPERIMENTAL, PLAT066-C / PERF039): compact whileTrue
- * accepts conditions proven BOOLEAN by the existing abstract-kind
- * analysis, rather than only Integer comparison expressions.
+ * accepts conditions admitted by the existing abstract-kind analysis,
+ * rather than only Integer comparison expressions. I115-H1-FIX: a
+ * comparison condition is the shared guarded numeric site, whose result is
+ * validated as exact canonical true or false by the condition conversion;
+ * its MISS branch physically holds the ordinary send and continuation
+ * machinery, counted rather than forbidden.
  *
  * Tests measure physical Bytecode DSL instructions without pinning
  * newly admitted workloads to an invented instruction budget.
@@ -52,17 +69,23 @@ final class ProtosI115PCompactBooleanWhileTest {
             Path.of("target", "perf039-while-zero", "i115-p");
 
     private static final List<String> FORBIDDEN = List.of(
-            "PrepareSendOne",
             "PreparedBooleanCall",
-            "PrepareStructuredCall",
             "TryDirectSendOne",
             "IsDirectSendMiss",
-            "EnterNestedStructuredDispatch",
-            "ResumeContinuation",
             "InstallFrameLexicalAuthority",
             "CreateCurrentIndexedLocalSlot",
             "ReadRootFrameLocal",
             "AssignRootFrameLocal",
+            "ExperimentalInteger");
+
+    /* Present only on the numeric MISS path; recorded for comparison. */
+    private static final List<String> MISS_PATH = List.of(
+            "TryPrimitiveNumeric",
+            "PromoteFrameLexicalAuthority",
+            "PrepareSendOne",
+            "PrepareStructuredCall",
+            "EnterNestedStructuredDispatch",
+            "ResumeContinuation",
             "CompleteClosureCall",
             "FinishClosureCall",
             "Yield");
@@ -94,8 +117,8 @@ final class ProtosI115PCompactBooleanWhileTest {
                         .anyMatch(name -> name.contains("ExperimentalCanonicalBooleanCondition")),
                 "A literal Boolean condition needs no conversion");
         assertFalse(census.names().stream()
-                        .anyMatch(name -> name.contains("ExperimentalIntegerLessBool")),
-                "A literal Boolean condition must not become an Integer comparison");
+                        .anyMatch(name -> name.contains("TryPrimitiveNumeric")),
+                "A literal Boolean condition must not become a numeric comparison");
 
         System.out.println("I115_P_PRIMITIVE_WHILE_ZERO=PASS");
     }
@@ -176,7 +199,7 @@ final class ProtosI115PCompactBooleanWhileTest {
     }
 
     @Test
-    void integerComparisonKeepsPrimitiveBooleanRoute() throws Exception {
+    void integerComparisonUsesSharedNumericSite() throws Exception {
         Census census = runCompact(
                 "integer-comparison",
                 """
@@ -190,14 +213,13 @@ final class ProtosI115PCompactBooleanWhileTest {
                 """,
                 result -> assertEquals(1, result.asInt()));
 
-        assertTrue(census.names().stream()
-                        .anyMatch(name -> name.contains("ExperimentalIntegerLessBool")),
-                "Integer comparison must retain its primitive Boolean path");
+        assertEquals(1, census.names().stream()
+                        .filter(name -> name.contains("TryPrimitiveNumericLess"))
+                        .count(),
+                "The condition comparison is one shared numeric site");
 
-        assertFalse(census.names().stream()
-                        .anyMatch(name -> name.contains(
-                                "ExperimentalCanonicalBooleanCondition")),
-                "Integer comparison must not acquire Boolean conversion");
+        // The HIT canonical Boolean and any MISS result share one validation.
+        assertBooleanConversion(census);
 
         System.out.println(
                 "I115_P_INTEGER_COMPARISON_RUN_FULL=" + census.runFull());
@@ -386,6 +408,129 @@ final class ProtosI115PCompactBooleanWhileTest {
         assertBooleanConversion(census);
     }
 
+    /**
+     * I115-H1-FIX: a compact whileTrue condition is the shared comparison
+     * site. Integer receivers HIT and yield canonical false or true, which
+     * the validating conversion turns into the loop branch. A receiver
+     * whose redefined '<' returns a non-Boolean object MISSes, and that
+     * condition result signals the standard Error of the standard
+     * whileTrue behavior: no truthiness, the body never runs.
+     */
+    @Test
+    void comparisonMissNonBooleanConditionSignalsStandardError() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run = closure(
+                    "(gate) => { body: 0\n(() => gate < 1).whileTrue() {\nbody = body + 1\n}\nbody }",
+                    module);
+            List<String> names = instructionNames(run);
+            assertTrue(names.stream().anyMatch(n -> n.contains("TryPrimitiveNumericLess")));
+            assertTrue(names.stream().anyMatch(
+                    n -> n.contains("ExperimentalCanonicalBooleanCondition")),
+                    "the condition is validated before branching");
+
+            // Canonical false: zero iterations.
+            assertEquals("0", integerValue(
+                    enter(fastDirect(run, module, new ProtosIntegerValue(5)))));
+
+            ProtosClosureValue counted = closure(
+                    "(limit) => { n: 0\n(() => n < limit).whileTrue() {\nn = n + 1\n}\nn }",
+                    module);
+            // Canonical true until the bound: three iterations.
+            assertEquals("3", integerValue(
+                    enter(fastDirect(counted, module, new ProtosIntegerValue(3)))));
+
+            ProtosObjectValue notBoolean =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue gate =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            gate.createLocalSlot("<", ProtosClosureValue.nativeClosure(
+                    (activation, supplied) -> notBoolean));
+            ProtosSignalException signal = assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(fastDirect(run, module, gate)));
+            assertSame(
+                    ProtosCoreErrors.prototype(module, ProtosCoreErrors.StandardError.ERROR),
+                    signal.error().parent().orElse(null),
+                    "a non-Boolean condition result is the standard Error");
+        });
+        System.out.println("I115_P_NON_BOOLEAN_MISS_CONDITION=PASS");
+    }
+
+    private interface CoreTest {
+        void run(ProtosActivation module) throws Exception;
+    }
+
+    // The PERF025 host-object harness (ProtosPerf025CompactCalleeExecutionTest).
+    private static void withCore(CoreTest test) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                test.run(prelude.newModuleActivation());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static ProtosClosureValue closure(String characters, ProtosActivation activation) {
+        Source source =
+                Source.newBuilder(ProtosLanguage.ID, characters, "i115-p-host.protos")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+        return assertInstanceOf(ProtosClosureValue.class, target.call(activation));
+    }
+
+    private static RootCallTarget target(ProtosClosureValue closure) {
+        return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+    }
+
+    private static ProtosPreparedCalls.PreparedClosureCall fastDirect(
+            ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        ProtosClosureValue selected =
+                ProtosClosureCallPreparation.directClosureCallSelectionOrNull(closure, caller);
+        assertSame(closure, selected, "canonical direct Closure-call selection");
+        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                false,
+                closure,
+                caller,
+                supplied,
+                selected,
+                selected.definition(),
+                entered,
+                selected.definition(),
+                entered,
+                target(closure));
+    }
+
+    private static Object enter(ProtosPreparedCalls.PreparedClosureCall prepared) {
+        Object entered =
+                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                        assertInstanceOf(ProtosPreparedCalls.OrdinarySourceCall.class, prepared),
+                        IndirectCallNode.create());
+        return prepared.finish(entered);
+    }
+
+    private static List<String> instructionNames(ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(ProtosInstructionNames::of)
+                .toList();
+    }
+
+    private static String integerValue(Object value) {
+        return com.guillermomolina.protos.runtime.ProtosNumericValueSupport
+                .integerDecimalText(value);
+    }
+
     private static Census runCompact(
             String name,
             String source,
@@ -483,6 +628,10 @@ final class ProtosI115PCompactBooleanWhileTest {
         System.out.println(prefix + "MODULE_FULL=" + moduleFull);
         System.out.println(prefix + "RUN_FULL=" + runFull);
         System.out.println(prefix + "DSL_FULL_TOTAL=" + totalFull);
+        for (String operation : MISS_PATH) {
+            System.out.println(prefix + operation + "_COUNT="
+                    + names.stream().filter(n -> n.contains(operation)).count());
+        }
 
         if (admitted) {
             assertEquals(
@@ -550,7 +699,7 @@ final class ProtosI115PCompactBooleanWhileTest {
                 census.names().stream().anyMatch(
                         name -> name.contains(
                                 "ExperimentalCanonicalBooleanCondition")),
-                "Non-comparison Boolean must use the existing conversion");
+                "A non-literal condition must use the validating conversion");
     }
 
     private static void assertGeneralLowering(

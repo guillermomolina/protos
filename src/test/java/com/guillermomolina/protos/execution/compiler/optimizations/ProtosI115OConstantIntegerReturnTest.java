@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.bytecode.LocalVariable;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -239,9 +240,13 @@ final class ProtosI115OConstantIntegerReturnTest {
                     r
                 }
                 """, result -> assertEquals(9, result.asInt()));
-        assertTrue(census.admitted());
-        assertNoReturnProjection(census);
-        assertEquals(List.of(9L), census.guestIntegers());
+        /*
+         * I115-H1-FIX: (k < 2) is a guarded comparison receiver. On its MISS
+         * the callback's physical root may store r as a primitive carrier
+         * through the frame-backed authority, so r is not certified and the
+         * epilog keeps projecting the return carrier.
+         */
+        assertNotAdmittedCompact(census);
     }
 
     @Test
@@ -486,6 +491,12 @@ final class ProtosI115OConstantIntegerReturnTest {
                 prepared.hostExecutableForTesting().target.getRootNode());
     }
 
+    /* Value locals declared only by the compact lowering's emitters. */
+    private static final List<String> COMPACT_VALUE_LOCALS = List.of(
+            "compactSendResult",
+            "compactBooleanResult",
+            "compactWhileResult");
+
     private static Census census(String name, ProtosBytecodeRootNode run) {
         boolean projectsBefore = run.epilogProjectsReturnCarrier();
         // DEFAULT bytecode with source information, not instrumented DEBUG.
@@ -506,6 +517,14 @@ final class ProtosI115OConstantIntegerReturnTest {
                     carriers.add(carrier);
                 }
             }
+        }
+        /*
+         * I115-H1-FIX: the compact emitters own their value locals; a
+         * compact numeric send, for example, stores its HIT or MISS result
+         * in its compactSendResult local, which no other lowering declares.
+         */
+        for (LocalVariable local : run.getBytecodeNode().getLocals()) {
+            compact |= COMPACT_VALUE_LOCALS.contains(local.getName());
         }
         List<Long> guests = guestIntegers(run);
         return new Census(name, roots.size(), instructions.size(), moduleFull,

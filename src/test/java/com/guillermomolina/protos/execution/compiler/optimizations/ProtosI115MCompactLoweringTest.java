@@ -32,9 +32,12 @@ import org.junit.jupiter.api.Test;
 
 /**
  * I115-M (EXPERIMENTAL, PLAT066-C / PERF039): the generalized compact
- * lowerer composes literal whileTrue loops, root-local bindings and Integer
- * operations without prepared dispatch or Context-backed lexical authority.
- * DSL FULL counts are recorded, not pinned.
+ * lowerer composes literal whileTrue loops, root-local bindings and numeric
+ * sends without callback roots or Context-backed lexical authority.
+ * I115-H1-FIX: each numeric send is the shared guarded numeric site, whose
+ * MISS branch physically holds the ordinary send and its continuation
+ * machinery; those operations are counted, not forbidden. DSL FULL counts
+ * are recorded, not pinned.
  */
 final class ProtosI115MCompactLoweringTest {
 
@@ -44,17 +47,20 @@ final class ProtosI115MCompactLoweringTest {
             Path.of("target", "perf039-while-once", "i115-m");
 
     private static final List<String> FORBIDDEN = List.of(
-            "PrepareSendOne",
             "TryDirectSendOne",
             "IsDirectSendMiss",
-            "EnterNestedStructuredDispatch",
-            "ResumeContinuation",
             "InstallFrameLexicalAuthority",
             "CreateCurrentIndexedLocalSlot",
             "ReadRootFrameLocal",
             "AssignRootFrameLocal",
+            "ExperimentalInteger");
+
+    /* Present only on the numeric MISS path; recorded for comparison. */
+    private static final List<String> MISS_PATH = List.of(
             "TryPrimitiveNumeric",
-            "IsPrimitiveNumericSendMiss",
+            "PrepareSendOne",
+            "EnterNestedStructuredDispatch",
+            "ResumeContinuation",
             "CompleteClosureCall",
             "FinishClosureCall",
             "Yield");
@@ -218,7 +224,7 @@ final class ProtosI115MCompactLoweringTest {
             // The whole root takes the general lowerer: no compact operation.
             for (Instruction instruction : instructions) {
                 String instructionName = ProtosInstructionNames.of(instruction);
-                assertFalse(instructionName.contains("ExperimentalInteger"),
+                assertFalse(instructionName.contains("Experimental"),
                         "Unadmitted root mixes compact " + instructionName);
             }
             assertEquals(2, prepared.executable().execute().asInt());
@@ -286,6 +292,7 @@ final class ProtosI115MCompactLoweringTest {
 
         assertEquals(2, roots.size(),
                 "Literal whileTrue callbacks must not add physical roots");
+        int[] missPath = new int[MISS_PATH.size()];
         for (Instruction instruction
                 : run.getBytecodeNode().getInstructionsAsList()) {
             String instructionName = ProtosInstructionNames.of(instruction);
@@ -293,7 +300,17 @@ final class ProtosI115MCompactLoweringTest {
                 assertFalse(instructionName.contains(forbidden),
                         name + " run root contains " + instructionName);
             }
+            for (int index = 0; index < missPath.length; index++) {
+                if (instructionName.contains(MISS_PATH.get(index))) {
+                    missPath[index]++;
+                }
+            }
         }
+        for (int index = 0; index < missPath.length; index++) {
+            System.out.println(prefix + MISS_PATH.get(index) + "_COUNT=" + missPath[index]);
+        }
+        // Every case computes through at least one shared numeric site.
+        assertTrue(missPath[0] > 0, name + " run root has no shared numeric site");
         return new Census(roots.size(), runCount, total);
     }
 }

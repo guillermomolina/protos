@@ -38,7 +38,9 @@ import org.junit.jupiter.api.Test;
  * I115-Q (EXPERIMENTAL, PLAT066-C / PERF039): a compact root whose terminal
  * is a signed-64 Integer literal returns a prepared guest constant and skips
  * the return-carrier projection; true/false literal conditions of structured
- * control are consumed directly as Java booleans.
+ * control are consumed directly as Java booleans. I115-H1-FIX: a numeric
+ * send is the shared guarded numeric site; only roots without one are
+ * free of ordinary send machinery.
  */
 final class ProtosI115QCompactLiteralReturnTest {
 
@@ -115,7 +117,8 @@ final class ProtosI115QCompactLiteralReturnTest {
         Census census = runCase("arithmetic", """
                 run: () => { 1 + 2 }
                 """, result -> assertEquals(3L, result.asLong()));
-        assertTrue(census.has("ExperimentalIntegerAdd"));
+        assertTrue(census.has("TryPrimitiveNumericAdd"));
+        assertFalse(census.has("ExperimentalInteger"));
         assertTrue(census.guestIntegers().isEmpty());
         assertFalse(census.carrierIntegers().isEmpty());
         assertTrue(census.projectsBefore());
@@ -206,7 +209,7 @@ final class ProtosI115QCompactLiteralReturnTest {
     }
 
     @Test
-    void integerComparisonRetainsBoolPrimitiveOperation() throws Exception {
+    void integerComparisonUsesSharedNumericSite() throws Exception {
         Census census = runCase("integer-comparison", """
                 run: () => {
                     i: 0
@@ -216,8 +219,10 @@ final class ProtosI115QCompactLiteralReturnTest {
                     i
                 }
                 """, result -> assertEquals(1L, result.asLong()));
-        assertTrue(census.has("ExperimentalIntegerLessBool"));
-        assertFalse(census.has(BOOLEAN_CONDITION));
+        assertTrue(census.has("TryPrimitiveNumericLess"));
+        assertFalse(census.has("ExperimentalInteger"));
+        // The comparison result, HIT or MISS, is validated before branching.
+        assertTrue(census.has(BOOLEAN_CONDITION));
     }
 
     @Test
@@ -234,9 +239,12 @@ final class ProtosI115QCompactLiteralReturnTest {
                     n
                 }
                 """, result -> assertEquals(1L, result.asLong()));
-        assertTrue(census.compact());
+        // Compact: the literal callbacks add no roots.
+        assertEquals(2, census.rootCount(), "No callback roots");
         assertFalse(census.has(BOOLEAN_CONDITION));
-        assertNoGenericDispatch(census);
+        // The prefix '+' is the shared numeric site; its MISS keeps the send.
+        assertTrue(census.has("TryPrimitiveNumericAdd"));
+        assertFalse(census.has("ExperimentalInteger"));
     }
 
     @Test

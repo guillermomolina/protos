@@ -8,6 +8,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.13-SNAPSHOT
+
+- `I115-H1-FIX` (restore ordinary dispatch and frame lexical authority in compact lowering):
+  retire the experimental reduced static-unary argument layout and the
+  `InvokeStaticClosureOneTail` bypass for locally bound Closures. Preserve
+  ordinary B5+ call arguments and `InvokeClosureOneTail`, allowing the
+  standard `Object.call` selection and its override/fallback behavior.
+  - Remove the static-local-Closure-call canonical admission and associated
+    experimental recursive/static-call paths, while keeping the admitted
+    compact lowering paths that remain eligible after the correction.
+  - Use shared guarded primitive-numeric operations with ordinary dispatch
+    on a numeric miss rather than the dedicated experimental Integer path;
+    retain exact numeric services, overflow handling and resumable fallback.
+  - Restore frame lexical-authority promotion for compact roots with proven
+    declaration order, and reconcile parameter/frame-local admission.
+  - Update structural and behavior tests for ordinary terminal call selection,
+    numeric fallback and compact frame authority.
+  - **Historical limitation:** these repairs address specific invalid
+    experimental assumptions but do not establish full Protos conformance.
+    The remaining compact and module-global specializations, including the
+    prior `ReadGlobal` versus D179 C0 issue, need independent acceptance.
+  - Reconstructed from original I115 commit
+    `1c8c57f0eb75534fa004ec37d8ab6799d2b05dca`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.12-SNAPSHOT
 
 - `I115` (post-rebase Boolean control selector reconciliation): restrict
