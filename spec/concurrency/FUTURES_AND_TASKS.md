@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-10-25
 
 This document is the primary normative owner of Core Future and task semantics
 that have been migrated out of `../PROTOS_LANGUAGE_SPEC.md` and
@@ -28,12 +28,20 @@ An ordinary function may simply return a Future.
 
 Returning a Future from an ordinary synchronous invocation does not itself create,
 close, transfer, re-parent, or wait a structured-concurrency ownership
-scope. Structured ownership is task-scoped as defined in §24: synchronous Closure
-and method activations executing within one asynchronous computation remain in
-that computation's current structured execution scope. A pending Future can
-therefore cross an ordinary synchronous return immediately while its task-backed
-producer, when any, remains owned by the same surrounding structured execution
-scope.
+scope, and does not make that synchronous invocation a Task. Structured ownership
+is defined in §24: when a current Task exists, newly started task-backed
+asynchronous work belongs to that Task's structured execution scope, and
+synchronous Closure and method activations executing within it remain in that
+scope; when an Actor-local execution has no current Task, newly started
+task-backed asynchronous work belongs to the root asynchronous scope of that
+Actor incarnation. A Future that has no producing Task is governed exclusively
+by the contract of its producer and does not acquire a structured ownership
+relation. Ownership belongs to the
+producer of the asynchronous work, never to a returned value merely because that
+value is or contains a Future. A pending Future can therefore cross an ordinary
+synchronous return immediately while its task-backed producer, when any, remains
+owned by the structured execution scope or Actor-incarnation root asynchronous
+scope in which it was started.
 
 ### Future result identity
 
@@ -385,6 +393,30 @@ The following rules apply:
 8. An Error that escapes the entry's outermost dynamic handler boundary,
    including one signaled by a resumed observation, follows the fatal RootActor
    rule of `ACTORS.md` §24C and §32.
+9. The entry does not materialize a Task merely by entering Protos. If it
+   starts task-backed asynchronous work, that task belongs to the root
+   asynchronous scope of the RootActor incarnation (§24). Returning a Future
+   from the entry neither waits for its terminal state nor closes its
+   ownership. Rule 7 is unchanged: while a suspended entry retains RootActor
+   exclusivity, no task of the same RootActor executes ordinary Protos code;
+   there is no automatic reentry, implicit yield of the RootActor to another
+   task, or auxiliary task created to avoid blocking. If the entry waits on a
+   Future whose producer needs another task of the same RootActor to run, the
+   general exclusivity rules continue to apply and no progress of that task is
+   promised.
+
+Illustrative cases (descriptive, not Protos syntax):
+
+- **Non-suspending entry starting work.** A host entry calls
+  `work.future()` and returns the Future. The task belongs to the RootActor
+  incarnation's root asynchronous scope; the entry returns without waiting for
+  it; no implicit RootTask exists. If the RootActor incarnation later
+  terminates, the pending task receives a cancellation request and termination
+  waits for its unwind and cleanup.
+- **Suspended entry.** A host entry starts a RootActor task and then calls
+  `value()` on its Future. The entry suspends while retaining RootActor
+  exclusivity, so that task does not execute concurrently in the RootActor and
+  no progress is promised through implicit reentry or scheduling.
 
 This section standardizes no host thread, carrier, lock, waiter structure,
 task representation, or continuation mechanism; an implementation may block
@@ -495,9 +527,12 @@ validation is eager and independent of the source Future's state: a pending,
 resolved, failed, or cancelled source does not defer, suppress, or replace it.
 
 Only after successful validation does the call create a distinct continuation
-task and a destination Future. The continuation is asynchronous child work
-created in the current task-scoped structured execution scope, and therefore
-belongs to that scope under the ordinary structured-concurrency rule. An
+task and a destination Future. The continuation is asynchronous work owned under
+the general rule of §24: when a current Task exists, it is child work of that
+Task's structured execution scope; when a legitimate Actor-local execution has no
+current Task, it belongs to the root asynchronous scope of that Actor
+incarnation. In either case the continuation is exactly one distinct task; no
+additional Task is created to represent the root asynchronous scope. An
 ordinary synchronous activation that merely
 calls `then()` does not become a new structured owner solely because that call
 occurred inside it.
@@ -623,7 +658,10 @@ An implementation may use additional internal polling or carrier interruption on
 when it cannot change the Protos-observable point at which cancellation takes
 effect.
 
-Cancelling a Future requests cancellation of its work.
+Cancelling a Future requests cancellation of its work. For a task-backed Future,
+honoring that request begins the task's cancellation unwind, which also performs
+the structured-child obligations of §24 ("Abnormal owner termination"); a
+cancellation request already honored is not re-delivered within that unwind.
 
 `Future.cancel()` is an idempotent request operation and returns the same Future
 object on every call. If the Future is already terminal, `cancel()` is a no-op
@@ -670,6 +708,14 @@ same current structured execution scope unless they themselves start a distinct
 asynchronous computation. Core exposes no public Task or scope object merely to
 represent this relationship.
 
+The task's structured execution scope is the ordinary owner of task-backed
+asynchronous work. The single normative exception is the root asynchronous
+scope of an Actor incarnation, which owns such work when a legitimate
+Actor-local execution has no current Task ("Actor-incarnation root asynchronous
+scope" below). An ordinary synchronous activation never by itself constitutes a
+new structured owner. The detailed rules for both cases are those of this
+section and its subsections.
+
 Task-backed asynchronous child work created while a structured execution scope is
 current is owned by that scope. Starting a
 distinct child task creates a new structured execution scope for work that child
@@ -683,6 +729,56 @@ transfer, re-parent, duplicate, or remove its ownership edge. No escape
 analysis or result-shape inspection participates in ownership. The edge remains
 attached to the same surrounding structured execution scope until the child is
 terminal.
+
+### Actor-incarnation root asynchronous scope
+
+The preceding rules apply unchanged whenever an Actor-local execution has a
+current Task: task-backed asynchronous child work it starts belongs to that
+Task's structured execution scope, the child creates its own structured
+execution scope for work it later starts, and no implicit re-parenting occurs.
+
+A legitimate Actor-local execution may instead have no current Task, for
+example a synchronous host-initiated RootActor entry (§29). Task-backed
+asynchronous work started by such an execution belongs to the **root
+asynchronous scope** of the Actor incarnation in which it executes. This rule is
+general Actor-local semantics, not specific to any library facility.
+
+The root asynchronous scope:
+
+- belongs to exactly one concrete Actor incarnation;
+- is not a Task, has no public identity, and is not represented by any Protos
+  value;
+- is not detached and is not a Process-global scope;
+- cannot be transferred to another Actor;
+- does not survive termination of its Actor incarnation and is not inherited
+  by a replacement incarnation; and
+- grants no authority.
+
+The root asynchronous scope is established on demand. An execution that starts
+no task-backed asynchronous work need not materialize it. Once established, it
+remains associated with the Actor incarnation after the synchronous activation
+that started the work returns.
+
+Return from a synchronous activation that has no current Task does not
+implicitly wait for, cancel, or observe the task-backed work it started, does
+not close the root asynchronous scope, does not change the identity of the
+corresponding Futures, and does not transfer ownership to the returned value.
+
+The root asynchronous scope ends with its Actor incarnation. Termination of the
+incarnation requests cooperative cancellation of its pending Actor-local tasks
+and waits for their required unwind and cleanup under the Actor-termination
+rules below.
+
+Establishing the root asynchronous scope does not fabricate a RootTask or any
+other Task, and does not turn the originating synchronous activation into a
+task-backed execution. The rule adds no Task of its own: a task-backed Future
+keeps exactly the task its producing operation requires (for example the task
+created by `Closure.future()` or the continuation task of `Future.then()`), while
+a Future with no producing task, including an ordinary I/O-producer Future,
+acquires no task because the root asynchronous scope exists, keeps its own
+producer contract, and acquires no structured ownership edge from this rule.
+Core exposes no public scope type, no scope-creation operation, no `Future.detach()`, and no detached
+Tasks.
 
 Structured ownership bounds child lifetime but does not implicitly observe child
 results. When the owning asynchronous computation itself reaches otherwise normal
@@ -698,6 +794,46 @@ a child Future happened to observe its failure. The Future remains an ordinary
 eventual-result object whose terminal outcome is stable and may be observed more
 than once.
 
+### Abnormal owner termination
+
+When the owning asynchronous computation begins terminal unwind because it
+failed, a cancellation request is recorded on every structured child task of its
+scope that is still pending. The owner remains obligated to wait until those
+children are terminal, including their required unwind and cleanup, and its
+Future does not become terminal before that obligation is discharged. The
+owner's original Error keeps its identity; only a failure of the owner's own
+cleanup can replace it, under the cleanup-precedence rules of
+`../semantics/ERRORS.md`.
+
+When a cancellation request on the owning computation is honored and its unwind
+begins, a cancellation request is likewise recorded on every structured child
+task still pending. The owner waits for those children to become terminal,
+including their required unwind and cleanup, and does not become `cancelled`
+before that obligation is discharged. A failure of the owner's own cleanup makes
+its Future `failed` with that cleanup Error under the cancellation-unwind rule
+below.
+
+In both cases each child remains an independent task with its own Future.
+Child cancellation is cooperative under §23: a child observes the request only
+at portable cancellation boundaries, may need to suspend to complete its own
+cleanup, and keeps its own terminal outcome, including its original Error if it
+fails. No cancellation checkpoint is invented for this purpose. A child's
+failure, including a failure of its cleanup, is not adopted by the owner and
+does not replace the owner's Error or cancellation; child outcomes remain
+observable only through their own Futures.
+
+An owner never completes its Future while it still has structured children that
+must perform unwind or cleanup, and no child is silently separated from its
+structured scope. No deadline bounds that cleanup: cleanup that never finishes
+can prevent the owner from terminating. No additional task is created to cancel
+children or to run their cleanup.
+
+Owner cancellation or failure does not request cancellation of a
+non-task-backed producer merely because a task awaiting that producer's Future
+is cancelled; the consumer/producer cancellation rules of §23 and §29 remain
+authoritative. The Actor-termination rules below and the commitment rules of
+already-committed I/O operations are unchanged.
+
 Cancellation unwind includes the task's applicable `ensure` cleanup.
 Once a cancellation request has been honored and has begun that unwind, the same
 request is not re-delivered at suspension boundaries reached by cleanup for that
@@ -706,7 +842,22 @@ cancelled by the cancellation it is already handling. If cleanup fails, that
 failure replaces the cancellation transfer and the task fails; if cleanup
 completes, cancellation continues and the Future becomes cancelled only after
 cleanup is complete. This rule does not create a general user-visible
-cancellation-mask facility.
+cancellation-mask facility. The same unwind performs the child-cancellation and
+waiting obligations of "Abnormal owner termination" above; Errors of children are
+not implicitly propagated as Errors of the owner.
+
+Illustrative cases (descriptive, not Protos syntax):
+
+- **Owner failure.** An owning task fails while two children are pending. Both
+  children receive cancellation requests; the owner waits for their unwind and
+  cleanup; the owner's Future then fails with the owner's original Error unless
+  the owner's own cleanup failed. A child whose cleanup fails records that Error
+  in its own Future only.
+- **Owner cancellation.** An owning task's cancellation is honored while a child
+  is suspended on I/O. The child receives a cancellation request and becomes
+  cancellation-runnable; the owner's Future becomes `cancelled` only after the
+  child is terminal and the owner's cleanup has completed. It does not terminate
+  prematurely.
 
 Core exposes no `Future.detach()` operation. No Core operation removes,
 transfers, or re-parents a task-backed child's structured-ownership edge while
@@ -955,6 +1106,16 @@ Actor-local task-backed Future
     -> Actor termination requests cooperative cancellation
     -> Actor waits for required task cancellation unwind/ensure cleanup
     -> task cannot continue as ordinary Protos work after Actor termination
+
+Actor-local task-backed Future created by an execution without a current Task
+    -> task belongs to the root asynchronous scope of the initiating Actor
+       incarnation (§24)
+    -> the synchronous activation may return while that task is pending
+    -> Actor termination requests cooperative cancellation
+    -> Actor waits for required task cancellation unwind/ensure cleanup
+    -> no re-parenting to RootActor, Process, another Actor, or a replacement
+       incarnation
+    -> the Future keeps its ordinary terminal outcome
 
 Actor-originated non-task-backed Future
     -> no structured task ownership edge exists

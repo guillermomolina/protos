@@ -23,6 +23,39 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.471] - 2026-10-25
+
+### D215 — Standard Library HTTP/1.1 single-request server
+- `spec/io/HTTP.md` (new normative owner): the explicit module
+  `std:http/Server` defines an HTTP/1.1 origin server that services exactly
+  one request per call through `Server.serveOne` (borrowed) and
+  `Server.serveOne.owning` (owning) over a caller-supplied Duplex. The module
+  carries no implicit Network authority and provides no listener, TLS or
+  timers. Request and Response are structural; the document owns request
+  validation, message framing, limits and HTTP error responses, mandates
+  `Connection: close` with exactly one final response, and streams bodies
+  through ByteReadable/ByteWritable. Borrowed and owning variants define
+  Duplex ownership; each admitted service runs as one cooperative Task, with
+  defined cancellation, cleanup and Future outcomes. HTTP/2, keep-alive and
+  other extensions are expressly excluded.
+- `spec/concurrency/FUTURES_AND_TASKS.md`: introduces a root asynchronous scope
+  per Actor incarnation for execution without a current Task; Task-backed work
+  has exclusive structured ownership, and `Future.then()` continuations are
+  owned by the correct scope. Abnormal owner termination cancels children and
+  awaits their unwind and cleanup before terminalizing the owner's Future. The
+  existing cancellation rules for non-Task producers and RootActor
+  exclusivity are preserved.
+- `spec/concurrency/ACTORS.md`: synchronous host entry creates no implicit
+  semantic Task; asynchronous work started from RootActor belongs to the root
+  scope of its incarnation; RootActor exclusivity is preserved across
+  suspension.
+- `spec/io/NETWORK.md`: references the HTTP server as an independent facility;
+  no new Network operations or authority are added.
+- `spec/semantics/ERRORS.md`: `HttpError` is a Standard Library prototype whose
+  immediate parent is `Error`; Core and the Prelude are unchanged.
+- `AGENTS.md` adds `spec/io/HTTP.md` to the normative owner map; this is
+  ownership bookkeeping, not new language semantics.
+
 ## [0.1.470] - 2026-10-24
 
 ### D214 — Standard Library Vector and Matrix (architecture C1, semantics D214-S1)

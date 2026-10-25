@@ -28,6 +28,12 @@ Network-policy introspection/attenuation, TLS, QUIC, HTTP, WebSocket, Unix-domai
 sockets, raw sockets, service discovery, generic socket options, and
 socket-local deadline/timeout APIs are outside this revision.
 
+The optional Standard Library HTTP/1.1 single-request server `std:http/Server`
+is owned by `HTTP.md`. It is built only on the existing `ByteReadable` /
+`ByteWritable` (and `Closable`) capabilities, which a `TcpConnection` provides;
+it adds no `Network` operation and does not change TCP authority, permissions,
+or transferability. All other HTTP facilities remain deferred.
+
 No network authority is ambient by implication. Importing a module, knowing an
 `IpAddress`, possessing `Process`, creating an Actor, or creating P work does not
 confer a `Network` capability.
@@ -469,7 +475,7 @@ remain separate explicit future designs:
 - UDP/datagram operations and truncation/size rules;
 - public NetworkInterface discovery/selection;
 - formal transferable Network attenuation/policy algebra;
-- TLS, QUIC, HTTP and WebSocket;
+- TLS, QUIC, HTTP beyond the `HTTP.md` single-request server, and WebSocket;
 - Unix-domain/raw sockets;
 - service discovery;
 - generic socket options and socket-local deadlines/timeouts; and

@@ -417,6 +417,17 @@ only when a normative specification explicitly defines it as such and this
 taxonomy (or a later revision of its owning contract) records its parent
 relation.
 
+#### Standard Library error prototypes
+
+The following prototypes are exported by explicit Standard Library modules.
+They are not Core prototypes, not standard-prelude bindings, and are not part
+of the minimal Core v0.1 set tabled above. They are not ancestors of any
+standard prototype listed above.
+
+| Standard Library prototype | Immediate parent | Exporting module / owner |
+| --- | --- | --- |
+| `HttpError` | `Error` | `std:http/Server` / `../io/HTTP.md` §12 |
+
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already
 observable prototype-based handler matching deterministic across independent

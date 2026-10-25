@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-05
+Last updated: 2026-10-25
 
 This document is the primary normative owner of the Core Actor-domain semantics
 migrated from `docs/design/CONCURRENCY_DESIGN.md`.
@@ -977,11 +977,18 @@ object is not sent to the requester as an implicit reply.
 
 A synchronous host-initiated entry that executes ordinary code in the
 RootActor is an Actor-local execution turn for the purposes of unhandled Error
-fatality, regardless of whether the implementation materializes a RootTask or
-ProtosTask. An Error that escapes its outermost dynamic handler boundary
-therefore follows the existing fatal RootActor rule. This classification
-introduces no requirement to allocate Task machinery for a successful ordinary
-synchronous entry.
+fatality. Such an entry does not semantically become a Task: entering Protos
+does not by itself create an implicit RootTask, ProtosTask, or any other Task
+(`FUTURES_AND_TASKS.md` §29). An Error that escapes its outermost dynamic
+handler boundary nevertheless follows the existing fatal RootActor rule. This
+classification introduces no requirement to allocate Task machinery for a
+successful ordinary synchronous entry and imposes no particular physical
+scheduler representation. Task-backed asynchronous work started by such an
+entry belongs to the root asynchronous scope of the RootActor incarnation
+(`FUTURES_AND_TASKS.md` §24). That scope authorizes no reentry, no concurrent
+execution of other ordinary code of the same RootActor, and no guaranteed
+progress of a task of the same RootActor while a suspended entry retains
+RootActor exclusivity (`FUTURES_AND_TASKS.md` §29, rules 7 and 9).
 
 Initialization remains the same rule applied to the initialization turn:
 an unhandled initialization `Error` is fatal to that Actor incarnation and the
