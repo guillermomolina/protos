@@ -23,6 +23,17 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.472] - 2026-10-25
+
+### D215 — HTTP/1.1 best-effort error-response precedence
+- `spec/io/HTTP.md`: clarifies service error precedence when a best-effort
+  HTTP error-response write fails. Write I/O errors prevail over initial
+  request rejection and optional handler/`invalidResponse` 500 outcomes. Late
+  request-body framer failures preserve their original `HttpError` even when
+  the best-effort 400/413 write fails. General `ensure` cleanup precedence
+  remains unchanged. Final-response retry prevention does not redefine
+  physical output commitment under `BYTE_IO.md`.
+
 ## [0.1.471] - 2026-10-25
 
 ### D215 — Standard Library HTTP/1.1 single-request server

@@ -551,8 +551,28 @@ attempt a best-effort empty 500 response; it is not required to. Invalid
 `serveOne` arguments detected after ordinary dispatch (§2.4) are not a
 rejected HTTP request and never produce an HTTP response.
 
-"Best-effort" means the driver attempts the write; a write failure is reported
-under §12 and does not trigger another response.
+"Best-effort" means the driver attempts the write once and the outcome of the
+service is then determined as follows (§12.2):
+
+- For a request rejected during its initial processing (the statuses of the
+  table above), if the best-effort write succeeds the service Future fails with
+  the rejection `HttpError`; if the write fails, the I/O Error produced by that
+  write prevails over the rejection `HttpError`.
+- For a handler failure or an `invalidResponse`, if the driver does not attempt
+  the optional empty 500 response, or the attempt succeeds, the service Future
+  fails with the original error; if the attempted write fails, the I/O Error
+  produced by that write prevails over the original error.
+- For a late framer failure (§6.2), and only for it, the service Future fails
+  with the original `HttpError` even when the best-effort 400 or 413 write
+  fails; the write failure does not replace that `HttpError`.
+
+Once the write of a final response has been initiated, no other final response
+is attempted, even if that write fails; the driver does not assume that a
+failed write emitted zero octets. This guard against retries does not redefine
+commitment (§7.7, `BYTE_IO.md` §6.2). In every case the outcome remains subject
+to the general cleanup precedence of `ensure`, under which a cleanup Error,
+including one raised by the owning `close()` (§9.2), may replace the preceding
+outcome.
 
 ### 7.7 Commitment of the final response
 
@@ -781,8 +801,10 @@ wrapped in `HttpError`.
 
 - An HTTP request rejected during its initial processing, before the handler
   is invoked (request line, header section, framing, `Expect`, or early limit
-  checks): best-effort response (§7.6); the service Future fails with the
-  fresh `HttpError`.
+  checks): best-effort response (§7.6); if that write does not fail, the service Future
+  fails with the fresh `HttpError`; if that write fails, the service Future
+  fails with the corresponding I/O Error. Both outcomes are subject to cleanup
+  precedence.
 - Invalid `serveOne` arguments detected after dispatch (§2.4) are not a
   rejected HTTP request: the service Future fails with a fresh
   `InvalidIOArgument`; no service Task is created, no session exists, and no
@@ -792,18 +814,27 @@ wrapped in `HttpError`.
   (`malformedRequest`) or 413 (`requestLimit`) and never a 500; after
   commitment no further final response is attempted and the session is not
   restarted. The service Future fails with the original `HttpError`, subject
-  to cleanup precedence.
+  to cleanup precedence; the original `HttpError` prevails even if the
+  best-effort 400 or 413 write fails.
 - A handler failure not originating from the parser/framer, before
-  commitment: the driver may attempt a best-effort empty 500 response; the
-  service Future fails with the handler's original error, subject to cleanup
+  commitment: the driver may attempt a best-effort empty 500 response; it is not required to. If no write is attempted, or the
+  attempted write succeeds, the service Future fails with the handler's
+  original error; if the attempted write fails, the I/O Error of that write
+  prevails over the handler's error. Both outcomes are subject to cleanup
   precedence. Provenance is classified from the driver's private session
   state, not merely from whether an Error escaped or was handled.
 - An `invalidResponse` before commitment: the driver may attempt a best-effort
-  empty 500 response; the service Future fails with a fresh `HttpError` of kind
-  `invalidResponse` without `status` (§12.1), subject to cleanup precedence.
+  empty 500 response; it is not required to. If no write is attempted, or the
+  attempted write succeeds, the service Future fails with a fresh `HttpError`
+  of kind `invalidResponse` without `status` (§12.1); if the attempted write
+  fails, the I/O Error of that write prevails over `invalidResponse`. Both
+  outcomes are subject to cleanup precedence.
 - Any failure after commitment: no further response is attempted; the service
   Future fails with that failure.
-- A duplex write or read failure: the service Future fails with that I/O error.
+- A duplex write or read failure: the service Future fails with that I/O error,
+  subject to cleanup precedence, except that a failed best-effort 400 or 413
+  write following a late framer failure (§6.2) does not replace the original
+  `HttpError`, as stated above. This exception covers only that write.
 - Cancellation of the service, including before the handler is invoked: the
   session is retired (§9.4) and the service Future follows the general
   cancellation-unwind rules (§9.5), becoming `cancelled` only after the
