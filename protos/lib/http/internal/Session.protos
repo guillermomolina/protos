@@ -1,0 +1,398 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal HTTP/1.1 single-request session of std:http/Server (D215,
+//! LIB025). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API. It coordinates one admitted service over the
+//! wire helpers of MessageHead and MessageBody; it owns no authority beyond the
+//! duplex it is given.
+
+MessageHead: import("std:http/internal/MessageHead")
+MessageBody: import("std:http/internal/MessageBody")
+BufferedReader: import("std:io/BufferedReader").BufferedReader
+
+/// Establishes the private state of one admitted session and answers its
+/// zero-argument service body, to be run as the one service Task. limits is
+/// the already captured, validated limit object; facility is the private
+/// asynchronous bridge of std:http/Server.
+serviceBody: (facility, HttpError, duplex, handler, limits, owning) => {
+    // HTTP-managed read-ahead never exceeds one lower read of this size.
+    readSize: limits.ioChunkBytes
+    if(limits.maxPrefetchBytes < readSize) {
+        readSize = limits.maxPrefetchBytes
+    }
+
+    // ------------------------------------------------------------ session state
+
+    // Private state decides every framing, commitment, and lifecycle question;
+    // the handler's mutable Request is never consulted.
+    retired: false
+    // Conservative guard: set once a final-response write is attempted. It is
+    // not the normative commitment of HTTP.md §7.7 (first octet contributed),
+    // which a failed write cannot reveal; it only forbids a second attempt.
+    finalResponseAttempted: false
+    lateFailure: null
+    leftover: Encoding.UTF8.encode("")
+    physicalEof: false
+    pendingLower: null
+    framer: null
+
+    // ------------------------------------------------------------ helpers
+
+    sliceFrom: (bytes, start) => {
+        copy: Encoding.UTF8.encode("")
+        index: start
+        while(index < bytes.size()) {
+            copy.add(bytes[index])
+            index = index + 1
+        }
+        copy
+    }
+
+    httpError: (errorKind, errorStatus) => {
+        occurrence: HttpError {
+            kind: errorKind
+            status: errorStatus
+        }
+        occurrence
+    }
+
+    writeAll: (bytes) => {
+        duplex.write(bytes).value()
+    }
+
+    // A best-effort empty final response (HTTP.md §7.6). The guard is set
+    // before the write: a failed write may have contributed any prefix
+    // (BYTE_IO.md §6.2), so no later final response is ever attempted.
+    // An ordinary write failure propagates as its I/O Error (§12.2). Only a
+    // late framer failure keeps its original HttpError over the failed write
+    // (§6.2); preserveOriginal selects that case.
+    attemptEmptyResponse: (status, preserveOriginal) => {
+        if(!finalResponseAttempted) {
+            finalResponseAttempted = true
+            prepared: MessageHead.prepareResponseHead(status, [], "NULL", null, false).prepared
+            if(preserveOriginal) {
+                Error.handle(
+                    () => {
+                        writeAll(prepared.headerBytes)
+                    },
+                    (error) => {
+                        error
+                    }
+                )
+            } else {
+                writeAll(prepared.headerBytes)
+            }
+        }
+    }
+
+    // Awaits a pending Future; a cancellation delivered meanwhile still waits
+    // for its completion as cleanup of that cancellation unwind.
+    awaitThroughCancellation: (future) => {
+        (() => {
+            future.value()
+        }).ensure(() => {
+            future.value()
+        })
+    }
+
+    // ------------------------------------------------------------ request head
+
+    // Answers the parser's terminal result. Octets after the head stay in
+    // leftover for the body framer; physical EOF before an accepted head is a
+    // malformed request.
+    readHead: () => {
+        parser: MessageHead.requestHeadParser(limits)
+        outcome: null
+        while(outcome === null) {
+            if(leftover.size() == 0) {
+                received: duplex.read(readSize).value()
+                if(received === null) {
+                    physicalEof = true
+                    outcome = {
+                        state: "REJECTED"
+                        head: null
+                        failure: {
+                            kind: "malformedRequest"
+                            status: 400
+                        }
+                    }
+                } else {
+                    leftover = received
+                }
+            }
+            if((outcome === null) && (leftover.size() > 0)) {
+                result: parser.feed(leftover, 0, leftover.size())
+                leftover = sliceFrom(leftover, result.consumed)
+                if(result.state != "NEED_MORE") {
+                    outcome = result
+                }
+            }
+        }
+        outcome
+    }
+
+    // ------------------------------------------------------------ request body
+
+    // Answers the next decoded content (at most maxBytes octets) or null at
+    // the logical end of the message. A framer rejection terminalizes the
+    // session and signals the recorded HttpError. A pending lower read stays
+    // recorded until it is consumed, so a cancelled logical read loses no
+    // octet obtained from the duplex.
+    nextContent: (maxBytes) => {
+        content: null
+        done: false
+        while(!done) {
+            result: null
+            if(leftover.size() > 0) {
+                result = framer.feed(leftover, 0, leftover.size(), maxBytes)
+                leftover = sliceFrom(leftover, result.consumed)
+            } else {
+                if(framer.state() != "OPEN") {
+                    result = framer.feed(leftover, 0, 0, maxBytes)
+                } else {
+                    if(physicalEof) {
+                        result = framer.endOfInput()
+                    } else {
+                        if(pendingLower === null) {
+                            pendingLower = duplex.read(readSize)
+                        }
+                        lower: pendingLower
+                        received: null
+                        Error.handle(
+                            () => {
+                                received = lower.value()
+                            },
+                            (error) => {
+                                // A failed lower read is reported once and
+                                // never replayed by a later logical read.
+                                pendingLower = null
+                                error.signal()
+                            }
+                        )
+                        pendingLower = null
+                        if(received === null) {
+                            physicalEof = true
+                        } else {
+                            leftover = received
+                        }
+                    }
+                }
+            }
+            if(result !== null) {
+                if(result.state == "CONTENT") {
+                    content = result.content
+                    done = true
+                }
+                if(result.state == "COMPLETE") {
+                    done = true
+                }
+                if(result.state == "REJECTED") {
+                    failure: httpError(result.failure.kind, result.failure.status)
+                    lateFailure = failure
+                    failure.signal()
+                }
+            }
+        }
+        content
+    }
+
+    // The private ByteReadable under the request body. Each read answers an
+    // already terminal Future; the standard BufferedReader above it supplies
+    // the per-read Futures, ordering, and cancellation without a Task.
+    framedSource: {
+        read: (maxBytes) => {
+            answer: null
+            if(retired || (lateFailure !== null)) {
+                answer = facility.failed(IOLifecycleError {})
+            } else {
+                Error.handle(
+                    () => {
+                        answer = facility.resolved(nextContent(maxBytes))
+                    },
+                    (error) => {
+                        answer = facility.failed(error)
+                        error
+                    }
+                )
+            }
+            answer
+        }
+    }
+
+    hasContent: (head) => {
+        (head.framing == "CHUNKED") ||
+            ((head.framing == "CONTENT_LENGTH") && (head.contentLength > 0))
+    }
+
+    // ------------------------------------------------------------ response
+
+    // Validates the handler result, then emits the final response. A
+    // ByteReadable body is read only after the previous chunk write completed.
+    emitResponse: (response, headRequest) => {
+        valid: facility.ordinaryObject(response)
+        if(valid) {
+            valid = response.hasSlot("status") &&
+                response.hasSlot("headers") &&
+                response.hasSlot("body")
+        }
+        bodyKind: "NULL"
+        bytesBody: null
+        stream: null
+        if(valid) {
+            responseBody: response.body
+            if(responseBody !== null) {
+                if(facility.isBytes(responseBody)) {
+                    bodyKind = "BYTES"
+                    bytesBody = responseBody
+                } else {
+                    if(facility.provides(responseBody, "read")) {
+                        bodyKind = "STREAM"
+                        stream = responseBody
+                    } else {
+                        valid = false
+                    }
+                }
+            }
+        }
+        prepared: null
+        if(valid) {
+            outcome: MessageHead.prepareResponseHead(
+                response.status,
+                response.headers,
+                bodyKind,
+                bytesBody,
+                headRequest
+            )
+            if(outcome.outcome == "PREPARED") {
+                prepared = outcome.prepared
+            }
+        }
+        if(prepared === null) {
+            failure: HttpError {
+                kind: "invalidResponse"
+            }
+            attemptEmptyResponse(500, false)
+            failure.signal()
+        }
+
+        finalResponseAttempted = true
+        writeAll(prepared.headerBytes)
+        if(prepared.emission == "FIXED") {
+            if(prepared.capturedBodyBytes.size() > 0) {
+                writeAll(prepared.capturedBodyBytes)
+            }
+        }
+        if(prepared.emission == "CHUNKED") {
+            finished: false
+            while(!finished) {
+                chunk: stream.read(limits.ioChunkBytes).value()
+                if(chunk === null) {
+                    finished = true
+                } else {
+                    if(chunk.size() > 0) {
+                        writeAll(MessageBody.encodeResponseChunk(chunk))
+                    }
+                }
+            }
+            writeAll(MessageBody.finalResponseChunk())
+        }
+    }
+
+    // ------------------------------------------------------------ service
+
+    process: () => {
+        outcome: readHead()
+        if(outcome.state == "REJECTED") {
+            failure: httpError(outcome.failure.kind, outcome.failure.status)
+            attemptEmptyResponse(failure.status, false)
+            failure.signal()
+        }
+
+        head: outcome.head
+        framer = MessageBody.requestBodyFramer(head, limits)
+        bodyReader: BufferedReader(framedSource)
+        requestHeaders: []
+        head.headers.each((pair) => {
+            requestHeaders = Array(...requestHeaders, [pair[0], sliceFrom(pair[1], 0)])
+        })
+        publicBody: {
+            read: (maxBytes) => {
+                answer: null
+                if(retired) {
+                    answer = facility.failed(IOLifecycleError {})
+                } else {
+                    answer = bodyReader.read(maxBytes)
+                }
+                answer
+            }
+        }
+        request: {
+            method: head.method
+            target: sliceFrom(head.target, 0)
+            version: "1.1"
+            headers: requestHeaders
+            body: publicBody
+        }
+
+        if(head.expectContinue && hasContent(head)) {
+            writeAll(Encoding.Latin1.encode("HTTP/1.1 100 Continue\r\n\r\n"))
+        }
+
+        response: null
+        handlerFailure: null
+        Error.handle(
+            () => {
+                response = handler(request)
+            },
+            (error) => {
+                handlerFailure = error
+                error
+            }
+        )
+
+        // Provenance comes from session state, not from what escaped.
+        if(lateFailure !== null) {
+            attemptEmptyResponse(lateFailure.status, true)
+            lateFailure.signal()
+        }
+        if(handlerFailure !== null) {
+            attemptEmptyResponse(500, false)
+            handlerFailure.signal()
+        }
+        emitResponse(response, head.method == "HEAD")
+        // A body read reached during emission still terminalizes the session.
+        if(lateFailure !== null) {
+            lateFailure.signal()
+        }
+    }
+
+    run: () => {
+        (() => {
+            // First instruction: a cancellation requested before the service
+            // started unwinds from here, through the cleanup below.
+            facility.enterService()
+            process()
+        }).ensure(() => {
+            retired = true
+            if(owning) {
+                awaitThroughCancellation(duplex.close())
+            }
+        })
+        null
+    }
+
+    run
+}

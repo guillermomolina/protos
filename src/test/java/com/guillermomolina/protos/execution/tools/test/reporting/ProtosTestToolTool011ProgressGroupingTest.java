@@ -151,10 +151,11 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         Map<String, List<String>> actual = leafGroups(pairs);
         Map<String, List<String>> expected = new LinkedHashMap<>();
         expected.put("protos/conformance", CONFORMANCE_GROUPS);
-        ORDINARY_LEAF_GROUPS.forEach((id, name) -> expected.put(id, List.of(name)));
+        ORDINARY_LEAF_GROUPS.forEach((id, name) -> expected.put(id, emptyPlanGroups(id, name)));
 
         assertEquals(expected, actual);
-        assertEquals(34, actual.values().stream().mapToInt(List::size).sum());
+        // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
+        assertEquals(33, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -183,7 +184,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             if (id.equals("protos/conformance")) {
                 assertEquals(CONFORMANCE_GROUPS, names);
             } else {
-                assertEquals(List.of(ORDINARY_LEAF_GROUPS.get(id)), names, id);
+                assertEquals(emptyPlanGroups(id, ORDINARY_LEAF_GROUPS.get(id)), names, id);
             }
         }
         assertEquals("protos/actor", order.get(0));
@@ -414,6 +415,14 @@ final class ProtosTestToolTool011ProgressGroupingTest {
             return null;
         }
         return CONFORMANCE_ROOTS.get(path.substring(0, path.indexOf('/')));
+    }
+
+    /**
+     * Groups a leaf presents for an empty plan: its SuiteId-derived name, except the LIB025
+     * per-source HTTP leaf, which presents only groups owning a retained Case.
+     */
+    private static List<String> emptyPlanGroups(String id, String name) {
+        return id.equals("protos/library/http") ? List.of() : List.of(name);
     }
 
     private static Map<String, String> ordinaryLeafGroups() {

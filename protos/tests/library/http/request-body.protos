@@ -1,0 +1,895 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+MessageBody: import("std:http/internal/MessageBody")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+limitsOf: (chunkLine, trailerBytes, trailerFields, body) => {
+    limits: {
+        maxChunkLineBytes: chunkLine
+        maxTrailerBytes: trailerBytes
+        maxTrailerFields: trailerFields
+        maxRequestBodyBytes: body
+    }
+    limits
+}
+
+defaultLimits: () => {
+    limitsOf(4096, 4096, 16, 1048576)
+}
+
+headOf: (framing, contentLength) => {
+    head: {
+        framing: framing
+        contentLength: contentLength
+    }
+    head
+}
+
+noneFramer: () => {
+    MessageBody.requestBodyFramer(headOf("NONE", null), defaultLimits())
+}
+
+lengthFramer: (size) => {
+    MessageBody.requestBodyFramer(headOf("CONTENT_LENGTH", size), defaultLimits())
+}
+
+chunkedFramerWith: (limits) => {
+    MessageBody.requestBodyFramer(headOf("CHUNKED", null), limits)
+}
+
+chunkedFramer: () => {
+    chunkedFramerWith(defaultLimits())
+}
+
+// Feeds bytes from start in slices of at most step octets, collecting CONTENT
+// until a terminal result or the end of the source.
+drain: (framer, bytes, start, step, maxContent) => {
+    collected: ascii("")
+    offset: start
+    last: null
+    done: false
+    while(!done) {
+        length: bytes.size() - offset
+        if(step < length) {
+            length = step
+        }
+        last = framer.feed(bytes, offset, length, maxContent)
+        offset = offset + last.consumed
+        if(last.state == "CONTENT") {
+            Assertions.require(last.consumed > 0)
+            Assertions.require(last.content.size() > 0)
+            Assertions.require(last.content.size() <= maxContent)
+            Assertions.require(last.failure === null)
+            index: 0
+            while(index < last.content.size()) {
+                collected.add(last.content[index])
+                index = index + 1
+            }
+        } else {
+            Assertions.require(last.content === null)
+            if(last.state == "NEED_MORE") {
+                Assertions.require(last.consumed == length)
+                done = (offset == bytes.size())
+            } else {
+                done = true
+            }
+        }
+    }
+    outcome: {
+        state: last.state
+        content: collected
+        offset: offset
+        failure: last.failure
+    }
+    outcome
+}
+
+prefixOf: (bytes, size) => {
+    prefix: ascii("")
+    index: 0
+    while(index < size) {
+        prefix.add(bytes[index])
+        index = index + 1
+    }
+    prefix
+}
+
+drainAll: (framer, bytes) => {
+    drain(framer, bytes, 0, bytes.size() + 1, 1048576)
+}
+
+requireFailure: (failure, kind, status) => {
+    Assertions.require(failure.kind == kind)
+    Assertions.require(failure.status == status)
+}
+
+requireRejectedResult: (result, kind, status) => {
+    Assertions.require(result.state == "REJECTED")
+    Assertions.require(result.content === null)
+    requireFailure(result.failure, kind, status)
+}
+
+// Frames a complete chunked message and answers its decoded content.
+chunkedContent: (message) => {
+    bytes: ascii(message)
+    outcome: drainAll(chunkedFramer(), bytes)
+    Assertions.require(outcome.state == "COMPLETE")
+    Assertions.require(outcome.offset == bytes.size())
+    Assertions.require(outcome.failure === null)
+    text(outcome.content)
+}
+
+chunkedRejectsWith: (limits, message, kind, status) => {
+    framer: chunkedFramerWith(limits)
+    outcome: drainAll(framer, ascii(message))
+    Assertions.require(outcome.state == "REJECTED")
+    requireFailure(outcome.failure, kind, status)
+    Assertions.require(framer.state() == "REJECTED")
+}
+
+chunkedRejects: (message) => {
+    chunkedRejectsWith(defaultLimits(), message, "malformedRequest", 400)
+}
+
+// Feeds a chunked prefix and answers the result of the following EOF.
+eofAfter: (prefix) => {
+    framer: chunkedFramer()
+    outcome: drainAll(framer, ascii(prefix))
+    Assertions.require(outcome.state == "NEED_MORE")
+    Assertions.require(framer.state() == "OPEN")
+    result: framer.endOfInput()
+    Assertions.require(result.consumed == 0)
+    requireRejectedResult(result, "malformedRequest", 400)
+    Assertions.require(framer.state() == "REJECTED")
+}
+
+// Several chunks, a quoted-string extension with an escape, binary content,
+// one trailer, and the final CRLF, followed by the next request's octets.
+fullMessage: "4;name=\"a\\\"b\"\r\nab\u{0}c\r\n3\r\n\u{80}\u{FF}z\r\n0\r\nX-Trailer: done\r\n\r\nGET"
+fullContent: "ab\u{0}c\u{80}\u{FF}z"
+
+tests: [
+    // ------------------------------------------------------------ NONE
+
+    Test("NONE body is empty and starts complete", () => {
+        framer: noneFramer()
+        Assertions.require(framer.state() == "COMPLETE")
+        bytes: ascii("")
+        result: framer.feed(bytes, 0, 0, 16)
+        Assertions.require(result.state == "COMPLETE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(result.content === null)
+        Assertions.require(result.failure === null)
+    }),
+    Test("NONE body never consumes octets of a following request", () => {
+        framer: noneFramer()
+        bytes: ascii("GET / HTTP/1.1\r\nHost: h\r\n\r\n")
+        result: framer.feed(bytes, 0, bytes.size(), 1024)
+        Assertions.require(result.state == "COMPLETE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(result.content === null)
+        Assertions.require(result.failure === null)
+    }),
+    Test("NONE body end of input stays complete", () => {
+        framer: noneFramer()
+        result: framer.endOfInput()
+        Assertions.require(result.state == "COMPLETE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(result.content === null)
+        Assertions.require(result.failure === null)
+        Assertions.require(framer.state() == "COMPLETE")
+    }),
+
+    // ------------------------------------------------------------ CONTENT_LENGTH
+
+    Test("Content-Length zero starts complete", () => {
+        framer: lengthFramer(0)
+        Assertions.require(framer.state() == "COMPLETE")
+        bytes: ascii("next")
+        result: framer.feed(bytes, 0, bytes.size(), 16)
+        Assertions.require(result.state == "COMPLETE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(framer.endOfInput().state == "COMPLETE")
+    }),
+    Test("Content-Length body in a single feed", () => {
+        framer: lengthFramer(5)
+        Assertions.require(framer.state() == "OPEN")
+        bytes: ascii("hello")
+        result: framer.feed(bytes, 0, 5, 1024)
+        Assertions.require(result.state == "CONTENT")
+        Assertions.require(result.consumed == 5)
+        Assertions.require(text(result.content) == "hello")
+        Assertions.require(result.failure === null)
+        Assertions.require(framer.feed(bytes, 5, 0, 1024).state == "COMPLETE")
+    }),
+    Test("Content-Length body fragmented in two feeds", () => {
+        framer: lengthFramer(5)
+        bytes: ascii("hello")
+        first: framer.feed(bytes, 0, 2, 1024)
+        Assertions.require(first.state == "CONTENT")
+        Assertions.require(first.consumed == 2)
+        Assertions.require(text(first.content) == "he")
+        Assertions.require(framer.state() == "OPEN")
+        second: framer.feed(bytes, 2, 3, 1024)
+        Assertions.require(second.state == "CONTENT")
+        Assertions.require(second.consumed == 3)
+        Assertions.require(text(second.content) == "llo")
+        Assertions.require(framer.state() == "COMPLETE")
+    }),
+    Test("Content-Length body fragmented octet by octet", () => {
+        bytes: ascii("hello")
+        outcome: drain(lengthFramer(5), bytes, 0, 1, 1024)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "hello")
+        Assertions.require(outcome.offset == 5)
+    }),
+    Test("Content-Length never consumes octets after the declared size", () => {
+        framer: lengthFramer(3)
+        bytes: ascii("abcGET / HTTP/1.1\r\n")
+        first: framer.feed(bytes, 0, bytes.size(), 1024)
+        Assertions.require(first.state == "CONTENT")
+        Assertions.require(first.consumed == 3)
+        Assertions.require(text(first.content) == "abc")
+        second: framer.feed(bytes, 3, bytes.size() - 3, 1024)
+        Assertions.require(second.state == "COMPLETE")
+        Assertions.require(second.consumed == 0)
+    }),
+    Test("Content-Length delivers CONTENT before COMPLETE", () => {
+        framer: lengthFramer(2)
+        bytes: ascii("ok")
+        Assertions.require(framer.feed(bytes, 0, 2, 1024).state == "CONTENT")
+        last: framer.feed(bytes, 2, 0, 1024)
+        Assertions.require(last.state == "COMPLETE")
+        Assertions.require(last.consumed == 0)
+        Assertions.require(last.content === null)
+        Assertions.require(last.failure === null)
+    }),
+    Test("Content-Length premature physical EOF is malformed", () => {
+        framer: lengthFramer(5)
+        bytes: ascii("hel")
+        Assertions.require(framer.feed(bytes, 0, 3, 1024).state == "CONTENT")
+        result: framer.endOfInput()
+        Assertions.require(result.consumed == 0)
+        requireRejectedResult(result, "malformedRequest", 400)
+        Assertions.require(framer.state() == "REJECTED")
+    }),
+    Test("maxContentBytes bounds each Content-Length delivery", () => {
+        framer: lengthFramer(5)
+        bytes: ascii("hello")
+        first: framer.feed(bytes, 0, 5, 2)
+        Assertions.require(first.state == "CONTENT")
+        Assertions.require(first.consumed == 2)
+        Assertions.require(text(first.content) == "he")
+        outcome: drain(framer, bytes, 2, 5, 2)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "llo")
+    }),
+    Test("mutating the source does not change delivered Content-Length octets", () => {
+        framer: lengthFramer(3)
+        bytes: ascii("abc")
+        result: framer.feed(bytes, 0, 3, 1024)
+        bytes[0] = 90
+        Assertions.require(text(result.content) == "abc")
+    }),
+
+    // ------------------------------------------------------------ CHUNKED basics
+
+    Test("single valid chunk", () => {
+        Assertions.require(chunkedContent("5\r\nhello\r\n0\r\n\r\n") == "hello")
+    }),
+    Test("several consecutive chunks", () => {
+        Assertions.require(chunkedContent("3\r\nabc\r\n2\r\nde\r\n1\r\nf\r\n0\r\n\r\n") == "abcdef")
+        Assertions.require(chunkedContent("a\r\n0123456789\r\nB\r\nabcdefghijk\r\n0\r\n\r\n") == "0123456789abcdefghijk")
+    }),
+    Test("chunked message fragmented octet by octet", () => {
+        bytes: ascii(fullMessage)
+        // The trailing "GET" belongs to the next request.
+        messageEnd: bytes.size() - 3
+        framer: chunkedFramer()
+        collected: ascii("")
+        offset: 0
+        last: null
+        while(offset < messageEnd) {
+            last = framer.feed(bytes, offset, 1, 1024)
+            Assertions.require(last.consumed == 1)
+            if(last.state == "CONTENT") {
+                Assertions.require(last.content.size() == 1)
+                collected.add(last.content[0])
+            } else {
+                Assertions.require(last.content === null)
+                if(offset < (messageEnd - 1)) {
+                    Assertions.require(last.state == "NEED_MORE")
+                    Assertions.require(framer.state() == "OPEN")
+                }
+            }
+            offset = offset + last.consumed
+        }
+        Assertions.require(last.state == "COMPLETE")
+        Assertions.require(framer.state() == "COMPLETE")
+        Assertions.require(text(collected) == fullContent)
+        Assertions.require(collected.size() == 7)
+
+        after: framer.feed(bytes, messageEnd, 1, 1024)
+        Assertions.require(after.state == "COMPLETE")
+        Assertions.require(after.consumed == 0)
+    }),
+    Test("chunked message fragmented at every split point", () => {
+        bytes: ascii(fullMessage)
+        messageEnd: bytes.size() - 3
+        split: 0
+        while(split <= messageEnd) {
+            framer: chunkedFramer()
+            first: drainAll(framer, prefixOf(bytes, split))
+            Assertions.require(first.state != "REJECTED")
+            if(first.state == "NEED_MORE") {
+                Assertions.require(first.offset == split)
+            }
+            second: drain(framer, bytes, first.offset, bytes.size(), 1024)
+            Assertions.require(second.state == "COMPLETE")
+            Assertions.require(second.offset == messageEnd)
+            Assertions.require((text(first.content) + text(second.content)) == fullContent)
+            split = split + 1
+        }
+        null
+    }),
+    Test("CR and LF split across feeds", () => {
+        framer: chunkedFramer()
+        bytes: ascii("3\r\nabc\r\n0\r\n\r\n")
+        Assertions.require(framer.feed(bytes, 0, 2, 1024).state == "NEED_MORE")
+        Assertions.require(framer.feed(bytes, 2, 1, 1024).state == "NEED_MORE")
+        data: framer.feed(bytes, 3, 3, 1024)
+        Assertions.require(text(data.content) == "abc")
+        Assertions.require(framer.feed(bytes, 6, 1, 1024).state == "NEED_MORE")
+        Assertions.require(framer.feed(bytes, 7, 1, 1024).state == "NEED_MORE")
+        Assertions.require(framer.feed(bytes, 8, 4, 1024).state == "NEED_MORE")
+        last: framer.feed(bytes, 12, 1, 1024)
+        Assertions.require(last.state == "COMPLETE")
+        Assertions.require(last.consumed == 1)
+    }),
+    Test("chunk with binary content", () => {
+        bytes: ascii("3\r\n\u{0}\u{80}\u{FF}\r\n0\r\n\r\n")
+        outcome: drainAll(chunkedFramer(), bytes)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(outcome.content.size() == 3)
+        Assertions.require(outcome.content[0] == 0)
+        Assertions.require(outcome.content[1] == 128)
+        Assertions.require(outcome.content[2] == 255)
+    }),
+    Test("last-chunk forms", () => {
+        Assertions.require(chunkedContent("0\r\n\r\n") == "")
+        Assertions.require(chunkedContent("00\r\n\r\n") == "")
+        Assertions.require(chunkedContent("000\r\n\r\n") == "")
+        Assertions.require(chunkedContent("2\r\nok\r\n0000\r\n\r\n") == "ok")
+        Assertions.require(chunkedContent("0;last\r\n\r\n") == "")
+        Assertions.require(chunkedContent("00;done=\"yes\"\r\n\r\n") == "")
+    }),
+    Test("uppercase and lowercase hex digits", () => {
+        Assertions.require(chunkedContent("A\r\n0123456789\r\n0\r\n\r\n") == "0123456789")
+        Assertions.require(chunkedContent("a\r\n0123456789\r\n0\r\n\r\n") == "0123456789")
+        Assertions.require(chunkedContent("0F\r\n0123456789abcde\r\n0\r\n\r\n") == "0123456789abcde")
+    }),
+    Test("chunked never consumes octets after the complete message", () => {
+        framer: chunkedFramer()
+        bytes: ascii("2\r\nok\r\n0\r\n\r\nPOST / HTTP/1.1\r\n")
+        outcome: drainAll(framer, bytes)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(outcome.offset == 12)
+        again: framer.feed(bytes, 12, bytes.size() - 12, 1024)
+        Assertions.require(again.state == "COMPLETE")
+        Assertions.require(again.consumed == 0)
+    }),
+    Test("chunked completes only after the final CRLF", () => {
+        framer: chunkedFramer()
+        bytes: ascii("0\r\n\r\n")
+        Assertions.require(framer.feed(bytes, 0, 3, 1024).state == "NEED_MORE")
+        Assertions.require(framer.state() == "OPEN")
+        Assertions.require(framer.feed(bytes, 3, 1, 1024).state == "NEED_MORE")
+        Assertions.require(framer.state() == "OPEN")
+        last: framer.feed(bytes, 4, 1, 1024)
+        Assertions.require(last.state == "COMPLETE")
+        Assertions.require(framer.state() == "COMPLETE")
+    }),
+
+    // ------------------------------------------------------------ extensions
+
+    Test("valid chunk extensions are accepted and discarded", () => {
+        [
+            "3;name\r\nabc\r\n0\r\n\r\n",
+            "3;name=value\r\nabc\r\n0\r\n\r\n",
+            "3;a;b=c;d=\"e\"\r\nabc\r\n0\r\n\r\n",
+            "3 ;a\r\nabc\r\n0\r\n\r\n",
+            "3\t; \tname \t= \tvalue\r\nabc\r\n0\r\n\r\n",
+            "3 ; a = b ; c\r\nabc\r\n0\r\n\r\n",
+            "3;!#$%&'*+-.^_`|~=x\r\nabc\r\n0\r\n\r\n"
+        ].each((message) => {
+            Assertions.require(chunkedContent(message) == "abc")
+        })
+        null
+    }),
+    Test("quoted-string extension values", () => {
+        [
+            "3;q=\"hello world\"\r\nabc\r\n0\r\n\r\n",
+            "3;q=\"\"\r\nabc\r\n0\r\n\r\n",
+            "3;q=\"a\\\"b\"\r\nabc\r\n0\r\n\r\n",
+            "3;q=\"a\\\\b\"\r\nabc\r\n0\r\n\r\n",
+            "3;q=\"tab\tand !#[]~\u{80}\u{FF}\"\r\nabc\r\n0\r\n\r\n",
+            "3;q=\"\\\t\\ \\\u{FF}\"\r\nabc\r\n0\r\n\r\n"
+        ].each((message) => {
+            Assertions.require(chunkedContent(message) == "abc")
+        })
+        null
+    }),
+    Test("fragmentation inside a quoted-string extension", () => {
+        bytes: ascii("3;q=\"a\\\"b c\"\r\nabc\r\n0\r\n\r\n")
+        outcome: drain(chunkedFramer(), bytes, 0, 1, 1024)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "abc")
+        Assertions.require(outcome.offset == bytes.size())
+    }),
+    Test("empty extension name is rejected", () => {
+        chunkedRejects("3;\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;=v\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a;;b\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("empty extension value is rejected", () => {
+        chunkedRejects("3;a=\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a= \r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=;b\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("unterminated quoted-string is rejected", () => {
+        chunkedRejects("3;a=\"open\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=\"x\"y\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("incomplete quoted-pair is rejected", () => {
+        chunkedRejects("3;a=\"x\\\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=\"\\\u{1}\"\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("illegal control octets in extensions are rejected", () => {
+        chunkedRejects("3;a=\"x\u{0}\"\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=\"x\u{7F}\"\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a\u{1}\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=b\u{0}\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("trailing whitespace without a valid extension is rejected", () => {
+        chunkedRejects("3 \r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3\t\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a \r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a=b \r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3 x\r\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3;a b\r\nabc\r\n0\r\n\r\n")
+    }),
+
+    // ------------------------------------------------------------ trailers
+
+    Test("valid trailers are validated and discarded", () => {
+        framer: chunkedFramer()
+        bytes: ascii("3\r\nabc\r\n0\r\nX-Checksum: 1234\r\n\r\n")
+        outcome: drainAll(framer, bytes)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "abc")
+        Assertions.require(outcome.offset == bytes.size())
+    }),
+    Test("several trailer fields", () => {
+        Assertions.require(chunkedContent("1\r\nx\r\n0\r\nA: 1\r\nB:2\r\nC:  three  \r\n\r\n") == "x")
+    }),
+    Test("trailer with an empty value", () => {
+        Assertions.require(chunkedContent("0\r\nEmpty:\r\n\r\n") == "")
+        Assertions.require(chunkedContent("0\r\nEmpty:   \r\n\r\n") == "")
+    }),
+    Test("trailer with HTAB and obs-text", () => {
+        Assertions.require(chunkedContent("0\r\nX:\ta\tb \u{80}\u{FF}\r\n\r\n") == "")
+    }),
+    Test("invalid trailer field name is rejected", () => {
+        chunkedRejects("0\r\nBad Name: x\r\n\r\n")
+        chunkedRejects("0\r\nBad(Name): x\r\n\r\n")
+        chunkedRejects("0\r\n: x\r\n\r\n")
+        chunkedRejects("0\r\nNoColon\r\n\r\n")
+    }),
+    Test("whitespace before the trailer colon is rejected", () => {
+        chunkedRejects("0\r\nX : y\r\n\r\n")
+        chunkedRejects("0\r\nX\t: y\r\n\r\n")
+    }),
+    Test("obs-fold in trailers is rejected", () => {
+        chunkedRejects("0\r\nX: a\r\n b\r\n\r\n")
+        chunkedRejects("0\r\nX: a\r\n\tb\r\n\r\n")
+    }),
+    Test("NUL and DEL in trailer values are rejected", () => {
+        chunkedRejects("0\r\nX: a\u{0}b\r\n\r\n")
+        chunkedRejects("0\r\nX: a\u{7F}b\r\n\r\n")
+        chunkedRejects("0\r\nX: a\u{1}b\r\n\r\n")
+    }),
+    Test("EOF before the final trailer CRLF is malformed", () => {
+        eofAfter("0\r\n")
+        eofAfter("0\r\nX: y\r\n")
+        eofAfter("0\r\nX: y\r\n\r")
+        eofAfter("0\r\nX: y")
+    }),
+
+    // ------------------------------------------------------------ delimiters and sizes
+
+    Test("missing CRLF after chunk-data is rejected", () => {
+        chunkedRejects("3\r\nabcd\r\n0\r\n\r\n")
+        chunkedRejects("3\r\nabc0\r\n\r\n")
+        chunkedRejects("3\r\nabc\rX0\r\n\r\n")
+    }),
+    Test("bare LF is rejected", () => {
+        chunkedRejects("3\nabc\r\n0\r\n\r\n")
+        chunkedRejects("3\r\nabc\n0\r\n\r\n")
+        chunkedRejects("0\r\nX: y\n\r\n")
+        chunkedRejects("0\r\n\n")
+    }),
+    Test("CR followed by a wrong octet is rejected", () => {
+        chunkedRejects("3\rXabc\r\n0\r\n\r\n")
+        chunkedRejects("0\r\nX: y\rZ\r\n\r\n")
+        chunkedRejects("0\r\n\r\r")
+    }),
+    Test("invalid hexadecimal sizes are rejected", () => {
+        [
+            "\r\n",
+            ";a\r\n",
+            "+3\r\nabc\r\n0\r\n\r\n",
+            "-3\r\nabc\r\n0\r\n\r\n",
+            "0x3\r\nabc\r\n0\r\n\r\n",
+            "g\r\n",
+            "3g\r\nabc\r\n0\r\n\r\n",
+            " 3\r\nabc\r\n0\r\n\r\n"
+        ].each((message) => {
+            chunkedRejects(message)
+        })
+        null
+    }),
+    Test("maximum signed 64-bit size is parsed without overflow", () => {
+        framer: chunkedFramerWith(limitsOf(4096, 4096, 16, 9223372036854775807))
+        bytes: ascii("7fffffffffffffff\r\nab")
+        header: framer.feed(bytes, 0, 18, 1024)
+        Assertions.require(header.state == "NEED_MORE")
+        Assertions.require(header.consumed == 18)
+        data: framer.feed(bytes, 18, 2, 1024)
+        Assertions.require(data.state == "CONTENT")
+        Assertions.require(text(data.content) == "ab")
+        Assertions.require(framer.state() == "OPEN")
+
+        padded: chunkedFramerWith(limitsOf(4096, 4096, 16, 9223372036854775807))
+        paddedBytes: ascii("00007FFFFFFFFFFFFFFF\r\n")
+        Assertions.require(padded.feed(paddedBytes, 0, paddedBytes.size(), 1024).state == "NEED_MORE")
+    }),
+    Test("size above the signed 64-bit range is malformed", () => {
+        huge: limitsOf(4096, 4096, 16, 9223372036854775807)
+        chunkedRejectsWith(huge, "8000000000000000\r\n", "malformedRequest", 400)
+        chunkedRejectsWith(huge, "ffffffffffffffffffff\r\n", "malformedRequest", 400)
+        chunkedRejectsWith(huge, "7fffffffffffffff0\r\n", "malformedRequest", 400)
+    }),
+    Test("representable size above the body budget is a request limit", () => {
+        chunkedRejectsWith(limitsOf(4096, 4096, 16, 15), "10\r\n", "requestLimit", 413)
+        chunkedRejectsWith(limitsOf(4096, 4096, 16, 15), "7fffffffffffffff\r\n", "requestLimit", 413)
+        // Syntax is validated before the size is classified against the budget.
+        chunkedRejectsWith(limitsOf(4096, 4096, 16, 15), "10 x\r\n", "malformedRequest", 400)
+    }),
+
+    // ------------------------------------------------------------ limits
+
+    Test("maxChunkLineBytes accepts exactly the limit", () => {
+        // "3;a=b\r\n" is 7 octets including CRLF.
+        framer: chunkedFramerWith(limitsOf(7, 4096, 16, 1024))
+        outcome: drainAll(framer, ascii("3;a=b\r\nabc\r\n0\r\n\r\n"))
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "abc")
+    }),
+    Test("maxChunkLineBytes plus one is a request limit", () => {
+        framer: chunkedFramerWith(limitsOf(6, 4096, 16, 1024))
+        bytes: ascii("3;a=b\r\nabc\r\n0\r\n\r\n")
+        result: framer.feed(bytes, 0, bytes.size(), 1024)
+        requireRejectedResult(result, "requestLimit", 413)
+        Assertions.require(result.consumed == 7)
+        chunkedRejectsWith(limitsOf(3, 4096, 16, 1024), "0001\r\nx\r\n0\r\n\r\n", "requestLimit", 413)
+    }),
+    Test("maxTrailerBytes accepts exactly the limit including the terminator", () => {
+        // "X: y\r\n" (6) plus the final CRLF (2) is 8 trailer octets.
+        outcome: drainAll(chunkedFramerWith(limitsOf(4096, 8, 16, 1024)), ascii("0\r\nX: y\r\n\r\n"))
+        Assertions.require(outcome.state == "COMPLETE")
+        // An empty trailer section is exactly 2 trailer octets.
+        empty: drainAll(chunkedFramerWith(limitsOf(4096, 2, 16, 1024)), ascii("0\r\n\r\n"))
+        Assertions.require(empty.state == "COMPLETE")
+    }),
+    Test("maxTrailerBytes plus one is a request limit", () => {
+        chunkedRejectsWith(limitsOf(4096, 7, 16, 1024), "0\r\nX: y\r\n\r\n", "requestLimit", 413)
+        chunkedRejectsWith(limitsOf(4096, 1, 16, 1024), "0\r\n\r\n", "requestLimit", 413)
+    }),
+    Test("maxTrailerFields accepts exactly the limit", () => {
+        outcome: drainAll(chunkedFramerWith(limitsOf(4096, 4096, 2, 1024)), ascii("0\r\nA: 1\r\nB: 2\r\n\r\n"))
+        Assertions.require(outcome.state == "COMPLETE")
+    }),
+    Test("maxTrailerFields plus one is a request limit", () => {
+        chunkedRejectsWith(limitsOf(4096, 4096, 2, 1024), "0\r\nA: 1\r\nB: 2\r\nC: 3\r\n\r\n", "requestLimit", 413)
+    }),
+    Test("maxRequestBodyBytes accepts exactly the accumulated limit", () => {
+        framer: chunkedFramerWith(limitsOf(4096, 4096, 16, 5))
+        outcome: drainAll(framer, ascii("3;x=\"ext\"\r\nabc\r\n2\r\nde\r\n0\r\nT: trailer\r\n\r\n"))
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "abcde")
+    }),
+    Test("maxRequestBodyBytes plus one is a request limit", () => {
+        chunkedRejectsWith(limitsOf(4096, 4096, 16, 4), "3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n", "requestLimit", 413)
+        chunkedRejectsWith(limitsOf(4096, 4096, 16, 4), "5\r\nabcde\r\n0\r\n\r\n", "requestLimit", 413)
+    }),
+
+    // ------------------------------------------------------------ incremental contract
+
+    Test("empty feed keeps the framer open", () => {
+        framer: chunkedFramer()
+        bytes: ascii("3\r\nabc\r\n0\r\n\r\n")
+        result: framer.feed(bytes, 0, 0, 1024)
+        Assertions.require(result.state == "NEED_MORE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(result.content === null)
+        Assertions.require(framer.state() == "OPEN")
+        Assertions.require(framer.feed(bytes, bytes.size(), 0, 1024).state == "NEED_MORE")
+        Assertions.require(lengthFramer(3).feed(bytes, 0, 0, 1024).state == "NEED_MORE")
+    }),
+    Test("invalid ranges signal Error and leave the framer unchanged", () => {
+        bytes: ascii("3\r\nabc\r\n0\r\n\r\n")
+        size: bytes.size()
+        [
+            [size + 1, 0],
+            [size, 1],
+            [0, size + 1],
+            [-1, 0],
+            [0, -1],
+            [null, 0],
+            [0, "1"],
+            [1.5, 0]
+        ].each((range) => {
+            framer: chunkedFramer()
+            Assertions.require(framer.feed(bytes, 0, 2, 1024).state == "NEED_MORE")
+            Assertions.signals(Error, () => { framer.feed(bytes, range[0], range[1], 1024) })
+            Assertions.require(framer.state() == "OPEN")
+            rest: drain(framer, bytes, 2, size, 1024)
+            Assertions.require(rest.state == "COMPLETE")
+            Assertions.require(text(rest.content) == "abc")
+        })
+        null
+    }),
+    Test("maxContentBytes zero, negative, or non-Integer signals Error", () => {
+        bytes: ascii("abc")
+        [0, -1, null, "1", 1.0].each((maxContent) => {
+            framer: lengthFramer(3)
+            Assertions.signals(Error, () => { framer.feed(bytes, 0, 3, maxContent) })
+            Assertions.require(framer.state() == "OPEN")
+            result: framer.feed(bytes, 0, 3, 1024)
+            Assertions.require(text(result.content) == "abc")
+        })
+        null
+    }),
+    Test("range checks precede computing offset plus length", () => {
+        bytes: ascii("abc")
+        framer: lengthFramer(3)
+        Assertions.signals(Error, () => { framer.feed(bytes, 1, 9223372036854775807, 1024) })
+        Assertions.signals(Error, () => { framer.feed(bytes, 9223372036854775807, 1, 1024) })
+        Assertions.signals(Error, () => { framer.feed(bytes, 2, 2, 1024) })
+        Assertions.require(text(framer.feed(bytes, 0, 3, 1024).content) == "abc")
+    }),
+    Test("mutating head after construction does not change framing", () => {
+        head: headOf("CONTENT_LENGTH", 3)
+        framer: MessageBody.requestBodyFramer(head, defaultLimits())
+        head.framing = "NONE"
+        head.contentLength = 1
+        bytes: ascii("abcdef")
+        result: framer.feed(bytes, 0, 6, 1024)
+        Assertions.require(result.state == "CONTENT")
+        Assertions.require(text(result.content) == "abc")
+
+        chunkedHead: headOf("CHUNKED", null)
+        chunked: MessageBody.requestBodyFramer(chunkedHead, defaultLimits())
+        chunkedHead.framing = "CONTENT_LENGTH"
+        chunkedHead.contentLength = 2
+        Assertions.require(text(drainAll(chunked, ascii("2\r\nok\r\n0\r\n\r\n")).content) == "ok")
+    }),
+    Test("mutating limits after construction does not change limits", () => {
+        limits: limitsOf(4096, 4096, 16, 3)
+        framer: chunkedFramerWith(limits)
+        limits.maxRequestBodyBytes = 1048576
+        limits.maxChunkLineBytes = 1
+        limits.maxTrailerBytes = 1
+        limits.maxTrailerFields = 0
+        outcome: drainAll(framer, ascii("3\r\nabc\r\n1\r\nd\r\n0\r\n\r\n"))
+        Assertions.require(outcome.state == "REJECTED")
+        requireFailure(outcome.failure, "requestLimit", 413)
+
+        relaxed: limitsOf(4096, 4096, 16, 1048576)
+        other: chunkedFramerWith(relaxed)
+        relaxed.maxChunkLineBytes = 1
+        relaxed.maxTrailerFields = 0
+        Assertions.require(drainAll(other, ascii("3\r\nabc\r\n0\r\nA: b\r\n\r\n")).state == "COMPLETE")
+    }),
+    Test("CONTENT precedes a later malformed size line", () => {
+        framer: chunkedFramer()
+        bytes: ascii("3\r\nabc\r\nZ\r\n")
+        size: bytes.size()
+        first: framer.feed(bytes, 0, size, 1024)
+        Assertions.require(first.state == "CONTENT")
+        Assertions.require(text(first.content) == "abc")
+        // "3\r\n" plus "abc" stops before the data CRLF and "Z".
+        Assertions.require(first.consumed == 6)
+        Assertions.require(framer.state() == "OPEN")
+
+        second: framer.feed(bytes, 6, size - 6, 1024)
+        requireRejectedResult(second, "malformedRequest", 400)
+        Assertions.require(second.consumed >= 3)
+        Assertions.require(second.consumed <= (size - 6))
+        Assertions.require(framer.state() == "REJECTED")
+    }),
+    Test("CONTENT precedes a later request limit", () => {
+        framer: chunkedFramerWith(limitsOf(4096, 4096, 16, 4))
+        bytes: ascii("3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n")
+        size: bytes.size()
+        first: framer.feed(bytes, 0, size, 1024)
+        Assertions.require(first.state == "CONTENT")
+        Assertions.require(text(first.content) == "abc")
+        Assertions.require(first.consumed == 6)
+
+        second: framer.feed(bytes, 6, size - 6, 1024)
+        requireRejectedResult(second, "requestLimit", 413)
+        // "\r\n" plus "2\r\n"; the chunk-data is never consumed.
+        Assertions.require(second.consumed == 5)
+        Assertions.require(framer.state() == "REJECTED")
+    }),
+    Test("rejection is terminal and never resets", () => {
+        framer: chunkedFramer()
+        bytes: ascii("3\r\nabc\r\nZ\r\n3\r\nabc\r\n0\r\n\r\n")
+        outcome: drainAll(framer, bytes)
+        Assertions.require(outcome.state == "REJECTED")
+        Assertions.require(text(outcome.content) == "abc")
+
+        good: ascii("3\r\nabc\r\n0\r\n\r\n")
+        again: framer.feed(good, 0, good.size(), 1024)
+        Assertions.require(again.consumed == 0)
+        requireRejectedResult(again, "malformedRequest", 400)
+        eof: framer.endOfInput()
+        Assertions.require(eof.consumed == 0)
+        requireRejectedResult(eof, "malformedRequest", 400)
+        Assertions.require(framer.state() == "REJECTED")
+
+        limited: lengthFramer(5)
+        Assertions.require(limited.endOfInput().state == "REJECTED")
+        abc: ascii("abcde")
+        requireRejectedResult(limited.feed(abc, 0, 5, 1024), "malformedRequest", 400)
+    }),
+    Test("COMPLETE never consumes further octets", () => {
+        framer: chunkedFramer()
+        bytes: ascii("0\r\n\r\n0\r\n\r\n")
+        first: framer.feed(bytes, 0, bytes.size(), 1024)
+        Assertions.require(first.state == "COMPLETE")
+        Assertions.require(first.consumed == 5)
+        index: 5
+        while(index < bytes.size()) {
+            result: framer.feed(bytes, index, bytes.size() - index, 1024)
+            Assertions.require(result.state == "COMPLETE")
+            Assertions.require(result.consumed == 0)
+            Assertions.require(result.content === null)
+            index = index + 1
+        }
+        Assertions.require(framer.endOfInput().state == "COMPLETE")
+        Assertions.require(framer.state() == "COMPLETE")
+    }),
+    Test("delivered Bytes are independent of each other and of the source", () => {
+        framer: chunkedFramer()
+        bytes: ascii("4\r\nabcd\r\n0\r\n\r\n")
+        first: framer.feed(bytes, 0, bytes.size(), 2)
+        second: framer.feed(bytes, first.consumed, bytes.size() - first.consumed, 2)
+        Assertions.require(text(first.content) == "ab")
+        Assertions.require(text(second.content) == "cd")
+        first.content[0] = 90
+        first.content.add(90)
+        bytes[5] = 90
+        bytes[6] = 90
+        Assertions.require(text(second.content) == "cd")
+        Assertions.require(text(first.content) == "ZbZ")
+        Assertions.require(bytes[3] == 97)
+    }),
+    Test("EOF inside incomplete chunked framing is malformed", () => {
+        eofAfter("")
+        eofAfter("1")
+        eofAfter("1f")
+        eofAfter("3\r")
+        eofAfter("3;q=\"open")
+        eofAfter("3;q=\"a\\")
+        eofAfter("3\r\nab")
+        eofAfter("3\r\nabc")
+        eofAfter("3\r\nabc\r")
+        eofAfter("3\r\nabc\r\n")
+    }),
+    Test("framing and maxContentBytes bound chunked deliveries", () => {
+        bytes: ascii("5\r\nhello\r\n0\r\n\r\n")
+        outcome: drain(chunkedFramer(), bytes, 0, bytes.size(), 2)
+        Assertions.require(outcome.state == "COMPLETE")
+        Assertions.require(text(outcome.content) == "hello")
+    }),
+
+    // ------------------------------------------------------------ encoders
+
+    Test("encodeResponseChunk of one octet", () => {
+        Assertions.require(text(MessageBody.encodeResponseChunk(ascii("a"))) == "1\r\na\r\n")
+        Assertions.require(text(MessageBody.encodeResponseChunk(ascii("abc"))) == "3\r\nabc\r\n")
+    }),
+    Test("encodeResponseChunk of fifteen octets", () => {
+        payload: ascii("0123456789abcde")
+        Assertions.require(text(MessageBody.encodeResponseChunk(payload)) == "f\r\n0123456789abcde\r\n")
+    }),
+    Test("encodeResponseChunk of sixteen octets", () => {
+        payload: ascii("0123456789abcdef")
+        Assertions.require(text(MessageBody.encodeResponseChunk(payload)) == "10\r\n0123456789abcdef\r\n")
+        large: ascii("")
+        while(large.size() < 255) {
+            large.add(120)
+        }
+        encoded: MessageBody.encodeResponseChunk(large)
+        Assertions.require(encoded.size() == (2 + 2 + 255 + 2))
+        Assertions.require(encoded[0] == 102)
+        Assertions.require(encoded[1] == 102)
+    }),
+    Test("encodeResponseChunk preserves binary octets", () => {
+        encoded: MessageBody.encodeResponseChunk(ascii("\u{0}\u{80}\u{FF}"))
+        Assertions.require(text(encoded) == "3\r\n\u{0}\u{80}\u{FF}\r\n")
+        Assertions.require(encoded[3] == 0)
+        Assertions.require(encoded[4] == 128)
+        Assertions.require(encoded[5] == 255)
+    }),
+    Test("encodeResponseChunk does not modify the payload", () => {
+        payload: ascii("xyz")
+        MessageBody.encodeResponseChunk(payload)
+        Assertions.require(payload.size() == 3)
+        Assertions.require(text(payload) == "xyz")
+    }),
+    Test("encodeResponseChunk answers independent Bytes", () => {
+        payload: ascii("xyz")
+        encoded: MessageBody.encodeResponseChunk(payload)
+        payload[0] = 65
+        Assertions.require(text(encoded) == "3\r\nxyz\r\n")
+        encoded[3] = 66
+        Assertions.require(text(payload) == "Ayz")
+        Assertions.require(text(MessageBody.encodeResponseChunk(payload)) == "3\r\nAyz\r\n")
+    }),
+    Test("encodeResponseChunk with an empty payload signals Error", () => {
+        Assertions.signals(Error, () => { MessageBody.encodeResponseChunk(ascii("")) })
+    }),
+    Test("finalResponseChunk is exactly five octets", () => {
+        chunk: MessageBody.finalResponseChunk()
+        Assertions.require(chunk.size() == 5)
+        Assertions.require(chunk[0] == 48)
+        Assertions.require(chunk[1] == 13)
+        Assertions.require(chunk[2] == 10)
+        Assertions.require(chunk[3] == 13)
+        Assertions.require(chunk[4] == 10)
+    }),
+    Test("finalResponseChunk answers independent Bytes", () => {
+        first: MessageBody.finalResponseChunk()
+        second: MessageBody.finalResponseChunk()
+        first[0] = 49
+        first.add(65)
+        Assertions.require(text(second) == "0\r\n\r\n")
+        Assertions.require(text(MessageBody.finalResponseChunk()) == "0\r\n\r\n")
+    })
+]

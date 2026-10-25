@@ -1,0 +1,156 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library HTTP/1.1 single-request origin server (D215, HTTP.md).
+//!
+//! `Server.serveOne(duplex, handler, limits)` borrows a caller-supplied duplex
+//! byte flow (`ByteReadable` and `ByteWritable`), processes exactly one
+//! request, invokes `handler(request)` at most once, emits exactly one final
+//! response carrying `Connection: close`, and retires its session.
+//! `Server.serveOne.owning(duplex, handler, limits)` additionally requires
+//! `Closable` and closes the duplex on every terminal path. Both answer a fresh
+//! `Future` resolving to `null`.
+//!
+//! The server listens on no port and acquires no network, clock, timer, or
+//! other ambient authority. It defines no timeout and is not declared safe for
+//! direct exposure to hostile Internet traffic (HTTP.md §11).
+
+/// The prototype of every HTTP failure. Each failure is a fresh occurrence
+/// whose `kind` is "malformedRequest", "requestLimit", "invalidResponse", or
+/// "unsupportedFeature", and whose `status`, when present, is the associated
+/// HTTP status Integer.
+HttpError: Error {}
+
+/// The single-request HTTP/1.1 server.
+Server: ((facility) => {
+    Session: import("std:http/internal/Session")
+
+    maxSigned64: 9223372036854775807
+
+    limitNames: [
+        "maxRequestLineBytes",
+        "maxHeaderBytes",
+        "maxHeaderFields",
+        "maxChunkLineBytes",
+        "maxTrailerBytes",
+        "maxTrailerFields",
+        "maxRequestBodyBytes",
+        "maxPrefetchBytes",
+        "ioChunkBytes"
+    ]
+
+    // Validates limits (HTTP.md §10) and answers a private snapshot of every
+    // effective limit, or null when limits is not admissible.
+    captureLimits: (limits) => {
+        valid: true
+        if(limits !== null) {
+            valid = facility.ordinaryObject(limits)
+            if(valid) {
+                limits.slotNames().each((name) => {
+                    if(valid) {
+                        known: false
+                        limitNames.each((limitName) => {
+                            if(name == limitName) {
+                                known = true
+                            }
+                        })
+                        if(known) {
+                            value: limits.slotValue(name)
+                            if(Integer.recognizes(value)) {
+                                if((value <= 0) || (value > maxSigned64)) {
+                                    valid = false
+                                }
+                            } else {
+                                valid = false
+                            }
+                        } else {
+                            valid = false
+                        }
+                    }
+                })
+            }
+        }
+
+        pick: (name, fallback) => {
+            chosen: fallback
+            if((limits !== null) && limits.hasSlot(name)) {
+                chosen = limits.slotValue(name)
+            }
+            chosen
+        }
+
+        captured: null
+        if(valid) {
+            captured = {
+                maxRequestLineBytes: pick("maxRequestLineBytes", 8192)
+                maxHeaderBytes: pick("maxHeaderBytes", 32768)
+                maxHeaderFields: pick("maxHeaderFields", 100)
+                maxChunkLineBytes: pick("maxChunkLineBytes", 8192)
+                maxTrailerBytes: pick("maxTrailerBytes", 8192)
+                maxTrailerFields: pick("maxTrailerFields", 100)
+                maxRequestBodyBytes: pick("maxRequestBodyBytes", 33554432)
+                maxPrefetchBytes: pick("maxPrefetchBytes", 65536)
+                ioChunkBytes: pick("ioChunkBytes", 16384)
+            }
+            captured.freeze()
+        }
+        captured
+    }
+
+    // HTTP.md §2.3 and §2.4: semantic validation precedes every effect. An
+    // invalid call answers an already failed Future without a Task, a session,
+    // ownership, or I/O; an admitted call establishes the session and then
+    // creates exactly one service Task.
+    admit: (duplex, handler, limits, owning) => {
+        valid: facility.provides(duplex, "read") && facility.provides(duplex, "write")
+        if(valid && owning) {
+            valid = facility.closable(duplex)
+        }
+        if(valid) {
+            valid = facility.invokable(handler)
+        }
+        captured: null
+        if(valid) {
+            captured = captureLimits(limits)
+            valid = captured !== null
+        }
+
+        answer: null
+        if(valid) {
+            answer = facility.startService(
+                Session.serviceBody(facility, HttpError, duplex, handler, captured, owning)
+            )
+        } else {
+            answer = facility.failed(InvalidIOArgument {})
+        }
+        answer
+    }
+
+    entry: (duplex, handler, limits) => {
+        admit(duplex, handler, limits, false)
+    }
+    entry.owning: (duplex, handler, limits) => {
+        admit(duplex, handler, limits, true)
+    }
+
+    server: {
+        serveOne: entry
+    }
+    server
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")

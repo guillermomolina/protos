@@ -272,6 +272,43 @@ isConformanceLeaf: (leaf) => {
     leaf.id == conformanceLeafId
 }
 
+// LIB025: the HTTP leaf presents one progress group per suite source. This is
+// presentation only, after TOOL012; Case identity and the leaf are unchanged.
+httpLeafId: "protos/library/http"
+
+// Exact authoritative casePath -> progress group name. No catch-all.
+httpProgressGroups: [
+    ["http/request-head.protos", "library/http/request-head"],
+    ["http/response-head.protos", "library/http/response-head"],
+    ["http/request-body.protos", "library/http/request-body"],
+    ["http/server-admission.protos", "library/http/server-admission"],
+    ["http/server-request.protos", "library/http/server-request"],
+    ["http/server-response.protos", "library/http/server-response"],
+    ["http/server-lifecycle.protos", "library/http/server-lifecycle"]
+]
+
+isHttpLeaf: (leaf) => {
+    leaf.id == httpLeafId
+}
+
+// Answers the HTTP progress group owning casePath; any other path, including
+// a malformed or unknown one, fails closed.
+httpProgressGroupName: (casePath) => {
+    String.recognizes(casePath).ifFalse(() => {
+        policyError()
+    })
+    name: null
+    httpProgressGroups.each((entry) => {
+        if(casePath == entry[0]) {
+            name = entry[1]
+        }
+    })
+    if(name === null) {
+        policyError()
+    }
+    name
+}
+
 // No Standard Library String prefix facility exists, so the scalar comparison
 // mirrors FileSelection.pathWithinDirectory.
 hasPrefix: (text, prefix) => {
@@ -474,7 +511,25 @@ progressGroupAssignment: (leaf, caseKeys) => {
             known[name]
         })
     }
-    isConformanceLeaf(leaf).ifFalse(() => {
+    if(isHttpLeaf(leaf)) {
+        // Names in order of first retained Case; only groups owning a
+        // retained Case appear.
+        names = Array()
+        known: Map()
+        // Every casePath is validated before any group is presented.
+        caseNames: Arrays.map(caseKeys, (key) => {
+            (casePath, ignoredSelector): key
+            httpProgressGroupName(casePath)
+        })
+        caseNames.each((name) => {
+            known.containsKey(name).ifFalse(() => {
+                names = Array(...names, name)
+                known[name] = names.size() - 1
+            })
+        })
+        caseGroupIndexes = Arrays.map(caseNames, (name) => known[name])
+    }
+    (isConformanceLeaf(leaf) || isHttpLeaf(leaf)).ifFalse(() => {
         names = Array(ordinaryProgressGroupName(leaf))
         caseGroupIndexes = Arrays.map(caseKeys, (ignored) => 0)
     })
@@ -507,7 +562,10 @@ progressGroupName: (leaf, casePath, selector) => {
                 selector
             )
     }
-    isConformanceLeaf(leaf).ifFalse(() => {
+    if(isHttpLeaf(leaf)) {
+        name = httpProgressGroupName(casePath)
+    }
+    (isConformanceLeaf(leaf) || isHttpLeaf(leaf)).ifFalse(() => {
         name = ordinaryProgressGroupName(leaf)
     })
 

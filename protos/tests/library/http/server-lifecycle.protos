@@ -1,0 +1,450 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Server")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// Deterministic in-memory duplex. Each read answers the next queued chunk,
+// split to maxBytes, and null once the chunks are exhausted. Writes are
+// captured at invocation. Optional hooks: readFailure, writeFailure,
+// closeFailure (Errors), and onWrite (a callback run by each write).
+duplexOf: (chunks) => {
+    next: 0
+    offset: 0
+    output: ascii("")
+    reads: 0
+    writes: 0
+    closes: 0
+    closeCompleted: false
+    readFailure: null
+    writeFailure: null
+    closeFailure: null
+    onWrite: null
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            reads = reads + 1
+            failure: readFailure
+            result: null
+            if((failure === null) && (next < chunks.size())) {
+                chunk: chunks[next]
+                end: chunk.size()
+                if((end - offset) > maxBytes) {
+                    end = offset + maxBytes
+                }
+                result = ascii("")
+                index: offset
+                while(index < end) {
+                    result.add(chunk[index])
+                    index = index + 1
+                }
+                if(end == chunk.size()) {
+                    next = next + 1
+                    offset = 0
+                } else {
+                    offset = end
+                }
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                result
+            }).future()
+        }
+        write: (bytes) => {
+            writes = writes + 1
+            if(onWrite !== null) {
+                onWrite(bytes)
+            }
+            failure: writeFailure
+            if(failure === null) {
+                bytes.each((octet) => {
+                    output.add(octet)
+                })
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                fixture
+            }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            failure: closeFailure
+            (() => {
+                closeCompleted = true
+                if(failure !== null) {
+                    failure.signal()
+                }
+                null
+            }).future()
+        }
+        written: () => {
+            text(output)
+        }
+        readCount: () => {
+            reads
+        }
+        writeCount: () => {
+            writes
+        }
+        closeCount: () => {
+            closes
+        }
+        closeDone: () => {
+            closeCompleted
+        }
+        failReadsWith: (error) => {
+            readFailure = error
+        }
+        failWritesWith: (error) => {
+            writeFailure = error
+        }
+        failCloseWith: (error) => {
+            closeFailure = error
+        }
+        whenWriting: (callback) => {
+            onWrite = callback
+        }
+    }
+    fixture
+}
+
+// Answers the Error a Future fails with, or null when it resolves.
+failureOf: (future) => {
+    caught: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            caught = error
+            error
+        }
+    )
+    caught
+}
+
+responseOf: (status, headers, body) => {
+    response: {
+        status: status
+        headers: headers
+        body: body
+    }
+    response
+}
+
+ok: (request) => {
+    responseOf(200, [], null)
+}
+
+getRequest: () => {
+    ascii("GET / HTTP/1.1\r\nHost: example.org\r\n\r\n")
+}
+
+// Serves one request from chunks with handler and answers {duplex, failure}.
+serveWith: (chunks, handler, limits) => {
+    servedDuplex: duplexOf(chunks)
+    caught: failureOf(http.Server.serveOne(servedDuplex, handler, limits))
+    outcome: {
+        duplex: servedDuplex
+        failure: caught
+    }
+    outcome
+}
+
+serve: (chunks, handler) => {
+    serveWith(chunks, handler, null)
+}
+
+statusLine: (status) => {
+    "HTTP/1.1 " + status + " \r\n"
+}
+
+emptyResponse: (status) => {
+    statusLine(status) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
+// Task-count properties (one service Task, no Task per body read or response
+// chunk) are asserted by ProtosHttpServerIntegrationTest, whose fixtures make
+// every live Task attributable.
+
+// Answers whether the Future ends cancelled.
+cancelledOf: (future) => {
+    Cancelled.handle(
+        () => {
+            future.value()
+            false
+        },
+        (cancellation) => {
+            true
+        }
+    )
+}
+
+// A duplex over duplexOf(chunks) whose read or write first runs hook.
+hookedDuplex: (inner, readHook, writeHook) => {
+    hooked: {
+        read: (maxBytes) => {
+            readHook()
+            inner.read(maxBytes)
+        }
+        write: (bytes) => {
+            writeHook()
+            inner.write(bytes)
+        }
+        close: () => {
+            inner.close()
+        }
+    }
+    hooked
+}
+
+nothing: () => {
+    null
+}
+
+postWithLength: () => {
+    ascii("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\n")
+}
+
+failingHandler: (request) => {
+    Error().signal()
+}
+
+// Serves owning and answers {duplex, failure}.
+serveOwning: (chunks, handler, configure) => {
+    owned: duplexOf(chunks)
+    configure(owned)
+    caught: failureOf(http.Server.serveOne.owning(owned, handler, null))
+    outcome: {
+        duplex: owned
+        failure: caught
+    }
+    outcome
+}
+
+unconfigured: (duplex) => {
+    null
+}
+
+tests: [
+    Test("a borrowed duplex is never closed", () => {
+        Assertions.require(serve([getRequest()], ok).duplex.closeCount() == 0)
+        Assertions.require(serve([ascii("BAD\r\n\r\n")], ok).duplex.closeCount() == 0)
+        Assertions.require(serve([getRequest()], failingHandler).duplex.closeCount() == 0)
+    }),
+    Test("an owned duplex is closed after success", () => {
+        outcome: serveOwning([getRequest()], ok, unconfigured)
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+        Assertions.require(outcome.duplex.closeDone())
+    }),
+    Test("an owned duplex is closed after a request rejection", () => {
+        outcome: serveOwning([ascii("BAD\r\n\r\n")], ok, unconfigured)
+        Assertions.require(outcome.failure.kind == "malformedRequest")
+        Assertions.require(outcome.duplex.closeCount() == 1)
+        Assertions.require(outcome.duplex.closeDone())
+    }),
+    Test("an owned duplex is closed after a handler failure", () => {
+        outcome: serveOwning([getRequest()], failingHandler, unconfigured)
+        Assertions.require(outcome.failure.parent() === Error)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+    }),
+    Test("an owned duplex is closed after an invalid response", () => {
+        outcome: serveOwning([getRequest()], (request) => {
+            responseOf(99, [], null)
+        }, unconfigured)
+        Assertions.require(outcome.failure.kind == "invalidResponse")
+        Assertions.require(outcome.duplex.closeCount() == 1)
+    }),
+    Test("an owned duplex is closed after a read failure", () => {
+        readError: IOError {}
+        outcome: serveOwning([getRequest()], ok, (duplex) => {
+            duplex.failReadsWith(readError)
+        })
+        Assertions.require(outcome.failure === readError)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+        Assertions.require(outcome.duplex.written() == "")
+    }),
+    Test("an owned duplex is closed after a write failure", () => {
+        writeError: IOError {}
+        outcome: serveOwning([getRequest()], ok, (duplex) => {
+            duplex.failWritesWith(writeError)
+        })
+        Assertions.require(outcome.failure === writeError)
+        Assertions.require(outcome.duplex.closeCount() == 1)
+    }),
+    Test("cancellation while reading closes only an owned duplex", () => {
+        borrowedInner: duplexOf([getRequest()])
+        borrowed: null
+        borrowed = http.Server.serveOne(hookedDuplex(borrowedInner, () => { borrowed.cancel() }, nothing), ok, null)
+        Assertions.require(cancelledOf(borrowed))
+        Assertions.require(borrowedInner.closeCount() == 0)
+
+        ownedInner: duplexOf([getRequest()])
+        owned: null
+        owned = http.Server.serveOne.owning(hookedDuplex(ownedInner, () => { owned.cancel() }, nothing), ok, null)
+        Assertions.require(cancelledOf(owned))
+        Assertions.require(ownedInner.closeCount() == 1)
+        Assertions.require(ownedInner.closeDone())
+        Assertions.require(ownedInner.written() == "")
+    }),
+    Test("cancellation while writing closes the owned duplex", () => {
+        inner: duplexOf([getRequest()])
+        service: null
+        service = http.Server.serveOne.owning(hookedDuplex(inner, nothing, () => { service.cancel() }), ok, null)
+        Assertions.require(cancelledOf(service))
+        Assertions.require(inner.closeCount() == 1)
+        Assertions.require(inner.closeDone())
+    }),
+    Test("cancellation during handler suspension unwinds the service", () => {
+        dx: duplexOf([postWithLength(), ascii("hello")])
+        resumed: false
+        service: null
+        service = http.Server.serveOne.owning(dx, (request) => {
+            service.cancel()
+            request.body.read(5).value()
+            resumed = true
+            ok(request)
+        }, null)
+        Assertions.require(cancelledOf(service))
+        Assertions.require(!resumed)
+        Assertions.require(dx.closeCount() == 1)
+        Assertions.require(dx.written() == "")
+    }),
+    Test("cancellation before the first service instruction still closes an owned duplex", () => {
+        invoked: false
+        handler: (request) => {
+            invoked = true
+            ok(request)
+        }
+        owned: duplexOf([getRequest()])
+        service: http.Server.serveOne.owning(owned, handler, null)
+        service.cancel()
+        Assertions.require(cancelledOf(service))
+        Assertions.require(owned.closeCount() == 1)
+        Assertions.require(owned.closeDone())
+        Assertions.require(owned.readCount() == 0)
+
+        borrowed: duplexOf([getRequest()])
+        other: http.Server.serveOne(borrowed, handler, null)
+        other.cancel()
+        Assertions.require(cancelledOf(other))
+        Assertions.require(borrowed.closeCount() == 0)
+        Assertions.require(borrowed.readCount() == 0)
+        Assertions.require(!invoked)
+    }),
+    Test("a close failure after a pre-start cancellation supersedes the cancellation", () => {
+        closeError: IOError {}
+        invoked: false
+        owned: duplexOf([getRequest()])
+        owned.failCloseWith(closeError)
+        service: http.Server.serveOne.owning(owned, (request) => {
+            invoked = true
+            ok(request)
+        }, null)
+        service.cancel()
+        Assertions.require(failureOf(service) === closeError)
+        Assertions.require(owned.closeCount() == 1)
+        Assertions.require(owned.readCount() == 0)
+        Assertions.require(!invoked)
+    }),
+    Test("close completion precedes service Future completion", () => {
+        owned: duplexOf([getRequest()])
+        service: http.Server.serveOne.owning(owned, ok, null)
+        service.value()
+        Assertions.require(owned.closeDone())
+    }),
+    Test("a close failure supersedes the earlier outcome", () => {
+        closeError: IOError {}
+        succeeded: serveOwning([getRequest()], ok, (duplex) => {
+            duplex.failCloseWith(closeError)
+        })
+        Assertions.require(succeeded.failure === closeError)
+        handlerFailed: serveOwning([getRequest()], failingHandler, (duplex) => {
+            duplex.failCloseWith(closeError)
+        })
+        Assertions.require(handlerFailed.failure === closeError)
+    }),
+    Test("the request body fails freshly after normal retirement", () => {
+        escaped: null
+        sawEnd: false
+        serve([getRequest()], (request) => {
+            escaped = request.body
+            sawEnd = request.body.read(4).value() === null
+            ok(request)
+        })
+        Assertions.require(sawEnd)
+        first: failureOf(escaped.read(4))
+        second: failureOf(escaped.read(4))
+        Assertions.require(first.parent() === IOLifecycleError)
+        Assertions.require(second.parent() === IOLifecycleError)
+        Assertions.require(first !== second)
+    }),
+    Test("reads after a framing failure fail freshly with IOLifecycleError", () => {
+        failures: []
+        outcome: serve([ascii("POST / HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n")], (request) => {
+            failures = [
+                failureOf(request.body.read(4)),
+                failureOf(request.body.read(4)),
+                failureOf(request.body.read(4))
+            ]
+            ok(request)
+        })
+        Assertions.require(failures[0].parent() === http.HttpError)
+        Assertions.require(failures[1].parent() === IOLifecycleError)
+        Assertions.require(failures[2].parent() === IOLifecycleError)
+        Assertions.require(failures[1] !== failures[2])
+        Assertions.require(outcome.failure === failures[0])
+    }),
+    Test("a handled framing failure still fails the service with the original HttpError", () => {
+        original: null
+        outcome: serve([ascii("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 10\r\n\r\nabc")], (request) => {
+            request.body.read(16).value()
+            original = failureOf(request.body.read(16))
+            responseOf(200, [], ascii("fine"))
+        })
+        Assertions.require(original.kind == "malformedRequest")
+        Assertions.require(outcome.failure === original)
+        Assertions.require(outcome.duplex.written() == emptyResponse("400"))
+    }),
+    Test("Tasks started by the handler follow structured completion", () => {
+        childDone: false
+        child: null
+        outcome: serve([getRequest()], (request) => {
+            child = (() => {
+                childDone = true
+                7
+            }).future()
+            ok(request)
+        })
+        Assertions.require(outcome.failure === null)
+        Assertions.require(childDone)
+        Assertions.require(child.value() == 7)
+    })
+]

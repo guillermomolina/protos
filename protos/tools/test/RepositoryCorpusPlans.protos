@@ -209,7 +209,12 @@ load: (corpusId) => {
             "http/",
             Array(
             Array("request-head.protos", "suite-native", "-"),
-            Array("response-head.protos", "suite-native", "-")
+            Array("response-head.protos", "suite-native", "-"),
+            Array("request-body.protos", "suite-native", "-"),
+            Array("server-admission.protos", "suite-native", "-"),
+            Array("server-request.protos", "suite-native", "-"),
+            Array("server-response.protos", "suite-native", "-"),
+            Array("server-lifecycle.protos", "suite-native", "-")
             )
         )
         matched = true

@@ -545,7 +545,12 @@ public final class ProtosCoreBootstrap {
                 ProtosInspectFacility.MODULE_KEY,
                 Map.of(
                         ProtosInspectFacility.BOOTSTRAP_SLOT,
-                        ProtosInspectFacility::createFacility));
+                        ProtosInspectFacility::createFacility),
+                // LIB025: the private asynchronous bridge of std:http/Server.
+                ProtosHttpAsyncFacility.MODULE_KEY,
+                Map.of(
+                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                        ProtosHttpAsyncFacility::createFacility));
     }
 
     /**

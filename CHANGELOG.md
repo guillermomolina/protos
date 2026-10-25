@@ -7,6 +7,43 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.404-SNAPSHOT
+
+- `LIB025` (#962, D215): complete Standard Library HTTP/1.1 single-request
+  server `std:http/Server` (spec 0.1.471, `spec/io/HTTP.md`).
+  - The public module exports exactly `Server` and `HttpError`
+    (`Error {}`); there is no Prelude binding. `Server.serveOne(duplex,
+    handler, limits)` borrows and `Server.serveOne.owning(...)` owns the
+    duplex; both answer a fresh `Future<null>`.
+  - All HTTP behavior is Protos: admission and limit capture
+    (`lib/http/Server.protos`), and the session in
+    `lib/http/internal/Session.protos` (head reading with preserved
+    surplus octets, Request construction, `100 Continue`, single handler
+    invocation, response validation and fixed/chunked/HEAD/204/205/304
+    emission, best-effort error responses, late framer failures, session
+    retirement, and the owning close in `ensure` cleanup). It reuses
+    `MessageHead` and the new internal `MessageBody` request-body framer and
+    response-chunk encoders (LIB025-B1).
+  - `request.body` is a standard borrowing `BufferedReader` over a private
+    framed source, so body reads create no Task, preserve octets across
+    cancelled reads, deliver the exact `HttpError` to the read that reaches
+    it, and fail with a fresh `IOLifecycleError` after terminalization or
+    retirement.
+  - A private, lazily created `ProtosHttpAsyncFacility` supplies only
+    terminal non-Task Futures, read-only capability probes, the one service
+    Task, and pre-start cancellation entry. `ProtosTask` gains the opt-in
+    `enterBodyBeforePreStartCancellationForRuntime()`, used only by that
+    service Task, so a cancellation before its first instruction unwinds
+    through the service cleanup (owning close) instead of skipping it;
+    ordinary Tasks are unchanged.
+  - A failed best-effort error-response write propagates its I/O Error,
+    except after a late framer failure, which keeps the original
+    `HttpError`.
+  - Tests: four new suite-native HTTP suites (admission, request, response,
+    lifecycle) in the now seven-member HTTP corpus, the Java
+    `ProtosHttpServerIntegrationTest`, and per-source HTTP progress groups
+    in the test tool (`library/http/<source>`), after TOOL012.
+
 ## 0.3.403-SNAPSHOT
 
 - `LIB025-A` (#962, D215): internal HTTP/1.1 message-head parsing and

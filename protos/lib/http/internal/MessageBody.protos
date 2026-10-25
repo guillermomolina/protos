@@ -1,0 +1,589 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal HTTP/1.1 message-body framing for the future std:http/Server driver
+//! (D215, LIB025-B1). This module is an unpublished implementation artifact, not
+//! an approved Standard Library API. It performs no I/O and owns no authority:
+//! it only frames request-body octets and encodes response-chunk octets.
+
+/// Answers a stateful request-body framer for an accepted request head.
+/// feed(bytes, offset, length, maxContentBytes) and endOfInput() answer
+/// {state, consumed, content, failure}; state() answers "OPEN", "COMPLETE", or
+/// "REJECTED". consumed counts only octets taken from the supplied slice, and
+/// octets after the logical end of the body are never consumed.
+requestBodyFramer: (head, limits) => {
+    // Scalars are captured once; later mutation of head or limits is ignored.
+    framing: head.framing
+    declaredLength: head.contentLength
+    maxChunkLineBytes: limits.maxChunkLineBytes
+    maxTrailerBytes: limits.maxTrailerBytes
+    maxTrailerFields: limits.maxTrailerFields
+    maxRequestBodyBytes: limits.maxRequestBodyBytes
+
+    ((framing == "NONE") || (framing == "CONTENT_LENGTH") || (framing == "CHUNKED")).ifFalse(() => {
+        Error().signal()
+    })
+    if(framing == "CONTENT_LENGTH") {
+        Integer.recognizes(declaredLength).ifFalse(() => {
+            Error().signal()
+        })
+        if(declaredLength < 0) {
+            Error().signal()
+        }
+    }
+
+    maxSigned64: 9223372036854775807
+
+    // Private rejection signal; only feed and endOfInput handle it.
+    Rejection: Error {}
+    rejectKind: null
+    rejectStatus: 0
+
+    reject: (kind, status) => {
+        rejectKind = kind
+        rejectStatus = status
+        occurrence: Rejection {}
+        occurrence.signal()
+    }
+
+    malformed: () => {
+        reject("malformedRequest", 400)
+    }
+
+    // ------------------------------------------------------------ framer state
+
+    // NONE and CONTENT_LENGTH use "BODY"; CHUNKED uses SIZE_LINE, DATA,
+    // DATA_CR, DATA_LF, and TRAILER_LINE. COMPLETE and REJECTED are terminal.
+    phase: "COMPLETE"
+    remaining: 0
+    totalContent: 0
+    line: null
+    pendingCr: false
+    chunkLineBytes: 0
+    trailerBytes: 0
+    trailerFields: 0
+
+    if(framing == "CONTENT_LENGTH") {
+        if(declaredLength > maxRequestBodyBytes) {
+            // Defensive: an accepted head never exceeds the body budget.
+            phase = "REJECTED"
+            rejectKind = "requestLimit"
+            rejectStatus = 413
+        } else {
+            if(declaredLength > 0) {
+                phase = "BODY"
+                remaining = declaredLength
+            }
+        }
+    }
+    if(framing == "CHUNKED") {
+        phase = "SIZE_LINE"
+        line = Encoding.UTF8.encode("")
+    }
+
+    // ------------------------------------------------------------ octet classes
+
+    isAlpha: (octet) => {
+        ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122))
+    }
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    // Answers the value of a hexadecimal digit, or -1.
+    hexValue: (octet) => {
+        value: -1
+        if(isDigit(octet)) {
+            value = octet - 48
+        }
+        if((octet >= 65) && (octet <= 70)) {
+            value = octet - 55
+        }
+        if((octet >= 97) && (octet <= 102)) {
+            value = octet - 87
+        }
+        value
+    }
+
+    // tchar = ALPHA / DIGIT / "!#$%&'*+-.^_`|~"
+    isTchar: (octet) => {
+        isAlpha(octet) ||
+            isDigit(octet) ||
+            (octet == 33) ||
+            (octet == 35) ||
+            (octet == 36) ||
+            (octet == 37) ||
+            (octet == 38) ||
+            (octet == 39) ||
+            (octet == 42) ||
+            (octet == 43) ||
+            (octet == 45) ||
+            (octet == 46) ||
+            (octet == 94) ||
+            (octet == 95) ||
+            (octet == 96) ||
+            (octet == 124) ||
+            (octet == 126)
+    }
+
+    isWhitespace: (octet) => {
+        (octet == 32) || (octet == 9)
+    }
+
+    // field-value octet: SP, HTAB, VCHAR, or obs-text.
+    isFieldValueOctet: (octet) => {
+        (octet == 32) || (octet == 9) || ((octet >= 33) && (octet <= 126)) || (octet >= 128)
+    }
+
+    // qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
+    isQdtext: (octet) => {
+        (octet == 9) ||
+            (octet == 32) ||
+            (octet == 33) ||
+            ((octet >= 35) && (octet <= 91)) ||
+            ((octet >= 93) && (octet <= 126)) ||
+            (octet >= 128)
+    }
+
+    // ------------------------------------------------------------ Bytes helpers
+
+    copyRange: (bytes, start, end) => {
+        copy: Encoding.UTF8.encode("")
+        index: start
+        while(index < end) {
+            copy.add(bytes[index])
+            index = index + 1
+        }
+        copy
+    }
+
+    // Answers the index after 1*tchar starting at start, or start when none.
+    skipToken: (bytes, start, end) => {
+        index: start
+        while((index < end) && isTchar(bytes[index])) {
+            index = index + 1
+        }
+        index
+    }
+
+    skipWhitespace: (bytes, start, end) => {
+        index: start
+        while((index < end) && isWhitespace(bytes[index])) {
+            index = index + 1
+        }
+        index
+    }
+
+    // Answers the index after a complete quoted-string starting at the DQUOTE.
+    skipQuotedString: (bytes, start, end) => {
+        index: start + 1
+        closed: false
+        while(!closed) {
+            if(index >= end) {
+                malformed()
+            }
+            octet: bytes[index]
+            if(octet == 34) {
+                closed = true
+            } else {
+                if(octet == 92) {
+                    index = index + 1
+                    if(index >= end) {
+                        malformed()
+                    }
+                    escaped: bytes[index]
+                    if(!(isWhitespace(escaped) || ((escaped >= 33) && (escaped <= 126)) || (escaped >= 128))) {
+                        malformed()
+                    }
+                } else {
+                    if(!isQdtext(octet)) {
+                        malformed()
+                    }
+                }
+            }
+            index = index + 1
+        }
+        index
+    }
+
+    // ------------------------------------------------------------ chunked lines
+
+    // chunk-size [ chunk-ext ], without CRLF. Extensions are validated and
+    // discarded; the size is checked against the budget only after the whole
+    // line is syntactically valid.
+    parseSizeLine: () => {
+        size: line.size()
+        chunkSize: 0
+        index: 0
+        while((index < size) && (hexValue(line[index]) >= 0)) {
+            digit: hexValue(line[index])
+            if(chunkSize > (maxSigned64 - digit).div(16)) {
+                malformed()
+            }
+            chunkSize = chunkSize * 16 + digit
+            index = index + 1
+        }
+        if(index == 0) {
+            malformed()
+        }
+
+        // chunk-ext = *( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )
+        while(index < size) {
+            index = skipWhitespace(line, index, size)
+            if(index >= size) {
+                malformed()
+            }
+            if(line[index] != 59) {
+                malformed()
+            }
+            index = skipWhitespace(line, index + 1, size)
+            nameEnd: skipToken(line, index, size)
+            if(nameEnd == index) {
+                malformed()
+            }
+            index = nameEnd
+            afterName: skipWhitespace(line, index, size)
+            if((afterName < size) && (line[afterName] == 61)) {
+                index = skipWhitespace(line, afterName + 1, size)
+                if(index >= size) {
+                    malformed()
+                }
+                if(line[index] == 34) {
+                    index = skipQuotedString(line, index, size)
+                } else {
+                    valueEnd: skipToken(line, index, size)
+                    if(valueEnd == index) {
+                        malformed()
+                    }
+                    index = valueEnd
+                }
+            }
+        }
+
+        if(chunkSize == 0) {
+            phase = "TRAILER_LINE"
+        } else {
+            if(chunkSize > (maxRequestBodyBytes - totalContent)) {
+                reject("requestLimit", 413)
+            }
+            remaining = chunkSize
+            phase = "DATA"
+        }
+    }
+
+    // field-name ":" OWS field-value OWS; validated and discarded.
+    parseTrailerLine: () => {
+        size: line.size()
+
+        // obs-fold
+        if(isWhitespace(line[0])) {
+            malformed()
+        }
+        // Whitespace before ":" is not a tchar, so it ends the name early.
+        nameEnd: skipToken(line, 0, size)
+        if((nameEnd == 0) || (nameEnd >= size) || (line[nameEnd] != 58)) {
+            malformed()
+        }
+        index: nameEnd + 1
+        while(index < size) {
+            if(!isFieldValueOctet(line[index])) {
+                malformed()
+            }
+            index = index + 1
+        }
+    }
+
+    completeLine: () => {
+        if(phase == "SIZE_LINE") {
+            parseSizeLine()
+        } else {
+            if(line.size() == 0) {
+                phase = "COMPLETE"
+            } else {
+                trailerFields = trailerFields + 1
+                if(trailerFields > maxTrailerFields) {
+                    reject("requestLimit", 413)
+                }
+                parseTrailerLine()
+            }
+        }
+        line = Encoding.UTF8.encode("")
+        chunkLineBytes = 0
+    }
+
+    // Consumes one framing octet of a size line, a chunk-data delimiter, or a
+    // trailer line.
+    consumeOctet: (octet) => {
+        if(phase == "DATA_CR") {
+            if(octet != 13) {
+                malformed()
+            }
+            phase = "DATA_LF"
+        } else {
+            if(phase == "DATA_LF") {
+                if(octet != 10) {
+                    malformed()
+                }
+                phase = "SIZE_LINE"
+            } else {
+                if(phase == "SIZE_LINE") {
+                    chunkLineBytes = chunkLineBytes + 1
+                    if(chunkLineBytes > maxChunkLineBytes) {
+                        reject("requestLimit", 413)
+                    }
+                } else {
+                    trailerBytes = trailerBytes + 1
+                    if(trailerBytes > maxTrailerBytes) {
+                        reject("requestLimit", 413)
+                    }
+                }
+                if(pendingCr) {
+                    if(octet != 10) {
+                        malformed()
+                    }
+                    pendingCr = false
+                    completeLine()
+                } else {
+                    if(octet == 13) {
+                        pendingCr = true
+                    } else {
+                        if(octet == 10) {
+                            malformed()
+                        }
+                        line.add(octet)
+                    }
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ results
+
+    resultOf: (resultState, consumed, content) => {
+        result: {
+            state: resultState
+            consumed: consumed
+            content: content
+            failure: null
+        }
+        result
+    }
+
+    rejectedResult: (consumed) => {
+        result: {
+            state: "REJECTED"
+            consumed: consumed
+            content: null
+            failure: {
+                kind: rejectKind
+                status: rejectStatus
+            }
+        }
+        result
+    }
+
+    terminalize: () => {
+        phase = "REJECTED"
+        line = null
+        pendingCr = false
+    }
+
+    framer: null
+    framer = {
+        feed: (source, offset, length, maxContentBytes) => {
+            (Integer.recognizes(offset) && Integer.recognizes(length) && Integer.recognizes(maxContentBytes)).ifFalse(() => {
+                Error().signal()
+            })
+            if(offset < 0) {
+                Error().signal()
+            }
+            if(length < 0) {
+                Error().signal()
+            }
+            if(maxContentBytes <= 0) {
+                Error().signal()
+            }
+            // Bounds are established without computing offset + length.
+            sourceSize: source.size()
+            if(offset > sourceSize) {
+                Error().signal()
+            }
+            if(length > (sourceSize - offset)) {
+                Error().signal()
+            }
+
+            end: offset + length
+            index: offset
+            content: null
+            result: null
+
+            if(phase == "COMPLETE") {
+                result = resultOf("COMPLETE", 0, null)
+            }
+            if(phase == "REJECTED") {
+                result = rejectedResult(0)
+            }
+
+            if(phase == "BODY") {
+                take: remaining
+                if(length < take) {
+                    take = length
+                }
+                if(maxContentBytes < take) {
+                    take = maxContentBytes
+                }
+                if(take > 0) {
+                    content = copyRange(source, offset, offset + take)
+                    remaining = remaining - take
+                    totalContent = totalContent + take
+                    index = offset + take
+                    if(remaining == 0) {
+                        phase = "COMPLETE"
+                    }
+                }
+            }
+
+            if(result === null) {
+                Rejection.handle(
+                    () => {
+                        // Decoded content ends the call before any later octet
+                        // is inspected.
+                        while((content === null) && (phase != "COMPLETE") && (phase != "BODY") && (index < end)) {
+                            if(phase == "DATA") {
+                                take: remaining
+                                if((end - index) < take) {
+                                    take = end - index
+                                }
+                                if(maxContentBytes < take) {
+                                    take = maxContentBytes
+                                }
+                                content = copyRange(source, index, index + take)
+                                index = index + take
+                                remaining = remaining - take
+                                totalContent = totalContent + take
+                                if(remaining == 0) {
+                                    phase = "DATA_CR"
+                                }
+                            } else {
+                                octet: source[index]
+                                index = index + 1
+                                consumeOctet(octet)
+                            }
+                        }
+                    },
+                    (error) => {
+                        terminalize()
+                        result = rejectedResult(index - offset)
+                        error
+                    }
+                )
+            }
+
+            if(result === null) {
+                if(content !== null) {
+                    result = resultOf("CONTENT", index - offset, content)
+                } else {
+                    if(phase == "COMPLETE") {
+                        line = null
+                        result = resultOf("COMPLETE", index - offset, null)
+                    } else {
+                        result = resultOf("NEED_MORE", index - offset, null)
+                    }
+                }
+            }
+
+            result
+        }
+
+        endOfInput: () => {
+            result: null
+            if(phase == "COMPLETE") {
+                result = resultOf("COMPLETE", 0, null)
+            } else {
+                if(phase != "REJECTED") {
+                    // Physical EOF before the logical end of the body.
+                    rejectKind = "malformedRequest"
+                    rejectStatus = 400
+                    terminalize()
+                }
+                result = rejectedResult(0)
+            }
+            result
+        }
+
+        state: () => {
+            answer: "OPEN"
+            if(phase == "COMPLETE") {
+                answer = "COMPLETE"
+            }
+            if(phase == "REJECTED") {
+                answer = "REJECTED"
+            }
+            answer
+        }
+    }
+
+    framer
+}
+
+/// Answers new Bytes holding one response chunk: lowercase hex-size CRLF
+/// payload CRLF. The payload is copied first and never modified; an empty
+/// payload signals an Error.
+encodeResponseChunk: (payload) => {
+    captured: Encoding.UTF8.encode("")
+    index: 0
+    while(index < payload.size()) {
+        captured.add(payload[index])
+        index = index + 1
+    }
+    if(captured.size() == 0) {
+        Error().signal()
+    }
+
+    output: Encoding.UTF8.encode("")
+
+    appendHex: null
+    appendHex = (value) => {
+        quotient: value.div(16)
+        if(quotient > 0) {
+            appendHex(quotient)
+        }
+        digit: value.mod(16)
+        if(digit < 10) {
+            output.add(48 + digit)
+        } else {
+            output.add(87 + digit)
+        }
+    }
+
+    appendHex(captured.size())
+    output.add(13)
+    output.add(10)
+    index = 0
+    while(index < captured.size()) {
+        output.add(captured[index])
+        index = index + 1
+    }
+    output.add(13)
+    output.add(10)
+    output
+}
+
+/// Answers new Bytes holding the final response chunk "0" CRLF CRLF, without
+/// trailers.
+finalResponseChunk: () => {
+    Encoding.Latin1.encode("0\r\n\r\n")
+}

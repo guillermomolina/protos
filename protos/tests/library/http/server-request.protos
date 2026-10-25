@@ -1,0 +1,501 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Server")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// Deterministic in-memory duplex. Each read answers the next queued chunk,
+// split to maxBytes, and null once the chunks are exhausted. Writes are
+// captured at invocation. Optional hooks: readFailure, writeFailure,
+// closeFailure (Errors), and onWrite (a callback run by each write).
+duplexOf: (chunks) => {
+    next: 0
+    offset: 0
+    output: ascii("")
+    reads: 0
+    writes: 0
+    closes: 0
+    closeCompleted: false
+    readFailure: null
+    writeFailure: null
+    closeFailure: null
+    onWrite: null
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            reads = reads + 1
+            failure: readFailure
+            result: null
+            if((failure === null) && (next < chunks.size())) {
+                chunk: chunks[next]
+                end: chunk.size()
+                if((end - offset) > maxBytes) {
+                    end = offset + maxBytes
+                }
+                result = ascii("")
+                index: offset
+                while(index < end) {
+                    result.add(chunk[index])
+                    index = index + 1
+                }
+                if(end == chunk.size()) {
+                    next = next + 1
+                    offset = 0
+                } else {
+                    offset = end
+                }
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                result
+            }).future()
+        }
+        write: (bytes) => {
+            writes = writes + 1
+            if(onWrite !== null) {
+                onWrite(bytes)
+            }
+            failure: writeFailure
+            if(failure === null) {
+                bytes.each((octet) => {
+                    output.add(octet)
+                })
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                fixture
+            }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            failure: closeFailure
+            (() => {
+                closeCompleted = true
+                if(failure !== null) {
+                    failure.signal()
+                }
+                null
+            }).future()
+        }
+        written: () => {
+            text(output)
+        }
+        readCount: () => {
+            reads
+        }
+        writeCount: () => {
+            writes
+        }
+        closeCount: () => {
+            closes
+        }
+        closeDone: () => {
+            closeCompleted
+        }
+        failReadsWith: (error) => {
+            readFailure = error
+        }
+        failWritesWith: (error) => {
+            writeFailure = error
+        }
+        failCloseWith: (error) => {
+            closeFailure = error
+        }
+        whenWriting: (callback) => {
+            onWrite = callback
+        }
+    }
+    fixture
+}
+
+// Answers the Error a Future fails with, or null when it resolves.
+failureOf: (future) => {
+    caught: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            caught = error
+            error
+        }
+    )
+    caught
+}
+
+responseOf: (status, headers, body) => {
+    response: {
+        status: status
+        headers: headers
+        body: body
+    }
+    response
+}
+
+ok: (request) => {
+    responseOf(200, [], null)
+}
+
+getRequest: () => {
+    ascii("GET / HTTP/1.1\r\nHost: example.org\r\n\r\n")
+}
+
+// Serves one request from chunks with handler and answers {duplex, failure}.
+serveWith: (chunks, handler, limits) => {
+    servedDuplex: duplexOf(chunks)
+    caught: failureOf(http.Server.serveOne(servedDuplex, handler, limits))
+    outcome: {
+        duplex: servedDuplex
+        failure: caught
+    }
+    outcome
+}
+
+serve: (chunks, handler) => {
+    serveWith(chunks, handler, null)
+}
+
+statusLine: (status) => {
+    "HTTP/1.1 " + status + " \r\n"
+}
+
+emptyResponse: (status) => {
+    statusLine(status) + "Content-Length: 0\r\nConnection: close\r\n\r\n"
+}
+
+concat: (first, second) => {
+    joined: ascii("")
+    first.each((octet) => {
+        joined.add(octet)
+    })
+    second.each((octet) => {
+        joined.add(octet)
+    })
+    joined
+}
+
+slice: (bytes, start, end) => {
+    copy: ascii("")
+    index: start
+    while(index < end) {
+        copy.add(bytes[index])
+        index = index + 1
+    }
+    copy
+}
+
+// Reads the body to its logical end or first failure; answers
+// {content, failure}.
+drainBody: (body) => {
+    received: ascii("")
+    caught: null
+    done: false
+    while(!done) {
+        Error.handle(
+            () => {
+                chunk: body.read(7).value()
+                if(chunk === null) {
+                    done = true
+                } else {
+                    chunk.each((octet) => {
+                        received.add(octet)
+                    })
+                }
+            },
+            (error) => {
+                caught = error
+                done = true
+                error
+            }
+        )
+    }
+    result: {
+        content: received
+        failure: caught
+    }
+    result
+}
+
+// Serves chunks with a handler that drains the body; answers {served, body}.
+serveDraining: (chunks, limits) => {
+    drained: null
+    handler: (request) => {
+        drained = drainBody(request.body)
+        ok(request)
+    }
+    servedOutcome: serveWith(chunks, handler, limits)
+    result: {
+        served: servedOutcome
+        body: drained
+    }
+    result
+}
+
+postHead: (field) => {
+    ascii("POST /upload HTTP/1.1\r\nHost: example.org\r\n" + field + "\r\n\r\n")
+}
+
+chunkedHead: () => {
+    postHead("Transfer-Encoding: chunked")
+}
+
+tests: [
+    Test("GET without content exposes the request and an empty body", () => {
+        seen: null
+        first: false
+        outcome: serve([getRequest()], (request) => {
+            seen = request
+            first = request.body.read(16).value()
+            ok(request)
+        })
+        Assertions.require(outcome.failure === null)
+        Assertions.require(seen.method == "GET")
+        Assertions.require(text(seen.target) == "/")
+        Assertions.require(seen.version == "1.1")
+        Assertions.require(seen.headers.size() == 1)
+        Assertions.require(seen.headers[0][0] == "Host")
+        Assertions.require(text(seen.headers[0][1]) == "example.org")
+        Assertions.require(first === null)
+    }),
+    Test("POST with Content-Length delivers exactly the content", () => {
+        outcome: serveDraining([postHead("Content-Length: 5"), ascii("hello")], null)
+        Assertions.require(outcome.served.failure === null)
+        Assertions.require(text(outcome.body.content) == "hello")
+        Assertions.require(outcome.body.failure === null)
+    }),
+    Test("a chunked request delivers decoded content only", () => {
+        body: ascii("5\r\nhello\r\n6;ext=1\r\n world\r\n0\r\nTrailer-Field: x\r\n\r\n")
+        outcome: serveDraining([chunkedHead(), body], null)
+        Assertions.require(outcome.served.failure === null)
+        Assertions.require(text(outcome.body.content) == "hello world")
+    }),
+    Test("binary content is delivered octet-exact", () => {
+        content: ascii("")
+        octet: 0
+        while(octet < 256) {
+            content.add(octet)
+            octet = octet + 1
+        }
+        outcome: serveDraining([postHead("Content-Length: 256"), content], null)
+        received: outcome.body.content
+        Assertions.require(received.size() == 256)
+        index: 0
+        while(index < 256) {
+            Assertions.require(received[index] == index)
+            index = index + 1
+        }
+    }),
+    Test("a head delivered one octet per read is parsed", () => {
+        message: concat(postHead("Content-Length: 3"), ascii("abc"))
+        chunks: []
+        index: 0
+        while(index < message.size()) {
+            chunks = Array(...chunks, slice(message, index, index + 1))
+            index = index + 1
+        }
+        outcome: serveDraining(chunks, null)
+        Assertions.require(outcome.served.failure === null)
+        Assertions.require(text(outcome.body.content) == "abc")
+    }),
+    Test("content in the same lower read as the head is not lost", () => {
+        message: concat(postHead("Content-Length: 5"), ascii("hello"))
+        outcome: serveDraining([message], null)
+        Assertions.require(text(outcome.body.content) == "hello")
+        Assertions.require(outcome.served.duplex.readCount() == 1)
+    }),
+    Test("fragmentation at every octet boundary yields the same request", () => {
+        message: concat(chunkedHead(), ascii("3\r\nabc\r\n2\r\nde\r\n0\r\n\r\n"))
+        split: 1
+        while(split < message.size()) {
+            chunks: [slice(message, 0, split), slice(message, split, message.size())]
+            outcome: serveDraining(chunks, null)
+            Assertions.require(outcome.served.failure === null)
+            Assertions.require(text(outcome.body.content) == "abcde")
+            split = split + 1
+        }
+    }),
+    Test("duplicate header fields stay ordered and unmerged", () => {
+        seen: null
+        request: ascii("GET / HTTP/1.1\r\nHost: h\r\nSet-Cookie: a=1\r\nset-cookie:  b=2 \r\n\r\n")
+        serve([request], (incoming) => {
+            seen = incoming.headers
+            ok(incoming)
+        })
+        Assertions.require(seen.size() == 3)
+        Assertions.require(seen[1][0] == "Set-Cookie")
+        Assertions.require(text(seen[1][1]) == "a=1")
+        Assertions.require(seen[2][0] == "set-cookie")
+        Assertions.require(text(seen[2][1]) == "b=2")
+    }),
+    Test("the request target is kept as raw Bytes", () => {
+        seen: null
+        request: ascii("GET /a%20b?x=%2F HTTP/1.1\r\nHost: h\r\n\r\n")
+        serve([request], (incoming) => {
+            seen = incoming.target
+            ok(incoming)
+        })
+        Assertions.require(!String.recognizes(seen))
+        Assertions.require(text(seen) == "/a%20b?x=%2F")
+    }),
+    Test("mutating the Request never changes private framing", () => {
+        content: null
+        outcome: serve([postHead("Content-Length: 5"), ascii("hello")], (request) => {
+            request.method = "HEAD"
+            request.headers = []
+            request.version = "1.0"
+            content = drainBody(request.body).content
+            responseOf(200, [], ascii("x"))
+        })
+        Assertions.require(text(content) == "hello")
+        Assertions.require(outcome.duplex.written() ==
+            statusLine("200") + "Content-Length: 1\r\nConnection: close\r\n\r\nx")
+    }),
+    Test("the handler is invoked exactly once with one argument", () => {
+        calls: 0
+        arity: 0
+        serve([getRequest()], (...arguments) => {
+            calls = calls + 1
+            arity = arguments.size()
+            ok(null)
+        })
+        Assertions.require(calls == 1)
+        Assertions.require(arity == 1)
+    }),
+    Test("the handler is not invoked after a rejection", () => {
+        calls: 0
+        outcome: serve([ascii("GET / HTTP/1.0\r\nHost: h\r\n\r\n")], (request) => {
+            calls = calls + 1
+            ok(request)
+        })
+        Assertions.require(calls == 0)
+        Assertions.require(outcome.failure.kind == "unsupportedFeature")
+        Assertions.require(outcome.failure.status == 505)
+        Assertions.require(outcome.duplex.written() == emptyResponse("505"))
+    }),
+    Test("100 Continue is written before the handler runs", () => {
+        dx: duplexOf([postHead("Expect: 100-continue\r\nContent-Length: 2"), ascii("hi")])
+        writtenAtInvocation: null
+        content: null
+        service: http.Server.serveOne(dx, (request) => {
+            writtenAtInvocation = dx.written()
+            content = drainBody(request.body).content
+            ok(request)
+        }, null)
+        service.value()
+        Assertions.require(writtenAtInvocation == "HTTP/1.1 100 Continue\r\n\r\n")
+        Assertions.require(text(content) == "hi")
+        Assertions.require(dx.written() == "HTTP/1.1 100 Continue\r\n\r\n" + emptyResponse("200"))
+    }),
+    Test("100 Continue is not written for a request without content", () => {
+        outcome: serve([postHead("Expect: 100-continue")], ok)
+        Assertions.require(outcome.duplex.written() == emptyResponse("200"))
+    }),
+    Test("an unsupported Expect is rejected with 417 and no 100", () => {
+        calls: 0
+        outcome: serve([postHead("Expect: something-else\r\nContent-Length: 2"), ascii("hi")], (request) => {
+            calls = calls + 1
+            ok(request)
+        })
+        Assertions.require(calls == 0)
+        Assertions.require(outcome.failure.kind == "unsupportedFeature")
+        Assertions.require(outcome.failure.status == 417)
+        Assertions.require(outcome.duplex.written() == emptyResponse("417"))
+    }),
+    Test("a declared length above the body limit is rejected with 413 before 100", () => {
+        limits: {
+            maxRequestBodyBytes: 4
+        }
+        outcome: serveDraining([postHead("Expect: 100-continue\r\nContent-Length: 10")], limits)
+        Assertions.require(outcome.body === null)
+        Assertions.require(outcome.served.failure.kind == "requestLimit")
+        Assertions.require(outcome.served.failure.status == 413)
+        Assertions.require(outcome.served.duplex.written() == emptyResponse("413"))
+    }),
+    Test("premature EOF delivers preceding content then fails", () => {
+        outcome: serveDraining([postHead("Content-Length: 10"), ascii("abcd")], null)
+        Assertions.require(text(outcome.body.content) == "abcd")
+        Assertions.require(outcome.body.failure.parent() === http.HttpError)
+        Assertions.require(outcome.body.failure.kind == "malformedRequest")
+        Assertions.require(outcome.served.failure === outcome.body.failure)
+        Assertions.require(outcome.served.duplex.written() == emptyResponse("400"))
+    }),
+    Test("a malformed chunk size fails the read with 400", () => {
+        outcome: serveDraining([chunkedHead(), ascii("zz\r\n")], null)
+        Assertions.require(outcome.body.failure.kind == "malformedRequest")
+        Assertions.require(outcome.body.failure.status == 400)
+        Assertions.require(outcome.served.failure === outcome.body.failure)
+        Assertions.require(outcome.served.duplex.written() == emptyResponse("400"))
+    }),
+    Test("a malformed trailer fails the read with 400", () => {
+        outcome: serveDraining([chunkedHead(), ascii("1\r\na\r\n0\r\nno colon\r\n\r\n")], null)
+        Assertions.require(text(outcome.body.content) == "a")
+        Assertions.require(outcome.body.failure.kind == "malformedRequest")
+        Assertions.require(outcome.served.failure === outcome.body.failure)
+    }),
+    Test("chunked content above the body limit fails the read with 413", () => {
+        limits: {
+            maxRequestBodyBytes: 4
+        }
+        outcome: serveDraining([chunkedHead(), ascii("5\r\nhello\r\n0\r\n\r\n")], limits)
+        Assertions.require(outcome.body.content.size() <= 4)
+        Assertions.require(outcome.body.failure.kind == "requestLimit")
+        Assertions.require(outcome.body.failure.status == 413)
+        Assertions.require(outcome.served.failure === outcome.body.failure)
+        Assertions.require(outcome.served.duplex.written() == emptyResponse("413"))
+    }),
+    Test("valid content precedes a later framing failure", () => {
+        outcome: serveDraining([chunkedHead(), ascii("3\r\nabc\r\nzz\r\n")], null)
+        Assertions.require(text(outcome.body.content) == "abc")
+        Assertions.require(outcome.body.failure.kind == "malformedRequest")
+    }),
+    Test("an unread body is neither drained nor an error", () => {
+        outcome: serve([postHead("Content-Length: 5"), ascii("hello")], ok)
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.duplex.readCount() == 1)
+        Assertions.require(outcome.duplex.written() == emptyResponse("200"))
+    }),
+    Test("unreached malformed content does not fail the service", () => {
+        outcome: serve([concat(chunkedHead(), ascii("3\r\nabc\r\nzz\r\n"))], ok)
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.duplex.written() == emptyResponse("200"))
+    }),
+    Test("octets after the message are never a second request", () => {
+        calls: 0
+        message: ascii("POST / HTTP/1.1\r\nHost: h\r\nContent-Length: 3\r\n\r\nabcGET /second HTTP/1.1\r\nHost: h\r\n\r\n")
+        content: null
+        outcome: serve([message], (request) => {
+            calls = calls + 1
+            content = drainBody(request.body).content
+            ok(request)
+        })
+        Assertions.require(calls == 1)
+        Assertions.require(text(content) == "abc")
+        Assertions.require(outcome.duplex.written() == emptyResponse("200"))
+    })
+]

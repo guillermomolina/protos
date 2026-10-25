@@ -99,6 +99,12 @@ public final class ProtosTask {
     private boolean cancellationRequestRecorded;
     private CancellationPhase cancellationPhase = CancellationPhase.NONE;
     private boolean continuationStarted;
+    /*
+     * LIB025 pay-only-when-used opt-in: the body runs even when cancellation was requested before
+     * its first ordinary instruction, so the body itself observes that cancellation inside its own
+     * cleanup scope. Ordinary Tasks never set it.
+     */
+    private boolean entersBodyBeforePreStartCancellation;
     private WaitDependency waitDependency;
 
     /*
@@ -193,6 +199,21 @@ public final class ProtosTask {
      * while that same cancellation is unwinding through ensure cleanup therefore does not
      * re-deliver it; a genuinely later independent request would require a distinct task.
      */
+    /**
+     * LIB025 (HTTP.md §9.5): makes this not-yet-started Task enter its body even if cancellation
+     * is requested before its first ordinary instruction. The request stays recorded and pending;
+     * the body is then responsible for observing it before any other ordinary work, from inside
+     * the cleanup scope that must run for that cancellation. General Task cancellation semantics
+     * are unchanged for every Task that does not opt in.
+     */
+    public synchronized void enterBodyBeforePreStartCancellationForRuntime() {
+        if (continuationStarted || isTerminal()) {
+            throw new IllegalStateException(
+                    "pre-start cancellation entry must be selected before the Task starts");
+        }
+        entersBodyBeforePreStartCancellation = true;
+    }
+
     public synchronized boolean cancellationRequested() {
         return cancellationPhase == CancellationPhase.REQUESTED;
     }
@@ -351,7 +372,9 @@ public final class ProtosTask {
                 resumedDependency = null;
             }
             cancelBeforeFirstOrdinaryInstruction =
-                    !continuationStarted && cancellationPhase == CancellationPhase.REQUESTED;
+                    !continuationStarted
+                            && cancellationPhase == CancellationPhase.REQUESTED
+                            && !entersBodyBeforePreStartCancellation;
             if (!cancelBeforeFirstOrdinaryInstruction && !finishCancellationChildDrain) {
                 // This is the semantic first-execution boundary. Once crossed, later cancellation
                 // cannot preempt arbitrary non-suspending ordinary code.
