@@ -242,13 +242,6 @@ final class ProtosI112TerminalCallBudgetTest {
      * PERF042 / PLAT066-C: a terminal C1 call of a lexical Closure binding
      * keeps the callee's physical root; the caller holds one terminal
      * operation and no inline copy of the callee body.
-     *
-     * <p>I115-H: {@code LEXICAL_C1} is a proven static local Closure call, so
-     * the materialized local Closure is replaced by one
-     * {@code InvokeStaticClosureOneTail} whose constant operand is the
-     * callee's {@code ProtosClosureExecutionPlanCell}. This is the
-     * experimental divergence already recorded by I115-H, not a new semantic
-     * deviation of PERF038-I.
      */
     @Test
     void lexicalC1TerminalCallKeepsPhysicalCalleeWithoutInlineBody()
@@ -265,7 +258,7 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {
-                    if (count(names(census.signatures().get(index)), "c.InvokeStaticClosureOneTail") == 1) {
+                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
                         runs.add(index);
                     }
                 }
@@ -276,14 +269,6 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 List<String> run = names(census.signatures().get(runIndex));
                 List<String> identity = names(census.signatures().get(identityIndex));
-                assertEquals(
-                        1,
-                        count(run, "c.InvokeStaticClosureOneTail"),
-                        () -> "one static terminal call in run\n" + census.fullReport());
-                assertEquals(
-                        0,
-                        count(run, "c.InvokeClosureOneTail"),
-                        () -> "InvokeClosureOneTail in run\n" + census.fullReport());
                 for (String required : List.of(
                         "c.BindUnaryFrameParameter",
                         "load.local")) {
@@ -320,25 +305,20 @@ final class ProtosI112TerminalCallBudgetTest {
 
                 System.out.println("PERF042_RUN_PHYSICAL_CALL=PASS");
                 System.out.println("PERF042_RUN_INLINE_BODY_IN_LOWERER=ABSENT");
-                System.out.println("PERF042_RUN_TERMINAL_OPERATION=InvokeStaticClosureOneTail");
+                System.out.println("PERF042_RUN_TERMINAL_OPERATION=InvokeClosureOneTail");
             });
         }
     }
 
     /**
-     * I115-H / PLAT066-C: {@code identity} reads only its own parameter and
-     * its only use is the terminal C1 call, so the lowering elides its
-     * creation and binding: the materialized local Closure is replaced by a
-     * static call whose constant operand is the callee's
-     * {@code ProtosClosureExecutionPlanCell} (see
-     * {@code ProtosI115HStaticClosureCallTest
-     * .staticUnaryRemovesMaterializationAndBindingStorage}). {@code run}
-     * holds no Closure creation, frame authority or local storage. This is
-     * the experimental divergence already recorded by I115-H, not a new
-     * semantic deviation of PERF038-I.
+     * I115 / PLAT066-C: {@code identity} reads only its own parameter, so
+     * its creation does not capture {@code run}'s context (GraalPy
+     * MakeFunction without freevars). {@code run} then installs no frame
+     * authority and keeps {@code identity} in an ordinary Bytecode DSL local
+     * (store.local / load.local) on its compact path.
      */
     @Test
-    void lexicalC1StaticCallElidesIdentityMaterializationAndLocalStorage()
+    void lexicalC1RunKeepsIdentityInAnOrdinaryLocal()
             throws Exception {
 
         try (Harness harness =
@@ -346,11 +326,11 @@ final class ProtosI112TerminalCallBudgetTest {
 
             harness.run(() -> {
                 Census census = census(
-                        LEXICAL_C1, "lexical-c1-static-call", 3);
+                        LEXICAL_C1, "lexical-c1-ordinary-local", 3);
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {
-                    if (count(names(census.signatures().get(index)), "c.InvokeStaticClosureOneTail") == 1) {
+                    if (count(names(census.signatures().get(index)), "c.InvokeClosureOneTail") == 1) {
                         runs.add(index);
                     }
                 }
@@ -361,27 +341,26 @@ final class ProtosI112TerminalCallBudgetTest {
                 List<String> identity = names(census.signatures().get(identityIndex));
 
                 assertEquals(
-                        List.of(
-                                "c.EnterRoot",
-                                "load.constant",
-                                "c.InvokeStaticClosureOneTail",
-                                "c.EpilogForReturn",
-                                "return"),
-                        run,
-                        () -> "run physical sequence\n" + census.fullReport());
-                assertEquals(
-                        0,
-                        run.stream().filter(name -> name.startsWith("store.local")).count(),
-                        () -> "store.local in run\n" + census.fullReport());
-                assertEquals(
-                        0,
-                        run.stream().filter(name -> name.startsWith("load.local")).count(),
-                        () -> "load.local in run\n" + census.fullReport());
-                for (String absent : List.of(
-                        "c.MaterializeCurrentClosure",
-                        "c.InvokeClosureOneTail",
+                        1,
+                        count(run, "c.InvokeClosureOneTail"),
+                        () -> "one terminal call in run\n" + census.fullReport());
+                for (String forbidden : List.of(
                         "c.InstallFrameLexicalAuthority",
-                        "c.CurrentActivation",
+                        "c.CurrentActivation")) {
+                    assertTrue(
+                            !run.contains(forbidden),
+                            () -> forbidden + " in run\n" + census.fullReport());
+                }
+                assertEquals(
+                        1,
+                        run.stream().filter(ProtosI112TerminalCallBudgetTest::isPlainStoreLocal).count(),
+                        () -> "one store.local in run\n" + census.fullReport());
+                assertEquals(
+                        1,
+                        run.stream().filter(ProtosI112TerminalCallBudgetTest::isPlainLoadLocal).count(),
+                        () -> "one load.local in run\n" + census.fullReport());
+                for (String absent : List.of(
+                        "c.IsCompactLocalFrame",
                         "c.CreateCurrentFrameLocal",
                         "c.ReadRootFrameLocal")) {
                     assertEquals(
@@ -389,13 +368,16 @@ final class ProtosI112TerminalCallBudgetTest {
                             count(run, absent),
                             () -> absent + " in run\n" + census.fullReport());
                 }
-                for (String required : List.of(
-                        "c.BindUnaryFrameParameter",
-                        "load.local")) {
-                    assertTrue(
-                            identity.contains(required),
-                            () -> required + " missing in identity\n" + census.fullReport());
-                }
+                assertEquals(
+                        1,
+                        count(run, "c.MaterializeCurrentClosure"),
+                        () -> "one Closure creation in run\n" + census.fullReport());
+                assertTrue(
+                        !run.contains("c.BindUnaryFrameParameter"),
+                        () -> "identity body copied into run\n" + census.fullReport());
+                assertTrue(
+                        identity.contains("c.BindUnaryFrameParameter"),
+                        () -> "identity keeps its own root\n" + census.fullReport());
 
                 assertInteger(
                         1,
@@ -403,6 +385,14 @@ final class ProtosI112TerminalCallBudgetTest {
                                 harness.moduleActivation()));
             });
         }
+    }
+
+    private static boolean isPlainStoreLocal(String name) {
+        return name.startsWith("store.local") && !name.contains(".mat");
+    }
+
+    private static boolean isPlainLoadLocal(String name) {
+        return name.startsWith("load.local") && !name.contains(".mat");
     }
 
     /**
@@ -419,8 +409,9 @@ final class ProtosI112TerminalCallBudgetTest {
                      new Harness(false)) {
 
             harness.run(() -> {
+                // I115-H1: the factorial ifTrue callback is a physical root again.
                 Census census = census(
-                        FACTORIAL_RUN, "i115-r6-factorial-run", 3);
+                        FACTORIAL_RUN, "i115-r6-factorial-run", 4);
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {

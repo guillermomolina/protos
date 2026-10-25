@@ -121,23 +121,6 @@ final class ProtosFrameArguments {
     /** Private kind marker; never a guest value, so never a method receiver. */
     private static final Object DIRECT_CLOSURE_CALL = new Object();
 
-    /*
-     * I115-H (EXPERIMENTAL, PLAT066-C): a second, reduced layout used only by
-     * InvokeStaticClosureOneTail, distinct from B5+:
-     *
-     *   [0] EXPERIMENTAL_STATIC_UNARY_CALL (private marker, never a guest value)
-     *   [1] supplied0
-     *
-     * It carries no Closure, receiver, methodHome, Task, caller, ReturnHome
-     * or Context. Only the consumers the lowering admits for a static callee
-     * root recognize it (BindUnaryFrameParameter, ReadRootFrameLocal and the
-     * return epilogue); activation, caller, Task and Closure accessors do not
-     * support it. A recorded divergence, not an equivalent ABI.
-     */
-    private static final Object EXPERIMENTAL_STATIC_UNARY_CALL = new Object();
-    private static final int EXPERIMENTAL_STATIC_UNARY_LENGTH = 2;
-    private static final int EXPERIMENTAL_STATIC_SUPPLIED_INDEX = 1;
-
     private static final java.util.function.Function<Object[], ProtosActivation>
             COMPACT_CAPTURE_OWNER = ProtosFrameArguments::activation;
 
@@ -404,20 +387,6 @@ final class ProtosFrameArguments {
             ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
             supplied0
         };
-    }
-
-    /** I115-H (EXPERIMENTAL): the reduced static unary layout {@code [marker, supplied0]}. */
-    static Object[] experimentalStaticUnaryCall(Object supplied0) {
-        return new Object[] {
-            EXPERIMENTAL_STATIC_UNARY_CALL,
-            supplied0
-        };
-    }
-
-    /** I115-H (EXPERIMENTAL): whether {@code arguments} use the static unary layout. */
-    static boolean isExperimentalStaticUnaryCall(Object[] arguments) {
-        return arguments.length == EXPERIMENTAL_STATIC_UNARY_LENGTH
-                && arguments[0] == EXPERIMENTAL_STATIC_UNARY_CALL;
     }
 
     /**
@@ -1160,12 +1129,6 @@ final class ProtosFrameArguments {
      * unchanged; only the supplied suffix length is consulted.
      */
     static Object compactSuppliedArgumentOrNull(Object[] arguments, int index) {
-        // I115-H: the static unary layout supplies exactly one value.
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return index == 0
-                    ? arguments[EXPERIMENTAL_STATIC_SUPPLIED_INDEX]
-                    : ProtosNullValue.INSTANCE;
-        }
         return arguments.length > SUPPLIED_ARGUMENT_OFFSET + index
                 ? arguments[SUPPLIED_ARGUMENT_OFFSET + index]
                 : ProtosNullValue.INSTANCE;
@@ -1312,13 +1275,9 @@ final class ProtosFrameArguments {
      * result. Only a fused direct source call or send writes the private
      * marker into the home slot; argument 0 publication keeps it. The length
      * test admits the frame arguments of non-Closure roots, whose entry
-     * contracts are not B5. I115-H: the static unary caller always accepts
-     * it; its own return epilogue projects for its caller.
+     * contracts are not B5.
      */
     static boolean acceptsPrimitiveResult(Object[] arguments) {
-        if (isExperimentalStaticUnaryCall(arguments)) {
-            return true;
-        }
         return arguments.length > RETURN_HOME_INDEX
                 && arguments[RETURN_HOME_INDEX]
                         == ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime();

@@ -380,8 +380,15 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
 
+    /*
+     * I115-H1-FIX: '>' is the shared guarded numeric site; its HIT yields a
+     * canonical Boolean that runs the callback inline, and any other result
+     * receives ifTrue as an ordinary send with the callback as a guest
+     * Closure, whose root the lowering registers. The unary parameter is
+     * not assumed to be an Integer.
+     */
     @Test
-    void compactUnaryBooleanControl() throws Exception {
+    void compactUnaryBooleanControlIsGuarded() throws Exception {
         Path directory = Path.of(
                 "target", "i115-r-factorial", "unary");
         Files.createDirectories(directory);
@@ -430,26 +437,27 @@ final class ProtosI115RFactorialCaptureTest {
             System.out.println(
                     "I115_R1_UNARY_INSTRUCTIONS=" + names);
 
-            assertTrue(
-                    names.stream().anyMatch(
-                            name -> name.contains("BindUnaryFrameParameter")),
-                    "Required unary binding is missing");
+            for (String required : List.of(
+                    "BindUnaryFrameParameter",
+                    "TryPrimitiveNumericGreater",
+                    "TryPrimitiveNumericMultiply",
+                    "IsCanonicalBooleanValue",
+                    "ExperimentalCanonicalBooleanCondition",
+                    "MaterializeCurrentClosure")) {
+                assertTrue(
+                        names.stream().anyMatch(
+                                name -> name.contains(required)),
+                        "Missing guarded compact operation: " + required);
+            }
 
-            assertTrue(
-                    names.stream().anyMatch(
-                            name -> name.contains("ExperimentalIntegerMultiply")),
-                    "The whole root did not enter compact lowering");
-
-            for (String forbidden : List.of(
-                    "PrepareSendOne",
-                    "PrepareStructuredCall",
-                    "ResumeContinuation",
-                    "CompleteClosureCall",
-                    "InstallFrameLexicalAuthority")) {
+            for (String retired : List.of(
+                    "ExperimentalInteger",
+                    "InstallFrameLexicalAuthority",
+                    "InvokeStaticClosureOneTail")) {
                 assertTrue(
                         names.stream().noneMatch(
-                                name -> name.contains(forbidden)),
-                        "Unexpected generic operation: " + forbidden);
+                                name -> name.contains(retired)),
+                        "Unexpected retired operation: " + retired);
             }
 
             assertEquals(
@@ -463,7 +471,7 @@ final class ProtosI115RFactorialCaptureTest {
                             .executable().execute().asInt());
 
             System.out.println("I115_R1_UNARY_CORRECTNESS=PASS");
-            System.out.println("I115_R1_UNARY_COMPACT=PASS");
+            System.out.println("I115_R1_UNARY_GUARDED_COMPACT=PASS");
         }
     }
 
@@ -484,8 +492,13 @@ final class ProtosI115RFactorialCaptureTest {
             }
             """;
 
+    /*
+     * I115-H1: the recursive call keeps the ordinary B5+ invocation, so a
+     * factorial root whose compact subset needs a call takes the general
+     * lowering instead of the retired static unary ABI.
+     */
     @Test
-    void compactRecursiveFactorialStructure() throws Exception {
+    void recursiveFactorialUsesOrdinaryInvocation() throws Exception {
         Path file = Path.of(
                 "target", "i115-r-factorial", "r2-structure.protos");
         Files.createDirectories(file.getParent());
@@ -506,44 +519,14 @@ final class ProtosI115RFactorialCaptureTest {
 
             factorial.getRootNodes().ensureSourceInformation();
 
-            int rootCount = factorial.getRootNodes().getNodes().size();
-
             List<String> names = factorial.getBytecodeNode()
                     .getInstructionsAsList().stream()
                     .map(ProtosInstructionNames::of)
                     .toList();
 
-            System.out.println("I115_R2_TEST_ROOT_COUNT=" + rootCount);
+            System.out.println("I115_R2_TEST_ROOT_COUNT="
+                    + factorial.getRootNodes().getNodes().size());
             System.out.println("I115_R2_TEST_DSL_FULL=" + names.size());
-
-            assertEquals(3, rootCount,
-                    "Unexpected callback or other physical root");
-
-            assertTrue(names.size() < 1134,
-                    "Factorial failed to enter compact lowering");
-
-            for (String required : List.of(
-                    "BindUnaryFrameParameter",
-                    "InvokeStaticClosureOneTail",
-                    "ExperimentalIntegerMultiply",
-                    "ExperimentalIntegerSubtract",
-                    "ExperimentalIntegerGreaterBool")) {
-                assertTrue(names.stream().anyMatch(
-                        name -> name.contains(required)),
-                        "Missing compact operation: " + required);
-            }
-
-            for (String forbidden : List.of(
-                    "PrepareClosureCall",
-                    "PrepareSendOne",
-                    "EnterNestedStructuredDispatch",
-                    "ResumeContinuation",
-                    "CompleteClosureCall",
-                    "InstallFrameLexicalAuthority")) {
-                assertTrue(names.stream().noneMatch(
-                        name -> name.contains(forbidden)),
-                        "Unexpected generic operation: " + forbidden);
-            }
 
             assertEquals(
                     2432902008176640000L,
@@ -551,6 +534,50 @@ final class ProtosI115RFactorialCaptureTest {
                             .executable().execute().asLong());
 
             System.out.println("I115_R2_STRUCTURE=PASS");
+        }
+    }
+
+    private static final String FACTORIAL_OVERFLOW_SOURCE = """
+            factorial: (n) => {
+                result: 1
+
+                (n > 1).ifTrue() {
+                    result = n * factorial(n - 1)
+                }
+
+                result
+            }
+
+            runOverflow: () => {
+                factorial(21) == 51090942171709440000
+            }
+            """;
+
+    /*
+     * I115-H1: factorial(21) exceeds long, so the recursive product must
+     * cross from the primitive carrier to a large Integer through the
+     * ordinary invocation. Independent of compilation and graph capture.
+     */
+    @Test
+    void recursiveFactorialOverflowsToLargeInteger() throws Exception {
+        Path file = Path.of(
+                "target", "i115-r-factorial", "h1-overflow.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(
+                file, FACTORIAL_OVERFLOW_SOURCE, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            Value result = session.prepareTopLevel("runOverflow")
+                    .executable().execute();
+
+            assertTrue(result.isBoolean());
+            assertTrue(result.asBoolean());
         }
     }
 

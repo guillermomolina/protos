@@ -426,6 +426,11 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
          * This transition is reached only after the owning root established
          * direct frame locals in its straight-line declaration order. PRESENT
          * state plus layout order therefore already is the exact history.
+         * I115-H1-FIX: a compact root reaches it through
+         * PromoteFrameLexicalAuthority only when its lowering proved that
+         * every establishment before the promotion followed layout order
+         * (CanonicalToBytecodeLowerer#experimentalCompactCreationsFollowLayout);
+         * later creations are recorded by recordFrameBackedEstablishment.
          */
         int lastPresentOrdinal = -1;
         for (int ordinal = 0;

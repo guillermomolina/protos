@@ -285,35 +285,6 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootOrdinaryClosureLocals =
             java.util.Set.of();
 
-    /*
-     * I115-H (EXPERIMENTAL, PLAT066-C): the static local Closure call admitted
-     * for the root being lowered ({@link #admitStaticLocalClosureCall}), and
-     * the plan cell its elided creation registered in this parse. The fact is
-     * recomputed (or recovered from the canonical cache) on every parse; the
-     * cell is physical state and never stored in the canonical facts.
-     * Per-root lowering state, saved and restored with the other root state.
-     */
-    private CanonicalCompilationFacts.StaticLocalClosureCall currentRootStaticClosureCall;
-    private ProtosClosureExecutionPlanCell currentStaticClosurePlanCell;
-
-    /*
-     * I115-H: handshake between an elided static creation and the lowering
-     * of its callee root. The definition whose root is about to be lowered
-     * for a static invocation; consumed at the start of that root. The set
-     * holds the definitions whose root entry and body consume only the
-     * experimental static unary ABI (ProtosFrameArguments
-     * #experimentalStaticUnaryCall); a definition missing from it keeps the
-     * ordinary creation and call.
-     */
-    private CanonicalClosure staticUnaryCalleeRequest;
-
-    // I115-R2: exact module binding for a recursive Closure.
-    private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
-            experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
-    private CanonicalClosure currentExperimentalRootDefinition;
-    private final java.util.Set<CanonicalClosure> staticUnaryCalleeRoots =
-            java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-
     private java.util.Map<CanonicalSend,
             ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> currentRootArithmeticHints =
@@ -382,6 +353,23 @@ final class CanonicalToBytecodeLowerer {
      * null outside such a root.
      */
     private CanonicalBindingIdentity currentExperimentalGuestIntegerBinding;
+    /*
+     * I115-H1-FIX: the root-scoped prepared-call, child-result and resume
+     * locals of the compact root being emitted, shared by the ordinary send
+     * of every numeric MISS path; null when the root has no numeric send.
+     */
+    private ComposedSequenceScratch currentExperimentalCompactScratch;
+    /*
+     * I115-H1-FIX: the dispatching Boolean control sites of the compact root
+     * being emitted (empty outside one). During admission only: the
+     * bindings pinned to OBJECT, the bindings assigned by dispatching
+     * callbacks, and the dispatching sites found by this pass.
+     */
+    private java.util.Set<CanonicalSend> currentExperimentalDispatchingControls =
+            java.util.Set.of();
+    private java.util.Set<CanonicalBindingIdentity> currentExperimentalCompactPinned;
+    private java.util.Set<CanonicalBindingIdentity> currentExperimentalCompactEscaped;
+    private java.util.Set<CanonicalSend> currentExperimentalCompactDispatchingControls;
 
     /**
      * PLAT041 C′ lowering-time source of the current {@link
@@ -840,24 +828,6 @@ final class CanonicalToBytecodeLowerer {
                         sequence,
                         activationDefinition,
                         bindingAnalysisFor(sequence, activationDefinition));
-        // I115-R2: discover the module binding before nested root lowering.
-        if (activationDefinition == null) {
-            CanonicalBindingAnalysis analysis =
-                    rootPlan.rootFacts().bindingAnalysis();
-            CanonicalLexicalScope scope = rootPlan.rootFacts().scope();
-            for (CanonicalExpression expression : sequence.expressions()) {
-                if (expression instanceof CanonicalCreate create
-                        && create.target().isEmpty()
-                        && create.value() instanceof CanonicalClosure definition) {
-                    CanonicalBindingIdentity identity =
-                            analysis.identityOf(create).orElse(null);
-                    if (identity != null && identity.owner() == scope) {
-                        experimentalRecursiveBindings.put(definition, identity);
-                    }
-                }
-            }
-        }
-
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
@@ -948,8 +918,6 @@ final class CanonicalToBytecodeLowerer {
          * body of its enclosing root.
          */
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
-        CanonicalClosure savedExperimentalDefinition =
-                currentExperimentalRootDefinition;
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
@@ -965,10 +933,6 @@ final class CanonicalToBytecodeLowerer {
         java.util.Set<String> savedScalarLocals = currentRootScalarLocals;
         java.util.Set<String> savedOrdinaryClosureLocals =
                 currentRootOrdinaryClosureLocals;
-        CanonicalCompilationFacts.StaticLocalClosureCall savedStaticClosureCall =
-                currentRootStaticClosureCall;
-        ProtosClosureExecutionPlanCell savedStaticClosurePlanCell =
-                currentStaticClosurePlanCell;
         var savedArithmeticHints = currentRootArithmeticHints;
         CanonicalSend savedTerminalIntegerSend = currentRootTerminalIntegerSend;
         var savedTerminalIntegerAddition = currentRootTerminalIntegerAddition;
@@ -1001,7 +965,6 @@ final class CanonicalToBytecodeLowerer {
                     java.util.Collections.newSetFromMap(
                             new java.util.IdentityHashMap<>());
             currentRootAnalysis = analysisForThisRoot;
-            currentExperimentalRootDefinition = activationDefinition;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
@@ -1013,8 +976,6 @@ final class CanonicalToBytecodeLowerer {
             currentRootIndexedParameterLayout = null;
             currentRootScalarLocals = java.util.Set.of();
             currentRootOrdinaryClosureLocals = java.util.Set.of();
-            currentRootStaticClosureCall = null;
-            currentStaticClosurePlanCell = null;
             currentRootArithmeticHints = java.util.Map.of();
             currentRootTerminalIntegerSend = null;
             currentRootTerminalIntegerAddition = null;
@@ -1027,7 +988,6 @@ final class CanonicalToBytecodeLowerer {
             currentRootEmittedContinuationPath = savedContinuationPath;
             currentRootEmittedTerminalInvocation = savedTerminalInvocation;
             currentRootAnalysis = savedAnalysis;
-            currentExperimentalRootDefinition = savedExperimentalDefinition;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
@@ -1041,8 +1001,6 @@ final class CanonicalToBytecodeLowerer {
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
             currentRootScalarLocals = savedScalarLocals;
             currentRootOrdinaryClosureLocals = savedOrdinaryClosureLocals;
-            currentRootStaticClosureCall = savedStaticClosureCall;
-            currentStaticClosurePlanCell = savedStaticClosurePlanCell;
             currentRootArithmeticHints = savedArithmeticHints;
             currentRootTerminalIntegerSend = savedTerminalIntegerSend;
             currentRootTerminalIntegerAddition = savedTerminalIntegerAddition;
@@ -1098,11 +1056,6 @@ final class CanonicalToBytecodeLowerer {
         boolean requiresPersistentFrameAuthority =
                 rootFacts.requiresPersistentFrameAuthority();
         SourceSpan rootSpan = sequence.span();
-        // I115-H: this root is the callee of an elided static creation.
-        boolean staticUnaryCallee =
-                activationDefinition != null
-                        && activationDefinition == staticUnaryCalleeRequest;
-        staticUnaryCalleeRequest = null;
         UnaryNormalEntry unaryEntry =
                 admitUnaryNormalEntry(
                         sequence,
@@ -1110,16 +1063,6 @@ final class CanonicalToBytecodeLowerer {
                         currentRootAnalysis,
                         scopeForThisRoot,
                         requiresPersistentFrameAuthority);
-        if (unaryEntry == null && staticUnaryCallee) {
-            unaryEntry =
-                    admitStaticUnaryLiteralEntry(
-                            sequence,
-                            activationDefinition,
-                            currentRootAnalysis,
-                            scopeForThisRoot,
-                            requiresPersistentFrameAuthority);
-        }
-        boolean staticUnaryEntryEmitted = false;
 
         // I115-M EXPERIMENTAL: whole-root compact lowering admission.
         ExperimentalCompactRoot experimentalCompact =
@@ -1242,15 +1185,6 @@ final class CanonicalToBytecodeLowerer {
                 admitsNormalDirectScalarLocalBody(
                         sequence, activationDefinition, scopeForThisRoot);
 
-        currentRootStaticClosureCall =
-                admitStaticLocalClosureCall(
-                        sequence,
-                        activationDefinition,
-                        scopeForThisRoot,
-                        directScalarLocalBody,
-                        rootPlan.foldedTerminal());
-        currentStaticClosurePlanCell = null;
-
         currentRootArithmeticHints =
                 arithmeticHintsForRoot(sequence, scopeForThisRoot);
 
@@ -1326,7 +1260,6 @@ final class CanonicalToBytecodeLowerer {
                         currentRootFrameNativeLayout,
                         ordinal,
                         parameterName);
-                staticUnaryEntryEmitted = staticUnaryCallee;
             } else {
                 emitClosureParameterBindings(
                         builder,
@@ -1337,16 +1270,6 @@ final class CanonicalToBytecodeLowerer {
                         defaultResumeValue);
             }
         }
-        /*
-         * I115-H: the static callee's entry is BindUnaryFrameParameter and its
-         * single-expression body (a primitive-carrier literal, guest literal or
-         * the parameter's ReadRootFrameLocal) reads nothing else from the frame
-         * arguments, so its root consumes the experimental static unary ABI.
-         */
-        if (staticUnaryEntryEmitted) {
-            staticUnaryCalleeRoots.add(activationDefinition);
-        }
-
         /*
          * I101-A: the emission plan of an admitted constant Boolean-control
          * terminal is its proven effective result. The canonical sequence is
@@ -1368,14 +1291,17 @@ final class CanonicalToBytecodeLowerer {
                     experimentalCompact.guestIntegerReturn() == null
                             && !experimentalCompact.guestIntegerLiteralReturn();
             /*
-             * I115-M: the compact subset (literals, root locals, Integer
-             * operations, inline whileTrue and structured Boolean control)
-             * emits no send, callback, prepared invocation or Yield, so the
-             * emitted root cannot suspend; it publishes that refinement as
-             * the I101-B direct scalar-local body does.
+             * I115-M: literals, root locals, inline whileTrue and structured
+             * Boolean control emit no send, callback, prepared invocation or
+             * Yield. I115-H1-FIX: a numeric send's MISS path is an ordinary
+             * send whose selected method may suspend, so only a root without
+             * one publishes the refinement, as the I101-B direct
+             * scalar-local body does.
              */
-            loweringRefinementAccepted = acceptsLoweringRefinement(
-                    publishLoweringRefinement(rootPlan, "I115-M compact root"));
+            if (!experimentalCompact.dispatches()) {
+                loweringRefinementAccepted = acceptsLoweringRefinement(
+                        publishLoweringRefinement(rootPlan, "I115-M compact root"));
+            }
         } else if (activationDefinition == null
                 && sequence.expressions().size() == 1
                 && sequence.expressions().get(0) instanceof CanonicalCreate create
@@ -1650,50 +1576,7 @@ final class CanonicalToBytecodeLowerer {
          * non-suspension.
          */
         boolean emittedTerminalInvocation = currentRootEmittedTerminalInvocation;
-        /*
-         * I115 experimental transitive non-suspension:
-         *
-         * I115-H has already replaced this exact two-statement body
-         * with an elided Closure creation and InvokeStaticClosureOneTail.
-         * The admitted callee has one required parameter and a body
-         * consisting only of its parameter read or a literal.
-         *
-         * Restrict the first refinement to a zero-parameter caller
-         * supplying one literal: there can be no caller default,
-         * spread, dynamic operand or additional body operation.
-         *
-         * The plan cell must come from this parse, not an earlier
-         * Bytecode reparse. All other terminal calls retain UNKNOWN.
-         */
-        boolean provenStaticTerminalCall =
-                emittedTerminalInvocation
-                        && !emittedGenericInvocation
-                        && activationDefinition != null
-                        && !compilationFacts.mayObserveReturnHome(
-                                activationDefinition)
-                        && currentRootStaticClosureCall != null
-                        && currentStaticClosurePlanCell != null
-                        && sequence.expressions().size() == 2
-                        && sequence.expressions().get(1)
-                                == currentRootStaticClosureCall.call()
-                        && provenStaticTerminalArgument(
-                                currentRootStaticClosureCall.call()
-                                        .arguments().get(0),
-                                activationDefinition,
-                                rootFacts.bindingAnalysis(),
-                                scopeForThisRoot);
-
-        if (provenStaticTerminalCall) {
-            loweringRefinementAccepted &=
-                    acceptsLoweringRefinement(
-                            publishLoweringRefinement(
-                                    rootPlan,
-                                    "I115 static non-suspending terminal Call1"));
-        }
-
-        if (emittedGenericInvocation
-                || (emittedTerminalInvocation
-                        && !provenStaticTerminalCall)) {
+        if (emittedGenericInvocation || emittedTerminalInvocation) {
             // A consumed result is kept (REJECTED_CONSUMED is not an error).
             compilationFacts.invalidateNonSuspension(
                     CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
@@ -1711,8 +1594,7 @@ final class CanonicalToBytecodeLowerer {
          */
         result.recordProvablyNonSuspendingBody(
                 !emittedGenericInvocation
-                        && (!emittedTerminalInvocation
-                                || provenStaticTerminalCall)
+                        && !emittedTerminalInvocation
                         && compilationFacts.consumeNonSuspension(
                                         CanonicalNonSuspensionAnalysis.Subject.EFFECTIVE_ROOT,
                                         effectiveRoot,
@@ -2394,112 +2276,6 @@ final class CanonicalToBytecodeLowerer {
         }
 
         return new UnaryNormalEntry(parameter.name());
-    }
-
-    /**
-     * I115-H (EXPERIMENTAL): the unary entry of a static callee whose body is
-     * one literal, admitted only for a root requested by an elided static
-     * creation ({@link #staticUnaryCalleeRequest}); every other root keeps
-     * {@link #admitUnaryNormalEntry}. A large Integer literal is excluded:
-     * its operation reads the caller operand from the frame arguments.
-     */
-    private UnaryNormalEntry admitStaticUnaryLiteralEntry(
-            CanonicalSequence body,
-            CanonicalClosure definition,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope,
-            boolean requiresPersistentFrameAuthority) {
-        if (definition == null
-                || analysis == null
-                || scope == null
-                || requiresPersistentFrameAuthority
-                || analysis.scopeOf(definition).orElse(null) != scope
-                || definition.parameters().size() != 1
-                || body.expressions().size() != 1
-                || !(body.expressions().get(0) instanceof CanonicalLiteral literal)
-                || (literal.kind() == CanonicalLiteral.Kind.NUMBER
-                        && primitiveNumberLiteralOrNull(literal) == null)) {
-            return null;
-        }
-        CanonicalParameter parameter = definition.parameters().get(0);
-        CanonicalBindingIdentity parameterIdentity =
-                analysis.identityOf(parameter).orElse(null);
-        if (parameter.rest()
-                || parameter.defaultValue().isPresent()
-                || !scope.declaredNames().equals(java.util.Set.of(parameter.name()))
-                || parameterIdentity == null
-                || parameterIdentity.owner() != scope) {
-            return null;
-        }
-        return new UnaryNormalEntry(parameter.name());
-    }
-
-    /**
-     * I115 experimental transitive proof: an admitted static Call1
-     * evaluates either a literal in a parameterless caller or the
-     * direct lookup of its sole required parameter.
-     *
-     * Binding identity, not spelling, establishes ownership.
-     * Defaults, rest parameters and captured reads remain UNKNOWN.
-     */
-    private static boolean provenStaticTerminalArgument(
-            CanonicalExpression argument,
-            CanonicalClosure caller,
-            CanonicalBindingAnalysis analysis,
-            CanonicalLexicalScope scope) {
-        if (argument instanceof CanonicalLiteral) {
-            return caller.parameters().isEmpty();
-        }
-        if (!(argument instanceof CanonicalLookup lookup)
-                || caller.parameters().size() != 1) {
-            return false;
-        }
-
-        CanonicalParameter parameter = caller.parameters().get(0);
-        if (parameter.rest() || parameter.defaultValue().isPresent()) {
-            return false;
-        }
-
-        CanonicalBindingIdentity binding =
-                analysis.identityOf(parameter).orElse(null);
-
-        return binding != null
-                && binding.owner() == scope
-                && analysis.resolutionOf(lookup).orElse(null)
-                        instanceof CanonicalBindingResolution.Resolved resolved
-                && resolved.identity() == binding;
-    }
-
-    /**
-     * I115-H (EXPERIMENTAL, PLAT066-C): the canonical static local Closure
-     * call of this root ({@link
-     * CanonicalCompilationFacts#staticLocalClosureCall}), admitted only when
-     * its creation takes the compact creation statement and its call the
-     * terminal Call1 lowering with a directly lowered argument. Every other
-     * root keeps the ordinary creation and the D013 terminal call.
-     */
-    private CanonicalCompilationFacts.StaticLocalClosureCall admitStaticLocalClosureCall(
-            CanonicalSequence sequence,
-            CanonicalClosure activationDefinition,
-            CanonicalLexicalScope scope,
-            boolean directScalarLocalBody,
-            CanonicalLiteral foldedTerminal) {
-        if (activationDefinition == null
-                || directScalarLocalBody
-                || foldedTerminal != null
-                || currentRootFrameNativeLayout == null) {
-            return null;
-        }
-        CanonicalCompilationFacts.StaticLocalClosureCall proven =
-                compilationFacts.staticLocalClosureCall(
-                                sequence, activationDefinition, currentRootAnalysis, scope)
-                        .orElse(null);
-        if (proven == null
-                || !admitsCompactClosureCreate(proven.creation())
-                || !admitsTerminalClosureCall(proven.call())) {
-            return null;
-        }
-        return proven;
     }
 
     /**
@@ -4252,42 +4028,13 @@ final class CanonicalToBytecodeLowerer {
      * published (uncached D013 fallback, debugger), the frame-backed
      * authority and tooling observe this local without the presence
      * bookkeeping of {@code CreateCurrentFrameLocal}.
-     *
-     * <p>I115-H (EXPERIMENTAL): the creation of the admitted static local
-     * Closure call ({@link #currentRootStaticClosureCall}) only registers the
-     * callee's independent root and keeps its plan cell for the terminal
-     * {@code InvokeStaticClosureOneTail}: no Closure is materialized and no
-     * binding is stored or created. A callee root that did not take the
-     * static unary entry keeps the ordinary creation with the same cell.
      */
     private void emitCompactClosureCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create) {
         CanonicalClosure closure = (CanonicalClosure) create.value();
-        ProtosClosureExecutionPlanCell plan;
-        if (currentRootStaticClosureCall != null
-                && currentRootStaticClosureCall.creation() == create) {
-            /*
-             * Membership must come from this parse's lowering of the callee
-             * root, never from an earlier parse.
-             */
-            staticUnaryCalleeRoots.remove(closure);
-            staticUnaryCalleeRequest = closure;
-            try {
-                plan = bytecodeClosurePlan(builder, closure);
-            } finally {
-                staticUnaryCalleeRequest = null;
-            }
-            if (staticUnaryCalleeRoots.contains(closure)) {
-                currentStaticClosurePlanCell = plan;
-                return;
-            }
-            currentRootStaticClosureCall = null;
-            beginStatement(builder, create);
-        } else {
-            beginStatement(builder, create);
-            plan = bytecodeClosurePlan(builder, closure);
-        }
+        beginStatement(builder, create);
+        ProtosClosureExecutionPlanCell plan = bytecodeClosurePlan(builder, closure);
         boolean ordinaryLocal =
                 currentRootOrdinaryClosureLocals.contains(create.name());
         if (ordinaryLocal) {
@@ -4567,15 +4314,6 @@ final class CanonicalToBytecodeLowerer {
             builder.beginInvokeClosureZeroTail();
             emitTerminalCallOperand(builder, call.receiver());
             builder.endInvokeClosureZeroTail();
-        } else if (isStaticLocalClosureCall(call)) {
-            /*
-             * I115-H (EXPERIMENTAL): the proven static call. The plan cell is
-             * a constant operand; only the argument is evaluated. No receiver
-             * read, no call selection, no Closure.
-             */
-            builder.beginInvokeStaticClosureOneTail(currentStaticClosurePlanCell);
-            emitTerminalCallOneArgument(builder, arguments.get(0));
-            builder.endInvokeStaticClosureOneTail();
         } else if (arguments.size() == 1) {
             builder.beginInvokeClosureOneTail();
             emitTerminalCallOperand(builder, call.receiver());
@@ -4593,13 +4331,6 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
-    }
-
-    /** I115-H: whether {@code call} is the static call whose creation was elided. */
-    private boolean isStaticLocalClosureCall(CanonicalCall call) {
-        return currentRootStaticClosureCall != null
-                && currentRootStaticClosureCall.call() == call
-                && currentStaticClosurePlanCell != null;
     }
 
     /** The single Call1 argument; a number literal stays a primitive carrier. */
@@ -8293,19 +8024,16 @@ final class CanonicalToBytecodeLowerer {
                     && resolution.orElseThrow()
                             instanceof CanonicalBindingResolution.CapturedResolved captured
                     && captured.identity().owner().kind()
-                            == CanonicalLexicalScope.Kind.ROOT) {
-                if (currentInlineCallbackFrameNative) {
-                    // CanonicalBindingAnalysis rejects such callbacks.
-                    throw new AssertionError(
-                            "I115-R6 module-global read admitted into an "
-                                    + "inline callback frame: "
-                                    + captured.identity().name());
-                }
+                            == CanonicalLexicalScope.Kind.ROOT
+                    && !currentInlineCallbackFrameNative) {
                 /*
                  * I115-R6 (experimental): a read proven to a module
                  * declaration reads the module scope directly
                  * (GraalPy ReadGlobal): no nearer-scope selection, no
-                 * receiver fallback, no conditional bytecode.
+                 * receiver fallback, no conditional bytecode. ReadGlobal
+                 * resolves from the frame of a physical root; a read inside
+                 * a frame-native inline callback keeps the inline captured
+                 * reads below, with the same identity and lexical depth.
                  */
                 builder.emitReadGlobal(
                         frameBackedOrdinal(captured.identity()),
@@ -9185,12 +8913,16 @@ final class CanonicalToBytecodeLowerer {
      * compared at run time. The staged receiver and argument were each
      * evaluated exactly once. A MISS result keeps the unchanged ordinary
      * send. Arithmetic sites additionally carry their PERF043 fold candidate.
+     * {@code receiverCarrier} and {@code argumentCarrier} state whether each
+     * staged operand may hold a primitive carrier.
      */
     private void emitPrimitiveNumericAttempt(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal receiverValue,
-            BytecodeLocal argumentValue) {
+            BytecodeLocal argumentValue,
+            boolean receiverCarrier,
+            boolean argumentCarrier) {
         String selector = send.message();
         switch (selector) {
             case "+" -> builder.beginTryPrimitiveNumericAdd();
@@ -9207,9 +8939,8 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(receiverValue);
         emitSendCallerOperand(builder);
         builder.emitLoadLocal(argumentValue);
-        builder.emitLoadConstant(primitiveNumericCarrierSource(send.receiver()));
-        builder.emitLoadConstant(
-                primitiveNumericCarrierSource(send.arguments().get(0)));
+        builder.emitLoadConstant(receiverCarrier);
+        builder.emitLoadConstant(argumentCarrier);
         switch (selector) {
             case "+", "-", "*", "/" -> {
                 Object fold = foldedIntegerAdditionForSend(send);
@@ -9236,6 +8967,75 @@ final class CanonicalToBytecodeLowerer {
             default -> throw new AssertionError(
                     "not a primitive numeric selector: " + selector);
         }
+    }
+
+    /**
+     * PERF040-E1: store the primitive numeric attempt over the staged
+     * operands and open its MISS branch, where the staged carriers become
+     * guest values for the ordinary send the caller emits next. {@link
+     * #endPrimitiveNumericMiss} closes the branch; its HIT branch consumes
+     * the attempt. I115-H1-FIX: the general and the compact send lowerings
+     * share this one numeric site shape.
+     */
+    private BytecodeLocal beginPrimitiveNumericMiss(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal receiverValue,
+            BytecodeLocal argumentValue,
+            boolean receiverCarrier,
+            boolean argumentCarrier) {
+        BytecodeLocal attempt = builder.createLocal("primitiveNumericAttempt", null);
+        builder.beginStoreLocal(attempt);
+        emitPrimitiveNumericAttempt(
+                builder, send, receiverValue, argumentValue,
+                receiverCarrier, argumentCarrier);
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginIsResultKind(ProtosResultKind.PRIMITIVE_NUMERIC_SEND_MISS);
+        builder.emitLoadLocal(attempt);
+        builder.endIsResultKind();
+        builder.beginBlock();
+        // Any internal carriers must become guest values before normal D013.
+        builder.beginStoreLocal(receiverValue);
+        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadConstant(receiverCarrier);
+        builder.endMaterializePrimitiveNumericCarrier();
+        builder.endStoreLocal();
+        builder.beginStoreLocal(argumentValue);
+        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.emitLoadLocal(argumentValue);
+        builder.emitLoadConstant(argumentCarrier);
+        builder.endMaterializePrimitiveNumericCarrier();
+        builder.endStoreLocal();
+        return attempt;
+    }
+
+    /*
+     * PERF040-E1: close the MISS branch opened by beginPrimitiveNumericMiss;
+     * the HIT branch stores the attempt's result, materialized unless the
+     * consumer permits a primitive carrier.
+     */
+    private static void endPrimitiveNumericMiss(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal attempt,
+            BytecodeLocal result,
+            boolean primitiveCarrierResult) {
+        builder.endBlock();
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        if (primitiveCarrierResult) {
+            builder.emitLoadLocal(attempt);
+        } else {
+            builder.beginMaterializePrimitiveNumericCarrier();
+            builder.emitLoadLocal(attempt);
+            builder.emitLoadConstant(true);
+            builder.endMaterializePrimitiveNumericCarrier();
+        }
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endIfThenElse();
     }
 
     /*
@@ -10053,11 +9853,15 @@ final class CanonicalToBytecodeLowerer {
     /**
      * I115-M/I115-N EXPERIMENTAL: the value family an admitted compact
      * expression produces. Bindings carry the family of their last admitted
-     * store on every path; Integer arithmetic and comparisons require
-     * INTEGER, Boolean control requires a BOOLEAN receiver, and OBJECT is
-     * any admitted value (null, a joined family, a control result).
+     * store on every path; Boolean control requires a BOOLEAN receiver, and
+     * OBJECT is any admitted value (null, a parameter, a joined family, a
+     * control result). I115-H1-FIX: a numeric send is dispatched at run
+     * time, so it accepts operands of any family; arithmetic produces
+     * OBJECT, since its MISS path may select a method returning any value.
+     * A comparison produces COMPARISON: canonical Boolean on its HIT, any
+     * value on its MISS, so Boolean control over it is guarded at run time.
      */
-    private enum ExperimentalCompactKind { INTEGER, BOOLEAN, OBJECT }
+    private enum ExperimentalCompactKind { INTEGER, BOOLEAN, COMPARISON, OBJECT }
 
     /**
      * I115-M EXPERIMENTAL: compilation fact that every expression of a
@@ -10067,11 +9871,17 @@ final class CanonicalToBytecodeLowerer {
      * admitExperimentalConstantIntegerReturn, or null.
      * I115-Q: {@code guestIntegerLiteralReturn} is true when the terminal is
      * a signed-64 Integer literal returned as a prepared guest constant.
+     * I115-H1-FIX: {@code dispatches} is true when the root contains a
+     * numeric send or a dispatching Boolean control, whose MISS path
+     * performs an ordinary send; {@code dispatchingControls} are the Boolean
+     * control sites whose receiver is not proven canonical Boolean.
      */
     private record ExperimentalCompactRoot(
             CanonicalLexicalScope scope,
             CanonicalBindingIdentity guestIntegerReturn,
-            boolean guestIntegerLiteralReturn) {}
+            boolean guestIntegerLiteralReturn,
+            boolean dispatches,
+            java.util.Set<CanonicalSend> dispatchingControls) {}
 
     /*
      * I115-N: compile-time binding families keyed by binding identity. A
@@ -10103,7 +9913,18 @@ final class CanonicalToBytecodeLowerer {
     private static ExperimentalCompactKind experimentalCompactJoin(
             ExperimentalCompactKind left,
             ExperimentalCompactKind right) {
-        return left == right ? left : ExperimentalCompactKind.OBJECT;
+        if (left == right) {
+            return left;
+        }
+        // A proven canonical Boolean joined with a comparison stays guarded.
+        boolean booleanLike =
+                (left == ExperimentalCompactKind.BOOLEAN
+                                || left == ExperimentalCompactKind.COMPARISON)
+                        && (right == ExperimentalCompactKind.BOOLEAN
+                                || right == ExperimentalCompactKind.COMPARISON);
+        return booleanLike
+                ? ExperimentalCompactKind.COMPARISON
+                : ExperimentalCompactKind.OBJECT;
     }
 
     /**
@@ -10126,28 +9947,58 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<CanonicalParameter> parameters =
                 activationDefinition.parameters();
 
-        // I115-R1 EXPERIMENTAL: admit one required scalar Integer
-        // parameter using the existing unary frame entry. The type
-        // assumption belongs only to the I115 experimental branch.
-        // Calls, defaults, rest and arbitrary body expressions remain
-        // outside the compact subset.
-        boolean unaryInteger = parameters.size() == 1
+        // I115-R1 EXPERIMENTAL: admit one required parameter using the
+        // existing unary frame entry. I115-H1-FIX: its lexical identity
+        // proves which binding is read, not the family of the supplied
+        // value, so it is an OBJECT. Calls, defaults, rest and arbitrary
+        // body expressions remain outside the compact subset.
+        boolean unaryRequired = parameters.size() == 1
                 && !parameters.get(0).rest()
                 && parameters.get(0).defaultValue().isEmpty()
                 && scope.declaresName(parameters.get(0).name());
 
-        if (!parameters.isEmpty() && !unaryInteger) {
+        if (!parameters.isEmpty() && !unaryRequired) {
             return null;
         }
 
-        ExperimentalCompactKinds kinds = new ExperimentalCompactKinds();
-        if (unaryInteger) {
-            kinds.put(
-                    scope.identity(parameters.get(0).name()),
-                    ExperimentalCompactKind.INTEGER);
+        /*
+         * I115-H1-FIX: the callbacks of a dispatching Boolean control may
+         * be invoked by its selected method any number of times, now or
+         * later, so every binding they assign is admitted as OBJECT
+         * everywhere. Pinning only widens families, which can only add
+         * dispatching sites: iterate to the fixpoint.
+         */
+        java.util.Set<CanonicalBindingIdentity> pinned = new java.util.HashSet<>();
+        java.util.Set<CanonicalSend> dispatchingControls;
+        try {
+            while (true) {
+                currentExperimentalCompactPinned = pinned;
+                currentExperimentalCompactEscaped = new java.util.HashSet<>();
+                currentExperimentalCompactDispatchingControls =
+                        java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+                ExperimentalCompactKinds kinds = new ExperimentalCompactKinds();
+                if (unaryRequired) {
+                    kinds.put(
+                            scope.identity(parameters.get(0).name()),
+                            ExperimentalCompactKind.OBJECT);
+                }
+                if (admitExperimentalCompactSequence(
+                                sequence, scope, kinds, false) == null) {
+                    return null;
+                }
+                if (pinned.containsAll(currentExperimentalCompactEscaped)) {
+                    dispatchingControls = currentExperimentalCompactDispatchingControls;
+                    break;
+                }
+                pinned.addAll(currentExperimentalCompactEscaped);
+            }
+        } finally {
+            currentExperimentalCompactPinned = null;
+            currentExperimentalCompactEscaped = null;
+            currentExperimentalCompactDispatchingControls = null;
         }
-        if (admitExperimentalCompactSequence(
-                        sequence, scope, kinds, false) == null) {
+        if (!experimentalCompactCreationsFollowLayout(
+                sequence, scope, unaryRequired ? parameters.get(0).name() : null)) {
             return null;
         }
         CanonicalExpression terminal =
@@ -10156,10 +10007,140 @@ final class CanonicalToBytecodeLowerer {
                 terminal instanceof CanonicalLiteral literal
                         && literal.kind() == CanonicalLiteral.Kind.NUMBER
                         && primitiveNumberLiteralOrNull(literal) instanceof Long;
+        boolean dispatches = !dispatchingControls.isEmpty();
+        for (CanonicalExpression expression : sequence.expressions()) {
+            dispatches |= experimentalCompactDispatches(expression);
+        }
+        // A binding a physical callback root may store keeps carrier projection.
+        CanonicalBindingIdentity guestIntegerReturn =
+                admitExperimentalConstantIntegerReturn(sequence, scope);
+        if (guestIntegerReturn != null && pinned.contains(guestIntegerReturn)) {
+            guestIntegerReturn = null;
+        }
         return new ExperimentalCompactRoot(
                 scope,
-                admitExperimentalConstantIntegerReturn(sequence, scope),
-                guestIntegerLiteralReturn);
+                guestIntegerReturn,
+                guestIntegerLiteralReturn,
+                dispatches,
+                java.util.Collections.unmodifiableSet(dispatchingControls));
+    }
+
+    /*
+     * I115-H1-FIX: PromoteFrameLexicalAuthority adopts the PRESENT frame
+     * locals as established in ascending layout order
+     * (ProtosFrameLexicalBindingAuthority#adoptPresentFrameBackedBindings).
+     * In a compact root every establishment is static and unconditional:
+     * the unary parameter at entry, then each root-level creation, an inner
+     * creation of a value before its outer one, each evaluated exactly once
+     * (callbacks create nothing). That execution order must be the root's
+     * layout order, the iteration of declaredNames() from which emitRootBody
+     * allocates the frame locals, which that order alone does not guarantee;
+     * otherwise the root keeps the general lowerer.
+     */
+    private static boolean experimentalCompactCreationsFollowLayout(
+            CanonicalSequence sequence,
+            CanonicalLexicalScope scope,
+            String parameter) {
+        java.util.List<String> layout = java.util.List.copyOf(scope.declaredNames());
+        java.util.List<String> established = new java.util.ArrayList<>();
+        if (parameter != null) {
+            established.add(parameter);
+        }
+        for (CanonicalExpression expression : sequence.expressions()) {
+            collectExperimentalCompactCreations(expression, established);
+        }
+        int previous = -1;
+        for (String name : established) {
+            int ordinal = layout.indexOf(name);
+            if (ordinal <= previous) {
+                return false;
+            }
+            previous = ordinal;
+        }
+        return true;
+    }
+
+    /* I115-H1-FIX: creations of an admitted expression, in execution order. */
+    private static void collectExperimentalCompactCreations(
+            CanonicalExpression expression,
+            java.util.List<String> established) {
+        if (expression instanceof CanonicalCreate create) {
+            collectExperimentalCompactCreations(create.value(), established);
+            established.add(create.name());
+        } else if (expression instanceof CanonicalAssign assign) {
+            collectExperimentalCompactCreations(assign.value(), established);
+        } else if (expression instanceof CanonicalSend send) {
+            collectExperimentalCompactCreations(send.receiver(), established);
+            for (CanonicalExpression argument : send.arguments()) {
+                collectExperimentalCompactCreations(argument, established);
+            }
+        }
+    }
+
+    /*
+     * I115-H1-FIX: the identities a callback body assigns, at any depth of
+     * its admitted expressions and nested inline callbacks.
+     */
+    private void collectExperimentalCompactAssigned(
+            CanonicalExpression expression,
+            CanonicalLexicalScope scope,
+            java.util.Set<CanonicalBindingIdentity> assigned) {
+        if (expression instanceof CanonicalClosure callback) {
+            for (CanonicalExpression inner : callback.body().expressions()) {
+                collectExperimentalCompactAssigned(inner, scope, assigned);
+            }
+        } else if (expression instanceof CanonicalAssign assign) {
+            CanonicalBindingIdentity identity =
+                    experimentalCompactStoreIdentity(assign, scope);
+            if (identity != null) {
+                assigned.add(identity);
+            }
+            collectExperimentalCompactAssigned(assign.value(), scope, assigned);
+        } else if (expression instanceof CanonicalCreate create) {
+            collectExperimentalCompactAssigned(create.value(), scope, assigned);
+        } else if (expression instanceof CanonicalSend send) {
+            collectExperimentalCompactAssigned(send.receiver(), scope, assigned);
+            for (CanonicalExpression argument : send.arguments()) {
+                collectExperimentalCompactAssigned(argument, scope, assigned);
+            }
+        }
+    }
+
+    /*
+     * I115-H1-FIX: whether an admitted compact expression, including its
+     * inline callback bodies, contains a numeric send.
+     */
+    private static boolean experimentalCompactDispatches(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalCreate create) {
+            return experimentalCompactDispatches(create.value());
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            return experimentalCompactDispatches(assign.value());
+        }
+        if (!(expression instanceof CanonicalSend send)) {
+            return false;
+        }
+        if (!"whileTrue".equals(send.message())
+                && experimentalCompactBooleanControl(send.message()) == null) {
+            return true;
+        }
+        java.util.List<CanonicalExpression> parts =
+                new java.util.ArrayList<>(send.arguments().size() + 1);
+        parts.add(send.receiver());
+        parts.addAll(send.arguments());
+        for (CanonicalExpression part : parts) {
+            java.util.List<CanonicalExpression> nested =
+                    part instanceof CanonicalClosure callback
+                            ? callback.body().expressions()
+                            : java.util.List.of(part);
+            for (CanonicalExpression inner : nested) {
+                if (experimentalCompactDispatches(inner)) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -10201,66 +10182,6 @@ final class CanonicalToBytecodeLowerer {
      * when the expression's result may be consumed; the last expression of
      * a callback body is treated as consumed whenever its control is.
      */
-    /*
-     * I115-R2 EXPERIMENTAL: the call references this same Closure's
-     * exact module declaration. Dynamic Object.call selection and
-     * lexical retargeting are intentionally not preserved.
-     */
-    /*
-     * I115-R2 EXPERIMENTAL: admit a unary recursive self-call when its
-     * nearest statically declared lexical owner is a module binding of
-     * the same name as this exact Closure's registered declaration.
-     *
-     * Binding identities from independent analyses cannot be compared
-     * by Java reference identity. Candidate and CapturedResolved are
-     * accepted here because this experimental path deliberately omits
-     * dynamic presence and retargeting semantics.
-     */
-    private boolean experimentalRecursiveSelfCall(CanonicalCall call) {
-        if (currentExperimentalRootDefinition == null
-                || currentRootAnalysis == null
-                || call.arguments().size() != 1
-                || !(call.receiver() instanceof CanonicalLookup lookup)) {
-            return false;
-        }
-
-        CanonicalBindingIdentity registered =
-                experimentalRecursiveBindings.get(
-                        currentExperimentalRootDefinition);
-
-        CanonicalBindingResolution resolution =
-                currentRootAnalysis.resolutionOf(lookup).orElse(null);
-
-        CanonicalBindingIdentity resolved = null;
-        int depth = -1;
-
-        if (resolution
-                instanceof CanonicalBindingResolution.CapturedResolved captured) {
-            resolved = captured.identity();
-            depth = captured.lexicalDepth();
-        } else if (resolution
-                instanceof CanonicalBindingResolution.Candidate candidate) {
-            resolved = candidate.identity();
-            depth = candidate.lexicalDepth();
-        }
-
-        boolean admitted =
-                registered != null
-                        && registered.owner().kind()
-                                == CanonicalLexicalScope.Kind.ROOT
-                        && registered.name().equals(lookup.name())
-                        && resolved != null
-                        && resolved.owner().kind()
-                                == CanonicalLexicalScope.Kind.ROOT
-                        && resolved.name().equals(registered.name())
-                        && depth > 0
-                        && currentRootAnalysis
-                                .scopeOf(currentExperimentalRootDefinition)
-                                .isPresent();
-
-        return admitted;
-    }
-
     private boolean experimentalGuestReturnScan(
             CanonicalExpression expression,
             boolean value,
@@ -10399,14 +10320,9 @@ final class CanonicalToBytecodeLowerer {
             return admitExperimentalCompactBinding(
                     expression, scope, kinds, callback);
         }
-        if (expression instanceof CanonicalCall call) {
-            return experimentalRecursiveSelfCall(call)
-                            && admitExperimentalCompactExpression(
-                                    call.arguments().get(0),
-                                    scope, kinds, callback)
-                                    == ExperimentalCompactKind.INTEGER
-                    ? ExperimentalCompactKind.INTEGER
-                    : null;
+        if (expression instanceof CanonicalCall) {
+            // A call keeps the general lowering and its ordinary B5+ invocation.
+            return null;
         }
         if (!(expression instanceof CanonicalSend send)) {
             return null;
@@ -10418,20 +10334,21 @@ final class CanonicalToBytecodeLowerer {
             return admitExperimentalCompactBooleanControl(
                     send, scope, kinds, callback);
         }
-        boolean arithmetic = experimentalCompactArithmetic(send.message());
-        if ((!arithmetic && !experimentalCompactComparison(send.message()))
+        if ((!experimentalCompactArithmetic(send.message())
+                        && !experimentalCompactComparison(send.message()))
                 || send.arguments().size() != 1
                 || admitExperimentalCompactExpression(
                                 send.receiver(), scope, kinds, callback)
-                        != ExperimentalCompactKind.INTEGER
+                        == null
                 || admitExperimentalCompactExpression(
                                 send.arguments().get(0), scope, kinds, callback)
-                        != ExperimentalCompactKind.INTEGER) {
+                        == null) {
             return null;
         }
-        return arithmetic
-                ? ExperimentalCompactKind.INTEGER
-                : ExperimentalCompactKind.BOOLEAN;
+        // I115-H1-FIX: selection happens at run time; see ExperimentalCompactKind.
+        return experimentalCompactComparison(send.message())
+                ? ExperimentalCompactKind.COMPARISON
+                : ExperimentalCompactKind.OBJECT;
     }
 
     /**
@@ -10462,7 +10379,7 @@ final class CanonicalToBytecodeLowerer {
             if (kind == null) {
                 return null;
             }
-            kinds.put(identity, kind);
+            kinds.put(identity, experimentalCompactStoredKind(identity, kind));
             return kind;
         }
         if (binding instanceof CanonicalAssign assign) {
@@ -10482,17 +10399,30 @@ final class CanonicalToBytecodeLowerer {
             if (kind == null) {
                 return null;
             }
-            kinds.put(identity, kind);
+            kinds.put(identity, experimentalCompactStoredKind(identity, kind));
             return kind;
         }
         return null;
     }
 
+    /* I115-H1-FIX: a binding a dispatching callback may assign is OBJECT. */
+    private ExperimentalCompactKind experimentalCompactStoredKind(
+            CanonicalBindingIdentity identity,
+            ExperimentalCompactKind kind) {
+        return currentExperimentalCompactPinned != null
+                        && currentExperimentalCompactPinned.contains(identity)
+                ? ExperimentalCompactKind.OBJECT
+                : kind;
+    }
+
     /**
      * I115-M/I115-P: a whileTrue send over two parameterless literal
      * Closures whose bodies are compact. The condition's last expression is
-     * any BOOLEAN proven by the existing compact-kind analysis; its whole
-     * body, prefix included, is evaluated on every iteration.
+     * any admitted value not proven INTEGER; its whole body, prefix
+     * included, is evaluated on every iteration. I115-H1-FIX: the condition result is validated at run
+     * time by ExperimentalCanonicalBooleanCondition, as the standard
+     * whileTrue behavior does: exact canonical true or false, otherwise the
+     * standard Error.
      * I115-N: the loop-head state is the join of the entry state and every
      * body exit state, iterated to its fixpoint (families only widen to
      * OBJECT); the exit state is the condition's exit at that head.
@@ -10518,9 +10448,10 @@ final class CanonicalToBytecodeLowerer {
         ExperimentalCompactKinds head = new ExperimentalCompactKinds(kinds);
         while (true) {
             ExperimentalCompactKinds afterTest = new ExperimentalCompactKinds(head);
-            if (admitExperimentalCompactSequence(
-                            condition.body(), scope, afterTest, true)
-                    != ExperimentalCompactKind.BOOLEAN) {
+            ExperimentalCompactKind test = admitExperimentalCompactSequence(
+                    condition.body(), scope, afterTest, true);
+            // A proven Integer condition always fails; the general lowerer keeps it.
+            if (test == null || test == ExperimentalCompactKind.INTEGER) {
                 return null;
             }
             ExperimentalCompactKinds afterBody = new ExperimentalCompactKinds(afterTest);
@@ -10579,10 +10510,25 @@ final class CanonicalToBytecodeLowerer {
                 return null;
             }
         }
-        if (admitExperimentalCompactExpression(
-                        send.receiver(), scope, kinds, callback)
-                != ExperimentalCompactKind.BOOLEAN) {
+        ExperimentalCompactKind receiverKind = admitExperimentalCompactExpression(
+                send.receiver(), scope, kinds, callback);
+        if (receiverKind != ExperimentalCompactKind.BOOLEAN
+                && receiverKind != ExperimentalCompactKind.COMPARISON) {
             return null;
+        }
+        /*
+         * I115-H1-FIX: a comparison receiver is guarded at run time; when it
+         * is not canonical, the control selector is sent ordinarily with the
+         * callbacks as guest Closures, which the selected method may invoke
+         * at any time.
+         */
+        boolean dispatching = receiverKind == ExperimentalCompactKind.COMPARISON;
+        if (dispatching) {
+            currentExperimentalCompactDispatchingControls.add(send);
+            for (CanonicalExpression argument : arguments) {
+                collectExperimentalCompactAssigned(
+                        argument, scope, currentExperimentalCompactEscaped);
+            }
         }
         ExperimentalCompactKinds[] exits =
                 new ExperimentalCompactKinds[arguments.size()];
@@ -10601,6 +10547,12 @@ final class CanonicalToBytecodeLowerer {
         }
         ExperimentalCompactKinds entry = new ExperimentalCompactKinds(kinds);
         kinds.joinFrom(exits[0], exits.length == 2 ? exits[1] : entry);
+        if (dispatching) {
+            // The ordinary send may select no callback.
+            ExperimentalCompactKinds selected = new ExperimentalCompactKinds(kinds);
+            kinds.joinFrom(selected, entry);
+            return ExperimentalCompactKind.OBJECT;
+        }
         return exits.length == 2
                 ? experimentalCompactJoin(results[0], results[1])
                 : ExperimentalCompactKind.OBJECT;
@@ -10664,7 +10616,18 @@ final class CanonicalToBytecodeLowerer {
             ExperimentalCompactRoot compact) {
         CanonicalBindingIdentity savedGuestIntegerBinding =
                 currentExperimentalGuestIntegerBinding;
+        ComposedSequenceScratch savedScratch = currentExperimentalCompactScratch;
+        java.util.Set<CanonicalSend> savedDispatchingControls =
+                currentExperimentalDispatchingControls;
         currentExperimentalGuestIntegerBinding = compact.guestIntegerReturn();
+        currentExperimentalDispatchingControls = compact.dispatchingControls();
+        // Created in the root block, so live across every loop and callback.
+        currentExperimentalCompactScratch = compact.dispatches()
+                ? new ComposedSequenceScratch(
+                        builder.createLocal("preparedClosureCall", null),
+                        builder.createLocal("childResult", null),
+                        builder.createLocal("resumeValue", null))
+                : null;
         try {
             java.util.List<CanonicalExpression> expressions =
                     sequence.expressions();
@@ -10686,6 +10649,8 @@ final class CanonicalToBytecodeLowerer {
             endStatement(builder);
         } finally {
             currentExperimentalGuestIntegerBinding = savedGuestIntegerBinding;
+            currentExperimentalCompactScratch = savedScratch;
+            currentExperimentalDispatchingControls = savedDispatchingControls;
         }
     }
 
@@ -10725,7 +10690,22 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression binding,
             String name,
             CanonicalExpression value) {
-        builder.beginStoreLocal(experimentalCompactLocal(name));
+        /*
+         * I115-H1-FIX: in a root that may promote its locals
+         * (PromoteFrameLexicalAuthority on a MISS path), a creation is the
+         * existing frame-native establishment: unobserved, it writes the
+         * ABSENT local directly, without materializing; after a promotion it
+         * creates through the installed authority, which records the
+         * establishment and keeps the duplicate-creation Error. An
+         * assignment stays a local store over the same storage.
+         */
+        boolean establish = binding instanceof CanonicalCreate
+                && currentExperimentalCompactScratch != null;
+        if (establish) {
+            emitCreateCurrentFrameLocal(builder, frameNativeOrdinal(name), name);
+        } else {
+            builder.beginStoreLocal(experimentalCompactLocal(name));
+        }
         if (currentExperimentalGuestIntegerBinding != null
                 && value instanceof CanonicalLiteral literal
                 && primitiveNumberLiteralOrNull(literal) instanceof Long
@@ -10738,7 +10718,11 @@ final class CanonicalToBytecodeLowerer {
         } else {
             emitExperimentalCompactValue(builder, value);
         }
-        builder.endStoreLocal();
+        if (establish) {
+            builder.endCreateCurrentFrameLocal();
+        } else {
+            builder.endStoreLocal();
+        }
     }
 
     private BytecodeLocal experimentalCompactLocal(String name) {
@@ -10776,19 +10760,6 @@ final class CanonicalToBytecodeLowerer {
             emitExperimentalCompactStore(builder, expression, name, value);
             builder.emitLoadLocal(experimentalCompactLocal(name));
             builder.endBlock();
-        } else if (expression instanceof CanonicalCall call
-                && experimentalRecursiveSelfCall(call)) {
-            // I115-R2: existing static unary ABI; Graal owns inlining.
-            ProtosClosureExecutionPlanCell plan =
-                    bytecodeClosurePlans.get(
-                            currentExperimentalRootDefinition);
-            if (plan == null) {
-                throw new AssertionError(
-                        "I115-R2 recursive plan cell missing");
-            }
-            builder.beginInvokeStaticClosureOneTail(plan);
-            emitExperimentalCompactValue(builder, call.arguments().get(0));
-            builder.endInvokeStaticClosureOneTail();
         } else {
             CanonicalSend send = (CanonicalSend) expression;
             if ("whileTrue".equals(send.message())) {
@@ -10806,72 +10777,81 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadLocal(result);
                 builder.endBlock();
             } else {
-                emitExperimentalCompactSend(builder, send, false);
+                builder.beginBlock();
+                BytecodeLocal result =
+                        builder.createLocal("compactSendResult", null);
+                emitExperimentalCompactNumericSend(builder, send, result);
+                builder.emitLoadLocal(result);
+                builder.endBlock();
             }
         }
     }
 
     /**
-     * I115-M: one Integer operation over two operands emitted exactly once,
-     * in evaluation order. {@code condition} selects the Java-boolean form
-     * of a comparison consumed directly by a Bytecode branch.
+     * I115-H1-FIX: a compact numeric send is the shared numeric send site.
+     * The receiver and then the argument are each evaluated exactly once
+     * into staged locals; the selector's TryPrimitiveNumeric operation
+     * (guarded on the actual operands and the standard numeric protocol)
+     * either produces the result, or MISSes into the ordinary
+     * PrepareSendOne and prepared invocation, with its continuation,
+     * ReturnHome and Error paths, over the materialized operands; before
+     * that send the root's frame locals become its activation's lexical
+     * authority, so the selected method observes the same bindings. Both
+     * branches store into {@code result}. Compact values may hold primitive
+     * carriers in every operand position, and a compact consumer accepts a
+     * carrier result (the return epilog projects it).
      */
-    private void emitExperimentalCompactSend(
+    private void emitExperimentalCompactNumericSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
-            boolean condition) {
-        String selector = send.message();
-        switch (selector) {
-            case "+" -> builder.beginExperimentalIntegerAdd();
-            case "-" -> builder.beginExperimentalIntegerSubtract();
-            case "*" -> builder.beginExperimentalIntegerMultiply();
-            case "<" -> {
-                if (condition) builder.beginExperimentalIntegerLessBool();
-                else builder.beginExperimentalIntegerLess();
-            }
-            case "<=" -> {
-                if (condition) builder.beginExperimentalIntegerLessEqualBool();
-                else builder.beginExperimentalIntegerLessEqual();
-            }
-            case ">" -> {
-                if (condition) builder.beginExperimentalIntegerGreaterBool();
-                else builder.beginExperimentalIntegerGreater();
-            }
-            case ">=" -> {
-                if (condition) builder.beginExperimentalIntegerGreaterEqualBool();
-                else builder.beginExperimentalIntegerGreaterEqual();
-            }
-            default -> throw new AssertionError(
-                    "I115-M unadmitted compact selector: " + selector);
+            BytecodeLocal result) {
+        ComposedSequenceScratch scratch = currentExperimentalCompactScratch;
+        if (scratch == null) {
+            throw new AssertionError(
+                    "I115-M compact numeric send without send scratch");
         }
+        SourceSpan span = send.span();
+        builder.beginSourceSection(span.startOffset(), span.length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal receiverValue = builder.createLocal("sendReceiver", null);
+        builder.beginStoreLocal(receiverValue);
         emitExperimentalCompactValue(builder, send.receiver());
+        builder.endStoreLocal();
+        BytecodeLocal argumentValue = builder.createLocal("sendArgument", null);
+        builder.beginStoreLocal(argumentValue);
         emitExperimentalCompactValue(builder, send.arguments().get(0));
-        switch (selector) {
-            case "+" -> builder.endExperimentalIntegerAdd();
-            case "-" -> builder.endExperimentalIntegerSubtract();
-            case "*" -> builder.endExperimentalIntegerMultiply();
-            case "<" -> {
-                if (condition) builder.endExperimentalIntegerLessBool();
-                else builder.endExperimentalIntegerLess();
-            }
-            case "<=" -> {
-                if (condition) builder.endExperimentalIntegerLessEqualBool();
-                else builder.endExperimentalIntegerLessEqual();
-            }
-            case ">" -> {
-                if (condition) builder.endExperimentalIntegerGreaterBool();
-                else builder.endExperimentalIntegerGreater();
-            }
-            default -> {
-                if (condition) builder.endExperimentalIntegerGreaterEqualBool();
-                else builder.endExperimentalIntegerGreaterEqual();
-            }
-        }
+        builder.endStoreLocal();
+
+        BytecodeLocal attempt = beginPrimitiveNumericMiss(
+                builder, send, receiverValue, argumentValue, true, true);
+        // The selected method may observe this activation.
+        emitExperimentalCompactAuthorityPromotion(builder);
+        builder.beginStoreLocal(scratch.preparedCall());
+        beginPrepareSend(builder, 1);
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadConstant(send.message());
+        emitSendCallerOperand(builder);
+        builder.emitLoadLocal(argumentValue);
+        endPrepareSend(builder, 1);
+        builder.endStoreLocal();
+        emitPreparedInvocation(
+                builder,
+                result,
+                scratch.preparedCall(),
+                scratch.childResult(),
+                scratch.resumeValue());
+        endPrimitiveNumericMiss(builder, attempt, result, true);
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
     }
 
     /**
-     * I115-M EXPERIMENTAL: inline literal whileTrue as a Bytecode While. No
-     * callback root, prepared call, continuation or protocol fallback.
+     * I115-M EXPERIMENTAL: inline literal whileTrue as a Bytecode While. The
+     * loop itself has no callback root, prepared call, continuation or
+     * protocol fallback; numeric sends in its bodies keep their own.
      * {@code result} is null when the loop value is discarded; otherwise it
      * starts as null and holds the last completed body result.
      */
@@ -10938,6 +10918,9 @@ final class CanonicalToBytecodeLowerer {
      * and yields its exact result, or the receiver after discarding it; an
      * unselected receiver yields the row's unselected result. {@code result}
      * is null when the control value is discarded, so no local is used.
+     * I115-H1-FIX: a dispatching site (receiver not proven canonical
+     * Boolean) is guarded at run time; see
+     * emitExperimentalCompactBooleanDispatch.
      */
     private void emitExperimentalCompactBooleanControl(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -10945,13 +10928,37 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal result) {
         NormalBooleanControl control =
                 experimentalCompactBooleanControl(send.message());
+        if (currentExperimentalDispatchingControls.contains(send)) {
+            emitExperimentalCompactBooleanDispatch(builder, send, control, result);
+            return;
+        }
+        emitExperimentalCompactStructuredBoolean(builder, send, control, null, result);
+    }
+
+    /*
+     * I115-N: the structured control itself. {@code stagedReceiver}, when
+     * non-null, already holds the receiver, proven canonical by its guard;
+     * otherwise the receiver expression is evaluated here.
+     */
+    private void emitExperimentalCompactStructuredBoolean(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            NormalBooleanControl control,
+            BytecodeLocal stagedReceiver,
+            BytecodeLocal result) {
         boolean thenOnly = result == null && control.selectedIndex(false) < 0;
         if (thenOnly) {
             builder.beginIfThen();
         } else {
             builder.beginIfThenElse();
         }
-        emitExperimentalCompactBooleanCondition(builder, send.receiver());
+        if (stagedReceiver == null) {
+            emitExperimentalCompactBooleanCondition(builder, send.receiver());
+        } else {
+            builder.beginExperimentalCanonicalBooleanCondition();
+            builder.emitLoadLocal(stagedReceiver);
+            builder.endExperimentalCanonicalBooleanCondition();
+        }
         emitExperimentalCompactBooleanBranch(builder, send, control, true, result);
         if (thenOnly) {
             builder.endIfThen();
@@ -10959,6 +10966,121 @@ final class CanonicalToBytecodeLowerer {
             emitExperimentalCompactBooleanBranch(builder, send, control, false, result);
             builder.endIfThenElse();
         }
+    }
+
+    /**
+     * I115-H1-FIX: a dispatching Boolean control. The receiver is evaluated
+     * once into a staged local. HIT: when it is exact canonical true or
+     * false, the structured control above runs its callback bodies inline,
+     * creating no Closure. MISS: any other value receives the control
+     * selector as an ordinary send. The root's frame locals are first
+     * promoted to its activation's lexical authority, then each callback
+     * literal becomes a guest Closure over that authority (its physical
+     * root was registered during this lowering), the send is prepared with
+     * the ordinary dynamic selection, and the prepared invocation completes
+     * it with its continuation, ReturnHome and Error paths.
+     */
+    private void emitExperimentalCompactBooleanDispatch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            NormalBooleanControl control,
+            BytecodeLocal result) {
+        ComposedSequenceScratch scratch = currentExperimentalCompactScratch;
+        if (scratch == null) {
+            throw new AssertionError(
+                    "I115-M dispatching Boolean control without send scratch");
+        }
+        java.util.List<CanonicalExpression> arguments = send.arguments();
+        // Register every callback root before any operation consumes it.
+        java.util.List<ProtosClosureExecutionPlanCell> plans =
+                new java.util.ArrayList<>(arguments.size());
+        for (CanonicalExpression argument : arguments) {
+            plans.add(bytecodeClosurePlan(builder, (CanonicalClosure) argument));
+        }
+
+        SourceSpan span = send.span();
+        builder.beginSourceSection(span.startOffset(), span.length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+        BytecodeLocal receiverValue =
+                builder.createLocal("compactBooleanReceiver", null);
+        builder.beginStoreLocal(receiverValue);
+        emitExperimentalCompactValue(builder, send.receiver());
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginIsCanonicalBooleanValue();
+        builder.emitLoadLocal(receiverValue);
+        builder.endIsCanonicalBooleanValue();
+
+        builder.beginBlock();
+        emitExperimentalCompactStructuredBoolean(
+                builder, send, control, receiverValue, result);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(receiverValue);
+        builder.beginMaterializePrimitiveNumericCarrier();
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadConstant(true);
+        builder.endMaterializePrimitiveNumericCarrier();
+        builder.endStoreLocal();
+        emitExperimentalCompactAuthorityPromotion(builder);
+        java.util.List<BytecodeLocal> callbacks =
+                new java.util.ArrayList<>(arguments.size());
+        for (int index = 0; index < arguments.size(); index++) {
+            BytecodeLocal callback =
+                    builder.createLocal("compactBooleanCallback", null);
+            builder.beginStoreLocal(callback);
+            emitClosureCapture(
+                    builder, (CanonicalClosure) arguments.get(index), plans.get(index));
+            builder.endStoreLocal();
+            callbacks.add(callback);
+        }
+        builder.beginStoreLocal(scratch.preparedCall());
+        beginPrepareSend(builder, arguments.size());
+        builder.emitLoadLocal(receiverValue);
+        builder.emitLoadConstant(send.message());
+        emitSendCallerOperand(builder);
+        for (BytecodeLocal callback : callbacks) {
+            builder.emitLoadLocal(callback);
+        }
+        endPrepareSend(builder, arguments.size());
+        builder.endStoreLocal();
+        BytecodeLocal sendResult = result != null
+                ? result
+                : builder.createLocal("compactBooleanSendResult", null);
+        emitPreparedInvocation(
+                builder,
+                sendResult,
+                scratch.preparedCall(),
+                scratch.childResult(),
+                scratch.resumeValue());
+        builder.endBlock();
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
+    }
+
+    /*
+     * I115-H1-FIX: before an ordinary send of a compact root, install its
+     * frame locals as the activation's lexical authority through the
+     * existing live-frame transition, so whatever the send observes or
+     * captures shares the bindings the compact code reads and writes. Only
+     * MISS paths emit it; a root without frame locals has nothing to share.
+     */
+    private void emitExperimentalCompactAuthorityPromotion(
+            ProtosBytecodeRootNodeGen.Builder builder) {
+        if (currentRootFrameNativeLocals == null
+                || currentRootFrameNativeLayout == null) {
+            return;
+        }
+        builder.beginPromoteFrameLexicalAuthority(
+                currentRootFrameNativeLocals, currentRootFrameNativeLayout);
+        emitCurrentActivation(builder);
+        builder.endPromoteFrameLexicalAuthority();
     }
 
     private void emitExperimentalCompactBooleanBranch(
@@ -10995,9 +11117,12 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /*
-     * I115-N: the receiver evaluated once as a Java boolean. An Integer
-     * comparison uses its direct Bool form; any other admitted BOOLEAN value
-     * is converted by one ExperimentalCanonicalBooleanCondition.
+     * I115-N: the receiver evaluated once as a Java boolean, converted by one
+     * ExperimentalCanonicalBooleanCondition only after the value is known to
+     * be exact canonical true or false. I115-H1-FIX: a comparison is the
+     * shared numeric send site, so its HIT canonical Boolean takes the
+     * condition's Boolean specialization and a MISS result is validated the
+     * same way (a whileTrue condition signals the standard Error otherwise).
      * I115-Q: a true/false literal is loaded directly as a Java boolean.
      */
     private void emitExperimentalCompactBooleanCondition(
@@ -11007,11 +11132,6 @@ final class CanonicalToBytecodeLowerer {
                 && (literal.kind() == CanonicalLiteral.Kind.TRUE
                         || literal.kind() == CanonicalLiteral.Kind.FALSE)) {
             builder.emitLoadConstant(literal.kind() == CanonicalLiteral.Kind.TRUE);
-            return;
-        }
-        if (receiver instanceof CanonicalSend comparison
-                && experimentalCompactComparison(comparison.message())) {
-            emitExperimentalCompactSend(builder, comparison, true);
             return;
         }
         builder.beginExperimentalCanonicalBooleanCondition();
@@ -11219,32 +11339,10 @@ final class CanonicalToBytecodeLowerer {
 
         BytecodeLocal primitiveNumericAttempt = null;
         if (tryPrimitiveNumericSend) {
-            primitiveNumericAttempt = builder.createLocal("primitiveNumericAttempt", null);
-            builder.beginStoreLocal(primitiveNumericAttempt);
-            emitPrimitiveNumericAttempt(
-                    builder, send, receiverValue, argumentValues.get(0));
-            builder.endStoreLocal();
-
-            builder.beginIfThenElse();
-            builder.beginIsResultKind(ProtosResultKind.PRIMITIVE_NUMERIC_SEND_MISS);
-            builder.emitLoadLocal(primitiveNumericAttempt);
-            builder.endIsResultKind();
-            builder.beginBlock();
-            // Any internal carriers must become guest values before normal D013.
-            builder.beginStoreLocal(receiverValue);
-            builder.beginMaterializePrimitiveNumericCarrier();
-            builder.emitLoadLocal(receiverValue);
-            builder.emitLoadConstant(primitiveNumericCarrierSource(receiver));
-            builder.endMaterializePrimitiveNumericCarrier();
-            builder.endStoreLocal();
-            BytecodeLocal stagedArgument = argumentValues.get(0);
-            builder.beginStoreLocal(stagedArgument);
-            builder.beginMaterializePrimitiveNumericCarrier();
-            builder.emitLoadLocal(stagedArgument);
-            builder.emitLoadConstant(
+            primitiveNumericAttempt = beginPrimitiveNumericMiss(
+                    builder, send, receiverValue, argumentValues.get(0),
+                    primitiveNumericCarrierSource(receiver),
                     primitiveNumericCarrierSource(send.arguments().get(0)));
-            builder.endMaterializePrimitiveNumericCarrier();
-            builder.endStoreLocal();
         }
 
         /*
@@ -11494,20 +11592,8 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (tryPrimitiveNumericSend) {
-            builder.endBlock();
-            builder.beginBlock();
-            builder.beginStoreLocal(result);
-            if (primitiveCarrierResult) {
-                builder.emitLoadLocal(primitiveNumericAttempt);
-            } else {
-                builder.beginMaterializePrimitiveNumericCarrier();
-                builder.emitLoadLocal(primitiveNumericAttempt);
-                builder.emitLoadConstant(true);
-                builder.endMaterializePrimitiveNumericCarrier();
-            }
-            builder.endStoreLocal();
-            builder.endBlock();
-            builder.endIfThenElse();
+            endPrimitiveNumericMiss(
+                    builder, primitiveNumericAttempt, result, primitiveCarrierResult);
         }
 
         builder.endBlock();
