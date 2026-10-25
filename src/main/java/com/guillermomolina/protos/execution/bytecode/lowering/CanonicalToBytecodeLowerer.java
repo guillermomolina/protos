@@ -10550,8 +10550,6 @@ final class CanonicalToBytecodeLowerer {
         return control == NormalBooleanControl.IF_TRUE
                         || control == NormalBooleanControl.IF_FALSE
                         || control == NormalBooleanControl.IF_TRUE_IF_FALSE
-                        || control == NormalBooleanControl.IF
-                        || control == NormalBooleanControl.ELSE
                 ? control
                 : null;
     }
@@ -10603,9 +10601,6 @@ final class CanonicalToBytecodeLowerer {
         }
         ExperimentalCompactKinds entry = new ExperimentalCompactKinds(kinds);
         kinds.joinFrom(exits[0], exits.length == 2 ? exits[1] : entry);
-        if (control.selectedResult == NormalBooleanControl.SelectedResult.RECEIVER) {
-            return ExperimentalCompactKind.BOOLEAN;
-        }
         return exits.length == 2
                 ? experimentalCompactJoin(results[0], results[1])
                 : ExperimentalCompactKind.OBJECT;
