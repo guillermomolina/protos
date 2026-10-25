@@ -8,6 +8,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.12-SNAPSHOT
+
+- `I115` (post-rebase Boolean control selector reconciliation): restrict
+  experimental compact Boolean-control admission to `ifTrue`, `ifFalse`
+  and `ifTrueIfFalse`; the `if` and `else` selector forms no longer enter
+  this specialized branch.
+  - Remove the shortcut that classified receiver-selected control results
+    unconditionally as BOOLEAN. Preserve the existing branch-result join
+    classification instead, avoiding an unjustified compact type proof.
+  - **Historical limitation:** this is a narrowly scoped correction to the
+    experimental I115 compact lowerer. It does not establish a complete
+    override, method-selection, suspension or semantic-conformance gate.
+  - Reconstructed from original I115 commit `8b839b40e22087187be18922d5e13becd05b7c6a`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.11-SNAPSHOT
 
 - `I115-R6` (experimental GraalPy-style module-global reads): introduce the
