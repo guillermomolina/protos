@@ -293,6 +293,7 @@ public final class ProtosStandardLibraryDocumentationExtractor {
             return paths.filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(SOURCE_SUFFIX))
                     .filter(path -> !isCorePath(libraryRoot.relativize(path)))
+                    .filter(path -> !isInternalPath(libraryRoot.relativize(path)))
                     .sorted(Comparator.comparing(path -> slashPath(libraryRoot.relativize(path))))
                     .toList();
         }
@@ -301,6 +302,21 @@ public final class ProtosStandardLibraryDocumentationExtractor {
     private static boolean isCorePath(Path relativePath) {
         return relativePath.getNameCount() > 0
                 && relativePath.getName(0).toString().equalsIgnoreCase("core");
+    }
+
+    /**
+     * Modules below an {@code internal} directory segment (for example {@code http/internal/X})
+     * remain importable but are not public Standard Library API, so they are not documented. Only
+     * a whole directory segment matches; a module or directory name merely containing the word
+     * does not.
+     */
+    private static boolean isInternalPath(Path relativePath) {
+        for (int index = 0; index < relativePath.getNameCount() - 1; index++) {
+            if (relativePath.getName(index).toString().equalsIgnoreCase("internal")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String logicalModuleName(Path relativePath) throws IOException {

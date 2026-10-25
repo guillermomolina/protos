@@ -1,0 +1,452 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+MessageHead: import("std:http/internal/MessageHead")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+limitsOf: (requestLine, headerBytes, headerFields, body) => {
+    limits: {
+        maxRequestLineBytes: requestLine
+        maxHeaderBytes: headerBytes
+        maxHeaderFields: headerFields
+        maxRequestBodyBytes: body
+    }
+    limits
+}
+
+defaultLimits: () => {
+    limitsOf(8192, 32768, 100, 33554432)
+}
+
+simple: "GET /index.html HTTP/1.1\r\nHost: example.com\r\n\r\n"
+
+// "GET / HTTP/1.1\r\n" is 16 octets including CRLF.
+limitLine: "GET / HTTP/1.1\r\n"
+// "Host: h\r\n" (9) plus the empty CRLF (2) is 11 header octets.
+limitHostHeaders: "Host: h\r\n\r\n"
+
+parseWith: (limits, bytes) => {
+    MessageHead.requestHeadParser(limits).feed(bytes, 0, bytes.size())
+}
+
+parse: (request) => {
+    parseWith(defaultLimits(), ascii(request))
+}
+
+accepted: (request) => {
+    bytes: ascii(request)
+    result: parseWith(defaultLimits(), bytes)
+    Assertions.require(result.state == "ACCEPTED")
+    Assertions.require(result.consumed == bytes.size())
+    Assertions.require(result.failure === null)
+    result.head
+}
+
+requireRejected: (result, kind, status) => {
+    Assertions.require(result.state == "REJECTED")
+    Assertions.require(result.head === null)
+    Assertions.require(result.failure.kind == kind)
+    Assertions.require(result.failure.status == status)
+}
+
+rejects: (request, kind, status) => {
+    requireRejected(parse(request), kind, status)
+}
+
+withHeaders: (headers) => {
+    "GET / HTTP/1.1\r\nHost: example.com\r\n" + headers + "\r\n"
+}
+
+valueText: (pair) => {
+    text(pair[1])
+}
+
+tests: [
+    Test("simple GET in a single feed", () => {
+        head: accepted(simple)
+        Assertions.require(head.method == "GET")
+        Assertions.require(text(head.target) == "/index.html")
+        Assertions.require(head.version == "HTTP/1.1")
+        Assertions.require(head.headers.size() == 1)
+        Assertions.require(head.headers[0][0] == "Host")
+        Assertions.require(valueText(head.headers[0]) == "example.com")
+        Assertions.require(head.framing == "NONE")
+        Assertions.require(head.contentLength === null)
+        Assertions.require(head.expectContinue == false)
+    }),
+    Test("GET fragmented at every octet boundary", () => {
+        bytes: ascii(simple)
+        size: bytes.size()
+        split: 0
+        while(split <= size) {
+            parser: MessageHead.requestHeadParser(defaultLimits())
+            first: parser.feed(bytes, 0, split)
+            if(split < size) {
+                Assertions.require(first.state == "NEED_MORE")
+                Assertions.require(first.consumed == split)
+                Assertions.require(first.head === null)
+                Assertions.require(first.failure === null)
+                second: parser.feed(bytes, split, size - split)
+                Assertions.require(second.state == "ACCEPTED")
+                Assertions.require(second.consumed == (size - split))
+                Assertions.require(second.head.method == "GET")
+            } else {
+                Assertions.require(first.state == "ACCEPTED")
+            }
+            split = split + 1
+        }
+
+        parser: MessageHead.requestHeadParser(defaultLimits())
+        last: null
+        index: 0
+        while(index < size) {
+            last = parser.feed(bytes, index, 1)
+            Assertions.require(last.consumed == 1)
+            if(index == (size - 1)) {
+                Assertions.require(last.state == "ACCEPTED")
+            } else {
+                Assertions.require(last.state == "NEED_MORE")
+            }
+            index = index + 1
+        }
+        Assertions.require(text(last.head.target) == "/index.html")
+    }),
+    Test("CR and LF split across feeds", () => {
+        bytes: ascii(simple)
+        parser: MessageHead.requestHeadParser(defaultLimits())
+        // "GET /index.html HTTP/1.1" is 24 octets; its CR is at index 24.
+        firstCr: 24
+        Assertions.require(parser.feed(bytes, 0, firstCr + 1).state == "NEED_MORE")
+        finalCr: bytes.size() - 2
+        Assertions.require(parser.feed(bytes, firstCr + 1, finalCr - firstCr).state == "NEED_MORE")
+        result: parser.feed(bytes, finalCr + 1, 1)
+        Assertions.require(result.state == "ACCEPTED")
+        Assertions.require(result.consumed == 1)
+    }),
+    Test("consumed is exact when body follows", () => {
+        head: "POST /u HTTP/1.1\r\nHost: h\r\nContent-Length: 5\r\n\r\n"
+        bytes: ascii(head + "hello")
+        result: parseWith(defaultLimits(), bytes)
+        Assertions.require(result.state == "ACCEPTED")
+        Assertions.require(result.consumed == head.size())
+        Assertions.require(result.head.framing == "CONTENT_LENGTH")
+        Assertions.require(result.head.contentLength == 5)
+    }),
+    Test("body octets are never interpreted", () => {
+        head: "POST /u HTTP/1.1\r\nHost: h\r\nTransfer-Encoding: chunked\r\n\r\n"
+        bytes: ascii(head + "\n\u{0}garbage\rZZ not chunked\r\n")
+        result: parseWith(defaultLimits(), bytes)
+        Assertions.require(result.state == "ACCEPTED")
+        Assertions.require(result.consumed == head.size())
+        Assertions.require(result.head.framing == "CHUNKED")
+        Assertions.require(result.head.headers.size() == 2)
+    }),
+    Test("method case is preserved", () => {
+        Assertions.require(accepted("gEt / HTTP/1.1\r\nHost: h\r\n\r\n").method == "gEt")
+    }),
+    Test("percent-encoded target is preserved", () => {
+        head: accepted("GET /a%2Fb//c/../%7e?q=%20x HTTP/1.1\r\nHost: h\r\n\r\n")
+        Assertions.require(text(head.target) == "/a%2Fb//c/../%7e?q=%20x")
+        rejects("GET /a%2 HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET /a%zz HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("origin-form is accepted", () => {
+        head: accepted("GET /path/to;p=1/x@y:z?a=1&b=/?c HTTP/1.1\r\nHost: h\r\n\r\n")
+        Assertions.require(text(head.target) == "/path/to;p=1/x@y:z?a=1&b=/?c")
+        rejects("GET /a#frag HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET /a\\b HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET /caf\u{E9} HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("absolute-form is accepted", () => {
+        first: accepted("GET http://example.com:8080/a?b=c HTTP/1.1\r\nHost: example.com:8080\r\n\r\n")
+        Assertions.require(text(first.target) == "http://example.com:8080/a?b=c")
+        second: accepted("GET http://[::1]/ HTTP/1.1\r\nHost: [::1]\r\n\r\n")
+        Assertions.require(text(second.target) == "http://[::1]/")
+    }),
+    Test("OPTIONS asterisk is accepted", () => {
+        head: accepted("OPTIONS * HTTP/1.1\r\nHost: h\r\n\r\n")
+        Assertions.require(head.method == "OPTIONS")
+        Assertions.require(text(head.target) == "*")
+        rejects("GET * HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("CONNECT with authority-form is unsupported", () => {
+        rejects("CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n",
+            "unsupportedFeature", 501)
+        rejects("CONNECT /x HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("authority-form with another method is malformed", () => {
+        rejects("GET 127.0.0.1:8080 HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET example.com:443 HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("HTTP/1.0 is an unsupported version", () => {
+        rejects("GET / HTTP/1.0\r\nHost: h\r\n\r\n", "unsupportedFeature", 505)
+    }),
+    Test("HTTP/2 preface is an unsupported version", () => {
+        rejects("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n", "unsupportedFeature", 505)
+    }),
+    Test("bare CR or LF is malformed", () => {
+        rejects("GET / HTTP/1.1\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET / HTTP/1.1\rHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET / HTTP/1.1\r\nHost: h\n\r\n", "malformedRequest", 400)
+        rejects("GET / HTTP/1.1\r\nHost: h\r\nX: a\rb\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("extra space in request line is malformed", () => {
+        rejects("GET  / HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET / HTTP/1.1 \r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("GET\t/ HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+        rejects("G(T / HTTP/1.1\r\nHost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("missing Host is malformed", () => {
+        rejects("GET / HTTP/1.1\r\nX: y\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("duplicate Host is malformed", () => {
+        rejects("GET / HTTP/1.1\r\nHost: h\r\nhost: h\r\n\r\n", "malformedRequest", 400)
+    }),
+    Test("invalid Host is malformed", () => {
+        [
+            "", "a b", "user@h", "h/x", "h?x", "h#x", "h\\x", "[::1", "::1]",
+            "h:80x", "h%zz", "[1:2]"
+        ].each((host) => {
+            rejects("GET / HTTP/1.1\r\nHost: " + host + "\r\n\r\n", "malformedRequest", 400)
+        })
+        accepted("GET / HTTP/1.1\r\nHost: 192.0.2.1:80\r\n\r\n")
+        accepted("GET / HTTP/1.1\r\nHost: [v1.fe]\r\n\r\n")
+        null
+    }),
+    Test("invalid header name is malformed", () => {
+        rejects(withHeaders("Bad(Name): x\r\n"), "malformedRequest", 400)
+        rejects(withHeaders(": x\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("NoColon\r\n"), "malformedRequest", 400)
+    }),
+    Test("whitespace before colon is malformed", () => {
+        rejects(withHeaders("X-Name : x\r\n"), "malformedRequest", 400)
+    }),
+    Test("obs-fold is malformed", () => {
+        rejects(withHeaders("X-Name: a\r\n b\r\n"), "malformedRequest", 400)
+    }),
+    Test("NUL in value is malformed", () => {
+        rejects(withHeaders("X-Name: a\u{0}b\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("X-Name: a\u{7F}b\r\n"), "malformedRequest", 400)
+    }),
+    Test("obs-text value is preserved", () => {
+        head: accepted(withHeaders("X-Name: caf\u{E9}\u{FF}\r\n"))
+        value: head.headers[1][1]
+        Assertions.require(value.size() == 5)
+        Assertions.require(value[0] == 99)
+        Assertions.require(value[1] == 97)
+        Assertions.require(value[2] == 102)
+        Assertions.require(value[3] == 233)
+        Assertions.require(value[4] == 255)
+    }),
+    Test("OWS is trimmed and interior preserved", () => {
+        head: accepted(withHeaders("X-Name: \t a \t b  \t\r\n"))
+        Assertions.require(valueText(head.headers[1]) == "a \t b")
+    }),
+    Test("header name case is preserved", () => {
+        head: accepted("GET / HTTP/1.1\r\nhOsT: h\r\nX-MiXeD: v\r\n\r\n")
+        Assertions.require(head.headers[0][0] == "hOsT")
+        Assertions.require(head.headers[1][0] == "X-MiXeD")
+    }),
+    Test("duplicate ordinary headers are preserved", () => {
+        head: accepted(withHeaders("Accept: a\r\nX: 1\r\nAccept: b\r\n"))
+        Assertions.require(head.headers.size() == 4)
+        Assertions.require(head.headers[1][0] == "Accept")
+        Assertions.require(valueText(head.headers[1]) == "a")
+        Assertions.require(head.headers[2][0] == "X")
+        Assertions.require(head.headers[3][0] == "Accept")
+        Assertions.require(valueText(head.headers[3]) == "b")
+    }),
+    Test("Transfer-Encoding with Content-Length is malformed", () => {
+        rejects(withHeaders("Transfer-Encoding: chunked\r\nContent-Length: 3\r\n"),
+            "malformedRequest", 400)
+    }),
+    Test("duplicate identical Content-Length is malformed", () => {
+        rejects(withHeaders("Content-Length: 3\r\nContent-Length: 3\r\n"), "malformedRequest", 400)
+    }),
+    Test("Content-Length list is malformed", () => {
+        rejects(withHeaders("Content-Length: 3, 3\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("Content-Length: 3,3\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("Content-Length: 3 3\r\n"), "malformedRequest", 400)
+    }),
+    Test("signed Content-Length is malformed", () => {
+        rejects(withHeaders("Content-Length: +3\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("Content-Length: -3\r\n"), "malformedRequest", 400)
+    }),
+    Test("overflowing Content-Length is malformed", () => {
+        rejects(withHeaders("Content-Length: 9223372036854775808\r\n"), "malformedRequest", 400)
+        rejects(withHeaders("Content-Length: 99999999999999999999999\r\n"), "malformedRequest", 400)
+    }),
+    Test("non-chunked Transfer-Encoding is unsupported", () => {
+        rejects(withHeaders("Transfer-Encoding: gzip\r\n"), "unsupportedFeature", 501)
+        rejects(withHeaders("Transfer-Encoding: gzip, chunked\r\n"), "unsupportedFeature", 501)
+    }),
+    Test("chunked Transfer-Encoding is CHUNKED framing", () => {
+        head: accepted(withHeaders("Transfer-Encoding: ChUnKeD\r\n"))
+        Assertions.require(head.framing == "CHUNKED")
+        Assertions.require(head.contentLength === null)
+    }),
+    Test("Content-Length is CONTENT_LENGTH framing", () => {
+        head: accepted(withHeaders("content-length: 0042\r\n"))
+        Assertions.require(head.framing == "CONTENT_LENGTH")
+        Assertions.require(head.contentLength == 42)
+    }),
+    Test("no framing fields is NONE framing", () => {
+        head: accepted(withHeaders(""))
+        Assertions.require(head.framing == "NONE")
+        Assertions.require(head.contentLength === null)
+    }),
+    Test("Expect 100-continue is retained without I/O", () => {
+        bytes: ascii(withHeaders("Content-Length: 3\r\nExpect: 100-Continue\r\n"))
+        result: parseWith(defaultLimits(), bytes)
+        Assertions.require(result.state == "ACCEPTED")
+        Assertions.require(result.consumed == bytes.size())
+        Assertions.require(result.head.expectContinue == true)
+    }),
+    Test("unsupported expectation is rejected", () => {
+        rejects(withHeaders("Expect: something\r\n"), "unsupportedFeature", 417)
+    }),
+    Test("Upgrade h2c is unsupported", () => {
+        rejects(withHeaders("Connection: Upgrade\r\nUpgrade: h2c\r\n"), "unsupportedFeature", 501)
+    }),
+    Test("Content-Length above limit is requestLimit", () => {
+        limits: limitsOf(8192, 32768, 100, 10)
+        Assertions.require(parseWith(limits, ascii(withHeaders("Content-Length: 10\r\n"))).state == "ACCEPTED")
+        requireRejected(parseWith(limits, ascii(withHeaders("Content-Length: 11\r\n"))), "requestLimit", 413)
+    }),
+    Test("request line exactly at limit is accepted", () => {
+        result: parseWith(limitsOf(16, 32768, 100, 1), ascii(limitLine + limitHostHeaders))
+        Assertions.require(result.state == "ACCEPTED")
+    }),
+    Test("request line one octet over limit is rejected", () => {
+        requireRejected(parseWith(limitsOf(15, 32768, 100, 1), ascii(limitLine + limitHostHeaders)),
+            "requestLimit", 414)
+    }),
+    Test("header bytes exactly at limit are accepted", () => {
+        result: parseWith(limitsOf(8192, 11, 100, 1), ascii(limitLine + limitHostHeaders))
+        Assertions.require(result.state == "ACCEPTED")
+    }),
+    Test("header bytes one octet over limit are rejected", () => {
+        requireRejected(parseWith(limitsOf(8192, 10, 100, 1), ascii(limitLine + limitHostHeaders)),
+            "requestLimit", 431)
+    }),
+    Test("header fields exactly at limit are accepted", () => {
+        result: parseWith(limitsOf(8192, 32768, 3, 1), ascii(limitLine + "Host: h\r\nA: 1\r\nA: 1\r\n\r\n"))
+        Assertions.require(result.state == "ACCEPTED")
+    }),
+    Test("header fields one over limit are rejected", () => {
+        requireRejected(
+            parseWith(limitsOf(8192, 32768, 3, 1), ascii(limitLine + "Host: h\r\nA: 1\r\nA: 1\r\nA: 1\r\n\r\n")),
+            "requestLimit", 431)
+    }),
+    Test("source mutated after ACCEPTED does not affect head", () => {
+        bytes: ascii("GET /abc HTTP/1.1\r\nHost: h\r\nX: v\r\n\r\n")
+        original: text(bytes)
+        result: parseWith(defaultLimits(), bytes)
+        // Feeding never mutates the source.
+        Assertions.require(text(bytes) == original)
+        index: 0
+        while(index < bytes.size()) {
+            bytes[index] = 90
+            index = index + 1
+        }
+        head: result.head
+        Assertions.require(head.method == "GET")
+        Assertions.require(text(head.target) == "/abc")
+        Assertions.require(head.headers[0][0] == "Host")
+        Assertions.require(valueText(head.headers[0]) == "h")
+        Assertions.require(valueText(head.headers[1]) == "v")
+    }),
+    Test("header value is independent of fed fragments", () => {
+        bytes: ascii(simple)
+        parser: MessageHead.requestHeadParser(defaultLimits())
+        result: null
+        index: 0
+        while(index < bytes.size()) {
+            result = parser.feed(bytes, index, 1)
+            // Overwrite each octet as soon as it has been fed.
+            bytes[index] = 90
+            index = index + 1
+        }
+        Assertions.require(result.state == "ACCEPTED")
+        Assertions.require(valueText(result.head.headers[0]) == "example.com")
+        Assertions.require(text(result.head.target) == "/index.html")
+    }),
+    Test("target is independent of other captured Bytes", () => {
+        head: accepted(simple)
+        value: head.headers[0][1]
+        index: 0
+        while(index < value.size()) {
+            value[index] = 90
+            index = index + 1
+        }
+        Assertions.require(text(head.target) == "/index.html")
+        Assertions.require(head.headers[0][0] == "Host")
+    }),
+    Test("feed after terminal state signals an Error", () => {
+        bytes: ascii(simple)
+        acceptedParser: MessageHead.requestHeadParser(defaultLimits())
+        Assertions.require(acceptedParser.feed(bytes, 0, bytes.size()).state == "ACCEPTED")
+        Assertions.signals(Error, () => { acceptedParser.feed(bytes, 0, bytes.size()) })
+        Assertions.signals(Error, () => { acceptedParser.feed(bytes, 0, 0) })
+
+        bad: ascii("GET / HTTP/1.0\r\n")
+        rejectedParser: MessageHead.requestHeadParser(defaultLimits())
+        Assertions.require(rejectedParser.feed(bad, 0, bad.size()).state == "REJECTED")
+        Assertions.signals(Error, () => { rejectedParser.feed(bytes, 0, bytes.size()) })
+    }),
+    Test("invalid feed ranges signal an Error without consuming input", () => {
+        bytes: ascii(simple)
+        size: bytes.size()
+        [
+            [size + 1, 0],
+            [size, 1],
+            [1, 9223372036854775807],
+            [9223372036854775807, 1],
+            [-1, 0],
+            [0, -1]
+        ].each((range) => {
+            parser: MessageHead.requestHeadParser(defaultLimits())
+            Assertions.signals(Error, () => { parser.feed(bytes, range[0], range[1]) })
+
+            // The misuse neither terminalized nor advanced the parser.
+            result: parser.feed(bytes, 0, size)
+            Assertions.require(result.state == "ACCEPTED")
+            Assertions.require(result.consumed == size)
+            Assertions.require(result.head.method == "GET")
+            Assertions.require(text(result.head.target) == "/index.html")
+            Assertions.require(result.head.headers.size() == 1)
+            Assertions.require(valueText(result.head.headers[0]) == "example.com")
+        })
+        null
+    }),
+    Test("empty feed at end of source needs more input", () => {
+        bytes: ascii(simple)
+        result: MessageHead.requestHeadParser(defaultLimits()).feed(bytes, bytes.size(), 0)
+        Assertions.require(result.state == "NEED_MORE")
+        Assertions.require(result.consumed == 0)
+        Assertions.require(result.head === null)
+        Assertions.require(result.failure === null)
+    })
+]

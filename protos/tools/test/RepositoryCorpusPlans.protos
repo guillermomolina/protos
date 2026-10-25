@@ -204,6 +204,17 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/http") {
+        selected = planFromEntries(
+            "http/",
+            Array(
+            Array("request-head.protos", "suite-native", "-"),
+            Array("response-head.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     matched.ifFalse(() => {
         fail()
     })

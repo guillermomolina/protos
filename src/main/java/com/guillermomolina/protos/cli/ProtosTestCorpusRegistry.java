@@ -115,6 +115,12 @@ final class ProtosTestCorpusRegistry {
         addBinding(
                 registry,
                 activation,
+                "protos/corpus/library/http",
+                "repository-explicit",
+                "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
                 "protos/corpus/package-tool/version",
                 "case-outcomes",
                 "packageToolVersionFilesystem",

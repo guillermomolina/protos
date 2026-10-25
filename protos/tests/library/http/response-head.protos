@@ -1,0 +1,331 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+MessageHead: import("std:http/internal/MessageHead")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+header: (name, value) => {
+    [name, ascii(value)]
+}
+
+empty: () => {
+    Encoding.UTF8.encode("")
+}
+
+preparedWith: (status, headers, bodyKind, body, headRequest) => {
+    result: MessageHead.prepareResponseHead(status, headers, bodyKind, body, headRequest)
+    Assertions.require(result.outcome == "PREPARED")
+    result.prepared
+}
+
+prepared: (status, bodyKind, body, headRequest) => {
+    preparedWith(status, [], bodyKind, body, headRequest)
+}
+
+requireInvalidWith: (status, headers, bodyKind, body, headRequest) => {
+    result: MessageHead.prepareResponseHead(status, headers, bodyKind, body, headRequest)
+    Assertions.require(result.outcome == "INVALID_RESPONSE")
+    Assertions.require(result.prepared === null)
+}
+
+requireInvalid: (status, bodyKind, body) => {
+    requireInvalidWith(status, [], bodyKind, body, false)
+}
+
+requireWire: (expected, preparedHead) => {
+    Assertions.require(text(preparedHead.headerBytes) == expected)
+}
+
+// Octet-wise first-occurrence search over the Latin1 encodings of both
+// Strings; answers -1 when absent.
+firstIndex: (haystack, needle) => {
+    hay: Encoding.Latin1.encode(haystack)
+    pattern: Encoding.Latin1.encode(needle)
+    found: -1
+    start: 0
+    while((found < 0) && ((start + pattern.size()) <= hay.size())) {
+        matches: true
+        offset: 0
+        while(matches && (offset < pattern.size())) {
+            if(hay[start + offset] != pattern[offset]) {
+                matches = false
+            }
+            offset = offset + 1
+        }
+        if(matches) {
+            found = start
+        }
+        start = start + 1
+    }
+    found
+}
+
+contains: (haystack, needle) => {
+    firstIndex(haystack, needle) >= 0
+}
+
+lowercase: (value) => {
+    bytes: Encoding.Latin1.encode(value)
+    lowered: Encoding.UTF8.encode("")
+    bytes.each((octet) => {
+        if((octet >= 65) && (octet <= 90)) {
+            lowered.add(octet + 32)
+        } else {
+            lowered.add(octet)
+        }
+    })
+    Encoding.Latin1.decode(lowered)
+}
+
+allValidShapes: () => {
+    shapes: []
+    [200, 204, 205, 304, 404, 500, 599].each((status) => {
+        [false, true].each((headRequest) => {
+            shapes = Array(...shapes, prepared(status, "NULL", null, headRequest))
+            shapes = Array(...shapes, prepared(status, "BYTES", empty(), headRequest))
+            bodiless: (status == 204) || (status == 205) || (status == 304)
+            if(!bodiless) {
+                shapes = Array(...shapes, prepared(status, "BYTES", ascii("body!"), headRequest))
+                shapes = Array(...shapes, prepared(status, "STREAM", null, headRequest))
+            }
+        })
+    })
+    shapes
+}
+
+tests: [
+    Test("200 with NULL body has zero Content-Length", () => {
+        p: prepared(200, "NULL", null, false)
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 0\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+        Assertions.require(p.capturedBodyBytes === null)
+    }),
+    Test("200 with BYTES has exact Content-Length", () => {
+        p: prepared(200, "BYTES", ascii("hello"), false)
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 5\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "FIXED")
+        Assertions.require(text(p.capturedBodyBytes) == "hello")
+    }),
+    Test("200 with STREAM is chunked", () => {
+        p: prepared(200, "STREAM", null, false)
+        requireWire("HTTP/1.1 200 \r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "CHUNKED")
+        Assertions.require(p.capturedBodyBytes === null)
+    }),
+    Test("204 with NULL has no framing fields", () => {
+        p: prepared(204, "NULL", null, false)
+        requireWire("HTTP/1.1 204 \r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+    }),
+    Test("205 with empty BYTES has zero Content-Length", () => {
+        p: prepared(205, "BYTES", empty(), false)
+        requireWire("HTTP/1.1 205 \r\nContent-Length: 0\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+        Assertions.require(p.capturedBodyBytes === null)
+    }),
+    Test("304 with NULL has no framing fields", () => {
+        p: prepared(304, "NULL", null, false)
+        requireWire("HTTP/1.1 304 \r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+    }),
+    Test("204 with non-empty BYTES is invalid", () => {
+        requireInvalid(204, "BYTES", ascii("x"))
+    }),
+    Test("205 with non-empty BYTES is invalid", () => {
+        requireInvalid(205, "BYTES", ascii("x"))
+    }),
+    Test("304 with non-empty BYTES is invalid", () => {
+        requireInvalid(304, "BYTES", ascii("x"))
+        // Status precedence: the no-body rule applies before HEAD.
+        requireInvalidWith(304, [], "BYTES", ascii("x"), true)
+    }),
+    Test("bodiless statuses with STREAM are invalid", () => {
+        [204, 205, 304].each((status) => {
+            requireInvalidWith(status, [], "STREAM", null, false)
+            requireInvalidWith(status, [], "STREAM", null, true)
+        })
+        null
+    }),
+    Test("HEAD with NULL has zero Content-Length and no emission", () => {
+        p: prepared(200, "NULL", null, true)
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 0\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+    }),
+    Test("HEAD with BYTES has hypothetical Content-Length and no emission", () => {
+        p: prepared(200, "BYTES", ascii("0123456789"), true)
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 10\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+        Assertions.require(p.capturedBodyBytes === null)
+    }),
+    Test("HEAD with STREAM has no framing fields and no emission", () => {
+        p: prepared(200, "STREAM", null, true)
+        requireWire("HTTP/1.1 200 \r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "NONE")
+    }),
+    Test("non-HEAD request uses general rules", () => {
+        // The caller decides HEAD by exact method comparison; "head" is not HEAD.
+        headRequest: "head" == "HEAD"
+        p: prepared(200, "BYTES", ascii("abc"), headRequest)
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 3\r\nConnection: close\r\n\r\n", p)
+        Assertions.require(p.emission == "FIXED")
+        Assertions.require(text(p.capturedBodyBytes) == "abc")
+    }),
+    Test("reserved names are rejected in any case", () => {
+        [
+            "Content-Length", "content-length", "CONTENT-LENGTH",
+            "Transfer-Encoding", "transfer-encoding", "TRANSFER-encoding",
+            "Connection", "connection", "CONNECTION",
+            "Upgrade", "upgrade", "UPGRADE",
+            "Trailer", "trailer", "TRAILER",
+            "TE", "te", "Te",
+            "Keep-Alive", "keep-alive", "KEEP-ALIVE",
+            "Proxy-Connection", "proxy-connection", "PROXY-CONNECTION"
+        ].each((name) => {
+            requireInvalidWith(200, [header("X-Ok", "1"), header(name, "v")], "NULL", null, false)
+        })
+        null
+    }),
+    Test("invalid header name or malformed pair is rejected", () => {
+        ["", "Bad Name", "Bad:Name", "Bad(Name)", "Caf\u{E9}"].each((name) => {
+            requireInvalidWith(200, [header(name, "v")], "NULL", null, false)
+        })
+        requireInvalidWith(200, [["X"]], "NULL", null, false)
+        requireInvalidWith(200, [["X", ascii("v"), ascii("w")]], "NULL", null, false)
+        requireInvalidWith(200, [[42, ascii("v")]], "NULL", null, false)
+        requireInvalidWith(200, ["X: v"], "NULL", null, false)
+        requireInvalidWith(200, null, "NULL", null, false)
+    }),
+    Test("header value with CR or LF is rejected", () => {
+        requireInvalidWith(200, [header("X", "a\rb")], "NULL", null, false)
+        requireInvalidWith(200, [header("X", "a\nb")], "NULL", null, false)
+        requireInvalidWith(200, [header("X", "a\r\nInjected: 1")], "NULL", null, false)
+    }),
+    Test("header value with NUL is rejected", () => {
+        requireInvalidWith(200, [header("X", "a\u{0}b")], "NULL", null, false)
+        requireInvalidWith(200, [header("X", "a\u{7F}b")], "NULL", null, false)
+    }),
+    Test("obs-text header value is preserved", () => {
+        p: preparedWith(200, [header("X", "caf\u{E9}\u{FF}")], "NULL", null, false)
+        bytes: p.headerBytes
+        expected: ascii("HTTP/1.1 200 \r\nX: caf\u{E9}\u{FF}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        Assertions.require(bytes.size() == expected.size())
+        Assertions.require(text(bytes) == text(expected))
+        // "HTTP/1.1 200 \r\n" is 15 octets and "X: caf" is 6 more.
+        Assertions.require(bytes[21] == 233)
+        Assertions.require(bytes[22] == 255)
+    }),
+    Test("repeated header order is preserved", () => {
+        p: preparedWith(
+            200,
+            [header("Set-Cookie", "a=1"), header("X", "y"), header("Set-Cookie", "b=2")],
+            "NULL",
+            null,
+            false)
+        requireWire(
+            "HTTP/1.1 200 \r\nSet-Cookie: a=1\r\nX: y\r\nSet-Cookie: b=2\r\n" +
+                "Content-Length: 0\r\nConnection: close\r\n\r\n",
+            p)
+    }),
+    Test("header spelling is preserved", () => {
+        p: preparedWith(404, [header("x-CuStOm", "V")], "NULL", null, false)
+        requireWire("HTTP/1.1 404 \r\nx-CuStOm: V\r\nContent-Length: 0\r\nConnection: close\r\n\r\n", p)
+    }),
+    Test("Content-Length and Transfer-Encoding never coexist", () => {
+        allValidShapes().each((p) => {
+            wire: text(p.headerBytes)
+            Assertions.require(!(contains(wire, "Content-Length:") && contains(wire, "Transfer-Encoding:")))
+        })
+        null
+    }),
+    Test("every valid response has Connection close", () => {
+        allValidShapes().each((p) => {
+            Assertions.require(contains(text(p.headerBytes), "\r\nConnection: close\r\n"))
+        })
+        null
+    }),
+    Test("no Date or Server is added", () => {
+        allValidShapes().each((p) => {
+            wire: lowercase(text(p.headerBytes))
+            Assertions.require(!contains(wire, "\r\ndate:"))
+            Assertions.require(!contains(wire, "\r\nserver:"))
+        })
+        null
+    }),
+    Test("headerBytes is a defensive snapshot", () => {
+        value: ascii("v")
+        headers: [["X", value]]
+        p: preparedWith(200, headers, "NULL", null, false)
+        value[0] = 90
+        headers[0] = header("Y", "w")
+        expected: "HTTP/1.1 200 \r\nX: v\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+        requireWire(expected, p)
+        // A second preparation from the same inputs answers distinct Bytes.
+        other: preparedWith(200, [header("X", "v")], "NULL", null, false)
+        otherBytes: other.headerBytes
+        otherBytes[0] = 90
+        requireWire(expected, p)
+    }),
+    Test("capturedBodyBytes is a defensive snapshot", () => {
+        body: ascii("hello")
+        p: prepared(200, "BYTES", body, false)
+        body[0] = 90
+        Assertions.require(text(p.capturedBodyBytes) == "hello")
+        Assertions.require(!(p.capturedBodyBytes === body))
+        requireWire("HTTP/1.1 200 \r\nContent-Length: 5\r\nConnection: close\r\n\r\n", p)
+    }),
+    Test("status outside range or non-Integer is invalid", () => {
+        [-1, 0, 100, 101, 199, 600, 999, 99999999999999999999].each((status) => {
+            requireInvalid(status, "NULL", null)
+        })
+        ["200", 200.0, null].each((status) => {
+            requireInvalid(status, "NULL", null)
+        })
+        prepared(200, "NULL", null, false)
+        prepared(599, "NULL", null, false)
+        null
+    }),
+    Test("header section ends with CRLF CRLF", () => {
+        allValidShapes().each((p) => {
+            bytes: p.headerBytes
+            size: bytes.size()
+            Assertions.require(bytes[size - 4] == 13)
+            Assertions.require(bytes[size - 3] == 10)
+            Assertions.require(bytes[size - 2] == 13)
+            Assertions.require(bytes[size - 1] == 10)
+            // The first CRLF CRLF is the terminating one.
+            Assertions.require(firstIndex(text(bytes), "\r\n\r\n") == (size - 4))
+        })
+        null
+    }),
+    Test("body octets never appear in headerBytes", () => {
+        body: ascii("UNIQUE-BODY-MARKER")
+        [false, true].each((headRequest) => {
+            p: prepared(200, "BYTES", body, headRequest)
+            requireWire("HTTP/1.1 200 \r\nContent-Length: 18\r\nConnection: close\r\n\r\n", p)
+            Assertions.require(!contains(text(p.headerBytes), "UNIQUE-BODY-MARKER"))
+        })
+        null
+    })
+]

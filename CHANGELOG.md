@@ -7,6 +7,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.403-SNAPSHOT
+
+- `LIB025-A` (#962, D215): internal HTTP/1.1 message-head parsing and
+  preparation in Protos (spec 0.1.471, `spec/io/HTTP.md`).
+  - The new internal module `protos/lib/http/internal/MessageHead.protos`
+    exports only `requestHeadParser` and `prepareResponseHead`. It is an
+    unpublished, authority-free implementation artifact for the future
+    `std:http/Server`, not a public Standard Library API; there is no
+    Prelude binding, Core primitive or Java HTTP code.
+  - `requestHeadParser(limits).feed(bytes, offset, length)` is an
+    incremental octet state machine over request-line and header-section
+    lines. It accepts only CRLF, stops exactly after the empty line that
+    ends the header section (never consuming body octets), and answers
+    `NEED_MORE`, `ACCEPTED` with a copied request head, or `REJECTED` with
+    the HTTP.md kind/status (`malformedRequest`, `requestLimit`,
+    `unsupportedFeature`). It validates origin-, absolute- and
+    `OPTIONS *` targets, `CONNECT` authority-form (501), the HTTP/2 preface
+    and other versions (505), field names and values, exactly one valid
+    Host, Content-Length/Transfer-Encoding framing, Expect (417), Upgrade
+    (501), and the request-line, header-byte, header-field and declared
+    body limits. Invalid `feed` ranges are checked without computing
+    `offset + length` first and signal an ordinary Error without changing
+    parser state.
+  - `prepareResponseHead` validates status, header pairs, reserved framing
+    fields and status/body combinations before encoding, then answers the
+    exact `HTTP/1.1 <status> ` head bytes with Content-Length or chunked
+    Transfer-Encoding, `Connection: close`, and a NONE/FIXED/CHUNKED
+    emission plan, using private snapshots of caller Bytes.
+  - `ProtosStandardLibraryDocumentationExtractor` skips modules below an
+    `internal` directory segment, so `std:http/internal/MessageHead` stays
+    importable but is not published as Standard Library documentation.
+  - New Test Tool corpus `protos/corpus/library/http` (leaf
+    `protos/library/http`, two suite-native cases with 52 request-head and
+    29 response-head Tests) and extended Test Tool infrastructure tests.
+
 ## 0.3.402-SNAPSHOT
 
 - `I124` (#963, PLAT068 R2-Float): packed binary64 storage for all-Float

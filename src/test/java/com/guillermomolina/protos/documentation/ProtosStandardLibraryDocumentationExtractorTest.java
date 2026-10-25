@@ -150,6 +150,56 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     }
 
     @Test
+    void internalDirectorySegmentModulesAreNotDocumented() throws Exception {
+        writeModule(
+                "http/Public",
+                """
+                //! Public module fixture.
+                /// Public member.
+                visible: 1
+                """);
+        writeModule(
+                "http/internal/Hidden",
+                """
+                //! Internal module fixture.
+                /// Internal member.
+                hidden: 1
+                """);
+        writeModule(
+                "http/internalTools/Named",
+                """
+                //! Directory name merely containing the word.
+                /// Named member.
+                named: 1
+                """);
+        writeModule(
+                "http/InternalHelpers",
+                """
+                //! Module name merely containing the word.
+                /// Helper member.
+                helper: 1
+                """);
+
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        List<String> sources =
+                extraction.artifact().modules().stream()
+                        .map(module -> module.source().path())
+                        .toList();
+        assertEquals(
+                List.of(
+                        "protos/lib/http/InternalHelpers.protos",
+                        "protos/lib/http/Public.protos",
+                        "protos/lib/http/internalTools/Named.protos"),
+                sources.stream().sorted().toList());
+        assertTrue(
+                extraction.artifact().symbols().stream()
+                        .noneMatch(symbol -> symbol.identity().slotName().equals("hidden")));
+        assertEquals(List.of(), extraction.coverage().missingModuleDocumentation());
+    }
+
+    @Test
     void nestedRemovalDoesNotHideTopLevelSlot() throws Exception {
         writeModule(
                 "collections/NestedRemoval",

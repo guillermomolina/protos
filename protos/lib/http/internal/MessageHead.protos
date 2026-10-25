@@ -1,0 +1,1120 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal HTTP/1.1 wire helpers for the future std:http/Server driver (D215,
+//! LIB025-A). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API. It performs no I/O and owns no authority.
+
+/// Answers a stateful parser whose feed(bytes, offset, length) consumes one
+/// slice of a request head and answers {state, consumed, head, failure}. The
+/// parser stops exactly after the CRLF that ends the header section, so body
+/// octets are never consumed. Feeding a terminal parser signals an Error.
+requestHeadParser: (limits) => {
+    maxRequestLineBytes: limits.maxRequestLineBytes
+    maxHeaderBytes: limits.maxHeaderBytes
+    maxHeaderFields: limits.maxHeaderFields
+    maxRequestBodyBytes: limits.maxRequestBodyBytes
+
+    // Private rejection signal; only feed handles it.
+    Rejection: Error {}
+    rejectKind: null
+    rejectStatus: 0
+
+    reject: (kind, status) => {
+        rejectKind = kind
+        rejectStatus = status
+        occurrence: Rejection {}
+        occurrence.signal()
+    }
+
+    malformed: () => {
+        reject("malformedRequest", 400)
+    }
+
+    // ------------------------------------------------------------ octet classes
+
+    isAlpha: (octet) => {
+        ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122))
+    }
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    isHexDigit: (octet) => {
+        isDigit(octet) ||
+            ((octet >= 65) && (octet <= 70)) ||
+            ((octet >= 97) && (octet <= 102))
+    }
+
+    isUnreserved: (octet) => {
+        isAlpha(octet) ||
+            isDigit(octet) ||
+            (octet == 45) ||
+            (octet == 46) ||
+            (octet == 95) ||
+            (octet == 126)
+    }
+
+    isSubDelimiter: (octet) => {
+        (octet == 33) ||
+            (octet == 36) ||
+            (octet == 38) ||
+            (octet == 39) ||
+            (octet == 40) ||
+            (octet == 41) ||
+            (octet == 42) ||
+            (octet == 43) ||
+            (octet == 44) ||
+            (octet == 59) ||
+            (octet == 61)
+    }
+
+    // tchar = ALPHA / DIGIT / "!#$%&'*+-.^_`|~"
+    isTchar: (octet) => {
+        isAlpha(octet) ||
+            isDigit(octet) ||
+            (octet == 33) ||
+            (octet == 35) ||
+            (octet == 36) ||
+            (octet == 37) ||
+            (octet == 38) ||
+            (octet == 39) ||
+            (octet == 42) ||
+            (octet == 43) ||
+            (octet == 45) ||
+            (octet == 46) ||
+            (octet == 94) ||
+            (octet == 95) ||
+            (octet == 96) ||
+            (octet == 124) ||
+            (octet == 126)
+    }
+
+    // field-value octet: SP, HTAB, VCHAR, or obs-text.
+    isFieldValueOctet: (octet) => {
+        (octet == 32) || (octet == 9) || ((octet >= 33) && (octet <= 126)) || (octet >= 128)
+    }
+
+    asciiLower: (octet) => {
+        lowered: octet
+        if((octet >= 65) && (octet <= 90)) {
+            lowered = octet + 32
+        }
+        lowered
+    }
+
+    // ------------------------------------------------------------ Bytes helpers
+
+    indexOf: (bytes, start, end, octet) => {
+        found: -1
+        index: start
+        while((found < 0) && (index < end)) {
+            if(bytes[index] == octet) {
+                found = index
+            }
+            index = index + 1
+        }
+        found
+    }
+
+    copyRange: (bytes, start, end) => {
+        copy: Encoding.UTF8.encode("")
+        index: start
+        while(index < end) {
+            copy.add(bytes[index])
+            index = index + 1
+        }
+        copy
+    }
+
+    isToken: (bytes, start, end) => {
+        valid: start < end
+        index: start
+        while(valid && (index < end)) {
+            if(!isTchar(bytes[index])) {
+                valid = false
+            }
+            index = index + 1
+        }
+        valid
+    }
+
+    rangeEqualsAscii: (bytes, start, end, text) => {
+        expected: Encoding.Latin1.encode(text)
+        equal: (end - start) == expected.size()
+        index: 0
+        while(equal && (index < expected.size())) {
+            if(bytes[start + index] != expected[index]) {
+                equal = false
+            }
+            index = index + 1
+        }
+        equal
+    }
+
+    // Compares whole Bytes with a lowercase ASCII literal, ASCII case-insensitively.
+    bytesEqualIgnoringCase: (bytes, lowercaseText) => {
+        expected: Encoding.Latin1.encode(lowercaseText)
+        equal: bytes.size() == expected.size()
+        index: 0
+        while(equal && (index < expected.size())) {
+            if(asciiLower(bytes[index]) != expected[index]) {
+                equal = false
+            }
+            index = index + 1
+        }
+        equal
+    }
+
+    // ------------------------------------------------------------ URI syntax
+
+    // unreserved / sub-delims / pct-encoded, plus the selected extra octets.
+    isComponent: (bytes, start, end, allowColon, allowAtAndSlash, allowQuestion) => {
+        valid: true
+        index: start
+        while(valid && (index < end)) {
+            octet: bytes[index]
+            if(octet == 37) {
+                if((index + 2) >= end) {
+                    valid = false
+                } else {
+                    if(!(isHexDigit(bytes[index + 1]) && isHexDigit(bytes[index + 2]))) {
+                        valid = false
+                    }
+                }
+                index = index + 3
+            } else {
+                allowed: isUnreserved(octet) || isSubDelimiter(octet)
+                if(allowColon && (octet == 58)) {
+                    allowed = true
+                }
+                if(allowAtAndSlash && ((octet == 64) || (octet == 47))) {
+                    allowed = true
+                }
+                if(allowQuestion && (octet == 63)) {
+                    allowed = true
+                }
+                if(!allowed) {
+                    valid = false
+                }
+                index = index + 1
+            }
+        }
+        valid
+    }
+
+    isIpv4: (bytes, start, end) => {
+        valid: true
+        partCount: 0
+        index: start
+        while(valid && (index < end)) {
+            tokenStart: index
+            while((index < end) && isDigit(bytes[index])) {
+                index = index + 1
+            }
+            tokenSize: index - tokenStart
+            if((tokenSize < 1) || (tokenSize > 3)) {
+                valid = false
+            }
+            if(valid && (tokenSize > 1) && (bytes[tokenStart] == 48)) {
+                valid = false
+            }
+            if(valid) {
+                value: 0
+                digitIndex: tokenStart
+                while(digitIndex < index) {
+                    value = value * 10 + (bytes[digitIndex] - 48)
+                    digitIndex = digitIndex + 1
+                }
+                if(value > 255) {
+                    valid = false
+                }
+                partCount = partCount + 1
+            }
+            if(valid && (index < end)) {
+                if(bytes[index] != 46) {
+                    valid = false
+                }
+                index = index + 1
+                if(index == end) {
+                    valid = false
+                }
+            }
+        }
+        valid && (partCount == 4)
+    }
+
+    // Counts 16-bit groups in one side of an IPv6 literal, or answers -1.
+    ipv6Groups: (bytes, start, end, allowIpv4Tail) => {
+        valid: true
+        count: 0
+        if(start < end) {
+            pieceStart: start
+            while(valid && (pieceStart <= end)) {
+                pieceEnd: indexOf(bytes, pieceStart, end, 58)
+                if(pieceEnd < 0) {
+                    pieceEnd = end
+                }
+                last: pieceEnd == end
+                hasDot: indexOf(bytes, pieceStart, pieceEnd, 46) >= 0
+                if(last && allowIpv4Tail && hasDot) {
+                    if(isIpv4(bytes, pieceStart, pieceEnd)) {
+                        count = count + 2
+                    } else {
+                        valid = false
+                    }
+                } else {
+                    pieceSize: pieceEnd - pieceStart
+                    if((pieceSize < 1) || (pieceSize > 4)) {
+                        valid = false
+                    }
+                    scan: pieceStart
+                    while(valid && (scan < pieceEnd)) {
+                        if(!isHexDigit(bytes[scan])) {
+                            valid = false
+                        }
+                        scan = scan + 1
+                    }
+                    count = count + 1
+                }
+                pieceStart = pieceEnd + 1
+            }
+        }
+        result: -1
+        if(valid) {
+            result = count
+        }
+        result
+    }
+
+    isIpv6: (bytes, start, end) => {
+        doubleColon: -1
+        repeated: false
+        index: start
+        while((index + 1) < end) {
+            if((bytes[index] == 58) && (bytes[index + 1] == 58)) {
+                if(doubleColon >= 0) {
+                    repeated = true
+                } else {
+                    doubleColon = index
+                }
+            }
+            index = index + 1
+        }
+        valid: false
+        if(!repeated) {
+            if(doubleColon < 0) {
+                valid = ipv6Groups(bytes, start, end, true) == 8
+            } else {
+                head: ipv6Groups(bytes, start, doubleColon, false)
+                tail: ipv6Groups(bytes, doubleColon + 2, end, true)
+                valid = (head >= 0) && (tail >= 0) && ((head + tail) <= 7)
+            }
+        }
+        valid
+    }
+
+    // IP-literal content: IPv6address / IPvFuture.
+    isIpLiteral: (bytes, start, end) => {
+        valid: false
+        if(start < end) {
+            if((bytes[start] == 118) || (bytes[start] == 86)) {
+                dot: indexOf(bytes, start + 1, end, 46)
+                valid = (dot > (start + 1)) && (dot < (end - 1))
+                scan: start + 1
+                while(valid && (scan < dot)) {
+                    if(!isHexDigit(bytes[scan])) {
+                        valid = false
+                    }
+                    scan = scan + 1
+                }
+                if(valid) {
+                    scan = dot + 1
+                }
+                while(valid && (scan < end)) {
+                    octet: bytes[scan]
+                    if(!(isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58))) {
+                        valid = false
+                    }
+                    scan = scan + 1
+                }
+            } else {
+                valid = isIpv6(bytes, start, end)
+            }
+        }
+        valid
+    }
+
+    // host [ ":" port ] with port = *DIGIT; requirePort makes ":" port mandatory
+    // (authority-form). Purely syntactic: no name resolution.
+    isHostPort: (bytes, start, end, requirePort) => {
+        valid: start < end
+        hostEnd: end
+        if(valid) {
+            if(bytes[start] == 91) {
+                close: indexOf(bytes, start + 1, end, 93)
+                valid = (close >= 0) && isIpLiteral(bytes, start + 1, close)
+                if(valid) {
+                    hostEnd = close + 1
+                    if((hostEnd < end) && (bytes[hostEnd] != 58)) {
+                        valid = false
+                    }
+                }
+            } else {
+                hostEnd = indexOf(bytes, start, end, 58)
+                if(hostEnd < 0) {
+                    hostEnd = end
+                }
+                valid = (hostEnd > start) && isComponent(bytes, start, hostEnd, false, false, false)
+            }
+        }
+        if(valid) {
+            if(hostEnd == end) {
+                valid = !requirePort
+            } else {
+                scan: hostEnd + 1
+                while(valid && (scan < end)) {
+                    if(!isDigit(bytes[scan])) {
+                        valid = false
+                    }
+                    scan = scan + 1
+                }
+            }
+        }
+        valid
+    }
+
+    isAuthority: (bytes, start, end) => {
+        hostStart: start
+        valid: true
+        at: indexOf(bytes, start, end, 64)
+        if(at >= 0) {
+            valid = isComponent(bytes, start, at, true, false, false)
+            hostStart = at + 1
+        }
+        valid && isHostPort(bytes, hostStart, end, false)
+    }
+
+    isOriginForm: (bytes, start, end) => {
+        query: indexOf(bytes, start, end, 63)
+        valid: false
+        if(query < 0) {
+            valid = isComponent(bytes, start, end, true, true, false)
+        } else {
+            valid = isComponent(bytes, start, query, true, true, false) &&
+                isComponent(bytes, query + 1, end, true, true, true)
+        }
+        valid
+    }
+
+    // absolute-URI = scheme ":" hier-part [ "?" query ], without fragment.
+    isAbsoluteForm: (bytes, start, end) => {
+        valid: isAlpha(bytes[start])
+        index: start + 1
+        while(valid && (index < end) && (bytes[index] != 58)) {
+            octet: bytes[index]
+            if(!(isAlpha(octet) || isDigit(octet) || (octet == 43) || (octet == 45) || (octet == 46))) {
+                valid = false
+            }
+            index = index + 1
+        }
+        if(valid && (index == end)) {
+            valid = false
+        }
+        if(valid) {
+            rest: index + 1
+            query: indexOf(bytes, rest, end, 63)
+            hierEnd: end
+            if(query >= 0) {
+                hierEnd = query
+            }
+            pathStart: rest
+            if(((hierEnd - rest) >= 2) && (bytes[rest] == 47) && (bytes[rest + 1] == 47)) {
+                authorityStart: rest + 2
+                authorityEnd: indexOf(bytes, authorityStart, hierEnd, 47)
+                if(authorityEnd < 0) {
+                    authorityEnd = hierEnd
+                }
+                valid = isAuthority(bytes, authorityStart, authorityEnd)
+                pathStart = authorityEnd
+            }
+            valid = valid && isComponent(bytes, pathStart, hierEnd, true, true, false)
+            if(valid && (query >= 0)) {
+                valid = isComponent(bytes, query + 1, end, true, true, true)
+            }
+        }
+        valid
+    }
+
+    validateTarget: (methodName, bytes, start, end) => {
+        scan: start
+        while(scan < end) {
+            octet: bytes[scan]
+            if((octet <= 32) || (octet >= 127) || (octet == 35)) {
+                malformed()
+            }
+            scan = scan + 1
+        }
+
+        if(methodName == "CONNECT") {
+            if(isHostPort(bytes, start, end, true)) {
+                reject("unsupportedFeature", 501)
+            }
+            malformed()
+        }
+
+        if(((end - start) == 1) && (bytes[start] == 42)) {
+            if(methodName != "OPTIONS") {
+                malformed()
+            }
+        } else {
+            if(bytes[start] == 47) {
+                if(!isOriginForm(bytes, start, end)) {
+                    malformed()
+                }
+            } else {
+                // Authority-form outside CONNECT takes precedence over a
+                // scheme-like reading of the same octets.
+                if(isHostPort(bytes, start, end, true)) {
+                    malformed()
+                }
+                if(!isAbsoluteForm(bytes, start, end)) {
+                    malformed()
+                }
+            }
+        }
+    }
+
+    // ------------------------------------------------------------ parser state
+
+    phase: "REQUEST_LINE"
+    line: Encoding.UTF8.encode("")
+    pendingCr: false
+    requestLineBytes: 0
+    headerBytes: 0
+    headerFields: 0
+    requestMethod: null
+    requestTarget: null
+    fieldLines: []
+    acceptedHead: null
+
+    // HTTP-version = "HTTP" "/" DIGIT "." DIGIT
+    isWellFormedVersion: (bytes, start, end) => {
+        ((end - start) == 8) &&
+            rangeEqualsAscii(bytes, start, start + 5, "HTTP/") &&
+            isDigit(bytes[start + 5]) &&
+            (bytes[start + 6] == 46) &&
+            isDigit(bytes[start + 7])
+    }
+
+    parseRequestLine: () => {
+        size: line.size()
+
+        // The HTTP/2 preface takes precedence over method and target rules.
+        if(rangeEqualsAscii(line, 0, size, "PRI * HTTP/2.0")) {
+            reject("unsupportedFeature", 505)
+        }
+
+        firstSpace: indexOf(line, 0, size, 32)
+        secondSpace: -1
+        if(firstSpace >= 0) {
+            secondSpace = indexOf(line, firstSpace + 1, size, 32)
+        }
+        if((firstSpace <= 0) || (secondSpace < 0) || (secondSpace == (firstSpace + 1))) {
+            malformed()
+        }
+        if(indexOf(line, secondSpace + 1, size, 32) >= 0) {
+            malformed()
+        }
+        if(!isToken(line, 0, firstSpace)) {
+            malformed()
+        }
+        if(!isWellFormedVersion(line, secondSpace + 1, size)) {
+            malformed()
+        }
+        if(!rangeEqualsAscii(line, secondSpace + 1, size, "HTTP/1.1")) {
+            reject("unsupportedFeature", 505)
+        }
+
+        methodName: Encoding.Latin1.decode(copyRange(line, 0, firstSpace))
+        validateTarget(methodName, line, firstSpace + 1, secondSpace)
+
+        requestMethod = methodName
+        requestTarget = copyRange(line, firstSpace + 1, secondSpace)
+    }
+
+    parseFieldLine: () => {
+        size: line.size()
+
+        // obs-fold
+        if((line[0] == 32) || (line[0] == 9)) {
+            malformed()
+        }
+
+        colon: indexOf(line, 0, size, 58)
+        if(colon <= 0) {
+            malformed()
+        }
+        // Rejects whitespace before ":" as a non-token octet.
+        if(!isToken(line, 0, colon)) {
+            malformed()
+        }
+
+        valueStart: colon + 1
+        valueEnd: size
+        while((valueStart < valueEnd) && ((line[valueStart] == 32) || (line[valueStart] == 9))) {
+            valueStart = valueStart + 1
+        }
+        while((valueEnd > valueStart) && ((line[valueEnd - 1] == 32) || (line[valueEnd - 1] == 9))) {
+            valueEnd = valueEnd - 1
+        }
+        scan: valueStart
+        while(scan < valueEnd) {
+            if(!isFieldValueOctet(line[scan])) {
+                malformed()
+            }
+            scan = scan + 1
+        }
+
+        name: Encoding.Latin1.decode(copyRange(line, 0, colon))
+        pair: [name, copyRange(line, valueStart, valueEnd)]
+        fieldLines = Array(...fieldLines, pair)
+    }
+
+    nameIs: (name, lowercaseText) => {
+        bytesEqualIgnoringCase(Encoding.Latin1.encode(name), lowercaseText)
+    }
+
+    // Parses 1*DIGIT within the signed-64 range, or answers -1.
+    parseContentLength: (value) => {
+        result: -1
+        if(value.size() > 0) {
+            result = 0
+            index: 0
+            while((result >= 0) && (index < value.size())) {
+                octet: value[index]
+                if(isDigit(octet)) {
+                    digit: octet - 48
+                    if((result > 922337203685477580) ||
+                            ((result == 922337203685477580) && (digit > 7))) {
+                        result = -1
+                    } else {
+                        result = result * 10 + digit
+                    }
+                } else {
+                    result = -1
+                }
+                index = index + 1
+            }
+        }
+        result
+    }
+
+    finishHead: () => {
+        hostCount: 0
+        hostValue: null
+        contentLengthCount: 0
+        contentLengthValue: null
+        transferEncodings: []
+        expectContinue: false
+        unsupportedExpect: false
+        upgrade: false
+
+        fieldLines.each((pair) => {
+            name: pair[0]
+            value: pair[1]
+            if(nameIs(name, "host")) {
+                hostCount = hostCount + 1
+                hostValue = value
+            }
+            if(nameIs(name, "content-length")) {
+                contentLengthCount = contentLengthCount + 1
+                contentLengthValue = value
+            }
+            if(nameIs(name, "transfer-encoding")) {
+                transferEncodings = Array(...transferEncodings, value)
+            }
+            if(nameIs(name, "expect")) {
+                if(bytesEqualIgnoringCase(value, "100-continue")) {
+                    expectContinue = true
+                } else {
+                    unsupportedExpect = true
+                }
+            }
+            if(nameIs(name, "upgrade")) {
+                upgrade = true
+            }
+        })
+
+        if(hostCount != 1) {
+            malformed()
+        }
+        if(!isHostPort(hostValue, 0, hostValue.size(), false)) {
+            malformed()
+        }
+
+        chunked: transferEncodings.size() > 0
+        if(chunked && (contentLengthCount > 0)) {
+            malformed()
+        }
+        if(contentLengthCount > 1) {
+            malformed()
+        }
+        contentLength: null
+        if(contentLengthCount == 1) {
+            contentLength = parseContentLength(contentLengthValue)
+            if(contentLength < 0) {
+                malformed()
+            }
+        }
+        if(chunked) {
+            transferEncodings.each((value) => {
+                if(value.size() == 0) {
+                    malformed()
+                }
+            })
+            if(transferEncodings.size() != 1) {
+                reject("unsupportedFeature", 501)
+            }
+            if(!bytesEqualIgnoringCase(transferEncodings[0], "chunked")) {
+                reject("unsupportedFeature", 501)
+            }
+        }
+        if(upgrade) {
+            reject("unsupportedFeature", 501)
+        }
+        if(unsupportedExpect) {
+            reject("unsupportedFeature", 417)
+        }
+        if((contentLength !== null) && (contentLength > maxRequestBodyBytes)) {
+            reject("requestLimit", 413)
+        }
+
+        framing: "NONE"
+        if(contentLength !== null) {
+            framing = "CONTENT_LENGTH"
+        }
+        if(chunked) {
+            framing = "CHUNKED"
+        }
+
+        acceptedHead = {
+            method: requestMethod
+            target: requestTarget
+            version: "HTTP/1.1"
+            headers: fieldLines
+            framing: framing
+            contentLength: contentLength
+            expectContinue: expectContinue
+        }
+    }
+
+    completeLine: () => {
+        if(phase == "REQUEST_LINE") {
+            parseRequestLine()
+            phase = "HEADERS"
+        } else {
+            if(line.size() == 0) {
+                finishHead()
+            } else {
+                headerFields = headerFields + 1
+                if(headerFields > maxHeaderFields) {
+                    reject("requestLimit", 431)
+                }
+                parseFieldLine()
+            }
+        }
+        line = Encoding.UTF8.encode("")
+    }
+
+    consumeOctet: (octet) => {
+        if(phase == "REQUEST_LINE") {
+            requestLineBytes = requestLineBytes + 1
+            if(requestLineBytes > maxRequestLineBytes) {
+                reject("requestLimit", 414)
+            }
+        } else {
+            headerBytes = headerBytes + 1
+            if(headerBytes > maxHeaderBytes) {
+                reject("requestLimit", 431)
+            }
+        }
+
+        if(pendingCr) {
+            if(octet != 10) {
+                malformed()
+            }
+            pendingCr = false
+            completeLine()
+        } else {
+            if(octet == 13) {
+                pendingCr = true
+            } else {
+                if(octet == 10) {
+                    malformed()
+                }
+                line.add(octet)
+            }
+        }
+    }
+
+    parser: null
+    parser = {
+        feed: (source, offset, length) => {
+            if(phase == "TERMINAL") {
+                Error().signal()
+            }
+            (Integer.recognizes(offset) && Integer.recognizes(length)).ifFalse(() => {
+                Error().signal()
+            })
+            if(offset < 0) {
+                Error().signal()
+            }
+            if(length < 0) {
+                Error().signal()
+            }
+            // Bounds are established without computing offset + length.
+            sourceSize: source.size()
+            if(offset > sourceSize) {
+                Error().signal()
+            }
+            if(length > (sourceSize - offset)) {
+                Error().signal()
+            }
+
+            end: offset + length
+            index: offset
+            result: null
+
+            Rejection.handle(
+                () => {
+                    while((acceptedHead === null) && (index < end)) {
+                        octet: source[index]
+                        index = index + 1
+                        consumeOctet(octet)
+                    }
+                },
+                (error) => {
+                    phase = "TERMINAL"
+                    line = null
+                    fieldLines = []
+                    result = {
+                        state: "REJECTED"
+                        consumed: index - offset
+                        head: null
+                        failure: {
+                            kind: rejectKind
+                            status: rejectStatus
+                        }
+                    }
+                    error
+                }
+            )
+
+            if((result === null) && (acceptedHead !== null)) {
+                phase = "TERMINAL"
+                line = null
+                result = {
+                    state: "ACCEPTED"
+                    consumed: index - offset
+                    head: acceptedHead
+                    failure: null
+                }
+            }
+
+            if(result === null) {
+                result = {
+                    state: "NEED_MORE"
+                    consumed: length
+                    head: null
+                    failure: null
+                }
+            }
+
+            result
+        }
+    }
+
+    parser
+}
+
+/// Validates a response head and prepares its exact wire octets without I/O.
+/// Answers {outcome, prepared}; prepared is {headerBytes, emission,
+/// capturedBodyBytes} for "PREPARED" and null for "INVALID_RESPONSE".
+prepareResponseHead: (status, headers, bodyKind, bytesBody, headRequest) => {
+    ((bodyKind == "NULL") || (bodyKind == "BYTES") || (bodyKind == "STREAM")).ifFalse(() => {
+        Error().signal()
+    })
+    ((headRequest === true) || (headRequest === false)).ifFalse(() => {
+        Error().signal()
+    })
+    if((bodyKind != "BYTES") && (bytesBody !== null)) {
+        Error().signal()
+    }
+
+    isAlpha: (octet) => {
+        ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122))
+    }
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    // tchar = ALPHA / DIGIT / "!#$%&'*+-.^_`|~"
+    isTchar: (octet) => {
+        isAlpha(octet) ||
+            isDigit(octet) ||
+            (octet == 33) ||
+            (octet == 35) ||
+            (octet == 36) ||
+            (octet == 37) ||
+            (octet == 38) ||
+            (octet == 39) ||
+            (octet == 42) ||
+            (octet == 43) ||
+            (octet == 45) ||
+            (octet == 46) ||
+            (octet == 94) ||
+            (octet == 95) ||
+            (octet == 96) ||
+            (octet == 124) ||
+            (octet == 126)
+    }
+
+    isFieldValueOctet: (octet) => {
+        (octet == 32) || (octet == 9) || ((octet >= 33) && (octet <= 126)) || (octet >= 128)
+    }
+
+    asciiLower: (octet) => {
+        lowered: octet
+        if((octet >= 65) && (octet <= 90)) {
+            lowered = octet + 32
+        }
+        lowered
+    }
+
+    bytesEqualIgnoringCase: (bytes, lowercaseText) => {
+        expected: Encoding.Latin1.encode(lowercaseText)
+        equal: bytes.size() == expected.size()
+        index: 0
+        while(equal && (index < expected.size())) {
+            if(asciiLower(bytes[index]) != expected[index]) {
+                equal = false
+            }
+            index = index + 1
+        }
+        equal
+    }
+
+    // Lossless private snapshot of arbitrary octets; non-Bytes input fails.
+    snapshot: (value) => {
+        copy: null
+        Error.handle(
+            () => {
+                copy = Encoding.Latin1.encode(Encoding.Latin1.decode(value))
+            },
+            (error) => {
+                copy = null
+                error
+            }
+        )
+        copy
+    }
+
+    reservedNames: [
+        "content-length",
+        "transfer-encoding",
+        "connection",
+        "upgrade",
+        "trailer",
+        "te",
+        "keep-alive",
+        "proxy-connection"
+    ]
+
+    invalid: false
+
+    // Capture status, names, values, and body before any validation outcome
+    // can depend on later caller mutation (HTTP.md §4.1).
+    if(!Integer.recognizes(status)) {
+        invalid = true
+    }
+    capturedFields: []
+    if(Array.recognizes(headers)) {
+        Array(...headers).each((pair) => {
+            if(!invalid) {
+                wellShaped: Array.recognizes(pair)
+                if(wellShaped) {
+                    wellShaped = pair.size() == 2
+                }
+                if(wellShaped) {
+                    wellShaped = String.recognizes(pair[0])
+                }
+                if(wellShaped) {
+                    nameBytes: Encoding.UTF8.encode(pair[0])
+                    valueBytes: snapshot(pair[1])
+                    if(valueBytes === null) {
+                        invalid = true
+                    } else {
+                        capturedFields = Array(...capturedFields, [nameBytes, valueBytes])
+                    }
+                } else {
+                    invalid = true
+                }
+            }
+        })
+    } else {
+        invalid = true
+    }
+    capturedBody: null
+    if(bodyKind == "BYTES") {
+        capturedBody = snapshot(bytesBody)
+        if(capturedBody === null) {
+            invalid = true
+        }
+    }
+
+    // Validation completes before any octet of the head is produced.
+    if(!invalid) {
+        if((status < 200) || (status > 599)) {
+            invalid = true
+        }
+    }
+    capturedFields.each((field) => {
+        nameBytes: field[0]
+        valueBytes: field[1]
+        if(nameBytes.size() == 0) {
+            invalid = true
+        }
+        nameBytes.each((octet) => {
+            if(!isTchar(octet)) {
+                invalid = true
+            }
+        })
+        reservedNames.each((reserved) => {
+            if(bytesEqualIgnoringCase(nameBytes, reserved)) {
+                invalid = true
+            }
+        })
+        valueBytes.each((octet) => {
+            if(!isFieldValueOctet(octet)) {
+                invalid = true
+            }
+        })
+    })
+
+    framingField: null
+    emission: "NONE"
+    if(!invalid) {
+        if((status == 204) || (status == 205) || (status == 304)) {
+            if(bodyKind == "STREAM") {
+                invalid = true
+            }
+            if((capturedBody !== null) && (capturedBody.size() != 0)) {
+                invalid = true
+            }
+            if(status == 205) {
+                framingField = "Content-Length: 0"
+            }
+        } else {
+            if(headRequest) {
+                if(bodyKind == "NULL") {
+                    framingField = "Content-Length: 0"
+                }
+                if(bodyKind == "BYTES") {
+                    framingField = "Content-Length: "
+                }
+            } else {
+                if(bodyKind == "NULL") {
+                    framingField = "Content-Length: 0"
+                }
+                if(bodyKind == "BYTES") {
+                    framingField = "Content-Length: "
+                    emission = "FIXED"
+                }
+                if(bodyKind == "STREAM") {
+                    framingField = "Transfer-Encoding: chunked"
+                    emission = "CHUNKED"
+                }
+            }
+        }
+    }
+
+    result: {
+        outcome: "INVALID_RESPONSE"
+        prepared: null
+    }
+
+    if(!invalid) {
+        output: Encoding.UTF8.encode("")
+
+        appendAscii: (text) => {
+            Encoding.Latin1.encode(text).each((octet) => {
+                output.add(octet)
+            })
+        }
+
+        appendBytes: (bytes) => {
+            bytes.each((octet) => {
+                output.add(octet)
+            })
+        }
+
+        appendDecimal: null
+        appendDecimal = (value) => {
+            quotient: value.div(10)
+            if(quotient > 0) {
+                appendDecimal(quotient)
+            }
+            output.add(48 + value.mod(10))
+        }
+
+        appendAscii("HTTP/1.1 ")
+        appendDecimal(status)
+        appendAscii(" \r\n")
+        capturedFields.each((field) => {
+            appendBytes(field[0])
+            appendAscii(": ")
+            appendBytes(field[1])
+            appendAscii("\r\n")
+        })
+        if(framingField !== null) {
+            appendAscii(framingField)
+            if(framingField == "Content-Length: ") {
+                appendDecimal(capturedBody.size())
+            }
+            appendAscii("\r\n")
+        }
+        appendAscii("Connection: close\r\n\r\n")
+
+        // Only a FIXED emission retains the body snapshot.
+        bodyForEmission: null
+        if(emission == "FIXED") {
+            bodyForEmission = capturedBody
+        }
+
+        result = {
+            outcome: "PREPARED"
+            prepared: {
+                headerBytes: output
+                emission: emission
+                capturedBodyBytes: bodyForEmission
+            }
+        }
+    }
+
+    result
+}
