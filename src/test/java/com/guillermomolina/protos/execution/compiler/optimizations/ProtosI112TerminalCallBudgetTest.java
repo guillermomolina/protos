@@ -409,9 +409,10 @@ final class ProtosI112TerminalCallBudgetTest {
                      new Harness(false)) {
 
             harness.run(() -> {
-                // I115-H1: the factorial ifTrue callback is a physical root again.
+                // I115-H3: the factorial ifTrue callback is integrated into
+                // the factorial root; the group has three physical roots.
                 Census census = census(
-                        FACTORIAL_RUN, "i115-r6-factorial-run", 4);
+                        FACTORIAL_RUN, "i115-r6-factorial-run", 3);
 
                 List<Integer> runs = new ArrayList<>();
                 for (int index = 1; index < census.roots().size(); index++) {
@@ -430,7 +431,7 @@ final class ProtosI112TerminalCallBudgetTest {
                                 "c.EnterRoot",
                                 "c.ReadGlobal",
                                 "load.constant",
-                                "c.InvokeClosureOneTail",
+                                "c.InvokeExperimentalClosureOneTail",
                                 "c.EpilogForReturn",
                                 "return"),
                         run,

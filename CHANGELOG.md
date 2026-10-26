@@ -8,6 +8,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.16-SNAPSHOT
+
+- `I115-H4-A` (experimental GraalPy-style direct terminal Call1 for factorial
+  `run()`): add `InvokeExperimentalClosureOneTail`, with a cached
+  Closure-identity PIC and `DirectCallNode` for a structurally admitted
+  terminal call to a certified H3 recursive Integer Closure. Non-admitted
+  invocations retain the general `InvokeClosureOneTail` path.
+  - Record the certified recursive module binding during lowering and
+    restrict the new operation to the corresponding terminal unary call
+    of a parameterless Closure root; preserve other ordinary call sites.
+  - Update the historical factorial structural expectations: three
+    physical roots and the six-instruction `run()` including one
+    `InvokeExperimentalClosureOneTail`. These are source-test oracles,
+    not measurements made during this versioned replay.
+  - **Historical semantic divergence:** the direct PIC ignores dynamic
+    `Object.call` replacement and cross-Context projection, reuses a
+    cached target without a code-stability invalidation equivalent,
+    transports no caller, Task, Prelude or ReturnHome, and does not
+    check ReturnHome observability or potential suspension. It also
+    bypasses bridged control-transfer translation and null-result
+    checking and returns directly to the calling root's epilogue.
+  - H3's wrapping signed-64 `long` overflow and the earlier D179 C0
+    late-lexical-retargeting divergence remain unresolved. This is an
+    intermediate experimental optimization, not a complete semantic,
+    suspension, Context-isolation or performance acceptance gate.
+  - Reconstructed from original I115 commit
+    `aac8ee5fc091491c4b04447ae4c9dc271fdc2e7a`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.15-SNAPSHOT
 
 - `I115-H3` (experimental factorial bytecode hot path): specialize the

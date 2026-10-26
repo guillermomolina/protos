@@ -624,7 +624,7 @@ final class ProtosI115RFactorialCaptureTest {
             "c.EnterRoot",
             "c.ReadGlobal",
             "load.constant",
-            "c.InvokeClosureOneTail",
+            "c.InvokeExperimentalClosureOneTail",
             "c.EpilogForReturn",
             "return");
 
