@@ -204,7 +204,7 @@ public final class ProtosStandardActorProtocol {
         ProtosModuleKey moduleKey = moduleRuntime.resolveModuleKey(moduleSpecifier, activation);
         String bindingName = ((ProtosStringValue) bindingValue).value();
         List<Object> transferredArguments =
-                ProtosActorValueTransfer.snapshotArguments(
+                ProtosActorValueTransfer.snapshotSpawnArguments(
                         supplied.subList(2, supplied.size()), activation);
 
         // Semantic creation cutover: nothing above this point creates an Actor or ActorRef.

@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.406-SNAPSHOT
+
+- `I125-B` (#966, D217): delegate `TcpAcceptor` through `Actor.spawn` for
+  same-Process cross-Actor acceptance.
+  - `Actor.spawn` initialization arguments are the only route that
+    delegates a concrete acceptor. The source stage extracts an inert
+    host-only descriptor (shared listener flow plus exact Process
+    incarnation) per acceptor identity, without reading its slots or
+    structural state. The destination materializes one fresh OPEN,
+    slotless acceptor parented by the canonical prototype. Aliases,
+    cycles and delegation parents are preserved, and Map keys rebuild
+    their recorded hash from the destination lookup chain.
+  - Source, destination and delegated accept admission all require the
+    exact same `ProtosProcessRuntime`; the listener owner's own domain
+    keeps its I125-A admission. Send, request, replies, P and ordinary
+    snapshots still reject concrete acceptors.
+  - Delegated accepts share the listener's single backend and lifecycle,
+    while the operation, Future and accepted `TcpConnection` belong to the
+    accepting Actor. On listener close, other Actors build their own
+    `IOLifecycleError`.
+  - A committed accept whose delivery is dropped by Actor termination
+    releases its socket once and retires its lifecycle registration, so
+    listener release cannot block.
+  - TCP listener close outcomes are published in the listener owner's
+    domain unless the backend reports them synchronously inside the
+    owner's own `close()`; other I/O families are unchanged.
+
 ## 0.3.405-SNAPSHOT
 
 - `I125-A` (#966, D217): add the Actor-local `TcpAcceptor` capability

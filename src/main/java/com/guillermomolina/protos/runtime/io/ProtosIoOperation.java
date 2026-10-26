@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
@@ -23,11 +38,21 @@ public final class ProtosIoOperation {
 
     private enum DeferredCutover { NONE, CANCELLATION, CLOSE }
 
-    record CloseCutoverAction(ProtosObjectValue error, Runnable cancellationHandler) {}
+    /**
+     * Close cutover recorded under the lifecycle lock. A deferred foreign settlement carries no
+     * Error: the owning foreign Actor constructs and publishes it (I125-B).
+     */
+    record CloseCutoverAction(
+            ProtosObjectValue error,
+            Runnable cancellationHandler,
+            boolean deferredForeignSettlement) {}
 
     private final ProtosIoLifecycle lifecycle;
     private final ProtosActivation origin;
     private final ProtosFutureValue future;
+    /** I125-B explicitly delegated TcpAcceptor accept; grants no general foreign-domain permission. */
+    private final boolean delegatedTcpAccept;
+    private boolean closeSettlementClaimed;
     private Phase phase = Phase.UNCOMMITTED;
     private DeferredCutover deferredCutover = DeferredCutover.NONE;
     private ProtosObjectValue deferredCloseError;
@@ -42,6 +67,15 @@ public final class ProtosIoOperation {
     private ProtosDynamicControlState deferredCPrimeDynamicControlState;
 
     ProtosIoOperation(ProtosIoLifecycle lifecycle, ProtosActivation origin, ProtosFutureValue future) {
+        this(lifecycle, origin, future, false);
+    }
+
+    ProtosIoOperation(
+            ProtosIoLifecycle lifecycle,
+            ProtosActivation origin,
+            ProtosFutureValue future,
+            boolean delegatedTcpAccept) {
+        this.delegatedTcpAccept=delegatedTcpAccept;
         this.lifecycle=Objects.requireNonNull(lifecycle,"lifecycle");
         this.origin=Objects.requireNonNull(origin,"origin");
         this.future=Objects.requireNonNull(future,"future");
@@ -419,24 +453,94 @@ public final class ProtosIoOperation {
     CloseCutoverAction closeCutoverLocked() {
         if (phase == Phase.UNCOMMITTED) {
             phase=Phase.TERMINAL;
+            if (foreignDelegatedLocked()) {
+                // The cutover is recorded here; the Error belongs to the accepting Actor.
+                return new CloseCutoverAction(null, cancellationHandler, true);
+            }
             return new CloseCutoverAction(
                     ProtosCoreErrors.newOccurrence(
                             origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR),
-                    cancellationHandler);
+                    cancellationHandler,
+                    false);
         }
         if (phase == Phase.ATTEMPTING_FIRST_EFFECT
                 && deferredCutover == DeferredCutover.NONE) {
             deferredCutover=DeferredCutover.CLOSE;
             deferredCloseError=ProtosCoreErrors.newOccurrence(
                     origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
-            return new CloseCutoverAction(null, cancellationHandler);
+            return new CloseCutoverAction(null, cancellationHandler, false);
         }
         return null;
+    }
+
+    private boolean foreignDelegatedLocked() {
+        return delegatedTcpAccept
+                && origin.executionDomain() != lifecycle.ownerDomainForRuntime();
     }
 
     void failAtCloseCutover(ProtosObjectValue error) {
         future.fail(error);
         finishTerminal();
+    }
+
+    /**
+     * I125-B: settles an already-recorded foreign close cutover inside the accepting Actor. The
+     * IOLifecycleError is constructed there; a discarded or rejected completion retires the
+     * operation host-only, without guest execution.
+     */
+    void scheduleDeferredCloseCutoverSettlement() {
+        try {
+            origin.executionDomain()
+                    .enqueueTargetedFutureCompletionForRuntime(
+                            future,
+                            this::settleDeferredCloseCutoverInOrigin,
+                            this::retireUnsettledCloseCutover);
+        } catch (IllegalStateException terminatingActor) {
+            retireUnsettledCloseCutover();
+        }
+    }
+
+    private boolean settleDeferredCloseCutoverInOrigin() {
+        if (!claimCloseSettlement()) return false;
+        boolean won = false;
+        try {
+            won = future.fail(ProtosCoreErrors.newOccurrence(
+                    origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR));
+        } finally {
+            finishTerminal();
+        }
+        return won;
+    }
+
+    private void retireUnsettledCloseCutover() {
+        if (!claimCloseSettlement()) return;
+        // The terminating Actor's Future keeps its existing termination contract; only the
+        // registrations are retired so lifecycle release can proceed.
+        finishTerminal();
+    }
+
+    private boolean claimCloseSettlement() {
+        synchronized(lifecycle) {
+            if (closeSettlementClaimed) return false;
+            closeSettlementClaimed=true;
+            return true;
+        }
+    }
+
+    /**
+     * I125-B host-only retirement of a committed acquisition whose accepted host resource was
+     * released undelivered because its owning Actor is terminating. Idempotent; creates no guest
+     * object, runs no guest code, never turns a committed operation into a precommit
+     * cancellation and leaves the Future to the existing Actor-termination contract. Returns
+     * false when the operation was not committed and undelivered.
+     */
+    public boolean abandonCommittedAcquisitionForRuntime() {
+        synchronized(lifecycle) {
+            if (phase != Phase.COMMITTED) return false;
+            phase=Phase.TERMINAL;
+        }
+        finishTerminal();
+        return true;
     }
 
     private void finishTerminal() {

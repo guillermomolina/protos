@@ -69,11 +69,21 @@ final class ProtosNetworkAcquisitionInvocation {
                 operation.future(),
                 () -> claim(delivery) && action.getAsBoolean(),
                 () -> {
-                    if (claim(delivery)) releaseSafely(releaseOnDrop);
+                    if (claim(delivery)) drop(releaseOnDrop);
                 });
         } catch (IllegalStateException terminatingActor) {
-            if (claim(delivery)) releaseSafely(releaseOnDrop);
+            if (claim(delivery)) drop(releaseOnDrop);
         }
+    }
+
+    /**
+     * Releases one undelivered host resource and retires a committed acquisition that lost its
+     * terminating destination Actor (I125-B), so lifecycle release cannot wait on it forever.
+     * Host-only: no guest object or Error is created here.
+     */
+    private void drop(Runnable releaseOnDrop) {
+        releaseSafely(releaseOnDrop);
+        operation.abandonCommittedAcquisitionForRuntime();
     }
 
     private boolean claim(AtomicReference<Runnable> delivery) {
@@ -101,7 +111,7 @@ final class ProtosNetworkAcquisitionInvocation {
         if (toCancel != null) toCancel.run();
         for (AtomicReference<Runnable> delivery : dropped) {
             Runnable release = delivery.getAndSet(null);
-            if (release != null) releaseSafely(release);
+            if (release != null) drop(release);
         }
     }
 

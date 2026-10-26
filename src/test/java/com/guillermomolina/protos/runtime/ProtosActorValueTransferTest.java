@@ -20,13 +20,18 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosStandardTcpListenerProtocol;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
+import com.guillermomolina.protos.runtime.io.ProtosTcpAcceptorValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
+import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class ProtosActorValueTransferTest {
@@ -953,6 +958,279 @@ final class ProtosActorValueTransferTest {
                 source, () -> ProtosActorValueTransfer.snapshotValue(failing, source));
         assertSame(half, failing.indexedAt(new ProtosIntegerValue(0)));
         assertTrue(failing.isOpen());
+    }
+
+    @Test
+    void spawnDelegationPreservesOneDestinationCapabilityAcrossAliasesAndCycles() throws Exception {
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue acceptor = x.acquire();
+        ProtosArrayValue array = x.prelude.newArray(List.of(acceptor, acceptor));
+        ProtosMapValue map = x.prelude.newMap();
+        ProtosInvocation.invokeMessage(
+                map, "atPut", List.of(new ProtosStringValue("k"), acceptor), x.source);
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(x.prelude.identityMapPrototype());
+        ProtosInvocation.invokeMessage(identityMap, "atPut", List.of(acceptor, acceptor), x.source);
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("acceptor", acceptor);
+        holder.createLocalSlot("self", holder);
+        holder.createLocalSlot("array", array);
+        ProtosObjectValue child = new ProtosObjectValue(acceptor);
+
+        List<?> delivered =
+                x.spawn(List.of(acceptor, acceptor, array, map, identityMap, holder, child));
+
+        ProtosTcpAcceptorValue destination =
+                assertInstanceOf(ProtosTcpAcceptorValue.class, delivered.get(0));
+        assertNotSame(acceptor, destination);
+        assertSame(destination, delivered.get(1));
+        ProtosArrayValue copiedArray = assertInstanceOf(ProtosArrayValue.class, delivered.get(2));
+        assertSame(destination, copiedArray.indexedSnapshot().get(0));
+        assertSame(destination, copiedArray.indexedSnapshot().get(1));
+        ProtosMapValue copiedMap = assertInstanceOf(ProtosMapValue.class, delivered.get(3));
+        assertSame(destination, copiedMap.keyedSnapshot().get(0).value());
+        ProtosIdentityMapValue copiedIdentityMap =
+                assertInstanceOf(ProtosIdentityMapValue.class, delivered.get(4));
+        assertSame(destination, copiedIdentityMap.keyedSnapshot().get(0).key());
+        assertSame(destination, copiedIdentityMap.keyedSnapshot().get(0).value());
+        ProtosObjectValue copiedHolder = assertInstanceOf(ProtosObjectValue.class, delivered.get(5));
+        assertSame(destination, copiedHolder.readLocalSlot("acceptor").orElseThrow());
+        assertSame(copiedHolder, copiedHolder.readLocalSlot("self").orElseThrow());
+        assertSame(copiedArray, copiedHolder.readLocalSlot("array").orElseThrow());
+        ProtosObjectValue copiedChild = assertInstanceOf(ProtosObjectValue.class, delivered.get(6));
+        assertSame(destination, copiedChild.parent().orElseThrow());
+        assertTrue(destination.ownedByForRuntime(x.destination));
+        assertFalse(destination.ownedByForRuntime(x.source));
+        assertEquals(0, x.backend.accepts.get());
+    }
+
+    @Test
+    void distinctSpawnDelegatedCapabilitiesStayDistinctOverOneAuthority() throws Exception {
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue first = x.acquire();
+        ProtosTcpAcceptorValue second = x.acquire();
+
+        List<?> delivered = x.spawn(List.of(first, second));
+
+        ProtosTcpAcceptorValue copiedFirst =
+                assertInstanceOf(ProtosTcpAcceptorValue.class, delivered.get(0));
+        ProtosTcpAcceptorValue copiedSecond =
+                assertInstanceOf(ProtosTcpAcceptorValue.class, delivered.get(1));
+        assertNotSame(copiedFirst, copiedSecond);
+        assertEquals(ProtosFutureValue.State.PENDING, copiedFirst.acceptForRuntime(x.destination).state());
+        assertEquals(ProtosFutureValue.State.PENDING, copiedSecond.acceptForRuntime(x.destination).state());
+        assertEquals(2, x.backend.accepts.get(), "both capabilities reach the one listener backend");
+    }
+
+    @Test
+    void spawnDelegationAttenuatesSlotsAndStructuralStateOfClosedOrFrozenSources() throws Exception {
+        for (boolean freeze : new boolean[] {false, true}) {
+            SpawnFixture x = spawnFixture();
+            ProtosTcpAcceptorValue acceptor = x.acquire();
+            acceptor.createLocalSlot("label", new ProtosIntegerValue(3));
+            acceptor.createLocalSlot("secret", x.listener);
+            if (freeze) acceptor.freeze(); else acceptor.close();
+
+            ProtosTcpAcceptorValue destination =
+                    assertInstanceOf(ProtosTcpAcceptorValue.class, x.spawn(List.of(acceptor)).get(0));
+
+            assertTrue(destination.isOpen());
+            assertTrue(destination.localSlotsSnapshot().isEmpty());
+            assertSame(x.prelude.tcpAcceptorPrototypeForRuntime(), destination.parent().orElseThrow());
+            assertEquals(freeze, acceptor.isFrozen());
+            assertEquals(!freeze, acceptor.isClosed());
+            assertEquals(2, acceptor.localSlotsSnapshot().size());
+            assertEquals(ProtosFutureValue.State.PENDING, destination.acceptForRuntime(x.destination).state());
+            assertEquals(1, x.backend.accepts.get());
+        }
+    }
+
+    @Test
+    void independentlyReachableNonTransferableValueFailsTheWholeSpawnSnapshot() throws Exception {
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue acceptor = x.acquire();
+        acceptor.createLocalSlot("label", new ProtosIntegerValue(3));
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("acceptor", acceptor);
+        holder.createLocalSlot("listener", x.listener);
+
+        assertNonTransferable(
+                x.source,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(List.of(acceptor, holder), x.source));
+
+        assertTrue(acceptor.isOpen());
+        assertEquals(1, acceptor.localSlotsSnapshot().size());
+        assertSame(acceptor, holder.readLocalSlot("acceptor").orElseThrow());
+        assertSame(x.listener, holder.readLocalSlot("listener").orElseThrow());
+        assertEquals(ProtosIoLifecycle.State.OPEN, x.listener.lifecycleForRuntime().state());
+        assertEquals(0, x.backend.accepts.get());
+    }
+
+    @Test
+    void spawnDelegationRequiresSourceActorProcessDomainAndDestinationProcess() throws Exception {
+        // Missing source Actor: a standalone activation owns the listener.
+        ProtosPrelude prelude = core();
+        ProtosActivation standalone = prelude.newModuleActivation();
+        CountingListenerBackend standaloneBackend = new CountingListenerBackend();
+        ProtosTcpAcceptorValue unhosted =
+                acquire(listener(prelude, standalone, standaloneBackend), standalone);
+        assertNonTransferable(
+                standalone,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(List.of(unhosted), standalone));
+
+        // Missing source Process: an Actor without Process hosting owns the listener.
+        ProtosActor processless = new ProtosActor(prelude.actorRefPrototypeForRuntime());
+        ProtosActivation processlessActivation = actorActivation(prelude, processless);
+        ProtosTcpAcceptorValue processlessAcceptor =
+                acquire(listener(prelude, processlessActivation, standaloneBackend), processlessActivation);
+        assertNonTransferable(
+                processlessActivation,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(
+                        List.of(processlessAcceptor), processlessActivation));
+
+        // Source domain mismatch: the snapshot is formed outside the capability's owner domain.
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue acceptor = x.acquire();
+        assertNonTransferable(
+                x.destination,
+                () -> ProtosActorValueTransfer.snapshotSpawnArguments(List.of(acceptor), x.destination));
+
+        // Destination in another Process incarnation fails closed without any authority.
+        List<Object> snapshot = ProtosActorValueTransfer.snapshotSpawnArguments(List.of(acceptor), x.source);
+        ProtosProcessRuntime otherProcess = new ProtosProcessRuntime(x.prelude.actorRefPrototypeForRuntime());
+        ProtosActivation foreignDestination =
+                actorActivation(x.prelude, otherProcess.createHostedActorForRuntime(x.prelude.actorRefPrototypeForRuntime()));
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosActorValueTransfer.materializeArguments(snapshot, foreignDestination));
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosActorValueTransfer.materializeArguments(
+                        snapshot, actorActivation(x.prelude, processless)));
+
+        // Listener in an incompatible Process: delegated admission rejects the foreign Actor.
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> x.listener.lifecycleForRuntime().beginDelegatedTcpAcceptForRuntime(foreignDestination));
+        assertEquals(0, x.backend.accepts.get());
+        assertEquals(0, standaloneBackend.accepts.get());
+    }
+
+    @Test
+    void ordinarySnapshotsStillRejectTopLevelAndNestedTcpAcceptors() throws Exception {
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue acceptor = x.acquire();
+        ProtosArrayValue nested = x.prelude.newArray(List.of(acceptor));
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("inner", nested);
+
+        assertNonTransferable(x.source, () -> ProtosActorValueTransfer.snapshotValue(acceptor, x.source));
+        assertNonTransferable(x.source, () -> ProtosActorValueTransfer.snapshotValue(holder, x.source));
+        assertNonTransferable(
+                x.source, () -> ProtosActorValueTransfer.snapshotArguments(List.of(acceptor), x.source));
+        assertNonTransferable(
+                x.source, () -> ProtosActorValueTransfer.snapshotArguments(List.of(holder), x.source));
+        assertNonTransferable(
+                x.source,
+                () -> ProtosActorValueTransfer.snapshotValue(new ProtosObjectValue(acceptor), x.source));
+    }
+
+    @Test
+    void spawnDelegatedCapabilitiesRemainValidMapAndIdentityMapKeys() throws Exception {
+        SpawnFixture x = spawnFixture();
+        ProtosTcpAcceptorValue plain = x.acquire();
+        ProtosTcpAcceptorValue overridden = x.acquire();
+        ProtosObjectValue inheriting = new ProtosObjectValue(overridden);
+        ProtosMapValue map = x.prelude.newMap();
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(x.prelude.identityMapPrototype());
+        for (ProtosObjectValue key : List.of(plain, overridden, inheriting)) {
+            ProtosInvocation.invokeMessage(map, "atPut", List.of(key, key), x.source);
+            ProtosInvocation.invokeMessage(identityMap, "atPut", List.of(key, key), x.source);
+        }
+        // The source hash override is never executed during snapshot formation and is omitted at
+        // the destination, so its stale source bookkeeping must not survive.
+        overridden.createLocalSlot("hash", new ProtosIntegerValue(7));
+
+        List<?> delivered =
+                x.spawn(List.of(map, identityMap, plain, overridden, plain, overridden));
+        ProtosMapValue copiedMap = assertInstanceOf(ProtosMapValue.class, delivered.get(0));
+        ProtosIdentityMapValue copiedIdentityMap =
+                assertInstanceOf(ProtosIdentityMapValue.class, delivered.get(1));
+        Object copiedPlain = delivered.get(2);
+        Object copiedOverridden = delivered.get(3);
+        assertSame(copiedPlain, delivered.get(4));
+        assertSame(copiedOverridden, delivered.get(5));
+        assertTrue(((ProtosObjectValue) copiedOverridden).localSlotsSnapshot().isEmpty());
+        Object copiedInheriting = copiedMap.keyedSnapshot().get(2).key();
+        assertSame(copiedOverridden, ((ProtosObjectValue) copiedInheriting).parent().orElseThrow());
+
+        for (Object key : List.of(copiedPlain, copiedOverridden, copiedInheriting)) {
+            assertSame(key, ProtosInvocation.invokeMessage(copiedMap, "at", List.of(key), x.destination));
+            assertSame(
+                    key, ProtosInvocation.invokeMessage(copiedIdentityMap, "at", List.of(key), x.destination));
+        }
+        for (ProtosMapValue.Entry entry : copiedMap.keyedSnapshot()) {
+            assertEquals(ProtosNumericHashKey.fromIdentity(entry.key()), entry.recordedHash());
+        }
+    }
+
+    private static SpawnFixture spawnFixture() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosProcessRuntime process = new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
+        ProtosActivation source = actorActivation(prelude, process.rootActorForRuntime());
+        ProtosActivation destination =
+                actorActivation(prelude, process.createHostedActorForRuntime(prelude.actorRefPrototypeForRuntime()));
+        CountingListenerBackend backend = new CountingListenerBackend();
+        return new SpawnFixture(prelude, source, destination, listener(prelude, source, backend), backend);
+    }
+
+    private static ProtosActivation actorActivation(ProtosPrelude prelude, ProtosActor actor) {
+        return prelude.newModuleActivation(
+                actor.moduleState(), null, prelude.newExecutionContext(), actor.executionDomain());
+    }
+
+    private static ProtosTcpListenerValue listener(
+            ProtosPrelude prelude, ProtosActivation owner, CountingListenerBackend backend) {
+        return new ProtosTcpListenerValue(
+                prelude, new Object(), owner, backend, 51000,
+                ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
+    }
+
+    private static ProtosTcpAcceptorValue acquire(ProtosTcpListenerValue listener, ProtosActivation owner) {
+        return assertInstanceOf(
+                ProtosTcpAcceptorValue.class,
+                ProtosInvocation.invokeMessage(listener, "acceptCapability", List.of(), owner));
+    }
+
+    private record SpawnFixture(
+            ProtosPrelude prelude,
+            ProtosActivation source,
+            ProtosActivation destination,
+            ProtosTcpListenerValue listener,
+            CountingListenerBackend backend) {
+        ProtosTcpAcceptorValue acquire() {
+            return ProtosActorValueTransferTest.acquire(listener, source);
+        }
+
+        List<?> spawn(List<?> arguments) {
+            List<Object> snapshot = ProtosActorValueTransfer.snapshotSpawnArguments(arguments, source);
+            assertTrue(ProtosActorValueTransfer.requiresMaterialization(snapshot));
+            return ProtosActorValueTransfer.materializeArguments(snapshot, destination);
+        }
+    }
+
+    private static final class CountingListenerBackend implements ProtosTcpListenerFlow.Backend {
+        final AtomicInteger accepts = new AtomicInteger();
+
+        @Override
+        public void close(ProtosTcpListenerFlow.CloseCompletion completion) {}
+
+        @Override
+        public ProtosTcpListenerFlow.Cancellation accept(ProtosTcpListenerFlow.AcceptCompletion completion) {
+            accepts.incrementAndGet();
+            return () -> {};
+        }
     }
 
     private static ProtosObjectValue linearAlgebraMember(ProtosPrelude prelude, String name) {

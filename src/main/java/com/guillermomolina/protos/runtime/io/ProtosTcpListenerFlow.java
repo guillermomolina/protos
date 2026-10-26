@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
@@ -90,7 +91,7 @@ public final class ProtosTcpListenerFlow {
         this.domain=activation.executionDomain();
         this.backend=Objects.requireNonNull(backend,"backend");
         this.resultMaterializer=resultMaterializer;
-        this.lifecycle=new ProtosIoLifecycle(receiver,activation.prelude().orElseThrow().futurePrototype(),domain,this::startCloseRelease);
+        this.lifecycle=ProtosIoLifecycle.withOwnerDomainPublicationForRuntime(receiver,activation.prelude().orElseThrow().futurePrototype(),domain,this::startCloseRelease);
     }
 
     public boolean acceptsForRuntime() { return resultMaterializer != null; }
@@ -98,12 +99,39 @@ public final class ProtosTcpListenerFlow {
     public ProtosFutureValue accept(ProtosActivation activation) {
         requireDomain(activation);
         if(resultMaterializer==null) throw new IllegalStateException("TcpListener has no accept materializer");
+        return startAccept(activation, lifecycle.beginOperation(activation));
+    }
 
-        ProtosIoOperation operation=lifecycle.beginOperation(activation);
+    /**
+     * I125-B delegated TcpAcceptor accept (D217). The accepting Actor must share this listener's
+     * exact Process incarnation; the operation, its Future and the accepted connection all belong
+     * to the accepting Actor while the backend, queue and lifecycle stay this listener's. The
+     * listener-owner domain itself crosses no Actor boundary and keeps its I125-A admission.
+     */
+    public ProtosFutureValue acceptDelegatedForRuntime(ProtosActivation activation) {
+        Objects.requireNonNull(activation,"activation");
+        if(activation.executionDomain()!=domain) {
+            ProtosProcessRuntime acceptingProcess =
+                    ProtosIoLifecycle.hostingProcessForRuntime(activation.executionDomain()).orElse(null);
+            if(acceptingProcess==null || !ownedByProcessForRuntime(acceptingProcess)) {
+                throw new IllegalArgumentException("TcpAcceptor operation belongs to another Process");
+            }
+        }
+        if(resultMaterializer==null) throw new IllegalStateException("TcpListener has no accept materializer");
+        return startAccept(activation, lifecycle.beginDelegatedTcpAcceptForRuntime(activation));
+    }
+
+    /** True only for the exact Process incarnation hosting this listener's owning Actor. */
+    boolean ownedByProcessForRuntime(ProtosProcessRuntime process) {
+        return process != null
+                && ProtosIoLifecycle.hostingProcessForRuntime(domain).orElse(null) == process;
+    }
+
+    private ProtosFutureValue startAccept(ProtosActivation activation, ProtosIoOperation operation) {
         if(!operation.future().isPending()) return operation.future();
 
         ProtosNetworkAcquisitionInvocation invocation =
-                new ProtosNetworkAcquisitionInvocation(domain, operation);
+                new ProtosNetworkAcquisitionInvocation(activation.executionDomain(), operation);
         operation.onCancellation(invocation::requestCancellation);
 
         AcceptCompletion completion = new AcceptCompletion() {
@@ -191,12 +219,15 @@ public final class ProtosTcpListenerFlow {
     private void startCloseRelease(ProtosIoLifecycle.ReleaseCompletion completion) {
         ProtosActivation activation=closeActivation;
         if(activation==null) throw new IllegalStateException("TCP listener close release started without a close activation");
+        // Backend release stays host-only. Callbacks never build guest Errors or settle Futures:
+        // the lifecycle does so directly only for a synchronous owner-domain report, and
+        // otherwise in the listener owner's domain (I125-B).
         try {
             backend.close(new CloseCompletion(){
                 @Override public void succeeded(){ completion.succeeded(); }
-                @Override public void failed(){ completion.failed(ioError(activation)); }
+                @Override public void failed(){ completion.failedWithIoErrorForRuntime(); }
             });
-        } catch(RuntimeException ex) { completion.failed(ioError(activation)); }
+        } catch(RuntimeException ex) { completion.failedWithIoErrorForRuntime(); }
     }
 
     private void requireDomain(ProtosActivation activation) {

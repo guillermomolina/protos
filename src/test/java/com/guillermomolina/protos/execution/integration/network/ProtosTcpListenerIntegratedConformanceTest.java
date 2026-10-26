@@ -168,6 +168,8 @@ final class ProtosTcpListenerIntegratedConformanceTest {
         assertEquals(ProtosFutureValue.State.PENDING, close.state());
 
         listenerBackend.closeCompletion.succeeded();
+        assertEquals(ProtosFutureValue.State.PENDING, close.state());
+        assertTrue(x.activation.executionDomain().dispatchOne());
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertSame(listener, close.resolvedValue().orElseThrow());
         assertTrue(listener.isOpen());

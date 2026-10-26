@@ -61,9 +61,9 @@ public final class ProtosActorValueTransfer {
 
     /** Forms one detached Actor-boundary snapshot value or signals NonTransferableValue. */
     public static Object snapshotValue(Object value, ProtosActivation source) {
-        Copier copier = new Copier(source, false);
+        Copier copier = new Copier(source, false, false);
         Object copied = copier.copy(value);
-        return copier.semanticRecords ? new DetachedGraph(List.of(copied)) : copied;
+        return copier.semanticRecords ? new DetachedGraph(List.of(copied), false) : copied;
     }
 
     /**
@@ -73,14 +73,29 @@ public final class ProtosActorValueTransfer {
      * preserved rather than copied independently.
      */
     public static List<Object> snapshotArguments(List<?> values, ProtosActivation source) {
+        return snapshotArgumentVector(values, source, false);
+    }
+
+    /**
+     * Actor.spawn initialization snapshot (D217, I125-B): {@link #snapshotArguments} plus the
+     * spawn-only delegation of physical TcpAcceptor capabilities. No other boundary may use it.
+     */
+    public static List<Object> snapshotSpawnArguments(List<?> values, ProtosActivation source) {
+        return snapshotArgumentVector(values, source, true);
+    }
+
+    private static List<Object> snapshotArgumentVector(
+            List<?> values, ProtosActivation source, boolean spawnDelegation) {
         Objects.requireNonNull(values, "values");
-        Copier copier = new Copier(source, false);
+        Copier copier = new Copier(source, false, spawnDelegation);
         ArrayList<Object> result = new ArrayList<>(values.size());
         for (Object value : values) {
             result.add(copier.copy(value));
         }
         List<Object> snapshot = List.copyOf(result);
-        return copier.semanticRecords ? List.of(new DetachedGraph(snapshot)) : snapshot;
+        return copier.semanticRecords
+                ? List.of(new DetachedGraph(snapshot, spawnDelegation))
+                : snapshot;
     }
 
     /** True when an argument snapshot carries semantic transfer records needing materialization. */
@@ -102,8 +117,9 @@ public final class ProtosActorValueTransfer {
         if (!requiresMaterialization(snapshot)) {
             return snapshot;
         }
-        Copier materializer = new Copier(destination, true);
-        List<Object> roots = ((DetachedGraph) snapshot.get(0)).roots;
+        DetachedGraph graph = (DetachedGraph) snapshot.get(0);
+        Copier materializer = new Copier(destination, true, graph.spawnDelegation);
+        List<Object> roots = graph.roots;
         ArrayList<Object> result = new ArrayList<>(roots.size());
         for (Object root : roots) {
             result.add(materializer.copy(root));
@@ -116,7 +132,7 @@ public final class ProtosActorValueTransfer {
         if (!(snapshot instanceof DetachedGraph graph)) {
             return snapshot;
         }
-        return new Copier(destination, true).copy(graph.roots.get(0));
+        return new Copier(destination, true, graph.spawnDelegation).copy(graph.roots.get(0));
     }
 
     /**
@@ -165,9 +181,12 @@ public final class ProtosActorValueTransfer {
      */
     private static final class DetachedGraph {
         private final List<Object> roots;
+        /** Spawn scope: only such a graph may materialize TcpAcceptor delegation descriptors. */
+        private final boolean spawnDelegation;
 
-        private DetachedGraph(List<Object> roots) {
+        private DetachedGraph(List<Object> roots, boolean spawnDelegation) {
             this.roots = roots;
+            this.spawnDelegation = spawnDelegation;
         }
     }
 
@@ -180,6 +199,9 @@ public final class ProtosActorValueTransfer {
         private final ProtosActivation source;
         private final ProtosPrelude prelude;
         private final boolean materializing;
+        /** I125-B: Actor.spawn initialization policy; ordinary boundaries never set it. */
+        private final boolean spawnDelegation;
+        /** True when the snapshot needs destination materialization (records or descriptors). */
         private boolean semanticRecords;
         private final IdentityHashMap<Object, Object> memo = new IdentityHashMap<>();
         private final Set<Object> populating =
@@ -187,9 +209,10 @@ public final class ProtosActorValueTransfer {
         private final Set<Object> populated =
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
-        private Copier(ProtosActivation source, boolean materializing) {
+        private Copier(ProtosActivation source, boolean materializing, boolean spawnDelegation) {
             this.source = Objects.requireNonNull(source, "source");
             this.materializing = materializing;
+            this.spawnDelegation = spawnDelegation;
             this.prelude =
                     source.prelude()
                             .orElseThrow(
@@ -289,6 +312,34 @@ public final class ProtosActorValueTransfer {
                 return remember(value, stream.rematerializeForActorTransfer());
             }
 
+            if (value instanceof ProtosTcpAcceptorValue acceptor) {
+                // D217/I125-B source stage, spawn only: the capability crosses as one inert
+                // descriptor per identity. Its parent, slots and structural state are omitted,
+                // so nothing reachable only through them is visited.
+                if (materializing || !spawnDelegation) {
+                    throw nonTransferable();
+                }
+                ProtosTcpAcceptorValue.SpawnDelegation descriptor;
+                try {
+                    descriptor = acceptor.prepareSpawnDelegationForRuntime(source);
+                } catch (IllegalArgumentException | IllegalStateException rejected) {
+                    throw nonTransferable();
+                }
+                semanticRecords = true;
+                return remember(value, descriptor);
+            }
+            if (value instanceof ProtosTcpAcceptorValue.SpawnDelegation descriptor) {
+                // D217/I125-B destination stage: one fresh capability per descriptor identity.
+                // Outside the spawn scope a descriptor fails closed.
+                if (!materializing || !spawnDelegation) {
+                    throw nonTransferable();
+                }
+                return remember(
+                        value,
+                        ProtosTcpAcceptorValue.materializeSpawnDelegationForRuntime(
+                                descriptor, source));
+            }
+
             // These are explicitly non-transferable Actor-domain/execution/resource values.
             if (value instanceof ProtosClosureValue
                     || value instanceof ProtosSendOperationControl
@@ -300,7 +351,6 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosNetworkCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
-                    || value instanceof ProtosTcpAcceptorValue
                     // LIB020-A sealed families are not portable; copying would drop the family.
                     // A Core Fraction or Complex never reaches here: each crossed above as an
                     // inert descriptor (D197-C, I090-C1).
@@ -481,13 +531,19 @@ public final class ProtosActorValueTransfer {
         private boolean usesDefaultObjectHash(Object key) {
             Object current = key;
             while (true) {
-                if (current instanceof ProtosObjectValue candidate) {
+                if (current instanceof ProtosTcpAcceptorValue
+                        && memo.get(current) instanceof ProtosTcpAcceptorValue.SpawnDelegation) {
+                    // I125-B: the delegated capability loses its local slots (including any
+                    // hash override) and delegates to the canonical prototype at the destination.
+                    current = prelude.tcpAcceptorPrototypeForRuntime();
+                } else if (current instanceof ProtosObjectValue candidate) {
                     if (candidate.hasLocalSlot("hash")) {
                         return candidate == ProtosObjectValue.rootObject();
                     }
                     current = candidate.parent().orElse(null);
                 } else if (current instanceof ProtosSemanticTransferRecord
-                        || current instanceof ProtosPathComponents) {
+                        || current instanceof ProtosPathComponents
+                        || current instanceof ProtosTcpAcceptorValue.SpawnDelegation) {
                     current = memo.get(current);
                 } else {
                     return false;
