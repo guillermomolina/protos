@@ -285,6 +285,19 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Set<String> currentRootOrdinaryClosureLocals =
             java.util.Set.of();
 
+    /*
+     * I115-H2 EXPERIMENTAL: a proven module-local recursive Closure may
+     * use static unary invocation and direct Integer operations. This lane
+     * intentionally preserves the I115-R6 semantic exceptions. Other roots
+     * retain H1-FIX dispatch and lexical-authority behavior.
+     */
+    private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
+            experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
+    private CanonicalClosure currentExperimentalRootDefinition;
+    private boolean currentExperimentalRecursiveIntegerAdmission;
+    private boolean currentExperimentalRecursiveIntegerEmission;
+
+
     private java.util.Map<CanonicalSend,
             ProtosPrimitiveNumericSendFastPathsBase
                     .FoldedIntegerArithmetic> currentRootArithmeticHints =
@@ -828,6 +841,24 @@ final class CanonicalToBytecodeLowerer {
                         sequence,
                         activationDefinition,
                         bindingAnalysisFor(sequence, activationDefinition));
+        // I115-R2: discover the module binding before nested root lowering.
+        if (activationDefinition == null) {
+            CanonicalBindingAnalysis analysis =
+                    rootPlan.rootFacts().bindingAnalysis();
+            CanonicalLexicalScope scope = rootPlan.rootFacts().scope();
+            for (CanonicalExpression expression : sequence.expressions()) {
+                if (expression instanceof CanonicalCreate create
+                        && create.target().isEmpty()
+                        && create.value() instanceof CanonicalClosure definition) {
+                    CanonicalBindingIdentity identity =
+                            analysis.identityOf(create).orElse(null);
+                    if (identity != null && identity.owner() == scope) {
+                        experimentalRecursiveBindings.put(definition, identity);
+                    }
+                }
+            }
+        }
+
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
@@ -918,6 +949,8 @@ final class CanonicalToBytecodeLowerer {
          * body of its enclosing root.
          */
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
+        CanonicalClosure savedExperimentalDefinition =
+                currentExperimentalRootDefinition;
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
@@ -965,6 +998,7 @@ final class CanonicalToBytecodeLowerer {
                     java.util.Collections.newSetFromMap(
                             new java.util.IdentityHashMap<>());
             currentRootAnalysis = analysisForThisRoot;
+            currentExperimentalRootDefinition = activationDefinition;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
@@ -988,6 +1022,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootEmittedContinuationPath = savedContinuationPath;
             currentRootEmittedTerminalInvocation = savedTerminalInvocation;
             currentRootAnalysis = savedAnalysis;
+            currentExperimentalRootDefinition = savedExperimentalDefinition;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
@@ -9881,6 +9916,7 @@ final class CanonicalToBytecodeLowerer {
             CanonicalBindingIdentity guestIntegerReturn,
             boolean guestIntegerLiteralReturn,
             boolean dispatches,
+            boolean experimentalRecursiveInteger,
             java.util.Set<CanonicalSend> dispatchingControls) {}
 
     /*
@@ -9960,6 +9996,10 @@ final class CanonicalToBytecodeLowerer {
         if (!parameters.isEmpty() && !unaryRequired) {
             return null;
         }
+        boolean experimentalRecursiveInteger =
+                unaryRequired
+                        && activationDefinition == currentExperimentalRootDefinition
+                        && experimentalContainsRecursiveSelfCall(sequence);
 
         /*
          * I115-H1-FIX: the callbacks of a dispatching Boolean control may
@@ -9968,6 +10008,10 @@ final class CanonicalToBytecodeLowerer {
          * everywhere. Pinning only widens families, which can only add
          * dispatching sites: iterate to the fixpoint.
          */
+        boolean savedRecursiveAdmission =
+                currentExperimentalRecursiveIntegerAdmission;
+        currentExperimentalRecursiveIntegerAdmission =
+                experimentalRecursiveInteger;
         java.util.Set<CanonicalBindingIdentity> pinned = new java.util.HashSet<>();
         java.util.Set<CanonicalSend> dispatchingControls;
         try {
@@ -9980,7 +10024,9 @@ final class CanonicalToBytecodeLowerer {
                 if (unaryRequired) {
                     kinds.put(
                             scope.identity(parameters.get(0).name()),
-                            ExperimentalCompactKind.OBJECT);
+                            experimentalRecursiveInteger
+                                    ? ExperimentalCompactKind.INTEGER
+                                    : ExperimentalCompactKind.OBJECT);
                 }
                 if (admitExperimentalCompactSequence(
                                 sequence, scope, kinds, false) == null) {
@@ -9996,6 +10042,8 @@ final class CanonicalToBytecodeLowerer {
             currentExperimentalCompactPinned = null;
             currentExperimentalCompactEscaped = null;
             currentExperimentalCompactDispatchingControls = null;
+            currentExperimentalRecursiveIntegerAdmission =
+                    savedRecursiveAdmission;
         }
         if (!experimentalCompactCreationsFollowLayout(
                 sequence, scope, unaryRequired ? parameters.get(0).name() : null)) {
@@ -10007,9 +10055,12 @@ final class CanonicalToBytecodeLowerer {
                 terminal instanceof CanonicalLiteral literal
                         && literal.kind() == CanonicalLiteral.Kind.NUMBER
                         && primitiveNumberLiteralOrNull(literal) instanceof Long;
-        boolean dispatches = !dispatchingControls.isEmpty();
-        for (CanonicalExpression expression : sequence.expressions()) {
-            dispatches |= experimentalCompactDispatches(expression);
+        boolean dispatches =
+                !experimentalRecursiveInteger && !dispatchingControls.isEmpty();
+        if (!experimentalRecursiveInteger) {
+            for (CanonicalExpression expression : sequence.expressions()) {
+                dispatches |= experimentalCompactDispatches(expression);
+            }
         }
         // A binding a physical callback root may store keeps carrier projection.
         CanonicalBindingIdentity guestIntegerReturn =
@@ -10022,6 +10073,7 @@ final class CanonicalToBytecodeLowerer {
                 guestIntegerReturn,
                 guestIntegerLiteralReturn,
                 dispatches,
+                experimentalRecursiveInteger,
                 java.util.Collections.unmodifiableSet(dispatchingControls));
     }
 
@@ -10182,6 +10234,94 @@ final class CanonicalToBytecodeLowerer {
      * when the expression's result may be consumed; the last expression of
      * a callback body is treated as consumed whenever its control is.
      */
+    private boolean experimentalRecursiveSelfCall(CanonicalCall call) {
+        if (currentExperimentalRootDefinition == null
+                || currentRootAnalysis == null
+                || call.arguments().size() != 1
+                || !(call.receiver() instanceof CanonicalLookup lookup)) {
+            return false;
+        }
+
+        CanonicalBindingIdentity registered =
+                experimentalRecursiveBindings.get(
+                        currentExperimentalRootDefinition);
+
+        CanonicalBindingResolution resolution =
+                currentRootAnalysis.resolutionOf(lookup).orElse(null);
+
+        CanonicalBindingIdentity resolved = null;
+        int depth = -1;
+
+        if (resolution
+                instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            resolved = captured.identity();
+            depth = captured.lexicalDepth();
+        } else if (resolution
+                instanceof CanonicalBindingResolution.Candidate candidate) {
+            resolved = candidate.identity();
+            depth = candidate.lexicalDepth();
+        }
+
+        boolean admitted =
+                registered != null
+                        && registered.owner().kind()
+                                == CanonicalLexicalScope.Kind.ROOT
+                        && registered.name().equals(lookup.name())
+                        && resolved != null
+                        && resolved.owner().kind()
+                                == CanonicalLexicalScope.Kind.ROOT
+                        && resolved.name().equals(registered.name())
+                        && depth > 0
+                        && currentRootAnalysis
+                                .scopeOf(currentExperimentalRootDefinition)
+                                .isPresent();
+
+        return admitted;
+    }
+
+
+    /*
+     * I115-H2: select the experimental Integer lane only if this root
+     * actually contains an admitted static self-call. A module binding
+     * alone is insufficient.
+     */
+    private boolean experimentalContainsRecursiveSelfCall(
+            CanonicalSequence sequence) {
+        for (CanonicalExpression expression : sequence.expressions()) {
+            if (experimentalContainsRecursiveSelfCall(expression)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean experimentalContainsRecursiveSelfCall(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalCall call) {
+            return experimentalRecursiveSelfCall(call);
+        }
+        if (expression instanceof CanonicalClosure closure) {
+            return experimentalContainsRecursiveSelfCall(closure.body());
+        }
+        if (expression instanceof CanonicalCreate create) {
+            return experimentalContainsRecursiveSelfCall(create.value());
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            return experimentalContainsRecursiveSelfCall(assign.value());
+        }
+        if (expression instanceof CanonicalSend send) {
+            if (experimentalContainsRecursiveSelfCall(send.receiver())) {
+                return true;
+            }
+            for (CanonicalExpression argument : send.arguments()) {
+                if (experimentalContainsRecursiveSelfCall(argument)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     private boolean experimentalGuestReturnScan(
             CanonicalExpression expression,
             boolean value,
@@ -10320,9 +10460,15 @@ final class CanonicalToBytecodeLowerer {
             return admitExperimentalCompactBinding(
                     expression, scope, kinds, callback);
         }
-        if (expression instanceof CanonicalCall) {
-            // A call keeps the general lowering and its ordinary B5+ invocation.
-            return null;
+        if (expression instanceof CanonicalCall call) {
+            return currentExperimentalRecursiveIntegerAdmission
+                            && experimentalRecursiveSelfCall(call)
+                            && admitExperimentalCompactExpression(
+                                            call.arguments().get(0),
+                                            scope, kinds, callback)
+                                    == ExperimentalCompactKind.INTEGER
+                    ? ExperimentalCompactKind.INTEGER
+                    : null;
         }
         if (!(expression instanceof CanonicalSend send)) {
             return null;
@@ -10334,18 +10480,41 @@ final class CanonicalToBytecodeLowerer {
             return admitExperimentalCompactBooleanControl(
                     send, scope, kinds, callback);
         }
-        if ((!experimentalCompactArithmetic(send.message())
-                        && !experimentalCompactComparison(send.message()))
-                || send.arguments().size() != 1
-                || admitExperimentalCompactExpression(
-                                send.receiver(), scope, kinds, callback)
-                        == null
-                || admitExperimentalCompactExpression(
-                                send.arguments().get(0), scope, kinds, callback)
-                        == null) {
+
+        boolean arithmetic = experimentalCompactArithmetic(send.message());
+
+        if ((!arithmetic && !experimentalCompactComparison(send.message()))
+                || send.arguments().size() != 1) {
             return null;
         }
-        // I115-H1-FIX: selection happens at run time; see ExperimentalCompactKind.
+
+        ExperimentalCompactKind receiverKind =
+                admitExperimentalCompactExpression(
+                        send.receiver(), scope, kinds, callback);
+
+        if (receiverKind == null
+                || (currentExperimentalRecursiveIntegerAdmission
+                        && receiverKind != ExperimentalCompactKind.INTEGER)) {
+            return null;
+        }
+
+        ExperimentalCompactKind argumentKind =
+                admitExperimentalCompactExpression(
+                        send.arguments().get(0), scope, kinds, callback);
+
+        if (argumentKind == null
+                || (currentExperimentalRecursiveIntegerAdmission
+                        && argumentKind != ExperimentalCompactKind.INTEGER)) {
+            return null;
+        }
+
+        if (currentExperimentalRecursiveIntegerAdmission) {
+            return arithmetic
+                    ? ExperimentalCompactKind.INTEGER
+                    : ExperimentalCompactKind.BOOLEAN;
+        }
+
+        // H1-FIX remains the default: dynamic numeric dispatch.
         return experimentalCompactComparison(send.message())
                 ? ExperimentalCompactKind.COMPARISON
                 : ExperimentalCompactKind.OBJECT;
@@ -10617,9 +10786,13 @@ final class CanonicalToBytecodeLowerer {
         CanonicalBindingIdentity savedGuestIntegerBinding =
                 currentExperimentalGuestIntegerBinding;
         ComposedSequenceScratch savedScratch = currentExperimentalCompactScratch;
+        boolean savedRecursiveEmission =
+                currentExperimentalRecursiveIntegerEmission;
         java.util.Set<CanonicalSend> savedDispatchingControls =
                 currentExperimentalDispatchingControls;
         currentExperimentalGuestIntegerBinding = compact.guestIntegerReturn();
+        currentExperimentalRecursiveIntegerEmission =
+                compact.experimentalRecursiveInteger();
         currentExperimentalDispatchingControls = compact.dispatchingControls();
         // Created in the root block, so live across every loop and callback.
         currentExperimentalCompactScratch = compact.dispatches()
@@ -10649,6 +10822,8 @@ final class CanonicalToBytecodeLowerer {
             endStatement(builder);
         } finally {
             currentExperimentalGuestIntegerBinding = savedGuestIntegerBinding;
+            currentExperimentalRecursiveIntegerEmission =
+                    savedRecursiveEmission;
             currentExperimentalCompactScratch = savedScratch;
             currentExperimentalDispatchingControls = savedDispatchingControls;
         }
@@ -10760,6 +10935,18 @@ final class CanonicalToBytecodeLowerer {
             emitExperimentalCompactStore(builder, expression, name, value);
             builder.emitLoadLocal(experimentalCompactLocal(name));
             builder.endBlock();
+        } else if (expression instanceof CanonicalCall call
+                && currentExperimentalRecursiveIntegerEmission
+                && experimentalRecursiveSelfCall(call)) {
+            ProtosClosureExecutionPlanCell plan =
+                    bytecodeClosurePlans.get(currentExperimentalRootDefinition);
+            if (plan == null) {
+                throw new AssertionError(
+                        "I115-H2 recursive plan cell missing");
+            }
+            builder.beginInvokeStaticClosureOneTail(plan);
+            emitExperimentalCompactValue(builder, call.arguments().get(0));
+            builder.endInvokeStaticClosureOneTail();
         } else {
             CanonicalSend send = (CanonicalSend) expression;
             if ("whileTrue".equals(send.message())) {
@@ -10777,12 +10964,74 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadLocal(result);
                 builder.endBlock();
             } else {
-                builder.beginBlock();
-                BytecodeLocal result =
-                        builder.createLocal("compactSendResult", null);
-                emitExperimentalCompactNumericSend(builder, send, result);
-                builder.emitLoadLocal(result);
-                builder.endBlock();
+                if (currentExperimentalRecursiveIntegerEmission) {
+                    emitExperimentalCompactSend(builder, send, false);
+                } else {
+                    builder.beginBlock();
+                    BytecodeLocal result =
+                            builder.createLocal("compactSendResult", null);
+                    emitExperimentalCompactNumericSend(builder, send, result);
+                    builder.emitLoadLocal(result);
+                    builder.endBlock();
+                }
+            }
+        }
+    }
+
+    /**
+     * I115-M: one Integer operation over two operands emitted exactly once,
+     * in evaluation order. {@code condition} selects the Java-boolean form
+     * of a comparison consumed directly by a Bytecode branch.
+     */
+    private void emitExperimentalCompactSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            boolean condition) {
+        String selector = send.message();
+        switch (selector) {
+            case "+" -> builder.beginExperimentalIntegerAdd();
+            case "-" -> builder.beginExperimentalIntegerSubtract();
+            case "*" -> builder.beginExperimentalIntegerMultiply();
+            case "<" -> {
+                if (condition) builder.beginExperimentalIntegerLessBool();
+                else builder.beginExperimentalIntegerLess();
+            }
+            case "<=" -> {
+                if (condition) builder.beginExperimentalIntegerLessEqualBool();
+                else builder.beginExperimentalIntegerLessEqual();
+            }
+            case ">" -> {
+                if (condition) builder.beginExperimentalIntegerGreaterBool();
+                else builder.beginExperimentalIntegerGreater();
+            }
+            case ">=" -> {
+                if (condition) builder.beginExperimentalIntegerGreaterEqualBool();
+                else builder.beginExperimentalIntegerGreaterEqual();
+            }
+            default -> throw new AssertionError(
+                    "I115-M unadmitted compact selector: " + selector);
+        }
+        emitExperimentalCompactValue(builder, send.receiver());
+        emitExperimentalCompactValue(builder, send.arguments().get(0));
+        switch (selector) {
+            case "+" -> builder.endExperimentalIntegerAdd();
+            case "-" -> builder.endExperimentalIntegerSubtract();
+            case "*" -> builder.endExperimentalIntegerMultiply();
+            case "<" -> {
+                if (condition) builder.endExperimentalIntegerLessBool();
+                else builder.endExperimentalIntegerLess();
+            }
+            case "<=" -> {
+                if (condition) builder.endExperimentalIntegerLessEqualBool();
+                else builder.endExperimentalIntegerLessEqual();
+            }
+            case ">" -> {
+                if (condition) builder.endExperimentalIntegerGreaterBool();
+                else builder.endExperimentalIntegerGreater();
+            }
+            default -> {
+                if (condition) builder.endExperimentalIntegerGreaterEqualBool();
+                else builder.endExperimentalIntegerGreaterEqual();
             }
         }
     }
@@ -11132,6 +11381,12 @@ final class CanonicalToBytecodeLowerer {
                 && (literal.kind() == CanonicalLiteral.Kind.TRUE
                         || literal.kind() == CanonicalLiteral.Kind.FALSE)) {
             builder.emitLoadConstant(literal.kind() == CanonicalLiteral.Kind.TRUE);
+            return;
+        }
+        if (currentExperimentalRecursiveIntegerEmission
+                && receiver instanceof CanonicalSend comparison
+                && experimentalCompactComparison(comparison.message())) {
+            emitExperimentalCompactSend(builder, comparison, true);
             return;
         }
         builder.beginExperimentalCanonicalBooleanCondition();

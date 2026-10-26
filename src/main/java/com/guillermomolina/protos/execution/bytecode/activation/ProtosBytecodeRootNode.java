@@ -1017,7 +1017,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int ordinal,
                 BytecodeNode bytecodeNode,
                 VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments())
+            Object[] arguments = frame.getArguments();
+            return (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                            || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments))
                     && frameBackedLocals.isCleared(
                             bytecodeNode, frame, ordinal);
         }
@@ -1444,7 +1446,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @NonIdempotent
         static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
+            Object[] arguments = frame.getArguments();
+            return ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    || ProtosFrameArguments.isExperimentalStaticUnaryCall(arguments);
         }
     }
 
@@ -8076,6 +8080,100 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * I115-J/I115-M EXPERIMENTAL: GraalPy-style direct integer operations.
+     * Each operation specializes on Long carriers and falls back to an
+     * Integer value (Long carrier or ProtosIntegerValue) in the same node.
+     * No protocol lookup, user-defined numeric methods or generic numeric
+     * fallback is supported by this experimental lane. An overflowed result
+     * (or a large operand it produced) is computed by the exact Integer
+     * service, so it promotes exactly as the generic operation does.
+     */
+    private static long experimentalInteger(Object value) {
+        if (value instanceof Long carrier) {
+            return carrier.longValue();
+        }
+        return ((ProtosIntegerValue) value).longValue();
+    }
+
+    /*
+     * Whether value is a signed-64 Integer (Long carrier or small guest
+     * Integer). A large Integer reaches the compact lane only as the exact
+     * result of an overflowed operation (experimentalIntegerResult).
+     */
+    private static boolean isExperimentalSmallInteger(Object value) {
+        return value instanceof Long || value instanceof ProtosIntegerValue;
+    }
+
+    /* Exact Integer comparison of two admitted compact Integers. */
+    private static int experimentalCompare(Object left, Object right) {
+        if (isExperimentalSmallInteger(left) && isExperimentalSmallInteger(right)) {
+            return Long.compare(experimentalInteger(left), experimentalInteger(right));
+        }
+        return experimentalCompareLarge(left, right);
+    }
+
+    @TruffleBoundary
+    private static int experimentalCompareLarge(Object left, Object right) {
+        return ProtosNumericValueSupport.compareIntegers(
+                ProtosNumericValueSupport.guestValue(left),
+                ProtosNumericValueSupport.guestValue(right));
+    }
+
+    private static final int EXPERIMENTAL_ADD = 0;
+    private static final int EXPERIMENTAL_SUBTRACT = 1;
+    private static final int EXPERIMENTAL_MULTIPLY = 2;
+
+    /*
+     * I115-M: the exact Integer result of an admitted compact operation that
+     * left the Long fast path: signed-64 operands whose result overflows, or
+     * a large operand. The ordinary exact Integer service normalizes the
+     * result (a value beyond signed-64 is minted with the BigInteger
+     * prototype of the invocation's Prelude), exactly as the generic '+',
+     * '-' and '*' do; no host ArithmeticException reaches the guest.
+     */
+    private static Object experimentalIntegerResult(
+            int operation, Object left, Object right, VirtualFrame frame) {
+        if (isExperimentalSmallInteger(left) && isExperimentalSmallInteger(right)) {
+            long a = experimentalInteger(left);
+            long b = experimentalInteger(right);
+            long result;
+            boolean overflow;
+            switch (operation) {
+                case EXPERIMENTAL_ADD -> {
+                    result = a + b;
+                    overflow = ((a ^ result) & (b ^ result)) < 0;
+                }
+                case EXPERIMENTAL_SUBTRACT -> {
+                    result = a - b;
+                    overflow = ((a ^ b) & (a ^ result)) < 0;
+                }
+                default -> {
+                    long high = Math.multiplyHigh(a, b);
+                    result = a * b;
+                    overflow = !((high == 0L && result >= 0L) || (high == -1L && result < 0L));
+                }
+            }
+            if (!overflow) {
+                return ProtosNumericValueSupport.integer(result);
+            }
+        }
+        return experimentalExactInteger(operation, left, right, frame.getArguments());
+    }
+
+    @TruffleBoundary
+    private static Object experimentalExactInteger(
+            int operation, Object left, Object right, Object[] frameArguments) {
+        ProtosPrelude prelude = ProtosFrameArguments.preludeOrNull(frameArguments);
+        Object a = ProtosNumericValueSupport.guestValue(left);
+        Object b = ProtosNumericValueSupport.guestValue(right);
+        return switch (operation) {
+            case EXPERIMENTAL_ADD -> ProtosNumericValueSupport.addIntegers(a, b, prelude);
+            case EXPERIMENTAL_SUBTRACT -> ProtosNumericValueSupport.subtractIntegers(a, b, prelude);
+            default -> ProtosNumericValueSupport.multiplyIntegers(a, b, prelude);
+        };
+    }
+
+    /**
      * I115-N EXPERIMENTAL: the Java boolean of a canonical Boolean for a
      * structured Bytecode branch. No truthiness: a compact Boolean-control
      * receiver is proven canonical by admission, and a compact whileTrue
@@ -8100,6 +8198,152 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             // The signal of PreparedWhileCall.conditionResult.
             throw ProtosCoreErrors.signal(
                     activation, ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left < right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalCompare(left, right) < 0;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessEqualBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left <= right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalCompare(left, right) <= 0;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left > right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalCompare(left, right) > 0;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterEqualBool {
+        @Specialization
+        public static boolean doLong(long left, long right) {
+            return left >= right;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static boolean doInteger(Object left, Object right) {
+            return experimentalCompare(left, right) >= 0;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLess {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left < right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalCompare(left, right) < 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerLessEqual {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left <= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalCompare(left, right) <= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreater {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left > right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalCompare(left, right) > 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerGreaterEqual {
+        @Specialization
+        public static Object doLong(long left, long right) {
+            return (left >= right) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right) {
+            return (experimentalCompare(left, right) >= 0) ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerAdd {
+        @Specialization(rewriteOn = ArithmeticException.class)
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.addExact(left, right));
+        }
+
+        // I115-M: overflow and large operands keep exact Integer semantics.
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_ADD, left, right, frame);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerSubtract {
+        @Specialization(rewriteOn = ArithmeticException.class)
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.subtractExact(left, right));
+        }
+
+        // I115-M: overflow and large operands keep exact Integer semantics.
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_SUBTRACT, left, right, frame);
+        }
+    }
+
+    @Operation
+    public static final class ExperimentalIntegerMultiply {
+        @Specialization(rewriteOn = ArithmeticException.class)
+        public static Object doLong(long left, long right) {
+            return ProtosNumericValueSupport.integer(Math.multiplyExact(left, right));
+        }
+
+        // I115-M: overflow and large operands keep exact Integer semantics.
+        @Specialization(replaces = "doLong")
+        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
+            return experimentalIntegerResult(EXPERIMENTAL_MULTIPLY, left, right, frame);
         }
     }
 
@@ -9992,6 +10236,188 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static boolean isForeignReceiver(Object receiver) {
             return PrepareSendArguments.isForeignReceiver(receiver);
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * I115-H (EXPERIMENTAL, PLAT066-C): the terminal Call1 of a statically
+     * proven local Closure call (CanonicalCompilationFacts
+     * .StaticLocalClosureCall). The lowering elided the Closure creation and
+     * its binding; the callee's plan cell is a constant operand and the only
+     * dynamic operand is the supplied value. There is no receiver, no
+     * {@code Object.call} (D013) selection and no Closure instance.
+     *
+     * <p>The direct tier caches, per entered Context, the Context-owned
+     * {@link RootCallTarget} of the plan ({@link #staticTargetOrNull}, at
+     * installation only) and one {@link DirectCallNode}. The callee is
+     * entered with the reduced {@link
+     * ProtosFrameArguments#experimentalStaticUnaryCall} layout: no caller,
+     * Task, ReturnHome or Closure is transported, no caller activation is
+     * created and no suspension transport is compiled, since the direct tier
+     * requires the callee root's non-suspension proof. A Context change past
+     * the PIC limit, the uncached interpreter, or a target without that proof
+     * takes {@link #generic}, which resolves the same target and uses the
+     * same layout; it never degrades to {@link InvokeClosureOneTail}. A
+     * missing target or a suspended outcome contradicts the static admission
+     * and is an explicit internal error.
+     *
+     * <p>NORMATIVE DIVERGENCE: later changes to {@code Object.call} are not
+     * observed, and the callee has no caller, Task or ReturnHome.
+     */
+    @Operation
+    @ConstantOperand(
+            type = ProtosClosureExecutionPlanCell.class,
+            name = "planCell")
+    public static final class InvokeStaticClosureOneTail {
+        /*
+         * The Context guard of direct must bind ContextReference.get
+         * visibly: the DSL treats a guard as cache-keying (allowing more
+         * than one instance) only when it binds an operand or a
+         * ContextReference/LanguageReference/Reference.get call. Otherwise
+         * the explicit limit is ignored and code generation fails (25.4.4).
+         * The node argument is $bytecodeNode, not $node: in a cache-keying
+         * guard, $node would denote the cache entry being selected.
+         */
+        static final com.oracle.truffle.api.TruffleLanguage.ContextReference<ProtosLanguageContext>
+                CONTEXT = com.oracle.truffle.api.TruffleLanguage.ContextReference.create(
+                        ProtosLanguage.class);
+
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static Object direct(
+                ProtosClosureExecutionPlanCell planCell,
+                Object supplied0,
+                @Bind("CONTEXT.get($bytecodeNode)")
+                        ProtosLanguageContext enteredContext,
+                @Cached("enteredContext")
+                        ProtosLanguageContext cachedContext,
+                @Cached("provenStaticTargetOrNull(planCell, enteredContext)")
+                        RootCallTarget cachedTarget,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node) {
+            Object outcome;
+            try {
+                outcome = node.call(
+                        ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+            java.util.Objects.requireNonNull(outcome, "static Closure invocation returned null");
+            return outcome;
+        }
+
+        @Specialization
+        @InliningCutoff
+        public static Object generic(
+                ProtosClosureExecutionPlanCell planCell,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)")
+                        ProtosLanguageContext enteredContext,
+                @Cached IndirectCallNode indirectCall) {
+            RootCallTarget target = staticTargetOrNull(planCell, enteredContext);
+            if (target == null) {
+                throw staticAdmissionContradiction(
+                        "the admitted plan has no Bytecode target in the entered Context");
+            }
+            Object outcome;
+            try {
+                outcome = indirectCall.call(
+                        target,
+                        ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+            java.util.Objects.requireNonNull(outcome, "static Closure invocation returned null");
+            if (ProtosTailCallContinuation.isSuspended(outcome)) {
+                throw staticAdmissionContradiction(
+                        "the statically admitted callee suspended");
+            }
+            return outcome;
+        }
+
+        /*
+         * An internal error, never a guest Error: the lowering admitted this
+         * site, so the plan contradicts the static admission.
+         */
+        @TruffleBoundary
+        private static IllegalStateException staticAdmissionContradiction(String reason) {
+            return new IllegalStateException(
+                    "I115-H static Closure call admission contradicts its executable plan: "
+                            + reason);
+        }
+
+        /*
+         * Cache initializers may run before the cachedTarget != null guard
+         * rejects an entry, so a null target must not reach
+         * DirectCallNode.create.
+         */
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+        }
+
+        /**
+         * The direct tier's target: {@link #staticTargetOrNull} when its root
+         * also carries the non-suspension proof, so the entry compiles no
+         * suspension handling. Otherwise the site stays on {@link #generic}.
+         */
+        @TruffleBoundary
+        static RootCallTarget provenStaticTargetOrNull(
+                ProtosClosureExecutionPlanCell planCell,
+                ProtosLanguageContext enteredContext) {
+            RootCallTarget target = staticTargetOrNull(planCell, enteredContext);
+            return target != null
+                            && ((ProtosBytecodeRootNode) target.getRootNode())
+                                    .provablyNonSuspendingBody()
+                    ? target
+                    : null;
+        }
+
+        /**
+         * The Context-owned target of the plan in {@code enteredContext}: the
+         * plan itself when it was lowered by the entered language, else the
+         * entered Context's projection of the same definition, provided it is
+         * a Bytecode root. No Closure is created to obtain it.
+         */
+        @TruffleBoundary
+        static RootCallTarget staticTargetOrNull(
+                ProtosClosureExecutionPlanCell planCell,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null) {
+                return null;
+            }
+            ProtosClosureExecutionPlan template = planCell.plan();
+            CanonicalClosure definition = template.definitionForRuntime();
+            if (definition == null) {
+                return null;
+            }
+            ProtosLanguage enteredLanguage = enteredContext.languageForRuntime();
+            ProtosClosureExecutionPlan effectivePlan =
+                    template.language().orElseThrow() == enteredLanguage
+                            ? template
+                            : enteredContext.bytecodeExecutionPlanForDefinition(
+                                    definition, template);
+            if (effectivePlan == null
+                    || effectivePlan.definitionForRuntime() != definition
+                    || effectivePlan.language().orElseThrow() != enteredLanguage) {
+                return null;
+            }
+            RootCallTarget target = effectivePlan.bytecodeActivationTargetForComposition();
+            if (target == null
+                    || !(target.getRootNode() instanceof ProtosBytecodeRootNode)) {
+                return null;
+            }
+            return target;
         }
 
         @NonIdempotent

@@ -493,12 +493,12 @@ final class ProtosI115RFactorialCaptureTest {
             """;
 
     /*
-     * I115-H1: the recursive call keeps the ordinary B5+ invocation, so a
-     * factorial root whose compact subset needs a call takes the general
-     * lowering instead of the retired static unary ABI.
+     * I115-H2: experimental structural contract. This selected factorial
+     * workload uses the admitted compact recursive lane; its measurements
+     * do not establish general Protos semantic equivalence.
      */
     @Test
-    void recursiveFactorialUsesOrdinaryInvocation() throws Exception {
+    void compactRecursiveFactorialStructure() throws Exception {
         Path file = Path.of(
                 "target", "i115-r-factorial", "r2-structure.protos");
         Files.createDirectories(file.getParent());
@@ -519,14 +519,44 @@ final class ProtosI115RFactorialCaptureTest {
 
             factorial.getRootNodes().ensureSourceInformation();
 
+            int rootCount = factorial.getRootNodes().getNodes().size();
+
             List<String> names = factorial.getBytecodeNode()
                     .getInstructionsAsList().stream()
                     .map(ProtosInstructionNames::of)
                     .toList();
 
-            System.out.println("I115_R2_TEST_ROOT_COUNT="
-                    + factorial.getRootNodes().getNodes().size());
+            System.out.println("I115_R2_TEST_ROOT_COUNT=" + rootCount);
             System.out.println("I115_R2_TEST_DSL_FULL=" + names.size());
+
+            assertEquals(3, rootCount,
+                    "Unexpected callback or other physical root");
+
+            assertEquals(18, names.size(),
+                    "I115-H2 experimental factorial FULL DSL budget");
+
+            for (String required : List.of(
+                    "BindUnaryFrameParameter",
+                    "InvokeStaticClosureOneTail",
+                    "ExperimentalIntegerMultiply",
+                    "ExperimentalIntegerSubtract",
+                    "ExperimentalIntegerGreaterBool")) {
+                assertTrue(names.stream().anyMatch(
+                        name -> name.contains(required)),
+                        "Missing compact operation: " + required);
+            }
+
+            for (String forbidden : List.of(
+                    "PrepareClosureCall",
+                    "PrepareSendOne",
+                    "EnterNestedStructuredDispatch",
+                    "ResumeContinuation",
+                    "CompleteClosureCall",
+                    "InstallFrameLexicalAuthority")) {
+                assertTrue(names.stream().noneMatch(
+                        name -> name.contains(forbidden)),
+                        "Unexpected generic operation: " + forbidden);
+            }
 
             assertEquals(
                     2432902008176640000L,
@@ -791,6 +821,14 @@ final class ProtosI115RFactorialCaptureTest {
 
         int total = moduleFull + runFull
                 + factorialFull + additionalFull;
+
+        // I115-H2: retain the verified R6 physical-bytecode baseline.
+        assertEquals(3, roots.size(), "Experimental physical root count");
+        assertEquals(17, moduleFull, "Experimental module DSL");
+        assertEquals(18, factorialFull, "Experimental factorial DSL");
+        assertEquals(6, runFull, "Experimental run DSL");
+        assertEquals(0, additionalFull, "Unexpected callback root");
+        assertEquals(41, total, "Experimental total DSL");
 
         System.out.println("I115_R_ROOT_COUNT=" + roots.size());
         System.out.println("I115_R_MODULE_DSL_FULL=" + moduleFull);
