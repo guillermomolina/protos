@@ -10260,6 +10260,88 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /*
+     * I115-H4-A EXPERIMENTAL: a GraalPy-style (CallUnaryMethodNode
+     * .callPFunction) monomorphic/polymorphic terminal Call1 emitted only for
+     * the lowering-admitted call of a certified H3 recursive Integer binding.
+     * The direct tier compares the cached Closure identity and calls the
+     * cached DirectCallNode with the reduced H3 argument layout.
+     *
+     * Accepted divergences (authorized experimental decisions, NOT defects
+     * pending correction in H4-A):
+     *  1. dynamic changes to Object.call are ignored;
+     *  2. a projection of the Closure to another Context is ignored;
+     *  3. the target installed for the first cached identity is used;
+     *  4. no caller, Task, Prelude or ReturnHome is transported;
+     *  5. ReturnHome observability is not checked;
+     *  6. whether the callee may suspend is not checked;
+     *  7. bridged control-transfer exceptions are not translated;
+     *  8. a null result is not checked;
+     *  9. no Protos activation is materialized for the callee;
+     * 10. the result is handed directly to the calling root's epilogue.
+     * 11. no equivalent of GraalPy's getCodeStableAssumption() is
+     *     implemented: the cached RootCallTarget is kept without an
+     *     equivalent invalidation guarantee.
+     */
+    @Operation
+    public static final class InvokeExperimentalClosureOneTail {
+        @Specialization(
+                excludeForUncached = true,
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static Object direct(
+                Object receiver,
+                Object supplied0,
+                @Cached(value = "receiver", weak = true)
+                        Object cachedReceiver,
+                @Cached("experimentalTargetOrNull(cachedReceiver)")
+                        RootCallTarget cachedTarget,
+                @Cached("createDirectCallNodeOrNull(cachedTarget)")
+                        DirectCallNode node) {
+            return node.call(ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+        }
+
+        @Specialization
+        @InliningCutoff
+        public static Object generic(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Bind("callerReference(frame)") Object caller,
+                @Cached IndirectCallNode indirectCall) {
+            return InvokeClosureOneTail.prepareAndEnter(
+                    receiver, root, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
+        }
+
+        /* Installation only: the prepared plan's Bytecode target, or null. */
+        static RootCallTarget experimentalTargetOrNull(Object receiver) {
+            if (!(receiver instanceof ProtosClosureValue closure)) {
+                return null;
+            }
+            ProtosClosureExecutionPlan plan =
+                    closure.preparedExecutionPlanOrNullForRuntime();
+            if (plan == null) {
+                return null;
+            }
+            return plan.bytecodeActivationTargetForComposition();
+        }
+
+        @NonIdempotent
+        static Object callerReference(VirtualFrame frame) {
+            return InvokeClosureOneTail.callerReference(frame);
+        }
+
+        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
+            return InvokeClosureZero.createDirectCallNodeOrNull(target);
+        }
+    }
+
     /**
      * I115-H (EXPERIMENTAL, PLAT066-C): the terminal Call1 of a statically
      * proven local Closure call (CanonicalCompilationFacts

@@ -293,6 +293,17 @@ final class CanonicalToBytecodeLowerer {
      */
     private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
             experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
+    /*
+     * I115-H4-A EXPERIMENTAL: the canonical identities of the module
+     * bindings whose definitions were actually admitted as H3 recursive
+     * Integer roots in the Bytecode DSL group being parsed. Rebuilt on every
+     * (re)parse of the group; consumed by
+     * admitsExperimentalTerminalUnaryCall.
+     */
+    private java.util.Set<CanonicalBindingIdentity>
+            experimentalCertifiedRecursiveBindings =
+                    java.util.Collections.newSetFromMap(
+                            new java.util.IdentityHashMap<>());
     private CanonicalClosure currentExperimentalRootDefinition;
     private boolean currentExperimentalRecursiveIntegerAdmission;
     private boolean currentExperimentalRecursiveIntegerEmission;
@@ -873,6 +884,12 @@ final class CanonicalToBytecodeLowerer {
                                 closureRootsLoweredThisParse =
                                         java.util.Collections.newSetFromMap(
                                                 new java.util.IdentityHashMap<>());
+                                java.util.Set<CanonicalBindingIdentity>
+                                        savedCertifiedRecursiveBindings =
+                                                experimentalCertifiedRecursiveBindings;
+                                experimentalCertifiedRecursiveBindings =
+                                        java.util.Collections.newSetFromMap(
+                                                new java.util.IdentityHashMap<>());
                                 try {
                                     /*
                                      * Root-inside-Source is the Bytecode DSL
@@ -889,6 +906,8 @@ final class CanonicalToBytecodeLowerer {
                                     builder.endSource();
                                 } finally {
                                     closureRootsLoweredThisParse = savedLoweredThisParse;
+                                    experimentalCertifiedRecursiveBindings =
+                                            savedCertifiedRecursiveBindings;
                                 }
                             });
 
@@ -1281,6 +1300,12 @@ final class CanonicalToBytecodeLowerer {
                  * same frame local every compact read and store uses; no
                  * presence, activation or authority check.
                  */
+                // I115-H4-A EXPERIMENTAL: certify the admitted binding.
+                CanonicalBindingIdentity certified =
+                        experimentalRecursiveBindings.get(activationDefinition);
+                if (certified != null) {
+                    experimentalCertifiedRecursiveBindings.add(certified);
+                }
                 builder.beginStoreLocal(experimentalCompactLocal(
                         activationDefinition.parameters().get(0).name()));
                 builder.emitExperimentalLongArgument0();
@@ -1511,7 +1536,11 @@ final class CanonicalToBytecodeLowerer {
                     // Return is the root's last operation: no implicit fallthrough.
                     builder.beginReturn();
                     beginStatement(builder, last);
-                    emitTerminalClosureCall(builder, (CanonicalCall) last);
+                    emitTerminalClosureCall(
+                            builder,
+                            (CanonicalCall) last,
+                            sequence,
+                            activationDefinition);
                     endStatement(builder);
                     builder.endReturn();
                 } else if (admitsTerminalMethodSend(last)) {
@@ -4350,7 +4379,9 @@ final class CanonicalToBytecodeLowerer {
      */
     private void emitTerminalClosureCall(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalCall call) {
+            CanonicalCall call,
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition) {
         currentRootEmittedTerminalInvocation = true;
         java.util.List<CanonicalExpression> arguments = call.arguments();
         builder.beginSourceSection(
@@ -4361,6 +4392,13 @@ final class CanonicalToBytecodeLowerer {
             builder.beginInvokeClosureZeroTail();
             emitTerminalCallOperand(builder, call.receiver());
             builder.endInvokeClosureZeroTail();
+        } else if (arguments.size() == 1
+                && admitsExperimentalTerminalUnaryCall(
+                        call, sequence, activationDefinition)) {
+            builder.beginInvokeExperimentalClosureOneTail();
+            emitTerminalCallOperand(builder, call.receiver());
+            emitTerminalCallOneArgument(builder, arguments.get(0));
+            builder.endInvokeExperimentalClosureOneTail();
         } else if (arguments.size() == 1) {
             builder.beginInvokeClosureOneTail();
             emitTerminalCallOperand(builder, call.receiver());
@@ -4378,6 +4416,39 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
+    }
+
+    /*
+     * I115-H4-A EXPERIMENTAL: a static, purely structural admission of the
+     * terminal Call1 of a parameterless Closure root whose body is only that
+     * call, whose receiver is a captured lookup of a module ROOT binding
+     * certified in this group as an H3 recursive Integer root (by canonical
+     * identity). No Object.call, Context, ReturnHome, Task, caller, Prelude,
+     * suspension or projection fact is consulted, and none is checked at run
+     * time.
+     */
+    private boolean admitsExperimentalTerminalUnaryCall(
+            CanonicalCall call,
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition) {
+        if (activationDefinition == null
+                || !activationDefinition.parameters().isEmpty()
+                || sequence.expressions().size() != 1
+                || sequence.expressions().get(0) != call
+                || call.arguments().size() != 1
+                || hasSpreadArgument(call.arguments())
+                || !(call.receiver() instanceof CanonicalLookup lookup)
+                || currentRootAnalysis == null
+                || !isTerminalCallOperand(call.receiver())
+                || !isTerminalCallOperand(call.arguments().get(0))) {
+            return false;
+        }
+        return currentRootAnalysis.resolutionOf(lookup).orElse(null)
+                        instanceof CanonicalBindingResolution.CapturedResolved captured
+                && captured.identity().owner().kind()
+                        == CanonicalLexicalScope.Kind.ROOT
+                && experimentalCertifiedRecursiveBindings.contains(
+                        captured.identity());
     }
 
     /** The single Call1 argument; a number literal stays a primitive carrier. */
