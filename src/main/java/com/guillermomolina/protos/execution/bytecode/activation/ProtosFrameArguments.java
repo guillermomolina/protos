@@ -126,7 +126,13 @@ final class ProtosFrameArguments {
      * InvokeStaticClosureOneTail, distinct from B5+:
      *
      *   [0] EXPERIMENTAL_STATIC_UNARY_CALL (private marker, never a guest value)
-     *   [1] supplied0
+     *   [1..3] null (unconsumed header slots)
+     *   [4] the unobservable primitive-accepting ReturnHome marker
+     *   [5] supplied0
+     *
+     * I115-H3: supplied0 sits at the B5 supplied position, so the direct
+     * parameter binding of an admitted recursive Integer root reads the same
+     * physical slot whether it is entered by this layout or by B5.
      *
      * It carries no Closure, receiver, methodHome, Task, caller, ReturnHome
      * or Context. Only the consumers the lowering admits for a static callee
@@ -135,8 +141,8 @@ final class ProtosFrameArguments {
      * support it. A recorded divergence, not an equivalent ABI.
      */
     private static final Object EXPERIMENTAL_STATIC_UNARY_CALL = new Object();
-    private static final int EXPERIMENTAL_STATIC_UNARY_LENGTH = 2;
-    private static final int EXPERIMENTAL_STATIC_SUPPLIED_INDEX = 1;
+    private static final int EXPERIMENTAL_STATIC_UNARY_LENGTH = SUPPLIED_ARGUMENT_OFFSET + 1;
+    private static final int EXPERIMENTAL_STATIC_SUPPLIED_INDEX = SUPPLIED_ARGUMENT_OFFSET;
 
     private static final java.util.function.Function<Object[], ProtosActivation>
             COMPACT_CAPTURE_OWNER = ProtosFrameArguments::activation;
@@ -406,12 +412,28 @@ final class ProtosFrameArguments {
         };
     }
 
-    /** I115-H (EXPERIMENTAL): the reduced static unary layout {@code [marker, supplied0]}. */
+    /**
+     * I115-H (EXPERIMENTAL): the reduced static unary layout. I115-H3: a
+     * direct construction with known positions; no caller, Task, Closure or
+     * Context is validated, published or created.
+     */
     static Object[] experimentalStaticUnaryCall(Object supplied0) {
         return new Object[] {
             EXPERIMENTAL_STATIC_UNARY_CALL,
+            null,
+            null,
+            null,
+            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
             supplied0
         };
+    }
+
+    /**
+     * I115-H3 (EXPERIMENTAL): supplied argument 0 of either the static unary
+     * layout or B5, read without any layout test.
+     */
+    static Object experimentalSuppliedArgument0(Object[] arguments) {
+        return arguments[SUPPLIED_ARGUMENT_OFFSET];
     }
 
     /** I115-H (EXPERIMENTAL): whether {@code arguments} use the static unary layout. */

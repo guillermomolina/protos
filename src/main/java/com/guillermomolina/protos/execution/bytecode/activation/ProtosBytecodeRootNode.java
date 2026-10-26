@@ -8227,16 +8227,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /*
+     * I115-H3 EXPERIMENTAL: GraalPy's Gt over two longs only. No Integer
+     * fallback: an operand that is not a long carrier fails the node.
+     */
     @Operation
     public static final class ExperimentalIntegerGreaterBool {
         @Specialization
         public static boolean doLong(long left, long right) {
             return left > right;
-        }
-
-        @Specialization(replaces = "doLong")
-        public static boolean doInteger(Object left, Object right) {
-            return experimentalCompare(left, right) > 0;
         }
     }
 
@@ -8319,31 +8318,48 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /*
+     * I115-H3 EXPERIMENTAL: wrapping long subtraction. No overflow check,
+     * promotion or Integer fallback.
+     */
     @Operation
     public static final class ExperimentalIntegerSubtract {
-        @Specialization(rewriteOn = ArithmeticException.class)
-        public static Object doLong(long left, long right) {
-            return ProtosNumericValueSupport.integer(Math.subtractExact(left, right));
-        }
-
-        // I115-M: overflow and large operands keep exact Integer semantics.
-        @Specialization(replaces = "doLong")
-        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
-            return experimentalIntegerResult(EXPERIMENTAL_SUBTRACT, left, right, frame);
+        @Specialization
+        public static long doLong(long left, long right) {
+            return left - right;
         }
     }
 
+    /*
+     * I115-H3 EXPERIMENTAL: wrapping long multiplication. No overflow check,
+     * promotion or Integer fallback.
+     */
     @Operation
     public static final class ExperimentalIntegerMultiply {
-        @Specialization(rewriteOn = ArithmeticException.class)
-        public static Object doLong(long left, long right) {
-            return ProtosNumericValueSupport.integer(Math.multiplyExact(left, right));
+        @Specialization
+        public static long doLong(long left, long right) {
+            return left * right;
         }
+    }
 
-        // I115-M: overflow and large operands keep exact Integer semantics.
-        @Specialization(replaces = "doLong")
-        public static Object doInteger(Object left, Object right, @Bind VirtualFrame frame) {
-            return experimentalIntegerResult(EXPERIMENTAL_MULTIPLY, left, right, frame);
+    /**
+     * I115-H3 EXPERIMENTAL: supplied argument 0 of an admitted recursive
+     * Integer root as a long, stored by the lowering with the built-in
+     * StoreLocal into the parameter's own frame local. The static unary
+     * layout and B5 keep it at the same position. The only branch is the
+     * physical unboxing of the two Integer representations a caller may
+     * supply; no binding presence, activation or layout is consulted.
+     */
+    @Operation
+    public static final class ExperimentalLongArgument0 {
+        @Specialization
+        public static long perform(@Bind VirtualFrame frame) {
+            Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
+                    frame.getArguments());
+            if (value instanceof Long carrier) {
+                return carrier.longValue();
+            }
+            return ((ProtosIntegerValue) value).longValue();
         }
     }
 
@@ -10252,22 +10268,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * dynamic operand is the supplied value. There is no receiver, no
      * {@code Object.call} (D013) selection and no Closure instance.
      *
-     * <p>The direct tier caches, per entered Context, the Context-owned
-     * {@link RootCallTarget} of the plan ({@link #staticTargetOrNull}, at
-     * installation only) and one {@link DirectCallNode}. The callee is
+     * <p>The direct tier caches, once at installation and in the Context
+     * entered then (I115-H3: no per-call Context guard), the Context-owned
+     * {@link RootCallTarget} of the plan ({@link #staticTargetOrNull}) and
+     * one {@link DirectCallNode}. The callee is
      * entered with the reduced {@link
      * ProtosFrameArguments#experimentalStaticUnaryCall} layout: no caller,
      * Task, ReturnHome or Closure is transported, no caller activation is
      * created and no suspension transport is compiled, since the direct tier
-     * requires the callee root's non-suspension proof. A Context change past
-     * the PIC limit, the uncached interpreter, or a target without that proof
+     * requires the callee root's non-suspension proof. The uncached
+     * interpreter, or a target without that proof
      * takes {@link #generic}, which resolves the same target and uses the
      * same layout; it never degrades to {@link InvokeClosureOneTail}. A
      * missing target or a suspended outcome contradicts the static admission
      * and is an explicit internal error.
      *
      * <p>NORMATIVE DIVERGENCE: later changes to {@code Object.call} are not
-     * observed, and the callee has no caller, Task or ReturnHome.
+     * observed, and the callee has no caller, Task or ReturnHome. I115-H3:
+     * a site executed in another Context keeps the first Context's target,
+     * and a bridged control transfer is not translated on the direct tier.
      */
     @Operation
     @ConstantOperand(
@@ -10275,46 +10294,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             name = "planCell")
     public static final class InvokeStaticClosureOneTail {
         /*
-         * The Context guard of direct must bind ContextReference.get
-         * visibly: the DSL treats a guard as cache-keying (allowing more
-         * than one instance) only when it binds an operand or a
-         * ContextReference/LanguageReference/Reference.get call. Otherwise
-         * the explicit limit is ignored and code generation fails (25.4.4).
-         * The node argument is $bytecodeNode, not $node: in a cache-keying
-         * guard, $node would denote the cache entry being selected.
+         * I115-H3: the target is resolved once, at installation, in the
+         * Context entered then; the guard binds only cached values, so it is
+         * not re-evaluated per call. The hot path builds the reduced
+         * arguments and calls; no Context, identity, suspension or
+         * control-transfer handling is compiled. The guard is not
+         * cache-keying, so the cache is a single instance (no limit).
          */
-        static final com.oracle.truffle.api.TruffleLanguage.ContextReference<ProtosLanguageContext>
-                CONTEXT = com.oracle.truffle.api.TruffleLanguage.ContextReference.create(
-                        ProtosLanguage.class);
-
         @Specialization(
                 excludeForUncached = true,
-                guards = {
-                    "enteredContext != null",
-                    "enteredContext == cachedContext",
-                    "cachedTarget != null"
-                },
-                limit = "3")
+                guards = "cachedTarget != null")
         public static Object direct(
                 ProtosClosureExecutionPlanCell planCell,
                 Object supplied0,
-                @Bind("CONTEXT.get($bytecodeNode)")
-                        ProtosLanguageContext enteredContext,
-                @Cached("enteredContext")
-                        ProtosLanguageContext cachedContext,
-                @Cached("provenStaticTargetOrNull(planCell, enteredContext)")
+                @Cached("provenStaticTargetOrNull(planCell, currentEnteredContext($bytecodeNode))")
                         RootCallTarget cachedTarget,
                 @Cached("createDirectCallNodeOrNull(cachedTarget)")
                         DirectCallNode node) {
-            Object outcome;
-            try {
-                outcome = node.call(
-                        ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-            java.util.Objects.requireNonNull(outcome, "static Closure invocation returned null");
-            return outcome;
+            return node.call(ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
         }
 
         @Specialization

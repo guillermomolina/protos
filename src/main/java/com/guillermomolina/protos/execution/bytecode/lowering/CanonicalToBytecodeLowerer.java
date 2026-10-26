@@ -1273,6 +1273,18 @@ final class CanonicalToBytecodeLowerer {
                         defaultChildResult,
                         defaultResumeValue,
                         requiredPrefixCount);
+            } else if (experimentalCompact != null
+                    && experimentalCompact.experimentalRecursiveInteger()) {
+                /*
+                 * I115-H3 EXPERIMENTAL: the admitted recursive Integer root
+                 * binds its parameter with the built-in StoreLocal into the
+                 * same frame local every compact read and store uses; no
+                 * presence, activation or authority check.
+                 */
+                builder.beginStoreLocal(experimentalCompactLocal(
+                        activationDefinition.parameters().get(0).name()));
+                builder.emitExperimentalLongArgument0();
+                builder.endStoreLocal();
             } else if ((unaryEntry != null
                             || (experimentalCompact != null
                                     && activationDefinition.parameters().size() == 1))
