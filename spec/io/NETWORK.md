@@ -337,7 +337,7 @@ resource authority.
 
 The TcpConnection protocol prototype owns the standard local behavior selectors `read`, `write`,
 `close`, `shutdownRead`, `shutdownWrite`, `localEndpoint`, and `remoteEndpoint`. The TcpListener
-protocol prototype owns `accept`, `localPort`, and `close`. A freshly acquired concrete resource has
+protocol prototype owns `accept`, `acceptCapability`, `localPort`, and `close`. A freshly acquired concrete resource has
 no mandatory local Protos slots merely to duplicate those selectors or encode backend state.
 Application code may create/shadow ordinary local slots while the resource object's structural state
 permits it.
@@ -357,6 +357,38 @@ The D047 Actor/P rule remains unchanged: concrete TCP live-resource capabilities
 that reach them are not transferable under the initial contract. The authority-free family protocol
 prototypes do not themselves grant network/resource authority.
 
+D217 adds a third TCP capability family, `TcpAcceptor`, an attenuated acceptance-only capability
+derived from one logical listener (§8). It follows the same topology convention: one canonical
+standard frozen behavior prototype whose immediate parent is exactly `Object`, and a concrete
+capability whose immediate parent is exactly that protocol prototype. Core v0.1 requires no public
+constructor, global identifier, or Prelude binding named `TcpAcceptor`. The TcpAcceptor protocol
+prototype owns exactly one standard TCP behavior selector, `accept`. It owns no `close`,
+`localPort`, `acceptCapability`, `connectTcp`, `listenTcp`, or other listener or `Network` authority
+selector.
+
+A concrete `TcpAcceptor` is an ordinary identity-bearing Protos object whose structural state is
+`OPEN` when acquired, but its acceptance authority is not its own resource: it depends on, and is
+bound to, the logical listener from which it was derived. Explicit Actor delegation (§11) produces a
+destination-Actor-local representation bound to the same logical listener; it never creates a
+shared mutable alias of the source Actor's Protos representation.
+
+Delegation through `Actor.spawn` transfers exclusively acceptance authority; it is not an ordinary
+copy of the source `TcpAcceptor` object. Local slots that the program added to the source object are
+not copied, shared, or materialized in the destination, and the source representation's `OPEN`,
+`CLOSED`, or `FROZEN` structural state is not transferred. The destination Actor obtains a new
+`TcpAcceptor` representation whose structural state is initially `OPEN`, whose immediate parent is
+the standard TcpAcceptor protocol prototype, and which carries only the attenuated authority over the
+same logical listener. Provisioning leaves the source representation intact, modifying neither its
+slots nor its structural state, and introduces no mutable aliasing between the representations held
+by the two Actors.
+
+The receiver-domain rule above applies unchanged: an ordinary object that merely inherits `accept`
+from the TcpAcceptor protocol prototype, or from a concrete `TcpAcceptor`, acquires no TCP authority
+and fails the receiver-domain check. Because the TcpAcceptor family has no nearer `close` selector,
+`acceptor.close()` resolves to the inherited structural `Object.close()` transition, which affects
+only that representation's ordinary structural state; it is not a `Closable` resource close and
+grants no authority to close the underlying listener.
+
 D052 does not define stronger endpoint object-identity observations. D047 continues to require the
 logical remote endpoint of an outgoing successful connection to equal the supplied endpoint under
 standard structural equality. This revision does not specify whether repeated endpoint accessors
@@ -368,8 +400,9 @@ A `TcpListener` is a live identity-bearing capability and satisfies `Closable`.
 Its initial operations include:
 
 ```text
-listener.accept()     -> Future<TcpConnection>
-listener.localPort()  -> Integer
+listener.accept()            -> Future<TcpConnection>
+listener.localPort()         -> Integer
+listener.acceptCapability()  -> TcpAcceptor
 ```
 
 `localPort()` is synchronous observation of the actual acquired non-zero local
@@ -389,6 +422,82 @@ the logical listener/backend. Each successful accept transfers one fresh
 Listener close/cancellation composes with the existing `Closable` lifecycle and
 Future rules. No host file descriptor, selector registration, event-loop token,
 carrier identity, or queue implementation becomes Protos-visible identity.
+
+### 8.1 `TcpAcceptor` acquisition
+
+`listener.acceptCapability()` is a synchronous authority-derivation operation.
+On success it returns a fresh `TcpAcceptor` (§7.1) limited to accepting
+connections on the existing logical listener of the receiver. It:
+
+- creates no new listening socket, opens no additional port, and requires no
+  second `Network.listenTcp` operation;
+- does not amplify the caller's authority, which already includes accepting on
+  that listener;
+- does not make the original `TcpListener` transferable; and
+- performs no acceptance I/O merely because the capability was acquired.
+
+Once the listener's close cutover (`IO_CORE.md` §8) has been established, no new
+operative authority can be derived: `acceptCapability()` then signals
+`IOLifecycleError`.
+
+### 8.2 `TcpAcceptor` authority
+
+A `TcpAcceptor` may accept connections on its logical listener and may be
+explicitly provisioned to compatible Actors of the same Protos Process (§11).
+
+It cannot create listeners, initiate outgoing TCP connections, query or recover
+`Network`, close the listener, change its own or the listener's permissions,
+amplify the authority it received, transfer the `TcpListener`, transfer any
+`TcpConnection`, or reach resources of another Process.
+
+### 8.3 Acceptance through a `TcpAcceptor`
+
+```text
+acceptor.accept() -> Future<TcpConnection>
+```
+
+Each call returns an ordinary Future. A successful acceptance produces exactly
+one fresh `TcpConnection`, delivered exclusively to the Actor that invoked that
+`accept()`. The connection does not pass through any other Protos Actor; in
+particular, acceptance neither creates nor transfers a connection in the Actor
+that owns the original `TcpListener`.
+
+Different Actors may hold pending acceptances simultaneously, and they may
+coexist with pending `listener.accept()` Futures. All of them compete within the
+one logical acceptance domain of the listener. A connection is never delivered
+twice. As for `listener.accept()`, there is no predetermined global order among
+acceptances issued by independent Actors, no specified fairness or
+connection-distribution policy, and no semantic one-pending-accept restriction
+per listener. This section imposes no scheduler or backend architecture.
+
+### 8.4 `TcpAcceptor` lifecycle
+
+Acceptance lifecycle reuses `IO_CORE.md` §§4 and 8 without a second acceptance
+state machine and without a new Error:
+
+- The original `TcpListener` alone retains close authority. Every `TcpAcceptor`
+  representation derived from it observes the same logical close domain.
+- `acceptor.accept()` always keeps its Future-returning operation contract. When
+  invoked after the listener's close cutover, it returns a fresh ordinary Future
+  failed with a fresh `IOLifecycleError` occurrence; it does not signal that
+  Error synchronously in place of the Future, and it starts no new acceptance
+  activity on the closed listener.
+- A pending acceptance not yet committed when the listener is closed ends under
+  the existing close rule with a fresh `IOLifecycleError`.
+- An already committed acceptance keeps its ordinary result and is not reverted
+  by a later close. Listener close does not retroactively close a
+  `TcpConnection` that has already been delivered.
+- Cancellation of an acceptance Future applies the existing commitment contract.
+  Cancellation that wins before commitment prevents delivery of any connection
+  to the caller.
+- A physically accepted connection that cannot be delivered to its recipient
+  remains in producer/runtime custody until it is safely released.
+- Termination of the recipient Actor before delivery applies the ordinary
+  cancellation of that Actor's pending I/O operations. Actor termination is not
+  itself an implicit listener close and does not revoke connections already
+  delivered.
+- No cancellation, close, or termination path may produce duplicate delivery or
+  abandon a resource.
 
 ## 9. `TcpConnection`
 
@@ -441,6 +550,43 @@ have no Actor-transfer or P-transfer contract in this initial model. Attempting
 to move them through a boundary that accepts only ordinary transferable values
 fails under that boundary's existing non-transferable-value rules.
 
+D217 adds exactly one explicit delegation: a `TcpAcceptor` (§§7.1, 8.1–8.4) may
+be provisioned to a new Actor as part of the initialization arguments of
+`Actor.spawn`, under the existing Actor-local capability contract
+(`../concurrency/ACTORS.md` §§8 and 16). The delegation:
+
+- keeps the reference to the same logical listener and only acceptance
+  authority;
+- produces a resource representation specific to the destination Actor and
+  shares no mutable Protos identity between Actors;
+- does not share the original `TcpListener` object, transfers no existing
+  connection, and grants no `Network` capability; and
+- requires the destination Actor to execute within the same logical Process.
+
+A `TcpAcceptor` is processed as a capability with its own provisioning contract,
+not as an ordinary object copied by value; the resulting representation is the
+one defined in §7.1. Its source local slots do not belong to the delegated
+representation, and values reachable only through those slots are neither
+transferred nor validated as part of the provisioned capability. An ordinary
+object that holds a reference to a `TcpAcceptor` remains subject to the normal
+copy and validation rules for its own graph, while the `TcpAcceptor` reference
+inside that graph is processed through this delegation contract. Validation of
+the values actually transferred keeps the atomicity of `Actor.spawn`. No
+`TcpListener`, `TcpConnection`, or `Network` resource becomes transferable
+through this exception.
+
+Same-Process compatibility is a mandatory internal admission constraint, not a
+program-visible placement option.
+
+This revision does not extend `send()` or `request()` to carry a `TcpAcceptor`;
+a payload or reply graph reaching one fails with `NonTransferableValue` as
+before. That limitation is the scope of the present exception, not a permanent
+prohibition: extending it requires separately resolving existing destinations,
+unknown placement, and cross-Process transfer. No transfer to `Closure.parallel`,
+no cross-Process transfer, no remote proxy, and no resource migration is
+enabled. Every other unauthorized transfer keeps signaling
+`NonTransferableValue`.
+
 Core defines no Erlang-style active socket mode that injects TCP bytes directly
 into an Actor mailbox. An Actor reads a connection using ordinary byte-I/O Future
 operations and may then send application messages explicitly.
@@ -463,6 +609,22 @@ A listener must not require a semantic single-accept bottleneck. A trivial
 program that never receives Network authority pays no conceptual requirement to
 create DNS caches, interface registries, event-loop objects, distributed proxies,
 TLS state, UDP state, or network policy structures.
+
+For `TcpAcceptor` (§§8.1–8.4, 11), an implementation may use NIO, epoll, kqueue,
+io_uring, IOCP, or any compatible host mechanism. The contract admits multiple
+pending acceptances even when a particular host API requires internal
+serialization or multiplexing of accepts. Core requires neither a single thread,
+nor one thread per Actor, nor one Actor per connection, nor a dedicated Protos
+acceptor Actor, nor an additional Protos message per acceptance. Use of multiple
+cores remains available to independent Actors; unavoidable internal contention on
+the listener does not become an obligation to serialize acceptance through guest
+execution. Core defines no public CPU-affinity, Process-affinity, or
+thread-selection policy.
+
+Pay-as-you-grow applies: a program that never invokes `acceptCapability()` keeps
+the prior listener contract, and an implementation must not eagerly acquire TCP
+delegation infrastructure when that capability is unused. No multi-Process
+infrastructure is introduced.
 
 ## 13. Deferred facilities
 

@@ -259,6 +259,24 @@ partial Actor. A capability with an explicit Actor-delegation contract, includin
 Process, uses that contract; nothing is inherited merely because the creator has
 it.
 
+`TcpAcceptor` is such a capability, delegable only through these initialization
+arguments (`../io/NETWORK.md` §11). The complete argument graph is validated
+atomically, but each node with an explicit delegation contract is processed
+under that contract. A `TcpAcceptor` node denotes delegable authority, not a copy
+of the source wrapper: the wrapper's local slots are not traversed as content to
+copy to the destination, and their omission is not a failed partial transfer.
+All other arguments, ordinary objects, and references actually transferred keep
+their validation rules in full; a non-transferable reference elsewhere in the
+graph, including any `TcpListener` or `TcpConnection`, still signals
+`NonTransferableValue`. A failed delegation neither partially creates the Actor
+nor partially delivers its initialization graph. Delegation shares no mutable Protos object between Actors; the same
+logical listener may be denoted by distinct Actor-local representations, and the
+capability is never inherited implicitly. The presence of a `TcpAcceptor`
+constrains the new incarnation to same-Process placement, applied through
+admission under `DISTRIBUTED_RUNTIME.md` §§43 and 45 after the creation cutover
+below, with no placement API. Absence of compatible capacity is not a new
+synchronous `spawn` error.
+
 After those validations, successful creation has one semantic cutover: exactly
 one new Actor incarnation comes into existence, its incarnation identity is
 fixed, and the `ActorRef` denoting that identity exists. `Actor.spawn(...)`
@@ -628,6 +646,10 @@ Transferability currently follows these rules:
 -   ActorRef: transferable as a special communication capability
 -   GroupRef: transferable as a special communication capability
 -   Process capability: transferable only through the explicit Actor-delegation contract owned by `../io/PROCESS_IO.md`; the destination receives Actor-local capability authority, not a copied host resource
+-   Network: not transferable
+-   TcpListener: not transferable
+-   TcpConnection: not transferable
+-   TcpAcceptor: explicitly delegable only for same-Process `Actor.spawn` initialization arguments, through the contract owned by `../io/NETWORK.md` §11; not transferable through `send()`/`request()` payloads or replies, and its delegation authorizes no transfer of any other resource
 -   Closure: not transferable
 -   Future: not transferable
 -   ExecutionContext: not transferable
@@ -1691,7 +1713,9 @@ This rule applies to, among other non-transferable values:
 - any capability that another normative rule declares non-transferable.
 
 A proxy or routed capability may still be a valid design, but it is a **distinct
-provisioning operation** with its own contract. Such a facility must define, at
+provisioning operation** with its own contract. `TcpAcceptor` delegation
+(`../io/NETWORK.md` §11) is one such explicit capability, not automatic
+conversion of a live `TcpListener`. Such a facility must define, at
 minimum:
 
 - how the new proxy/capability is obtained;
@@ -2310,3 +2334,8 @@ implicit proxy, controlling-Actor retargeting, socket migration, or mailbox-acti
 mode is created. A future explicit networking proxy/delegation facility must
 define identity, authority, ordering, cancellation, lifetime, and failure
 semantics independently.
+
+D217 later defines one such distinct, attenuated authority: `TcpAcceptor`,
+explicitly delegable for same-Process `Actor.spawn` initialization under
+`../io/NETWORK.md` §11. It does not make `Network`, `TcpConnection`, or
+`TcpListener` transferable.

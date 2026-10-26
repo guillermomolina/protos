@@ -23,6 +23,42 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.473] - 2026-10-26
+
+### D217 — TcpAcceptor same-Process acceptance capability
+- `spec/io/NETWORK.md`: adds `listener.acceptCapability() -> TcpAcceptor`, a
+  synchronous, attenuated, acceptance-only capability derived from one logical
+  listener without a new socket, port, or `Network.listenTcp`. `TcpAcceptor`
+  follows the TCP family topology (frozen protocol prototype delegating from
+  `Object`, sole selector `accept`, no public binding) and grants no listener
+  close or `Network` authority; inherited `acceptor.close()` stays structural.
+  `acceptor.accept() -> Future<TcpConnection>` competes in the listener's
+  single logical acceptance domain with no fairness or ordering policy, and
+  delivers each connection exactly once and only to the invoking Actor. After
+  the listener close cutover it returns a fresh failed Future with
+  `IOLifecycleError`. Close, cancellation, and recipient-termination reuse
+  `IO_CORE.md` §§4 and 8 without duplicate delivery or resource abandonment.
+  The sole new Actor delegation is through `Actor.spawn` initialization
+  arguments to same-Process Actors: it provisions a fresh `OPEN`
+  destination-local representation carrying only acceptance authority,
+  without copying source slots or structural state. `send()`/`request()`,
+  `Closure.parallel`, and cross-Process transfer remain excluded; `Network`,
+  `TcpListener`, and `TcpConnection` remain non-transferable. Implementation
+  freedom and pay-as-you-grow are extended to acceptor backends.
+- `spec/concurrency/ACTORS.md`: `Actor.spawn` processes `TcpAcceptor`
+  argument nodes under their delegation contract within atomic graph
+  validation, with same-Process placement applied through existing admission
+  after the creation cutover. The §16 classification adds `Network`,
+  `TcpListener`, `TcpConnection` (non-transferable) and `TcpAcceptor`
+  (delegable only for same-Process spawn initialization). §24L and the D047
+  boundary gain references distinguishing this explicit capability from
+  automatic proxying.
+- `spec/io/PROCESS_IO.md`: §26 cites `TcpAcceptor` as explicit Actor-local
+  provisioning. Each acceptor is bound to one specific listener, independent
+  listeners' acceptance domains never merge, and no RootActor mediation,
+  `Network` recovery, cross-Process provisioning, or general I/O
+  resource-transfer facility is introduced.
+
 ## [0.1.472] - 2026-10-25
 
 ### D215 — HTTP/1.1 best-effort error-response precedence
