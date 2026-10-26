@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -50,7 +51,7 @@ final class ProtosTcpListenerFoundationTest {
 
         assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
         assertTrue(prototype.isFrozen());
-        assertEquals(java.util.Set.of("accept", "localPort", "close"), prototype.localSlotsSnapshot().keySet());
+        assertEquals(java.util.Set.of("accept", "acceptCapability", "localPort", "close"), prototype.localSlotsSnapshot().keySet());
         assertTrue(prelude.bindings().readLocalSlot("TcpListener").isEmpty());
         assertTrue(prelude.bindings().readLocalSlot("_coreTcpListenerPrototype").isEmpty());
     }
@@ -124,6 +125,84 @@ final class ProtosTcpListenerFoundationTest {
         assertNotSame(ordinary, pCopy);
         assertSame(prototype, pCopy.parent().orElseThrow());
         assertTrue(pCopy.isFrozen());
+    }
+
+    @Test
+    void hiddenAcceptorPrototypeIsCanonicalFrozenAuthorityFreeCoreState() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosObjectValue prototype = prelude.tcpAcceptorPrototypeForRuntime();
+
+        assertSame(prototype, prelude.tcpAcceptorPrototypeForRuntime());
+        assertTrue(prelude.isTcpAcceptorPrototypeForRuntime(prototype));
+        assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
+        assertTrue(prototype.isFrozen());
+        assertEquals(java.util.Set.of("accept"), prototype.localSlotsSnapshot().keySet());
+        assertTrue(prelude.bindings().readLocalSlot("TcpAcceptor").isEmpty());
+        assertTrue(prelude.bindings().readLocalSlot("_coreTcpAcceptorPrototype").isEmpty());
+
+        ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
+        assertFalse(ordinary instanceof ProtosTcpAcceptorValue);
+        assertFalse(prelude.isTcpAcceptorPrototypeForRuntime(ordinary));
+    }
+
+    @Test
+    void authorityFreeAcceptorDescendantTransfersWithCanonicalParent() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue prototype = prelude.tcpAcceptorPrototypeForRuntime();
+        ProtosObjectValue ordinary = new ProtosObjectValue(prototype);
+        ordinary.createLocalSlot("payload", new ProtosIntegerValue(19));
+        ordinary.freeze();
+
+        ProtosObjectValue actorCopy =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosActorValueTransfer.snapshotValue(ordinary, activation));
+        assertNotSame(ordinary, actorCopy);
+        assertSame(prototype, actorCopy.parent().orElseThrow());
+
+        ProtosObjectValue pCopy =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        pCopyMethod()
+                                .invoke(
+                                        null,
+                                        ordinary,
+                                        activation,
+                                        new IdentityHashMap<Object, Object>()));
+        assertNotSame(ordinary, pCopy);
+        assertSame(prototype, pCopy.parent().orElseThrow());
+    }
+
+    @Test
+    void actorAndPRejectAcceptorAndAuthorityBearingDescendants() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosTcpListenerValue listener =
+                new ProtosTcpListenerValue(
+                        prelude,
+                        new Object(),
+                        activation,
+                        completion -> completion.succeeded(),
+                        51000,
+                        (a, state, local, remote, backend) -> {
+                            throw new AssertionError("no accept is started");
+                        });
+        ProtosTcpAcceptorValue acceptor =
+                listener.acceptCapabilityForRuntime(
+                        activation, prelude.tcpAcceptorPrototypeForRuntime());
+        ProtosObjectValue descendant = new ProtosObjectValue(acceptor);
+
+        assertNonTransferable(
+                prelude,
+                () -> ProtosActorValueTransfer.snapshotValue(acceptor, activation));
+        assertNonTransferable(
+                prelude,
+                () -> ProtosActorValueTransfer.snapshotValue(descendant, activation));
+
+        Method copy = pCopyMethod();
+        assertNonParallel(copy, acceptor, activation);
+        assertNonParallel(copy, descendant, activation);
     }
 
     private static void assertNonTransferable(ProtosPrelude prelude, ThrowingAction action) {

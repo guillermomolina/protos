@@ -41,6 +41,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
     private final ProtosObjectValue runtimeTcpListenerPrototype;
+    private final ProtosObjectValue runtimeTcpAcceptorPrototype;
     private final ProtosObjectValue runtimeIpAddressPrototype;
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
@@ -199,6 +200,39 @@ public final class ProtosPrelude {
             List<ProtosSemanticTransferFamily> semanticTransferFamilies,
             Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
                     lazyStandardModuleMembers) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                runtimeIpAddressPrototype,
+                runtimeIpEndpointPrototype,
+                standardModuleMembers,
+                semanticTransferFamilies,
+                lazyStandardModuleMembers,
+                null);
+    }
+
+    /**
+     * Creates a Prelude that additionally retains the runtime-only TcpAcceptor protocol prototype
+     * (I125-A). The prototype is omitted from public Prelude bindings.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers,
+            List<ProtosSemanticTransferFamily> semanticTransferFamilies,
+            Map<ProtosModuleKey, Map<String, Supplier<ProtosObjectValue>>>
+                    lazyStandardModuleMembers,
+            ProtosObjectValue runtimeTcpAcceptorPrototype) {
         this.semanticTransferFamilies = copySemanticTransferFamilies(semanticTransferFamilies);
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
@@ -207,6 +241,7 @@ public final class ProtosPrelude {
         this.runtimeActorRefPrototype = runtimeActorRefPrototype;
         this.runtimeTcpConnectionPrototype = runtimeTcpConnectionPrototype;
         this.runtimeTcpListenerPrototype = runtimeTcpListenerPrototype;
+        this.runtimeTcpAcceptorPrototype = runtimeTcpAcceptorPrototype;
         this.runtimeIpAddressPrototype = runtimeIpAddressPrototype;
         this.runtimeIpEndpointPrototype = runtimeIpEndpointPrototype;
         this.standardModuleMembers = copyStandardModuleMembers(standardModuleMembers);
@@ -232,6 +267,14 @@ public final class ProtosPrelude {
                                 != ProtosObjectValue.rootObject())) {
             throw new IllegalArgumentException(
                     "runtime TcpListener prototype must be a frozen direct child of Object");
+        }
+
+        if (runtimeTcpAcceptorPrototype != null
+                && (!runtimeTcpAcceptorPrototype.isFrozen()
+                        || runtimeTcpAcceptorPrototype.parent().orElse(null)
+                                != ProtosObjectValue.rootObject())) {
+            throw new IllegalArgumentException(
+                    "runtime TcpAcceptor prototype must be a frozen direct child of Object");
         }
 
         if (!bindings.isFrozen()) {
@@ -542,6 +585,20 @@ public final class ProtosPrelude {
     /** Nullable-safe identity test used only by isolation transfer machinery. */
     public boolean isTcpListenerPrototypeForRuntime(Object candidate) {
         return runtimeTcpListenerPrototype != null && candidate == runtimeTcpListenerPrototype;
+    }
+
+    /** Runtime-only exact TcpAcceptor protocol prototype omitted from public Prelude bindings. */
+    public ProtosObjectValue tcpAcceptorPrototypeForRuntime() {
+        if (runtimeTcpAcceptorPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime TcpAcceptor prototype");
+        }
+        return runtimeTcpAcceptorPrototype;
+    }
+
+    /** Nullable-safe identity test used only by isolation transfer machinery. */
+    public boolean isTcpAcceptorPrototypeForRuntime(Object candidate) {
+        return runtimeTcpAcceptorPrototype != null && candidate == runtimeTcpAcceptorPrototype;
     }
 
     /** Runtime-only canonical IpAddress family omitted from public Prelude bindings. */

@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpAcceptorValue;
 import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import com.guillermomolina.protos.runtime.process.ProtosProcessExecutionHost;
@@ -461,7 +462,7 @@ public final class ProtosParallelRuntime {
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
             // A Core Fraction or Complex crossed above as an inert descriptor (D197-C, I090-C1); other sealed values stay non-parallel.
-            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosTcpAcceptorValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v instanceof ProtosSealedValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
@@ -675,6 +676,7 @@ public final class ProtosParallelRuntime {
             if(!(v instanceof ProtosObjectValue o)||!o.isFrozen())return false;
             if(p.isTcpConnectionPrototypeForRuntime(v))return true;
             if(p.isTcpListenerPrototypeForRuntime(v))return true;
+            if(p.isTcpAcceptorPrototypeForRuntime(v))return true;
             if(p.isStandardModuleMemberForRuntime(v))return true;
             ArrayList<String> names=new ArrayList<>();
             ArrayList<Object> values=new ArrayList<>();

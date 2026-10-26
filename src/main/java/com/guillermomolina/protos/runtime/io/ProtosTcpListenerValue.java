@@ -95,6 +95,18 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
         return flow.accept(activation);
     }
 
+    /** Derives one TcpAcceptor sharing this listener's single flow (I125-A). */
+    public ProtosTcpAcceptorValue acceptCapabilityForRuntime(
+            ProtosActivation activation,
+            ProtosObjectValue tcpAcceptorPrototype) {
+        if (!hasAcceptForRuntime()) throw new IllegalStateException("TcpListener has no accept capability");
+        Objects.requireNonNull(activation, "activation");
+        if (activation.prelude().orElseThrow().tcpAcceptorPrototypeForRuntime() != tcpAcceptorPrototype) {
+            throw new IllegalArgumentException("TcpAcceptor derivation requires the standard TcpAcceptor prototype");
+        }
+        return flow.deriveAcceptor(activation, tcpAcceptorPrototype);
+    }
+
     public ProtosFutureValue closeForRuntime(ProtosActivation activation) {
         if (flow == null) throw new IllegalStateException("TcpListener has no operational runtime flow");
         return flow.close(activation);

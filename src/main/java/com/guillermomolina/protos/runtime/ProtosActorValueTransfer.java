@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.io.ProtosPathComponents;
 import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.io.ProtosTcpAcceptorValue;
 import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
 import com.guillermomolina.protos.runtime.numeric.ProtosNumericHashKey;
 import java.util.ArrayList;
@@ -299,6 +300,7 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosNetworkCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
+                    || value instanceof ProtosTcpAcceptorValue
                     // LIB020-A sealed families are not portable; copying would drop the family.
                     // A Core Fraction or Complex never reaches here: each crossed above as an
                     // inert descriptor (D197-C, I090-C1).
@@ -516,6 +518,7 @@ public final class ProtosActorValueTransfer {
                     || object == prelude.bindings()
                     || prelude.isTcpConnectionPrototypeForRuntime(object)
                     || prelude.isTcpListenerPrototypeForRuntime(object)
+                    || prelude.isTcpAcceptorPrototypeForRuntime(object)
                     || prelude.isStandardModuleMemberForRuntime(object)) {
                 return true;
             }

@@ -59,7 +59,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/protocols/io/ProtosStandardIpEndpointProtocol.java", 1),
                     Map.entry("execution/protocols/io/ProtosStandardNetworkProtocol.java", 2),
                     Map.entry("execution/protocols/io/ProtosStandardTcpConnectionProtocol.java", 7),
-                    Map.entry("execution/protocols/io/ProtosStandardTcpListenerProtocol.java", 3),
+                    Map.entry("execution/protocols/io/ProtosStandardTcpAcceptorProtocol.java", 1),
+                    Map.entry("execution/protocols/io/ProtosStandardTcpListenerProtocol.java", 4),
                     Map.entry("execution/protocols/values/ProtosStandardArrayProtocol.java", 7),
                     // LIB024 std:math/LinearAlgebra Vector/Matrix protocols through one define helper.
                     Map.entry("execution/protocols/values/ProtosStandardLinearAlgebraProtocol.java", 1),
@@ -174,8 +175,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(38, actualCore.size());
-        assertEquals(142, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(39, actualCore.size());
+        assertEquals(144, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -372,7 +373,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "TcpListener",
                 prelude.tcpListenerPrototypeForRuntime(),
-                Set.of("accept", "localPort", "close"));
+                Set.of("accept", "acceptCapability", "localPort", "close"));
+        ProtosObjectValue tcpAcceptorPrototype = prelude.tcpAcceptorPrototypeForRuntime();
+        assertTrue(tcpAcceptorPrototype.isFrozen(), "standard TcpAcceptor prototype must be frozen");
+        assertTrue(
+                tcpAcceptorPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
+                "standard TcpAcceptor prototype must delegate directly to Object");
+        assertNativeSelectors("TcpAcceptor", tcpAcceptorPrototype, Set.of("accept"));
         assertNativeSelectors(
                 "Future",
                 prelude.futurePrototype(),

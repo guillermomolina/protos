@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.405-SNAPSHOT
+
+- `I125-A` (#966, D217): add the Actor-local `TcpAcceptor` capability
+  (spec 0.1.473).
+  - `listener.acceptCapability()` synchronously derives a fresh
+    `TcpAcceptor` (canonical frozen prototype, direct child of `Object`,
+    no public binding) that shares the listener's single
+    `ProtosTcpListenerFlow`, backend and `ProtosIoLifecycle`; derivation
+    starts no I/O. After the close cutover it signals a fresh
+    `IOLifecycleError`.
+  - `acceptor.accept()` reuses the existing listener accept path, so each
+    call answers a fresh Future with unchanged cancellation, commitment,
+    close cutover and custody release; after the cutover it answers a fresh
+    failed Future without reaching the backend. Calls from another Actor
+    domain are rejected.
+  - Inherited `Object.close()` changes only the acceptor's structural state.
+  - Concrete acceptors and their ordinary descendants are rejected by Actor
+    transfer and by P; the frozen prototype remains a standard identity
+    anchor. `Actor.spawn` delegation is deferred to I125-B.
+
 ## 0.3.404-SNAPSHOT
 
 - `LIB025` (#962, D215): complete Standard Library HTTP/1.1 single-request

@@ -199,6 +199,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("network/TcpListener.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("network/TcpAcceptor.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -378,8 +381,15 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext,
                         "_coreTcpListenerPrototype",
                         ProtosObjectValue.rootObject());
-        ProtosStandardTcpListenerProtocol.install(tcpListenerPrototype);
+        ProtosObjectValue tcpAcceptorPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "_coreTcpAcceptorPrototype",
+                        ProtosObjectValue.rootObject());
+        ProtosStandardTcpAcceptorProtocol.install(tcpAcceptorPrototype);
+        ProtosStandardTcpListenerProtocol.install(tcpListenerPrototype, tcpAcceptorPrototype);
         bootstrapContext.removeLocalSlot("_coreTcpListenerPrototype");
+        bootstrapContext.removeLocalSlot("_coreTcpAcceptorPrototype");
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosObjectValue processObject =
@@ -488,7 +498,8 @@ public final class ProtosCoreBootstrap {
                 bufferedReaderFactory,
                 bufferedWriterFactory,
                 vectorPrototype,
-                matrixPrototype);
+                matrixPrototype,
+                tcpAcceptorPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -503,7 +514,8 @@ public final class ProtosCoreBootstrap {
                 bufferedReaderFactory,
                 bufferedWriterFactory,
                 vectorPrototype,
-                matrixPrototype);
+                matrixPrototype,
+                tcpAcceptorPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -522,7 +534,8 @@ public final class ProtosCoreBootstrap {
                         vectorPrototype,
                         matrixPrototype),
                 semanticTransferFamilies,
-                lazyStandardModuleMembers());
+                lazyStandardModuleMembers(),
+                tcpAcceptorPrototype);
     }
 
     /**

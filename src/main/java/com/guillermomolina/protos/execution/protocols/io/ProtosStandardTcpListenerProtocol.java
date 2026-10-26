@@ -27,11 +27,14 @@ import java.util.Objects;
 /** D052 shared protocol bridge for TcpListener accept, observation and Closable lifecycle. */
 public final class ProtosStandardTcpListenerProtocol {
     private ProtosStandardTcpListenerProtocol() {}
-    public static void install(ProtosObjectValue prototype) {
+    public static void install(ProtosObjectValue prototype, ProtosObjectValue acceptorPrototype) {
         Objects.requireNonNull(prototype,"prototype");
+        Objects.requireNonNull(acceptorPrototype,"acceptorPrototype");
+        if(acceptorPrototype.parent().orElse(null)!=ProtosObjectValue.rootObject()||!acceptorPrototype.localSlotsSnapshot().containsKey("accept")) throw new IllegalArgumentException("standard TcpAcceptor prototype must delegate directly to Object and carry its accept protocol");
         if(prototype.parent().orElse(null)!=ProtosObjectValue.rootObject()) throw new IllegalArgumentException("standard TcpListener protocol prototype must delegate directly to Object");
         if(!prototype.isOpen()||!prototype.localSlotsSnapshot().isEmpty()) throw new IllegalStateException("standard TcpListener protocol prototype must be fresh and open");
         prototype.createLocalSlot("accept",ProtosClosureValue.nativeClosure((activation,supplied)->requireAcceptingListener(activation,supplied,prototype).acceptForRuntime(activation)));
+        prototype.createLocalSlot("acceptCapability",ProtosClosureValue.nativeClosure((activation,supplied)->requireAcceptingListener(activation,supplied,prototype).acceptCapabilityForRuntime(activation,acceptorPrototype)));
         prototype.createLocalSlot("localPort",ProtosClosureValue.nativeClosure((activation,supplied)->{
             ProtosTcpListenerValue listener=requireListener(activation,supplied,prototype);
             return ProtosNumericValueSupport.integer(listener.localPortForRuntime());

@@ -4,6 +4,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
+import com.guillermomolina.protos.runtime.io.ProtosTcpAcceptorValue;
 import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
 import com.guillermomolina.protos.runtime.io.ProtosTcpListenerFlow;
 import com.guillermomolina.protos.runtime.io.ProtosTcpListenerValue;
@@ -147,12 +148,82 @@ final class ProtosTcpListenerAcceptTest {
         assertTrue(x.backend.accepts.isEmpty());
     }
 
+    @Test void listenerAndAcceptorsShareOneBackendAndDeliverEachConnectionOnce() throws Exception {
+        Fixture x=fixture(); ProtosTcpAcceptorValue a1=acceptor(x), a2=acceptor(x);
+        assertNotSame(a1,a2);
+        ProtosFutureValue f0=accept(x), f1=future(a1,"accept",List.of(),x.activation), f2=future(a2,"accept",List.of(),x.activation);
+        assertEquals(3,x.backend.accepts.size());
+        ProtosObjectValue[] remotes={endpoint(x,0x01010101L,46000),endpoint(x,0x02020202L,46001),endpoint(x,0x03030303L,46002)};
+        AtomicInteger[] releases={new AtomicInteger(),new AtomicInteger(),new AtomicInteger()};
+        for(int i:new int[]{2,0,1}){
+            x.backend.accepts.get(i).completion.succeeded(new Object(),host(endpoint(x,0x7f000001L,51000)),host(remotes[i]),new NoOpConnectionBackend(),releases[i]::incrementAndGet);
+            assertTrue(x.activation.executionDomain().dispatchOne());
+        }
+        ProtosFutureValue[] futures={f0,f1,f2};
+        java.util.Set<Object> delivered=java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for(int i=0;i<3;i++){
+            ProtosTcpConnectionValue c=assertInstanceOf(ProtosTcpConnectionValue.class,futures[i].resolvedValue().orElseThrow());
+            assertTrue(delivered.add(c));
+            assertEndpointEquals(x,ProtosInvocation.invokeMessage(c,"remoteEndpoint",List.of(),x.activation),remotes[i]);
+            assertEquals(0,releases[i].get());
+        }
+        assertFalse(x.activation.executionDomain().dispatchOne());
+    }
+
+    @Test void acceptorPrecommitCancellationReleasesLateConnectionOnce() throws Exception {
+        Fixture x=fixture(); ProtosFutureValue cancelled=future(acceptor(x),"accept",List.of(),x.activation); AcceptInvocation ci=x.backend.accepts.get(0);
+        assertTrue(cancelled.cancelRequest()); assertEquals(ProtosFutureValue.State.CANCELLED,cancelled.state()); assertEquals(1,ci.cancels.get());
+        AtomicInteger lateRelease=new AtomicInteger();
+        ci.completion.succeeded(new Object(),host(endpoint(x,0x7f000001L,51000)),host(endpoint(x,0x01010101L,47000)),new NoOpConnectionBackend(),lateRelease::incrementAndGet);
+        assertEquals(1,lateRelease.get()); assertEquals(ProtosFutureValue.State.CANCELLED,cancelled.state()); assertTrue(cancelled.resolvedValue().isEmpty());
+    }
+
+    @Test void listenerCloseCutsOverListenerAndAcceptorAcceptsInOneDomain() throws Exception {
+        Fixture x=fixture(); ProtosTcpAcceptorValue acceptor=acceptor(x);
+        ProtosFutureValue fromListener=accept(x), fromAcceptor=future(acceptor,"accept",List.of(),x.activation);
+        AcceptInvocation li=x.backend.accepts.get(0), ai=x.backend.accepts.get(1);
+        ProtosFutureValue close=future(x.listener,"close",List.of(),x.activation);
+        assertFailedAs(fromListener,x.prelude,"IOLifecycleError"); assertFailedAs(fromAcceptor,x.prelude,"IOLifecycleError");
+        assertEquals(1,li.cancels.get()); assertEquals(1,ai.cancels.get()); assertEquals(1,x.backend.closeStarts);
+        AtomicInteger lateListener=new AtomicInteger(), lateAcceptor=new AtomicInteger();
+        li.completion.succeeded(new Object(),host(endpoint(x,0x7f000001L,51000)),host(endpoint(x,0x01010101L,48000)),new NoOpConnectionBackend(),lateListener::incrementAndGet);
+        ai.completion.succeeded(new Object(),host(endpoint(x,0x7f000001L,51000)),host(endpoint(x,0x01010101L,48001)),new NoOpConnectionBackend(),lateAcceptor::incrementAndGet);
+        assertEquals(1,lateListener.get()); assertEquals(1,lateAcceptor.get());
+        ProtosFutureValue afterCutover=future(acceptor,"accept",List.of(),x.activation);
+        assertFailedAs(afterCutover,x.prelude,"IOLifecycleError"); assertEquals(2,x.backend.accepts.size());
+        x.backend.closeCompletion.succeeded(); assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+    }
+
+    @Test void acceptorTerminationDropsUntransferredAcceptedConnectionOnce() throws Exception {
+        Fixture x = fixture();
+        ProtosFutureValue future = future(acceptor(x), "accept", List.of(), x.activation);
+        AcceptInvocation invocation = x.backend.accepts.get(0);
+        AtomicInteger released = new AtomicInteger();
+
+        java.util.concurrent.CompletableFuture.runAsync(
+                () -> invocation.completion.succeeded(
+                        new Object(),
+                        new ProtosHostIpEndpoint(4, new byte[] {127, 0, 0, 1}, 51000),
+                        new ProtosHostIpEndpoint(4, new byte[] {1, 1, 1, 1}, 49000),
+                        new NoOpConnectionBackend(), released::incrementAndGet)).get();
+
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertTrue(future.cancelRequest());
+        assertEquals(0, released.get());
+        future.domain().actorTerminated();
+        assertEquals(1, released.get());
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertFalse(future.domain().dispatchOne());
+        assertEquals(1, released.get());
+    }
+
     private static Fixture fixture() throws Exception {
         ProtosPrelude p=core(); ProtosActivation a=p.newModuleActivation(); RecordingBackend b=new RecordingBackend();
         ProtosTcpListenerValue l=new ProtosTcpListenerValue(p,new Object(),a,b,51000,ProtosStandardTcpListenerProtocol::materializeAcceptedConnection);
         return new Fixture(p,a,l,b);
     }
     private static ProtosPrelude core() throws Exception { return new ProtosCoreBootstrap().bootstrap(CORE); }
+    private static ProtosTcpAcceptorValue acceptor(Fixture x){ return assertInstanceOf(ProtosTcpAcceptorValue.class,ProtosInvocation.invokeMessage(x.listener,"acceptCapability",List.of(),x.activation)); }
     private static ProtosFutureValue accept(Fixture x){ return future(x.listener,"accept",List.of(),x.activation); }
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue endpoint(Fixture x,long bits,long port){

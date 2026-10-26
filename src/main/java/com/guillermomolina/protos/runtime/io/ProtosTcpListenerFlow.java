@@ -23,6 +23,8 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoLifecycle;
 import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import com.guillermomolina.protos.runtime.io.ProtosHostIpEndpoint;
 import com.guillermomolina.protos.runtime.io.ProtosTcpConnectionValue;
@@ -158,6 +160,23 @@ public final class ProtosTcpListenerFlow {
             invocation.exitBackendCall();
         }
         return operation.future();
+    }
+
+    /**
+     * Synchronously derives one TcpAcceptor sharing this flow (I125-A). Starts no I/O; after the
+     * close cutover it signals a fresh IOLifecycleError instead of constructing a capability.
+     */
+    public ProtosTcpAcceptorValue deriveAcceptor(
+            ProtosActivation activation,
+            ProtosObjectValue acceptorPrototype) {
+        requireDomain(activation);
+        if(resultMaterializer==null) throw new IllegalStateException("TcpListener has no accept materializer");
+        ProtosPrelude prelude=activation.prelude().orElseThrow();
+        if(!prelude.isTcpAcceptorPrototypeForRuntime(acceptorPrototype)) throw new IllegalArgumentException("TcpAcceptor derivation requires the standard TcpAcceptor prototype");
+        if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN) {
+            throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR));
+        }
+        return new ProtosTcpAcceptorValue(prelude,this,activation);
     }
 
     public synchronized ProtosFutureValue close(ProtosActivation activation) {
