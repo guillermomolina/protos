@@ -8,6 +8,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.15-SNAPSHOT
+
+- `I115-H3` (experimental factorial bytecode hot path): specialize the
+  previously admitted compact recursive factorial lane, without widening
+  its correctness or method-selection guarantees.
+  - Bind the recursive unary Integer parameter directly to its Bytecode DSL
+    local using `ExperimentalLongArgument0` and `StoreLocal`; move the
+    experimental static-unary argument to the usual B5 supplied-argument
+    offset. The private frame representation still is not equivalent to
+    an ordinary B5+ invocation.
+  - Make the admitted `ExperimentalIntegerGreaterBool` long-only and perform
+    direct wrapping signed-64 subtraction and multiplication without the
+    earlier exact overflow promotion or generic Integer fallback.
+  - Initialize the static direct-call target once in the first entered
+    Context, without a per-invocation Context guard. A call from a different
+    Context may retain the original target, and the direct path no longer
+    translates a bridged control transfer.
+  - Update the historical factorial FULL DSL expectations: 3 physical roots;
+    module 17, run 6 and factorial 19 instructions, total 42. The original
+    overflow-to-large-Integer regression test is explicitly `@Disabled` in
+    this historical commit. These are source-test expectations, not results
+    measured by this versioned replay.
+  - **Historical semantic divergence:** signed-64 overflow wrapping conflicts
+    with exact Protos Integer semantics; the experimental recursive call also
+    bypasses dynamic `Object.call` selection, caller/Task/ReturnHome context,
+    and some cross-Context/control-transfer guarantees. Earlier D179 C0
+    module-binding lexical-retargeting divergence is not resolved. No
+    semantic, suspension, or performance acceptance gate is established.
+  - Reconstructed from original I115 commit
+    `29d4f0e6e2089e901c164d886d31d83645ff4545`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.14-SNAPSHOT
 
 - `I115-H2` (PLAT066-C / experimental recursive factorial): restore the

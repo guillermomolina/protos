@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.graalvm.polyglot.Value;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -532,11 +533,12 @@ final class ProtosI115RFactorialCaptureTest {
             assertEquals(3, rootCount,
                     "Unexpected callback or other physical root");
 
-            assertEquals(18, names.size(),
-                    "I115-H2 experimental factorial FULL DSL budget");
+            // I115-H3: the direct parameter binding is two instructions.
+            assertEquals(19, names.size(),
+                    "I115-H3 experimental factorial FULL DSL budget");
 
             for (String required : List.of(
-                    "BindUnaryFrameParameter",
+                    "ExperimentalLongArgument0",
                     "InvokeStaticClosureOneTail",
                     "ExperimentalIntegerMultiply",
                     "ExperimentalIntegerSubtract",
@@ -552,7 +554,9 @@ final class ProtosI115RFactorialCaptureTest {
                     "EnterNestedStructuredDispatch",
                     "ResumeContinuation",
                     "CompleteClosureCall",
-                    "InstallFrameLexicalAuthority")) {
+                    "InstallFrameLexicalAuthority",
+                    "BindUnaryFrameParameter",
+                    "TryPrimitiveNumeric")) {
                 assertTrue(names.stream().noneMatch(
                         name -> name.contains(forbidden)),
                         "Unexpected generic operation: " + forbidden);
@@ -589,6 +593,7 @@ final class ProtosI115RFactorialCaptureTest {
      * ordinary invocation. Independent of compilation and graph capture.
      */
     @Test
+    @Disabled("I115-H3: the experimental lane wraps on long overflow (owner-accepted divergence)")
     void recursiveFactorialOverflowsToLargeInteger() throws Exception {
         Path file = Path.of(
                 "target", "i115-r-factorial", "h1-overflow.protos");
@@ -825,10 +830,11 @@ final class ProtosI115RFactorialCaptureTest {
         // I115-H2: retain the verified R6 physical-bytecode baseline.
         assertEquals(3, roots.size(), "Experimental physical root count");
         assertEquals(17, moduleFull, "Experimental module DSL");
-        assertEquals(18, factorialFull, "Experimental factorial DSL");
+        // I115-H3: +1 for the direct parameter binding.
+        assertEquals(19, factorialFull, "Experimental factorial DSL");
         assertEquals(6, runFull, "Experimental run DSL");
         assertEquals(0, additionalFull, "Unexpected callback root");
-        assertEquals(41, total, "Experimental total DSL");
+        assertEquals(42, total, "Experimental total DSL");
 
         System.out.println("I115_R_ROOT_COUNT=" + roots.size());
         System.out.println("I115_R_MODULE_DSL_FULL=" + moduleFull);
