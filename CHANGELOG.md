@@ -8,6 +8,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.14-SNAPSHOT
+
+- `I115-H2` (PLAT066-C / experimental recursive factorial): restore the
+  narrow compact recursive factorial lowering on top of the H1-FIX ordinary
+  dispatch and frame-lexical-authority fallbacks.
+  - Recognize the selected unary Integer recursive Closure and reintroduce
+    the experimental `InvokeStaticClosureOneTail` execution lane with the
+    reduced static unary argument layout; other roots keep the H1 ordinary
+    B5+ invocation and selection paths.
+  - Re-enable compact signed-64 arithmetic/comparison operations and exact
+    overflow promotion in this admitted lane; leave numeric protocol lookup
+    and dynamic selection to ordinary paths outside its strict admission.
+  - Restore structural assertions for `factorial(20)` and its historical
+    Bytecode DSL census: three roots, module 17, factorial 18, run 6,
+    and 41 instructions in total. These are test expectations from the
+    original I115 commit, not measurements on this versioned replay.
+  - **Historical semantic limitation:** the reduced two-slot static unary
+    ABI is not an equivalent replacement for B5+; the experimental recursive
+    lane deliberately does not preserve every dynamic `Object.call` override,
+    module-binding retargeting, or D179 C0 late lexical-selection guarantee.
+    This snapshot does not establish full Protos semantic conformance or a
+    general optimization acceptance gate.
+  - Reconstructed from original I115 commit
+    `a49cab249116bd59680ad50b3ec9ea192726dbda`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.13-SNAPSHOT
 
 - `I115-H1-FIX` (restore ordinary dispatch and frame lexical authority in compact lowering):
