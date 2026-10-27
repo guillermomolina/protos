@@ -182,7 +182,6 @@ import com.oracle.truffle.api.source.Source;
 @OperationProxy(value = ProtosNumericGreaterNode.class, name = "TryPrimitiveNumericGreater")
 @OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
 @OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
-@OperationProxy(value = ProtosExperimentalCallUnaryNode.class, name = "InvokeExperimentalClosureOneTail")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
@@ -209,32 +208,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
-     * I115-H4-B EXPERIMENTAL: whether the prolog and epilogues run the
-     * GraalPy-style callee context of this root (the focal run root and the
-     * H3 recursive Integer roots), and whether its return epilogue returns
-     * the callee's value directly (the focal run root). Set once by the
-     * lowerer after endRoot(); a reparse replays that lowering.
+     * I115-H4-B EXPERIMENTAL: whether this root is an experimental callee
+     * context root (the focal run root and the H3 recursive Integer roots),
+     * whose prolog checks that it was entered with a B5 header. Set once by
+     * the lowerer after endRoot(); a reparse replays that lowering. Protos
+     * keeps no GraalPy-style per-invocation callee state: the invocation and
+     * its caller (B5[3]) are carried by the B5 header itself.
      */
     @CompilationFinal private transient boolean experimentalCalleeContextRoot;
-    @CompilationFinal private transient boolean experimentalDirectReturnRoot;
-    @Child private transient ProtosExperimentalCalleeContext experimentalCalleeContext =
-            new ProtosExperimentalCalleeContext();
 
-    final void markExperimentalCalleeContextRoot(boolean directReturn) {
+    final void markExperimentalCalleeContextRoot() {
         this.experimentalCalleeContextRoot = true;
-        this.experimentalDirectReturnRoot = directReturn;
     }
 
     final boolean isExperimentalCalleeContextRoot() {
         return experimentalCalleeContextRoot;
-    }
-
-    final boolean isExperimentalDirectReturnRoot() {
-        return experimentalDirectReturnRoot;
-    }
-
-    final ProtosExperimentalCalleeContext experimentalCalleeContext() {
-        return experimentalCalleeContext;
     }
 
     /**
@@ -689,8 +677,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     /*
      * I115-H4-B EXPERIMENTAL (GraalPy EnterCalleeContext): an experimental
-     * callee context root enters its ProtosExperimentalCalleeContext; every
-     * other root does nothing, as before. No ProtosActivation is
+     * callee context root asserts its B5 header; every other root does
+     * nothing, as before. No ProtosActivation is
      * materialized and no Object.call, ReturnHome, Task or suspension check
      * runs.
      */
@@ -701,11 +689,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root) {
             if (root.isExperimentalCalleeContextRoot()) {
-                assert ProtosFrameArguments.isExperimentalGraalPyUnaryCall(frame.getArguments())
-                                || frame.getArguments().length
-                                        >= ProtosFrameArguments.HEADER_LENGTH
-                        : "experimental callee context root entered without a call header";
-                root.experimentalCalleeContext().enter(frame, root);
+                assert frame.getArguments().length >= ProtosFrameArguments.HEADER_LENGTH
+                        : "experimental callee context root entered without a B5 header";
             }
         }
     }
@@ -729,19 +714,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode) {
             /*
-             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn): an
-             * experimental callee context root exits its callee context; the
-             * focal run root then returns the callee's value directly,
-             * without MaterializeReturnCarrier.
+             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn): every root,
+             * an experimental callee context root included, returns or
+             * projects its value the same way.
              */
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
-            }
-            if (root.isExperimentalCalleeContextRoot()) {
-                root.experimentalCalleeContext().exit(frame, root, bytecodeNode);
-                if (root.isExperimentalDirectReturnRoot()) {
-                    return value;
-                }
             }
             if (!root.epilogProjectsReturnCarrier()) {
                 return value;
@@ -752,10 +730,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /**
      * I115-H4-B EXPERIMENTAL (GraalPy EpilogForException): the single
-     * exceptional epilogue of every root. Only an experimental callee
-     * context root does anything: it exits its callee context. The
-     * exception is neither translated nor replaced, and every other root is
-     * unchanged.
+     * exceptional epilogue of every root: only the internal trace probe
+     * records the exception, which is neither translated nor replaced.
      */
     @EpilogExceptional(storeBytecodeIndex = true)
     public static final class EpilogForException {
@@ -767,9 +743,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind BytecodeNode bytecodeNode) {
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileException(frame, bytecodeNode, exception);
-            }
-            if (root.isExperimentalCalleeContextRoot()) {
-                root.experimentalCalleeContext().exit(frame, root, bytecodeNode);
             }
         }
     }
@@ -8439,11 +8412,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * I115-H3 EXPERIMENTAL: supplied argument 0 of an admitted recursive
      * Integer root as a long, stored by the lowering with the built-in
      * StoreLocal into the parameter's own frame local. The static unary
-     * layout and B5 keep it at the same position; I115-H4-B: the GraalPy
-     * unary layout one position later. The only branch is the physical
-     * unboxing of the Integer representations a caller may supply (I115-H4-B:
-     * an Integer constant of the focal run root included); no binding
-     * presence, activation or layout is consulted.
+     * layout and B5 keep it at the same position. The only branch is the
+     * physical unboxing of the two Integer representations a caller may
+     * supply; no binding presence, activation or layout is consulted.
      */
     @Operation
     public static final class ExperimentalLongArgument0 {
@@ -8452,9 +8423,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
                     frame.getArguments());
             if (value instanceof Long carrier) {
-                return carrier.longValue();
-            }
-            if (value instanceof Integer carrier) {
                 return carrier.longValue();
             }
             return ((ProtosIntegerValue) value).longValue();
@@ -9563,6 +9531,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
+        }
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL: the Bytecode DSL adapter of {@link
+     * ProtosExperimentalCallUnaryNode}. A proxied node cannot bind the typed
+     * caller root, the BytecodeNode or the bytecode index, so this operation
+     * binds them and delegates; it carries no call semantics of its own.
+     */
+    @Operation
+    public static final class InvokeExperimentalClosureOneTail {
+        @Specialization
+        public static Object invoke(
+                Object receiver,
+                Object supplied0,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode callerRoot,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
+                @Cached ProtosExperimentalCallUnaryNode callUnary) {
+            return callUnary.execute(
+                    frame, callerRoot, bytecodeNode, bytecodeIndex, receiver, supplied0);
         }
     }
 

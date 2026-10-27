@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.dsl.NeverDefault;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -24,17 +25,23 @@ import com.oracle.truffle.api.nodes.Node;
 
 /**
  * I115-H4-B EXPERIMENTAL (GraalPy ExecutionContext.CallContext): the
- * caller-side preparation of a GraalPy unary frame-argument layout
- * ({@link ProtosFrameArguments#experimentalGraalPyUnaryCall}) before the
+ * caller-side preparation of the B5+ header staged by {@link
+ * ProtosFrameArguments#admittedTerminalClosureCallOneToInstall} before the
  * direct call of {@link ProtosExperimentalCallDispatchers}.
  *
- * <p>{@link #prepareCall} installs the caller reference (the caller's own
- * frame arguments) and the caller's experimental exceptional state. The
- * indirect pair, used when no caller frame exists, installs an absent caller
- * and exceptional state and clears the caller reference again after the
- * call. No ProtosActivation is built, no Object.call, ReturnHome, Task or
- * Prelude is consulted or prepared, no suspension route exists, and neither
- * transferred exceptions nor results are translated.
+ * <p>{@link #prepareCall} installs the B5 caller slot exactly as the
+ * ordinary admitted terminal Call1 passes it ({@link
+ * ProtosBytecodeRootNode.InvokeClosureOneTail#callerArgument}): the
+ * caller's published activation or its own still-compact B5 arguments, or,
+ * when the callee root registered NEEDS_CALLER_PRELUDE, a
+ * ProtosCallerFrameReference transporting the caller's prelude. Nothing is
+ * published or materialized.
+ *
+ * <p>B5 has no caller-less admitted header: the caller identity is the
+ * Protos caller of the invocation and has no thread-state substitute (GraalPy
+ * reads its indirect caller from the thread state). The indirect entry
+ * therefore rejects a call without a caller frame as an internal error;
+ * the Bytecode DSL always executes this operation with its frame.
  */
 final class ProtosExperimentalCallContext extends Node {
 
@@ -43,24 +50,35 @@ final class ProtosExperimentalCallContext extends Node {
         return new ProtosExperimentalCallContext();
     }
 
-    void prepareCall(VirtualFrame frame, Object[] arguments, RootCallTarget target) {
-        assert target.getRootNode() instanceof ProtosBytecodeRootNode
-                : "experimental call target is not a Protos Bytecode root";
-        Object[] callerArguments = frame.getArguments();
-        ProtosFrameArguments.setExperimentalCaller(arguments, callerArguments);
-        ProtosFrameArguments.setExperimentalExceptionState(
-                arguments,
-                ProtosFrameArguments.isExperimentalGraalPyUnaryCall(callerArguments)
-                        ? ProtosFrameArguments.experimentalExceptionState(callerArguments)
-                        : null);
+    /*
+     * {@code callerRoot} is the root executing the Call1, bound statically by
+     * the Bytecode DSL at the operation; {@code target} is the callee's.
+     */
+    void prepareCall(
+            VirtualFrame frame,
+            ProtosBytecodeRootNode callerRoot,
+            Object[] arguments,
+            RootCallTarget target) {
+        ProtosBytecodeRootNode callee = (ProtosBytecodeRootNode) target.getRootNode();
+        Object caller =
+                ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
+        if (callee.hasCallerNeed(ProtosBytecodeRootNode.NEEDS_CALLER_PRELUDE)) {
+            caller = ProtosBytecodeRootNode.InvokeClosureOneTail.callerArgument(
+                    callerRoot,
+                    callee,
+                    ProtosFrameArguments.admittedInvokedClosure(arguments),
+                    caller);
+        }
+        ProtosFrameArguments.installAdmittedCallerSlot(arguments, caller);
     }
 
     void enterIndirect(Object[] arguments) {
-        ProtosFrameArguments.setExperimentalCaller(arguments, null);
-        ProtosFrameArguments.setExperimentalExceptionState(arguments, null);
+        throw CompilerDirectives.shouldNotReachHere(
+                "experimental B5 Call1 without a caller frame");
     }
 
     void exitIndirect(Object[] arguments) {
-        ProtosFrameArguments.setExperimentalCaller(arguments, null);
+        throw CompilerDirectives.shouldNotReachHere(
+                "experimental B5 Call1 without a caller frame");
     }
 }

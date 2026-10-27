@@ -294,21 +294,6 @@ final class CanonicalToBytecodeLowerer {
      */
     private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
             experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
-    /*
-     * I115-H4-B EXPERIMENTAL: pre-emission ABI7 compatibility facts of the
-     * module Closure bindings, keyed by exact canonical identity. Computed
-     * in lowerRoot before the module group's builder opens, by the real H3
-     * admission of each callee, so every (re)parse of the group sees the
-     * same facts regardless of root emission order. Identities are unique
-     * to their module analysis, so facts never admit another module's call.
-     */
-    private record ExperimentalAbiFact(
-            CanonicalBindingIdentity identity,
-            CanonicalClosure definition,
-            boolean abi7Compatible) {}
-
-    private final java.util.Map<CanonicalBindingIdentity, ExperimentalAbiFact>
-            experimentalAbiFacts = new java.util.IdentityHashMap<>();
     private CanonicalClosure currentExperimentalRootDefinition;
 
     /*
@@ -884,20 +869,6 @@ final class CanonicalToBytecodeLowerer {
                     }
                 }
             }
-            // I115-H4-B EXPERIMENTAL: prove ABI7 callees before emission.
-            for (java.util.Map.Entry<CanonicalClosure, CanonicalBindingIdentity> entry
-                    : experimentalRecursiveBindings.entrySet()) {
-                if (entry.getValue().owner() == scope) {
-                    CanonicalClosure definition = entry.getKey();
-                    experimentalAbiFacts.put(
-                            entry.getValue(),
-                            new ExperimentalAbiFact(
-                                    entry.getValue(),
-                                    definition,
-                                    provesExperimentalAbi7Callee(
-                                            definition, analysis)));
-                }
-            }
         }
 
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
@@ -1122,43 +1093,6 @@ final class CanonicalToBytecodeLowerer {
                 definition.body(),
                 definition,
                 rootPlan);
-    }
-
-    /*
-     * I115-H4-B EXPERIMENTAL: evaluates, without emission, the real H3
-     * admission of a module Closure binding's root in the context its
-     * nested lowering would establish (the module analysis as enclosing
-     * analysis, then the callee's own analysis, definition and scope).
-     * Only a root admitted as an experimental recursive Integer root binds
-     * its parameter from the seven-slot ABI. Any failure is negative.
-     */
-    private boolean provesExperimentalAbi7Callee(
-            CanonicalClosure definition,
-            CanonicalBindingAnalysis moduleAnalysis) {
-        CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
-        CanonicalClosure savedExperimentalDefinition =
-                currentExperimentalRootDefinition;
-        CanonicalLexicalScope savedTopScope = currentRootTopScope;
-        try {
-            currentRootAnalysis = moduleAnalysis;
-            CanonicalBindingAnalysis analysis =
-                    bindingAnalysisForNestedClosure(definition);
-            CanonicalCompilationFacts.RootFacts rootFacts =
-                    prepareRootFacts(definition.body(), definition, analysis);
-            currentRootAnalysis = analysis;
-            currentExperimentalRootDefinition = definition;
-            currentRootTopScope = rootFacts.scope();
-            ExperimentalCompactRoot compact =
-                    admitExperimentalCompactRoot(
-                            definition.body(), definition, rootFacts);
-            return compact != null && compact.experimentalRecursiveInteger();
-        } catch (RuntimeException e) {
-            return false;
-        } finally {
-            currentRootAnalysis = savedAnalysis;
-            currentExperimentalRootDefinition = savedExperimentalDefinition;
-            currentRootTopScope = savedTopScope;
-        }
     }
 
     private ProtosBytecodeRootNode emitRootBody(
@@ -1415,7 +1349,7 @@ final class CanonicalToBytecodeLowerer {
         // I112: the terminal paths that used to emit MaterializeReturnCarrier.
         boolean epilogProjectsReturnCarrier = false;
         // I115-H4-B EXPERIMENTAL: whether the focal terminal Call1 was emitted.
-        boolean experimentalDirectReturnRoot = false;
+        boolean experimentalCallRoot = false;
         if (experimentalCompact != null) {
             emitExperimentalCompactRoot(builder, sequence, experimentalCompact);
             // I115-O/I115-Q: a certified guest-constant return delivers no carrier.
@@ -1596,7 +1530,7 @@ final class CanonicalToBytecodeLowerer {
                     // Return is the root's last operation: no implicit fallthrough.
                     builder.beginReturn();
                     beginStatement(builder, last);
-                    experimentalDirectReturnRoot = emitTerminalClosureCall(
+                    experimentalCallRoot = emitTerminalClosureCall(
                             builder,
                             (CanonicalCall) last,
                             sequence,
@@ -1695,13 +1629,12 @@ final class CanonicalToBytecodeLowerer {
         result.markSemanticActivationRoot();
         /*
          * I115-H4-B EXPERIMENTAL: the focal run root and the H3 recursive
-         * Integer roots run the GraalPy-style callee context; only the run
-         * root returns its callee's value directly.
+         * Integer roots run the GraalPy-style callee context.
          */
-        if (experimentalDirectReturnRoot
+        if (experimentalCallRoot
                 || (experimentalCompact != null
                         && experimentalCompact.experimentalRecursiveInteger())) {
-            result.markExperimentalCalleeContextRoot(experimentalDirectReturnRoot);
+            result.markExperimentalCalleeContextRoot();
         }
         builder.endSourceSection();
         /*
@@ -4425,7 +4358,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginInvokeMethodOneTail(send.message());
         emitTerminalCallOperand(builder, send.receiver());
-        emitTerminalCallOneArgument(builder, send.arguments().get(0), false);
+        emitTerminalCallOneArgument(builder, send.arguments().get(0));
         builder.endInvokeMethodOneTail();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
@@ -4477,14 +4410,14 @@ final class CanonicalToBytecodeLowerer {
             builder.beginInvokeExperimentalClosureOneTail();
             emitTerminalCallOperand(builder, call.receiver());
             builder.beginInstrumentCall();
-            emitTerminalCallOneArgument(builder, arguments.get(0), true);
+            emitTerminalCallOneArgument(builder, arguments.get(0));
             builder.endInstrumentCall();
             builder.endInvokeExperimentalClosureOneTail();
             builder.endInstrumentCallReturn();
         } else if (arguments.size() == 1) {
             builder.beginInvokeClosureOneTail();
             emitTerminalCallOperand(builder, call.receiver());
-            emitTerminalCallOneArgument(builder, arguments.get(0), false);
+            emitTerminalCallOneArgument(builder, arguments.get(0));
             builder.endInvokeClosureOneTail();
         } else {
             builder.beginInvokeClosureArgumentsTail();
@@ -4506,11 +4439,13 @@ final class CanonicalToBytecodeLowerer {
      * admission localized to the focal run shape: the terminal Call1 of a
      * parameterless Closure root whose body is only that call, whose
      * receiver is a captured lookup of a module ROOT binding and whose
-     * argument is an Integer literal. I115-H4-B: the callee binding must
-     * carry a positive pre-emission ABI7 fact ({@link #experimentalAbiFacts}),
-     * so the emission order of the group is not consulted. No Object.call, Context, ReturnHome,
-     * Task, caller, Prelude, suspension or projection fact is consulted, and
-     * none is checked at run time.
+     * argument is an Integer literal. I115-H4-B: nothing about the callee
+     * root is certified, and the emission order of the group is not
+     * consulted: the operation enters any callee with the universal B5
+     * contract, and its direct tier admits, at run time, exactly the
+     * receivers the ordinary InvokeClosureOneTail direct tier admits
+     * (Object.call selection, Context, ReturnHome and projection);
+     * every other receiver takes the ordinary D013 fallback.
      */
     private boolean admitsExperimentalTerminalUnaryCall(
             CanonicalCall call,
@@ -4530,38 +4465,21 @@ final class CanonicalToBytecodeLowerer {
                 || !(primitiveNumberLiteralOrNull(argument) instanceof Long)) {
             return false;
         }
-        if (!(currentRootAnalysis.resolutionOf(lookup).orElse(null)
-                        instanceof CanonicalBindingResolution.CapturedResolved captured)
-                || captured.identity().owner().kind()
-                        != CanonicalLexicalScope.Kind.ROOT) {
-            return false;
-        }
-        ExperimentalAbiFact fact = experimentalAbiFacts.get(captured.identity());
-        return fact != null
-                && fact.abi7Compatible()
-                && fact.identity() == captured.identity()
-                && experimentalRecursiveBindings.get(fact.definition())
-                        == captured.identity();
+        return currentRootAnalysis.resolutionOf(lookup).orElse(null)
+                        instanceof CanonicalBindingResolution.CapturedResolved captured
+                && captured.identity().owner().kind()
+                        == CanonicalLexicalScope.Kind.ROOT;
     }
 
-    /**
-     * The single Call1 argument; a number literal stays a primitive carrier.
-     * I115-H4-B EXPERIMENTAL: with {@code intConstant} (only the experimental
-     * Call1), an Integer literal that fits an int is loaded as an Integer.
-     */
+    /** The single Call1 argument; a number literal stays a primitive carrier. */
     private void emitTerminalCallOneArgument(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalExpression argument,
-            boolean intConstant) {
+            CanonicalExpression argument) {
         Object carrier =
                 argument instanceof CanonicalLiteral literal
                         ? primitiveNumberLiteralOrNull(literal)
                         : null;
-        if (intConstant
-                && carrier instanceof Long integer
-                && integer.longValue() == integer.intValue()) {
-            builder.emitLoadConstant(Integer.valueOf(integer.intValue()));
-        } else if (carrier != null) {
+        if (carrier != null) {
             builder.emitLoadConstant(carrier);
         } else {
             emitTerminalCallOperand(builder, argument);

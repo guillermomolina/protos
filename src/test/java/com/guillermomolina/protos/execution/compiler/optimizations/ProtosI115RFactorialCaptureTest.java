@@ -24,6 +24,7 @@ import com.oracle.truffle.api.bytecode.Instruction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Disabled;
@@ -461,9 +462,9 @@ final class ProtosI115RFactorialCaptureTest {
                         "Unexpected retired operation: " + retired);
             }
 
-            // I115-H4-B: a non-ABI7 callee keeps the ordinary B5 call.
-            assertOrdinaryUnaryCall(session, "runZero");
-            assertOrdinaryUnaryCall(session, "runThree");
+            // I115-H4-B: any admitted shape uses the experimental B5 Call1.
+            assertExperimentalUnaryCall(session, "runZero");
+            assertExperimentalUnaryCall(session, "runThree");
 
             assertEquals(
                     1,
@@ -758,28 +759,32 @@ final class ProtosI115RFactorialCaptureTest {
                 .toList();
     }
 
-    private static void assertOrdinaryUnaryCall(
+    /*
+     * I115-H4-B: the experimental Call1 is emitted and the ordinary terminal
+     * Call1 is not. Both enter their callee with the same B5 contract.
+     */
+    private static void assertExperimentalUnaryCall(
             ProtosStandaloneHostedSession session, String name)
             throws Exception {
         List<String> names = instructionNames(session, name);
         assertTrue(
-                names.stream().anyMatch(
-                        instruction -> instruction.endsWith(
-                                ".InvokeClosureOneTail")),
-                name + " must use the ordinary InvokeClosureOneTail: " + names);
+                names.contains("c.InvokeExperimentalClosureOneTail"),
+                name + " must use the experimental B5 Call1: " + names);
         assertTrue(
                 names.stream().noneMatch(
-                        instruction -> instruction.contains(
-                                "InvokeExperimentalClosureOneTail")),
-                name + " must not use the experimental ABI7 call: " + names);
+                        instruction -> instruction.endsWith(
+                                ".InvokeClosureOneTail")),
+                name + " must not also use InvokeClosureOneTail: " + names);
     }
 
     /*
-     * I115-H4-B: the experimental unary ABI is admitted only for a callee
-     * whose root is proven to bind its parameter from the ABI7 layout.
+     * I115-H4-B: the experimental Call1 enters any callee root with B5, so
+     * an ordinary (non-H3) root such as compute is entered by its direct
+     * tier and binds its parameter exactly as from the ordinary call; no
+     * lowering fact certifies the callee.
      */
     @Test
-    void experimentalUnaryAbiAdmissionRequiresCompatibleCallee()
+    void experimentalUnaryCallEntersOrdinaryRootWithB5()
             throws Exception {
         String source = I115_R2_SOURCE + """
                 compute: (n) => {
@@ -811,8 +816,8 @@ final class ProtosI115RFactorialCaptureTest {
                     I115_R6_RUN_DSL_FULL,
                     instructionNames(session, "run"),
                     "I115-R6 run() FULL DSL sequence");
-            assertOrdinaryUnaryCall(session, "runZero");
-            assertOrdinaryUnaryCall(session, "runThree");
+            assertExperimentalUnaryCall(session, "runZero");
+            assertExperimentalUnaryCall(session, "runThree");
 
             // Module, factorial, run, compute, compute's dispatching ifTrue
             // callback (MaterializeCurrentClosure), runZero and runThree.
@@ -838,16 +843,36 @@ final class ProtosI115RFactorialCaptureTest {
                     session.prepareTopLevel("runThree")
                             .executable().execute().asInt());
 
-            System.out.println("I115_H4B_ABI_ADMISSION=PASS");
+            // Repeated entries hit the installed direct tier.
+            for (int i = 0; i < 3; i++) {
+                assertEquals(
+                        1,
+                        session.prepareTopLevel("runZero")
+                                .executable().execute().asInt());
+                assertEquals(
+                        6,
+                        session.prepareTopLevel("runThree")
+                                .executable().execute().asInt());
+                assertEquals(
+                        EXPECTED,
+                        session.prepareTopLevel("run")
+                                .executable().execute().asLong());
+            }
+
+            System.out.println("I115_H4B_B5_ORDINARY_CALLEE=PASS");
         }
     }
 
     /*
-     * I115-H4-B: run is declared, and therefore emitted, before factorial;
-     * admission comes from pre-emission facts, not from emission order.
+     * I115-H4-B: run refers to factorial, declared after it. The forward
+     * reference is not a static captured resolution but a dynamic Lookup,
+     * so the structural admission of the experimental Call1 does not apply
+     * and run keeps the ordinary terminal Call1 (both use B5). This test
+     * covers the forward-reference rule only, not root emission order, on
+     * which the admission does not depend.
      */
     @Test
-    void experimentalUnaryAdmissionIsIndependentOfRootEmissionOrder()
+    void forwardReferencedBindingKeepsDynamicLookupAndOrdinaryCall()
             throws Exception {
         String source = """
                 run: () => {
@@ -866,7 +891,7 @@ final class ProtosI115RFactorialCaptureTest {
                 """;
 
         Path file = Path.of(
-                "target", "i115-r-factorial", "h4b-emission-order.protos");
+                "target", "i115-r-factorial", "h4b-forward-reference.protos");
         Files.createDirectories(file.getParent());
         Files.writeString(file, source, StandardCharsets.UTF_8);
 
@@ -878,19 +903,91 @@ final class ProtosI115RFactorialCaptureTest {
 
             List<String> names = instructionNames(session, "run");
             assertTrue(
-                    names.contains("c.InvokeExperimentalClosureOneTail"),
-                    "run must use the experimental ABI7 call: " + names);
-            assertEquals(
-                    I115_R6_RUN_DSL_FULL,
-                    names,
-                    "I115-R6 run() FULL DSL sequence");
+                    names.contains("c.Lookup"),
+                    "A forward reference must stay a dynamic Lookup: " + names);
+            assertTrue(
+                    names.stream().noneMatch(
+                            name -> name.contains("ReadGlobal")
+                                    || name.contains("InvokeExperimentalClosureOneTail")),
+                    "A forward reference must not be statically admitted: " + names);
+            assertTrue(
+                    names.contains("c.InvokeClosureOneTail"),
+                    "run must keep the ordinary terminal Call1: " + names);
 
             assertEquals(
                     EXPECTED,
                     session.prepareTopLevel("run")
                             .executable().execute().asLong());
 
-            System.out.println("I115_H4B_EMISSION_ORDER=PASS");
+            System.out.println("I115_H4B_FORWARD_REFERENCE=PASS");
+        }
+    }
+
+    /*
+     * I115-H4-B: the header the experimental direct tier stages and
+     * completes is exactly the B5+ header of the ordinary admitted terminal
+     * Call1 (same length, positions and markers), and the H3 parameter read
+     * finds supplied0 at the B5 supplied position.
+     */
+    @Test
+    void experimentalDirectHeaderIsTheOrdinaryB5Header() {
+        Object[] caller = new Object[ProtosFrameArguments.HEADER_LENGTH];
+        Object supplied0 = 7L;
+
+        Object[] staged =
+                ProtosFrameArguments.admittedTerminalClosureCallOneToInstall(supplied0);
+        ProtosFrameArguments.installAdmittedClosure(staged, null);
+        ProtosFrameArguments.installAdmittedCallerSlot(staged, caller);
+
+        Object[] ordinary =
+                ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
+                        null, caller, supplied0);
+
+        assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, staged.length);
+        assertEquals(Arrays.asList(ordinary), Arrays.asList(staged));
+        assertTrue(ProtosFrameArguments.admittedCallerSlot(staged) == caller);
+        assertEquals(
+                supplied0,
+                staged[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+        assertEquals(
+                supplied0,
+                ProtosFrameArguments.experimentalSuppliedArgument0(staged));
+        assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(staged));
+    }
+
+    /*
+     * I115-H4-B: a receiver the direct tier does not admit (an object whose
+     * call is a method, not a ProtosClosureValue) takes the generic tier,
+     * the ordinary D013 terminal Call1 fallback, with valid guest values.
+     */
+    @Test
+    void experimentalUnaryCallGenericFallback() throws Exception {
+        String source = """
+                doubler: { call: (n) => { n * 2 } }
+
+                runDoubler: () => { doubler(21) }
+                """;
+
+        Path file = Path.of(
+                "target", "i115-r-factorial", "h4b-generic.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, source, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            assertExperimentalUnaryCall(session, "runDoubler");
+            for (int i = 0; i < 3; i++) {
+                assertEquals(
+                        42,
+                        session.prepareTopLevel("runDoubler")
+                                .executable().execute().asInt());
+            }
+
+            System.out.println("I115_H4B_GENERIC=PASS");
         }
     }
 
