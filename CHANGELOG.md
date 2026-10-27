@@ -8,6 +8,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.18-SNAPSHOT
+
+- `I115-H4-B` (converge experimental unary Closure dispatch on B5):
+  move the experimental direct Call1 path back to the existing B5+ frame
+  header and its caller transport, instead of the separate seven-slot ABI7.
+  - Stage the Closure and caller in the B5+ header, with dynamic per-receiver
+    admission and the ordinary D013 terminal Call1 fallback for misses. The
+    revised path accounts for target stability, ReturnHome and suspension
+    handling without certifying general semantic equivalence.
+  - Remove the unused `ProtosExperimentalCalleeContext` and its private
+    per-invocation state. Use B5 as the callee frame contract and eliminate
+    the ABI7-specific lowering admission and header implementation.
+  - Revisit the experimental module `ReadGlobal` prelude cache: inspect the
+    module on every read, and avoid caching an outer scope that could be
+    shadowed by a nearer scope. Refresh structural factorial tests.
+  - **Historical limitations:** the separate H3 static recursive unary lane
+    retains the wrapping `long` overflow divergence; D179 C0 late lexical
+    retargeting remains unproved for module-owned `ReadGlobal`. The altered
+    bytecode tagging and generator configuration remain experimental. This
+    historical replay performs no compilation, tests or acceptance gates.
+  - Reconstructed from original I115 commit
+    `883c77744936fa8e2fe65fb6272987f13745d315`.
+
 ## 0.4.17-SNAPSHOT
 
 - `WIP I115-H4-B` (experimental GraalPy-style unary-call infrastructure):

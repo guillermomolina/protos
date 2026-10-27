@@ -30,17 +30,20 @@ import com.oracle.truffle.api.profiles.InlinedConditionProfile;
 
 /**
  * I115-H4-B EXPERIMENTAL (GraalPy CallDispatchers): the inlined direct-call
- * helpers of {@link ProtosExperimentalCallUnaryNode}. They prepare the GraalPy
- * unary frame-argument layout and perform the direct call; the ordinary
- * Closure dispatch does not use them.
+ * helpers of {@link ProtosExperimentalCallUnaryNode}. They complete the B5+
+ * header staged by {@link
+ * ProtosFrameArguments#admittedTerminalClosureCallOneToInstall}, the same
+ * contract the ordinary admitted terminal Call1 builds, and perform the
+ * direct call; the ordinary Closure dispatch does not use them.
  */
 final class ProtosExperimentalCallDispatchers {
 
     private ProtosExperimentalCallDispatchers() {}
 
     /**
-     * GraalPy FunctionDirectInvokeNode: installs the invoked Closure and its
-     * captured lexical environment in the experimental header, then performs
+     * GraalPy FunctionDirectInvokeNode: installs the invoked Closure in B5
+     * slot 0 (GraalPy setFunctionObject; its captured lexical environment,
+     * the GraalPy globals counterpart, is reached through it), then performs
      * the simple direct call.
      */
     @GenerateInline
@@ -50,6 +53,7 @@ final class ProtosExperimentalCallDispatchers {
         abstract Object execute(
                 VirtualFrame frame,
                 Node inliningTarget,
+                ProtosBytecodeRootNode callerRoot,
                 DirectCallNode callNode,
                 ProtosClosureValue callee,
                 Object[] arguments);
@@ -58,24 +62,24 @@ final class ProtosExperimentalCallDispatchers {
         static Object doDirect(
                 VirtualFrame frame,
                 Node inliningTarget,
+                ProtosBytecodeRootNode callerRoot,
                 DirectCallNode callNode,
                 ProtosClosureValue callee,
                 Object[] arguments,
                 @Cached ExperimentalSimpleDirectInvokeNode invoke) {
-            assert callNode.getCallTarget()
-                            == ProtosExperimentalCallUnaryNode.experimentalTargetOrNull(callee)
-                    : "experimental direct call target mismatch";
-            ProtosFrameArguments.setExperimentalGlobals(
-                    arguments, callee.capturedLexicalEnvironmentForRuntime());
-            ProtosFrameArguments.setExperimentalClosure(arguments, callee);
-            return invoke.execute(frame, inliningTarget, callNode, arguments);
+            assert ((RootCallTarget) callNode.getCallTarget()).getRootNode()
+                            instanceof ProtosBytecodeRootNode
+                    : "experimental direct call target is not a Protos Bytecode root";
+            ProtosFrameArguments.installAdmittedClosure(arguments, callee);
+            return invoke.execute(frame, inliningTarget, callerRoot, callNode, arguments);
         }
     }
 
     /**
      * GraalPy SimpleDirectInvokeNode: prepares the call context of the
      * caller frame and calls the target; without a caller frame, the
-     * indirect entry and exit of the call context bracket the call.
+     * indirect entry and exit of the call context bracket the call (in B5
+     * the indirect entry rejects it; see {@link ProtosExperimentalCallContext}).
      */
     @GenerateInline
     @GenerateCached(false)
@@ -84,6 +88,7 @@ final class ProtosExperimentalCallDispatchers {
         abstract Object execute(
                 VirtualFrame frame,
                 Node inliningTarget,
+                ProtosBytecodeRootNode callerRoot,
                 DirectCallNode callNode,
                 Object[] arguments);
 
@@ -91,6 +96,7 @@ final class ProtosExperimentalCallDispatchers {
         static Object doCall(
                 VirtualFrame frame,
                 Node inliningTarget,
+                ProtosBytecodeRootNode callerRoot,
                 DirectCallNode callNode,
                 Object[] arguments,
                 @Cached InlinedConditionProfile isNullFrameProfile,
@@ -104,7 +110,7 @@ final class ProtosExperimentalCallDispatchers {
                 }
             }
             callContext.prepareCall(
-                    frame, arguments, (RootCallTarget) callNode.getCallTarget());
+                    frame, callerRoot, arguments, (RootCallTarget) callNode.getCallTarget());
             return callNode.call(arguments);
         }
     }

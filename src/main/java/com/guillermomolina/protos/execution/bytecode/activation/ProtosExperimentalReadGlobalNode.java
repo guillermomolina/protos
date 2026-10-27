@@ -47,8 +47,8 @@ import com.oracle.truffle.api.strings.TruffleString;
  * <p>ADAPTED: GraalPy's globals dictionary Shape is represented by the
  * identity of the module's lexical binding authority; there is no PDict or
  * DynamicObjectStorage. {@link #readPreludeFastPath} caches that identity
- * while the name is absent from the module together with the selected outer
- * (prelude) scope; {@link #readGlobalFastPath} caches the module's
+ * together with the scope immediately outside the module (the prelude) that
+ * held the name, and still reads the module first on every execution; {@link #readGlobalFastPath} caches the module's
  * frame-backed authority and reads the constant frame ordinal; {@link
  * #readGlobalGeneric} is the former resolution. The TruffleString name is
  * converted once per cache installation.
@@ -70,7 +70,8 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
             guards = {
                 "module != null",
                 "authorityOf(module) == cachedAuthority",
-                "cachedOutside != null"
+                "cachedOutside != null",
+                "cachedOutside == module.outer()"
             },
             limit = "1")
     static Object readPreludeFastPath(
@@ -84,7 +85,22 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
                     ProtosLexicalBindingAuthority cachedAuthority,
             @Cached(value = "outsideScopeOrNull(module, cachedName, frameOrdinal)", weak = true)
                     ProtosLexicalEnvironment cachedOutside) {
-        java.util.Optional<Object> present = cachedOutside.readLocalSlotForRuntime(cachedName);
+        /*
+         * A module binding defined after installation does not change the
+         * authority identity, so the module is read first on every
+         * execution; only the outer scope selection is cached.
+         */
+        Object value =
+                ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
+                        module, cachedName, frameOrdinal);
+        if (value != null) {
+            return value;
+        }
+        java.util.Optional<Object> present = module.readLocalSlotForRuntime(cachedName);
+        if (present.isPresent()) {
+            return present.get();
+        }
+        present = cachedOutside.readLocalSlotForRuntime(cachedName);
         if (present.isPresent()) {
             return present.get();
         }
@@ -166,16 +182,13 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
     }
 
     /*
-     * The captured chain of the invocation: the GraalPy unary header's
-     * globals slot, a still-compact call's Closure, or the published
-     * activation's.
+     * The captured chain of the invocation, from its B5 header: a
+     * still-compact call's Closure, or the published activation's.
      */
     private static ProtosLexicalEnvironment capturedModuleOrNull(
             Object[] arguments, int lexicalDepth) {
         ProtosLexicalEnvironment captured;
-        if (ProtosFrameArguments.isExperimentalGraalPyUnaryCall(arguments)) {
-            captured = ProtosFrameArguments.experimentalGlobals(arguments);
-        } else if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+        if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
             captured = ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments);
         } else {
             captured = ProtosFrameArguments.publishedActivation(arguments)
@@ -195,8 +208,9 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
     }
 
     /*
-     * Installation only: the selected scope outside the module that holds
-     * the name while the module does not, or null.
+     * Installation only: the scope immediately outside the module when it
+     * holds the name while the module does not, or null. A farther scope is
+     * not cached, because a binding added to a nearer one would shadow it.
      */
     @TruffleBoundary
     static ProtosLexicalEnvironment outsideScopeOrNull(
@@ -206,14 +220,10 @@ abstract class ProtosExperimentalReadGlobalNode extends Node {
                 || module.readLocalSlotForRuntime(name).isPresent()) {
             return null;
         }
-        for (ProtosLexicalEnvironment scope = module.outer();
-                scope != null;
-                scope = scope.outer()) {
-            if (scope.readLocalSlotForRuntime(name).isPresent()) {
-                return scope;
-            }
-        }
-        return null;
+        ProtosLexicalEnvironment outside = module.outer();
+        return outside != null && outside.readLocalSlotForRuntime(name).isPresent()
+                ? outside
+                : null;
     }
 
     /* A fast-path miss: the generic resolution, unchanged. */
