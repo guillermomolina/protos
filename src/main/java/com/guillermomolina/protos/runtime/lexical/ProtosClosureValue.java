@@ -46,6 +46,16 @@ public final class ProtosClosureValue extends ProtosObjectValue {
      */
     private Assumption contextProjectionStability;
 
+    /*
+     * I115-H4-B EXPERIMENTAL (GraalPy PFunction.getCodeStableAssumption):
+     * stability of this instance's executable target, independent of
+     * contextProjectionStability. Allocated only if a direct-call cache
+     * requests it; invalidated when a plan that changes the executable
+     * target is installed. Object.call, ReturnHome and Prelude changes do
+     * not invalidate it.
+     */
+    private Assumption codeStableAssumption;
+
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
@@ -399,6 +409,22 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return stability;
     }
 
+    /**
+     * I115-H4-B EXPERIMENTAL: lazily certifies that this Closure's executable
+     * target does not change. Registration and plan installation use the
+     * same monitor.
+     */
+    @TruffleBoundary
+    public synchronized Assumption codeStableAssumptionForRuntime() {
+        Assumption stability = codeStableAssumption;
+        if (stability == null || !stability.isValid()) {
+            stability = Truffle.getRuntime().createAssumption(
+                    "Protos Closure code stable");
+            codeStableAssumption = stability;
+        }
+        return stability;
+    }
+
 /**
      * Requires entered Polyglot execution to use a Context-owned executable projection.
      * The semantic Closure and its template plan remain unchanged.
@@ -435,6 +461,11 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 executionPlan = Objects.requireNonNull(
                         invokeExecutionPlanRematerializer(rematerializer),
                         "executionPlanRematerializer returned null");
+                // I115-H4-B EXPERIMENTAL: the executable target changed.
+                Assumption stability = codeStableAssumption;
+                if (stability != null) {
+                    stability.invalidate();
+                }
             }
             return executionPlan;
         }

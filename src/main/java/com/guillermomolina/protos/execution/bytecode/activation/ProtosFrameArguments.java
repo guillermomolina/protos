@@ -144,6 +144,38 @@ final class ProtosFrameArguments {
     private static final int EXPERIMENTAL_STATIC_UNARY_LENGTH = SUPPLIED_ARGUMENT_OFFSET + 1;
     private static final int EXPERIMENTAL_STATIC_SUPPLIED_INDEX = SUPPLIED_ARGUMENT_OFFSET;
 
+    /*
+     * I115-H4-B EXPERIMENTAL (GraalPy PArguments): a third layout used only
+     * by the direct tier of ProtosExperimentalCallUnaryNode, distinct from
+     * B5+ and from the static unary layout:
+     *
+     *   [0] EXPERIMENTAL_GRAALPY_UNARY_CALL (private marker, never a guest value)
+     *   [1] the invoked Closure's captured lexical environment (globals)
+     *   [2] the invoked ProtosClosureValue
+     *   [3] the caller reference (the caller's frame arguments), or null
+     *       for an indirect entry
+     *   [4] the callee's current ProtosExperimentalCalleeContext.FrameInfo,
+     *       installed by the callee's prolog and cleared by its epilogue
+     *   [5] the experimental exceptional state (null when none)
+     *   [6] supplied0
+     *
+     * It carries no receiver, methodHome, Task, Prelude or ReturnHome, and
+     * slot 4 never holds the primitive-accepting ReturnHome marker, so the
+     * callee's own return epilogue projects a primitive carrier. Only the
+     * experimental consumers recognize it; activation, caller, Task and
+     * Closure accessors of B5 do not support it. A recorded divergence, not
+     * an equivalent ABI.
+     */
+    private static final Object EXPERIMENTAL_GRAALPY_UNARY_CALL = new Object();
+    private static final int EXPERIMENTAL_GRAALPY_GLOBALS_INDEX = 1;
+    private static final int EXPERIMENTAL_GRAALPY_CLOSURE_INDEX = 2;
+    private static final int EXPERIMENTAL_GRAALPY_CALLER_INDEX = 3;
+    private static final int EXPERIMENTAL_GRAALPY_FRAME_INFO_INDEX = 4;
+    private static final int EXPERIMENTAL_GRAALPY_EXCEPTION_INDEX = 5;
+    private static final int EXPERIMENTAL_GRAALPY_USER_ARGUMENTS_OFFSET = 6;
+    private static final int EXPERIMENTAL_GRAALPY_UNARY_LENGTH =
+            EXPERIMENTAL_GRAALPY_USER_ARGUMENTS_OFFSET + 1;
+
     private static final java.util.function.Function<Object[], ProtosActivation>
             COMPACT_CAPTURE_OWNER = ProtosFrameArguments::activation;
 
@@ -429,11 +461,82 @@ final class ProtosFrameArguments {
     }
 
     /**
-     * I115-H3 (EXPERIMENTAL): supplied argument 0 of either the static unary
-     * layout or B5, read without any layout test.
+     * I115-H3 (EXPERIMENTAL): supplied argument 0 of the static unary layout
+     * or B5 (offset 5), or I115-H4-B: of the GraalPy unary layout (offset 6).
      */
     static Object experimentalSuppliedArgument0(Object[] arguments) {
-        return arguments[SUPPLIED_ARGUMENT_OFFSET];
+        return arguments[0] == EXPERIMENTAL_GRAALPY_UNARY_CALL
+                ? arguments[EXPERIMENTAL_GRAALPY_USER_ARGUMENTS_OFFSET]
+                : arguments[SUPPLIED_ARGUMENT_OFFSET];
+    }
+
+    /**
+     * I115-H4-B (EXPERIMENTAL, GraalPy PArguments.create): a GraalPy unary
+     * layout carrying only its marker. The Closure and its globals are
+     * installed by ExperimentalFunctionDirectInvokeNode, the caller and
+     * exceptional state by ProtosExperimentalCallContext, the frame info by
+     * the callee's ProtosExperimentalCalleeContext, and the user argument by
+     * the caller. The B5 constructors are not used.
+     */
+    static Object[] experimentalGraalPyUnaryCall() {
+        Object[] arguments = new Object[EXPERIMENTAL_GRAALPY_UNARY_LENGTH];
+        arguments[0] = EXPERIMENTAL_GRAALPY_UNARY_CALL;
+        return arguments;
+    }
+
+    static void setExperimentalUnaryArgument(Object[] arguments, int index, Object value) {
+        arguments[EXPERIMENTAL_GRAALPY_USER_ARGUMENTS_OFFSET + index] = value;
+    }
+
+    static Object getExperimentalUnaryArgument(Object[] arguments, int index) {
+        return arguments[EXPERIMENTAL_GRAALPY_USER_ARGUMENTS_OFFSET + index];
+    }
+
+    /** I115-H4-B (EXPERIMENTAL): whether {@code arguments} use the GraalPy unary layout. */
+    static boolean isExperimentalGraalPyUnaryCall(Object[] arguments) {
+        return arguments.length == EXPERIMENTAL_GRAALPY_UNARY_LENGTH
+                && arguments[0] == EXPERIMENTAL_GRAALPY_UNARY_CALL;
+    }
+
+    /* I115-H4-B (EXPERIMENTAL): GraalPy unary layout slot accessors. */
+    static ProtosLexicalEnvironment experimentalGlobals(Object[] arguments) {
+        return (ProtosLexicalEnvironment) arguments[EXPERIMENTAL_GRAALPY_GLOBALS_INDEX];
+    }
+
+    static void setExperimentalGlobals(Object[] arguments, ProtosLexicalEnvironment globals) {
+        arguments[EXPERIMENTAL_GRAALPY_GLOBALS_INDEX] = globals;
+    }
+
+    static ProtosClosureValue experimentalClosure(Object[] arguments) {
+        return (ProtosClosureValue) arguments[EXPERIMENTAL_GRAALPY_CLOSURE_INDEX];
+    }
+
+    static void setExperimentalClosure(Object[] arguments, ProtosClosureValue closure) {
+        arguments[EXPERIMENTAL_GRAALPY_CLOSURE_INDEX] = closure;
+    }
+
+    static Object experimentalCaller(Object[] arguments) {
+        return arguments[EXPERIMENTAL_GRAALPY_CALLER_INDEX];
+    }
+
+    static void setExperimentalCaller(Object[] arguments, Object caller) {
+        arguments[EXPERIMENTAL_GRAALPY_CALLER_INDEX] = caller;
+    }
+
+    static Object experimentalFrameInfo(Object[] arguments) {
+        return arguments[EXPERIMENTAL_GRAALPY_FRAME_INFO_INDEX];
+    }
+
+    static void setExperimentalFrameInfo(Object[] arguments, Object frameInfo) {
+        arguments[EXPERIMENTAL_GRAALPY_FRAME_INFO_INDEX] = frameInfo;
+    }
+
+    static Object experimentalExceptionState(Object[] arguments) {
+        return arguments[EXPERIMENTAL_GRAALPY_EXCEPTION_INDEX];
+    }
+
+    static void setExperimentalExceptionState(Object[] arguments, Object state) {
+        arguments[EXPERIMENTAL_GRAALPY_EXCEPTION_INDEX] = state;
     }
 
     /** I115-H (EXPERIMENTAL): whether {@code arguments} use the static unary layout. */

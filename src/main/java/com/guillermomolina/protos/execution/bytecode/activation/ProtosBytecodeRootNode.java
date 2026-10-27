@@ -65,7 +65,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
-import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.lookup.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -82,8 +81,10 @@ import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
+import com.oracle.truffle.api.bytecode.EpilogExceptional;
 import com.oracle.truffle.api.bytecode.EpilogReturn;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
+import com.oracle.truffle.api.bytecode.Instrumentation;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
@@ -107,19 +108,21 @@ import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.profiles.InlinedBranchProfile;
+import com.oracle.truffle.api.source.Source;
 
 /**
  * The single Protos Bytecode DSL interpreter (I111-B / PLAT065-A).
  *
  * <p>It serves two kinds of physical roots. A genuine guest-semantic
  * top-level, module or Closure activation produced by {@link
- * CanonicalToBytecodeLowerer} is marked {@link #isSemanticActivationRoot()}
- * and carries the explicit RootTag that lowerer emits; automatic root tagging
- * stays disabled, because this configuration covers every root of the
- * interpreter. Auxiliary structured-dispatch ({@link
+ * CanonicalToBytecodeLowerer} is marked {@link #isSemanticActivationRoot()}.
+ * Auxiliary structured-dispatch ({@link
  * ProtosStructuredDispatchLowerer}), Task C-prime entry and I/O C-prime roots
- * are created by their own builders, are unmarked and carry no tag, so they
- * never appear as guest frames, scopes or RootTag regions. Inline Closure
+ * are created by their own builders and are unmarked, so they never appear
+ * as guest frames. I115-H4-B EXPERIMENTAL: automatic RootTag/RootBodyTag
+ * tagging is enabled and applies to every physical root of this single
+ * configuration, auxiliary roots included; the lowerer no longer emits an
+ * explicit physical-root RootTag. Inline Closure
  * callbacks retain their nested semantic RootTag regions. The generated
  * interpreter does not infer guest identity from the mere existence of a
  * physical root. Object bodies are lowered inline
@@ -141,16 +144,33 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
  * {@link ProtosFrameLocalBindings}). The operations used only by auxiliary
  * roots are declared last.
  */
+/*
+ * I115-H4-B EXPERIMENTAL (GraalPy PBytecodeDSLRootNode configuration):
+ * default automatic RootTag/RootBodyTag tagging, no block scoping,
+ * serialization, the bytecode index stored in the frame, an uncached
+ * threshold of 4 and int-only boxing elimination. NOT PORTABLE: Materialized
+ * local accesses stay enabled, because existing operations depend on
+ * MaterializedLocalAccessor; illegalLocalException/Factory are not
+ * configured, so uninitialized locals keep their existing behavior; the
+ * root extends RootNode, not a PRootNode. With serialization enabled, every
+ * mutable field of this root is transient: they hold per-parse lowering
+ * facts, runtime state or a child node that the lowerer and execution
+ * re-establish, and no BytecodeSerializer exists, so nothing serializes
+ * them.
+ */
 @GenerateBytecode(
         languageClass = ProtosLanguage.class,
         enableYield = true,
         enableTagInstrumentation = true,
-        enableRootTagging = false,
-        enableRootBodyTagging = false,
         enableMaterializedLocalAccesses = true,
+        enableBlockScoping = false,
+        enableSerialization = true,
+        storeBytecodeIndexInFrame = true,
+        defaultUncachedThreshold = "4",
         enableTailCallHandlers = true,
         enableUncachedInterpreter = true,
-        boxingEliminationTypes = {int.class, long.class, double.class, boolean.class},
+        boxingEliminationTypes = {int.class},
+        sourceContentSupplier = "loadSourceContent",
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 @OperationProxy(value = ProtosCanonicalBooleanOneNode.class, name = "TryCompactCanonicalBooleanOne")
 @OperationProxy(value = ProtosNumericAddNode.class, name = "TryPrimitiveNumericAdd")
@@ -161,6 +181,8 @@ import com.oracle.truffle.api.profiles.InlinedBranchProfile;
 @OperationProxy(value = ProtosNumericLessEqualNode.class, name = "TryPrimitiveNumericLessEqual")
 @OperationProxy(value = ProtosNumericGreaterNode.class, name = "TryPrimitiveNumericGreater")
 @OperationProxy(value = ProtosNumericGreaterEqualNode.class, name = "TryPrimitiveNumericGreaterEqual")
+@OperationProxy(value = ProtosExperimentalReadGlobalNode.class, name = "ReadGlobal")
+@OperationProxy(value = ProtosExperimentalCallUnaryNode.class, name = "InvokeExperimentalClosureOneTail")
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
@@ -170,14 +192,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /*
      * I111-B / PLAT065-A: whether this physical root is a genuine guest
-     * semantic activation (module, top-level or Closure) that carries its
-     * explicit RootTag. False by default, so every auxiliary structured,
+     * semantic activation (module, top-level or Closure). False by default, so every auxiliary structured,
      * Task or I/O C-prime root of this single generated interpreter is
      * non-semantic without any global registry. Set once by
      * CanonicalToBytecodeLowerer#emitRootBody after endRoot(); a reparse
      * replays that lowering and re-establishes the same value.
      */
-    @CompilationFinal private boolean semanticActivationRoot;
+    @CompilationFinal private transient boolean semanticActivationRoot;
 
     final void markSemanticActivationRoot() {
         this.semanticActivationRoot = true;
@@ -185,6 +206,116 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     final boolean isSemanticActivationRoot() {
         return semanticActivationRoot;
+    }
+
+    /*
+     * I115-H4-B EXPERIMENTAL: whether the prolog and epilogues run the
+     * GraalPy-style callee context of this root (the focal run root and the
+     * H3 recursive Integer roots), and whether its return epilogue returns
+     * the callee's value directly (the focal run root). Set once by the
+     * lowerer after endRoot(); a reparse replays that lowering.
+     */
+    @CompilationFinal private transient boolean experimentalCalleeContextRoot;
+    @CompilationFinal private transient boolean experimentalDirectReturnRoot;
+    @Child private transient ProtosExperimentalCalleeContext experimentalCalleeContext =
+            new ProtosExperimentalCalleeContext();
+
+    final void markExperimentalCalleeContextRoot(boolean directReturn) {
+        this.experimentalCalleeContextRoot = true;
+        this.experimentalDirectReturnRoot = directReturn;
+    }
+
+    final boolean isExperimentalCalleeContextRoot() {
+        return experimentalCalleeContextRoot;
+    }
+
+    final boolean isExperimentalDirectReturnRoot() {
+        return experimentalDirectReturnRoot;
+    }
+
+    final ProtosExperimentalCalleeContext experimentalCalleeContext() {
+        return experimentalCalleeContext;
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL (GraalPy needsTraceAndProfileInstrumentation):
+     * whether the internal trace probe is enabled. The JVM-start value of
+     * {@link ProtosExperimentalTraceHooks#ENABLED}; false by default.
+     */
+    @NonIdempotent
+    public final boolean needsTraceAndProfileInstrumentation() {
+        return ProtosExperimentalTraceHooks.ENABLED;
+    }
+
+    /* I115-H4-B EXPERIMENTAL: records ROOT_RETURN; the value is unchanged. */
+    @InliningCutoff
+    private void traceOrProfileReturn(VirtualFrame frame, BytecodeNode location, Object value) {
+        ProtosExperimentalTraceHooks.record(
+                ProtosExperimentalTraceHooks.Event.ROOT_RETURN,
+                this,
+                location.getBytecodeIndex(frame),
+                value);
+    }
+
+    /* I115-H4-B EXPERIMENTAL: records ROOT_EXCEPTION; the exception is unchanged. */
+    @InliningCutoff
+    private void traceOrProfileException(
+            VirtualFrame frame, BytecodeNode location, AbstractTruffleException exception) {
+        ProtosExperimentalTraceHooks.record(
+                ProtosExperimentalTraceHooks.Event.ROOT_EXCEPTION,
+                this,
+                location.getBytecodeIndex(frame),
+                exception);
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL (GraalPy InstrumentCall): records CALL after the
+     * last argument of the experimental Call1 and returns it unchanged.
+     * Present only in a BytecodeConfig that adds it.
+     */
+    @Instrumentation(storeBytecodeIndex = true)
+    public static final class InstrumentCall {
+        @Specialization
+        public static Object perform(
+                VirtualFrame frame,
+                Object value,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            ProtosExperimentalTraceHooks.record(
+                    ProtosExperimentalTraceHooks.Event.CALL, root, bytecodeIndex, value);
+            return value;
+        }
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL (GraalPy InstrumentCallReturn): records
+     * CALL_RETURN for the experimental Call1 result and returns it unchanged.
+     * Present only in a BytecodeConfig that adds it.
+     */
+    @Instrumentation(storeBytecodeIndex = true)
+    public static final class InstrumentCallReturn {
+        @Specialization
+        public static Object perform(
+                VirtualFrame frame,
+                Object result,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex) {
+            ProtosExperimentalTraceHooks.record(
+                    ProtosExperimentalTraceHooks.Event.CALL_RETURN, root, bytecodeIndex, result);
+            return result;
+        }
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL: the Bytecode DSL source content supplier. A
+     * Source that already has characters or bytes is returned unchanged.
+     * ProtosLanguage provides no content-recovery mechanism, so a Source
+     * without content is also returned unchanged; no content is invented.
+     */
+    static Source loadSourceContent(ProtosLanguage language, Source source) {
+        return source;
     }
 
     /**
@@ -246,15 +377,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * of a Closure root lowered without InstallFrameLexicalAuthority, or null.
      * Read only by tooling scope projection, which receives the live frame.
      */
-    private LocalRangeAccessor frameNativeBindingLocals;
-    private ProtosFrameLexicalLayout frameNativeBindingLayout;
+    private transient LocalRangeAccessor frameNativeBindingLocals;
+    private transient ProtosFrameLexicalLayout frameNativeBindingLayout;
 
     /*
      * TEST009-V: the exact root span, recorded by the lowerer only while the diagnostic stable
      * root identity is enabled, so a compiled root has a cross-run name without materializing
      * (reparsing) its lazy source information. Never read by guest execution.
      */
-    private ProtosDiagnosticRootIdentity.Span diagnosticRootSpan;
+    private transient ProtosDiagnosticRootIdentity.Span diagnosticRootSpan;
 
     final void recordDiagnosticRootSpan(ProtosDiagnosticRootIdentity.Span span) {
         this.diagnosticRootSpan = span;
@@ -277,7 +408,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /* PERF038-C: set once, when the first guest exception crosses this root. */
-    @CompilationFinal private boolean guestExceptionCrossed;
+    @CompilationFinal private transient boolean guestExceptionCrossed;
 
     /*
      * I115 (GraalPy IndirectCallData.CallerFlagsAssumptionSet): what this
@@ -376,7 +507,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Recorded once per parse, before the root is published; never consulted
      * as a per-call compiler check beyond these guards.
      */
-    private boolean provablyNonSuspendingBody;
+    private transient boolean provablyNonSuspendingBody;
 
     final void recordProvablyNonSuspendingBody(boolean proven) {
         this.provablyNonSuspendingBody = proven;
@@ -392,7 +523,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * of this root may project that carrier into the observable guest domain.
      * It remains a private carrier for explicitly accepting fused call sites.
      */
-    @CompilationFinal private boolean directScalarLocalCarrierBody;
+    @CompilationFinal private transient boolean directScalarLocalCarrierBody;
 
     final void recordDirectScalarLocalCarrierBody(boolean proven) {
         directScalarLocalCarrierBody = proven;
@@ -409,7 +540,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * body, a builder-level root) returns its value unchanged and leaves the
      * projection to its caller. Recorded once per parse.
      */
-    @CompilationFinal private boolean epilogProjectsReturnCarrier;
+    @CompilationFinal private transient boolean epilogProjectsReturnCarrier;
 
     final void recordEpilogProjectsReturnCarrier(boolean projects) {
         this.epilogProjectsReturnCarrier = projects;
@@ -556,10 +687,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * Keeping the Prolog preserves the Bytecode DSL root shape.
      */
-    @Prolog
+    /*
+     * I115-H4-B EXPERIMENTAL (GraalPy EnterCalleeContext): an experimental
+     * callee context root enters its ProtosExperimentalCalleeContext; every
+     * other root does nothing, as before. No ProtosActivation is
+     * materialized and no Object.call, ReturnHome, Task or suspension check
+     * runs.
+     */
+    @Prolog(storeBytecodeIndex = false)
     public static final class EnterRoot {
         @Specialization
-        public static void perform() {}
+        public static void perform(
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root) {
+            if (root.isExperimentalCalleeContextRoot()) {
+                assert ProtosFrameArguments.isExperimentalGraalPyUnaryCall(frame.getArguments())
+                                || frame.getArguments().length
+                                        >= ProtosFrameArguments.HEADER_LENGTH
+                        : "experimental callee context root entered without a call header";
+                root.experimentalCalleeContext().enter(frame, root);
+            }
+        }
     }
 
     /**
@@ -572,17 +720,57 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * suspended invocation. I111-B: an auxiliary structured/C-prime root is
      * never projecting, so it returns its values unchanged as before.
      */
-    @EpilogReturn
+    @EpilogReturn(storeBytecodeIndex = true)
     public static final class EpilogForReturn {
         @Specialization
         public static Object perform(
                 Object value,
+                @Bind VirtualFrame frame,
                 @Bind ProtosBytecodeRootNode root,
-                @Bind VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode) {
+            /*
+             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn): an
+             * experimental callee context root exits its callee context; the
+             * focal run root then returns the callee's value directly,
+             * without MaterializeReturnCarrier.
+             */
+            if (root.needsTraceAndProfileInstrumentation()) {
+                root.traceOrProfileReturn(frame, bytecodeNode, value);
+            }
+            if (root.isExperimentalCalleeContextRoot()) {
+                root.experimentalCalleeContext().exit(frame, root, bytecodeNode);
+                if (root.isExperimentalDirectReturnRoot()) {
+                    return value;
+                }
+            }
             if (!root.epilogProjectsReturnCarrier()) {
                 return value;
             }
             return MaterializeReturnCarrier.perform(value, frame);
+        }
+    }
+
+    /**
+     * I115-H4-B EXPERIMENTAL (GraalPy EpilogForException): the single
+     * exceptional epilogue of every root. Only an experimental callee
+     * context root does anything: it exits its callee context. The
+     * exception is neither translated nor replaced, and every other root is
+     * unchanged.
+     */
+    @EpilogExceptional(storeBytecodeIndex = true)
+    public static final class EpilogForException {
+        @Specialization
+        public static void perform(
+                AbstractTruffleException exception,
+                @Bind VirtualFrame frame,
+                @Bind ProtosBytecodeRootNode root,
+                @Bind BytecodeNode bytecodeNode) {
+            if (root.needsTraceAndProfileInstrumentation()) {
+                root.traceOrProfileException(frame, bytecodeNode, exception);
+            }
+            if (root.isExperimentalCalleeContextRoot()) {
+                root.experimentalCalleeContext().exit(frame, root, bytecodeNode);
+            }
         }
     }
 
@@ -1594,101 +1782,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         static CapturedNearerScopeAbsence unprovenNearerScopeAbsence(int lexicalDepth) {
             return CapturedNearerScopeAbsence.unproven(lexicalDepth);
-        }
-    }
-
-    /*
-     * I115-R6 (experimental): a bare read statically resolved to a module
-     * (ROOT) declaration reads the exact module scope of the invoked
-     * Closure's captured chain, with no nearer-scope absence guard and no
-     * receiver fallback. The value is read on every execution: the
-     * frame-backed authority first, then the module's general authority;
-     * only ABSENT consults the scopes outside the module, cold.
-     */
-    @Operation
-    @ConstantOperand(type = int.class, name = "frameOrdinal")
-    @ConstantOperand(type = String.class, name = "name")
-    @ConstantOperand(type = int.class, name = "lexicalDepth")
-    public static final class ReadGlobal {
-        @Specialization(guards = "isCompact(frame)")
-        public static Object compact(
-                int frameOrdinal,
-                String name,
-                int lexicalDepth,
-                @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return readModuleGlobal(
-                    arguments,
-                    ProtosFrameArguments.compactCapturedLexicalEnvironment(arguments),
-                    frameOrdinal,
-                    name,
-                    lexicalDepth);
-        }
-
-        @Specialization(guards = "!isCompact(frame)")
-        public static Object materialized(
-                int frameOrdinal,
-                String name,
-                int lexicalDepth,
-                @Bind VirtualFrame frame) {
-            Object[] arguments = frame.getArguments();
-            return readModuleGlobal(
-                    arguments,
-                    ProtosFrameArguments.publishedActivation(arguments)
-                            .capturedLexicalEnvironmentForRuntime(),
-                    frameOrdinal,
-                    name,
-                    lexicalDepth);
-        }
-
-        @NonIdempotent
-        static boolean isCompact(VirtualFrame frame) {
-            return ProtosFrameArguments.isUnmaterializedCompactCall(frame.getArguments());
-        }
-
-        private static Object readModuleGlobal(
-                Object[] arguments,
-                ProtosLexicalEnvironment capturedEnvironment,
-                int frameOrdinal,
-                String name,
-                int lexicalDepth) {
-            ProtosLexicalEnvironment moduleEnvironment =
-                    ProtosLexicalEnvironment.at(capturedEnvironment, lexicalDepth - 1);
-            if (moduleEnvironment == null) {
-                return readOutsideModuleGlobal(arguments, null, name);
-            }
-            // Java null is the frame-authority miss sentinel, never guest null.
-            Object value =
-                    ProtosCapturedLexicalAccess.readOwnerFrameBindingOrNull(
-                            moduleEnvironment, name, frameOrdinal);
-            if (value != null) {
-                return value;
-            }
-            java.util.Optional<Object> present =
-                    moduleEnvironment.readLocalSlotForRuntime(name);
-            if (present.isPresent()) {
-                return present.get();
-            }
-            return readOutsideModuleGlobal(arguments, moduleEnvironment.outer(), name);
-        }
-
-        /* ABSENT in the module: only the scopes outside it (the prelude). */
-        @TruffleBoundary
-        private static Object readOutsideModuleGlobal(
-                Object[] arguments,
-                ProtosLexicalEnvironment outside,
-                String name) {
-            for (ProtosLexicalEnvironment scope = outside;
-                    scope != null;
-                    scope = scope.outer()) {
-                java.util.Optional<Object> present = scope.readLocalSlotForRuntime(name);
-                if (present.isPresent()) {
-                    return present.get();
-                }
-            }
-            throw new ProtosSignalException(
-                    ProtosCoreErrors.newSlotNotFound(
-                            ProtosFrameArguments.activation(arguments)));
         }
     }
 
@@ -8346,9 +8439,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * I115-H3 EXPERIMENTAL: supplied argument 0 of an admitted recursive
      * Integer root as a long, stored by the lowering with the built-in
      * StoreLocal into the parameter's own frame local. The static unary
-     * layout and B5 keep it at the same position. The only branch is the
-     * physical unboxing of the two Integer representations a caller may
-     * supply; no binding presence, activation or layout is consulted.
+     * layout and B5 keep it at the same position; I115-H4-B: the GraalPy
+     * unary layout one position later. The only branch is the physical
+     * unboxing of the Integer representations a caller may supply (I115-H4-B:
+     * an Integer constant of the focal run root included); no binding
+     * presence, activation or layout is consulted.
      */
     @Operation
     public static final class ExperimentalLongArgument0 {
@@ -8357,6 +8452,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             Object value = ProtosFrameArguments.experimentalSuppliedArgument0(
                     frame.getArguments());
             if (value instanceof Long carrier) {
+                return carrier.longValue();
+            }
+            if (value instanceof Integer carrier) {
                 return carrier.longValue();
             }
             return ((ProtosIntegerValue) value).longValue();
@@ -9695,7 +9793,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * operands, then the terminal execution of the selected invocation.
          * A primitive carrier operand is projected before selection.
          */
-        private static Object prepareAndEnter(
+        static Object prepareAndEnter(
                 Object receiver,
                 ProtosBytecodeRootNode root,
                 Object caller,
@@ -10257,88 +10355,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
-        }
-    }
-
-    /*
-     * I115-H4-A EXPERIMENTAL: a GraalPy-style (CallUnaryMethodNode
-     * .callPFunction) monomorphic/polymorphic terminal Call1 emitted only for
-     * the lowering-admitted call of a certified H3 recursive Integer binding.
-     * The direct tier compares the cached Closure identity and calls the
-     * cached DirectCallNode with the reduced H3 argument layout.
-     *
-     * Accepted divergences (authorized experimental decisions, NOT defects
-     * pending correction in H4-A):
-     *  1. dynamic changes to Object.call are ignored;
-     *  2. a projection of the Closure to another Context is ignored;
-     *  3. the target installed for the first cached identity is used;
-     *  4. no caller, Task, Prelude or ReturnHome is transported;
-     *  5. ReturnHome observability is not checked;
-     *  6. whether the callee may suspend is not checked;
-     *  7. bridged control-transfer exceptions are not translated;
-     *  8. a null result is not checked;
-     *  9. no Protos activation is materialized for the callee;
-     * 10. the result is handed directly to the calling root's epilogue.
-     * 11. no equivalent of GraalPy's getCodeStableAssumption() is
-     *     implemented: the cached RootCallTarget is kept without an
-     *     equivalent invalidation guarantee.
-     */
-    @Operation
-    public static final class InvokeExperimentalClosureOneTail {
-        @Specialization(
-                excludeForUncached = true,
-                guards = {
-                    "receiver == cachedReceiver",
-                    "cachedTarget != null"
-                },
-                limit = "3")
-        public static Object direct(
-                Object receiver,
-                Object supplied0,
-                @Cached(value = "receiver", weak = true)
-                        Object cachedReceiver,
-                @Cached("experimentalTargetOrNull(cachedReceiver)")
-                        RootCallTarget cachedTarget,
-                @Cached("createDirectCallNodeOrNull(cachedTarget)")
-                        DirectCallNode node) {
-            return node.call(ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
-        }
-
-        @Specialization
-        @InliningCutoff
-        public static Object generic(
-                Object receiver,
-                Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode root,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("callerReference(frame)") Object caller,
-                @Cached IndirectCallNode indirectCall) {
-            return InvokeClosureOneTail.prepareAndEnter(
-                    receiver, root, caller, supplied0, indirectCall, bytecodeNode, bytecodeIndex);
-        }
-
-        /* Installation only: the prepared plan's Bytecode target, or null. */
-        static RootCallTarget experimentalTargetOrNull(Object receiver) {
-            if (!(receiver instanceof ProtosClosureValue closure)) {
-                return null;
-            }
-            ProtosClosureExecutionPlan plan =
-                    closure.preparedExecutionPlanOrNullForRuntime();
-            if (plan == null) {
-                return null;
-            }
-            return plan.bytecodeActivationTargetForComposition();
-        }
-
-        @NonIdempotent
-        static Object callerReference(VirtualFrame frame) {
-            return InvokeClosureOneTail.callerReference(frame);
-        }
-
-        static DirectCallNode createDirectCallNodeOrNull(RootCallTarget target) {
-            return InvokeClosureZero.createDirectCallNodeOrNull(target);
         }
     }
 

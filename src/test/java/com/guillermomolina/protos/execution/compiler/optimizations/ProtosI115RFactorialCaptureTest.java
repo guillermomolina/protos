@@ -461,6 +461,10 @@ final class ProtosI115RFactorialCaptureTest {
                         "Unexpected retired operation: " + retired);
             }
 
+            // I115-H4-B: a non-ABI7 callee keeps the ordinary B5 call.
+            assertOrdinaryUnaryCall(session, "runZero");
+            assertOrdinaryUnaryCall(session, "runThree");
+
             assertEquals(
                     1,
                     session.prepareTopLevel("runZero")
@@ -741,6 +745,155 @@ final class ProtosI115RFactorialCaptureTest {
         }
     }
 
+    private static List<String> instructionNames(
+            ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        ProtosBytecodeRootNode root = assertInstanceOf(
+                ProtosBytecodeRootNode.class,
+                session.prepareTopLevel(name).hostExecutableForTesting()
+                        .target.getRootNode());
+        return root.getBytecodeNode()
+                .getInstructionsAsList().stream()
+                .map(ProtosInstructionNames::of)
+                .toList();
+    }
+
+    private static void assertOrdinaryUnaryCall(
+            ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        List<String> names = instructionNames(session, name);
+        assertTrue(
+                names.stream().anyMatch(
+                        instruction -> instruction.endsWith(
+                                ".InvokeClosureOneTail")),
+                name + " must use the ordinary InvokeClosureOneTail: " + names);
+        assertTrue(
+                names.stream().noneMatch(
+                        instruction -> instruction.contains(
+                                "InvokeExperimentalClosureOneTail")),
+                name + " must not use the experimental ABI7 call: " + names);
+    }
+
+    /*
+     * I115-H4-B: the experimental unary ABI is admitted only for a callee
+     * whose root is proven to bind its parameter from the ABI7 layout.
+     */
+    @Test
+    void experimentalUnaryAbiAdmissionRequiresCompatibleCallee()
+            throws Exception {
+        String source = I115_R2_SOURCE + """
+                compute: (n) => {
+                    result: 1
+
+                    (n > 1).ifTrue() {
+                        result = n * 2
+                    }
+
+                    result
+                }
+
+                runZero: () => { compute(0) }
+                runThree: () => { compute(3) }
+                """;
+
+        Path file = Path.of(
+                "target", "i115-r-factorial", "h4b-abi-admission.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, source, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            assertEquals(
+                    I115_R6_RUN_DSL_FULL,
+                    instructionNames(session, "run"),
+                    "I115-R6 run() FULL DSL sequence");
+            assertOrdinaryUnaryCall(session, "runZero");
+            assertOrdinaryUnaryCall(session, "runThree");
+
+            // Module, factorial, run, compute, compute's dispatching ifTrue
+            // callback (MaterializeCurrentClosure), runZero and runThree.
+            ProtosBytecodeRootNode run = assertInstanceOf(
+                    ProtosBytecodeRootNode.class,
+                    session.prepareTopLevel("run").hostExecutableForTesting()
+                            .target.getRootNode());
+            assertEquals(
+                    7,
+                    run.getRootNodes().getNodes().size(),
+                    "Experimental physical root count");
+
+            assertEquals(
+                    EXPECTED,
+                    session.prepareTopLevel("run")
+                            .executable().execute().asLong());
+            assertEquals(
+                    1,
+                    session.prepareTopLevel("runZero")
+                            .executable().execute().asInt());
+            assertEquals(
+                    6,
+                    session.prepareTopLevel("runThree")
+                            .executable().execute().asInt());
+
+            System.out.println("I115_H4B_ABI_ADMISSION=PASS");
+        }
+    }
+
+    /*
+     * I115-H4-B: run is declared, and therefore emitted, before factorial;
+     * admission comes from pre-emission facts, not from emission order.
+     */
+    @Test
+    void experimentalUnaryAdmissionIsIndependentOfRootEmissionOrder()
+            throws Exception {
+        String source = """
+                run: () => {
+                    factorial(20)
+                }
+
+                factorial: (n) => {
+                    result: 1
+
+                    (n > 1).ifTrue() {
+                        result = n * factorial(n - 1)
+                    }
+
+                    result
+                }
+                """;
+
+        Path file = Path.of(
+                "target", "i115-r-factorial", "h4b-emission-order.protos");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, source, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            List<String> names = instructionNames(session, "run");
+            assertTrue(
+                    names.contains("c.InvokeExperimentalClosureOneTail"),
+                    "run must use the experimental ABI7 call: " + names);
+            assertEquals(
+                    I115_R6_RUN_DSL_FULL,
+                    names,
+                    "I115-R6 run() FULL DSL sequence");
+
+            assertEquals(
+                    EXPECTED,
+                    session.prepareTopLevel("run")
+                            .executable().execute().asLong());
+
+            System.out.println("I115_H4B_EMISSION_ORDER=PASS");
+        }
+    }
+
     private static String census(
             ProtosBytecodeRootNode run,
             ProtosBytecodeRootNode factorial) {
@@ -779,6 +932,8 @@ final class ProtosI115RFactorialCaptureTest {
         int factorialFull = 0;
         int additionalFull = 0;
 
+        List<String> moduleNames = List.of();
+
         StringBuilder report = new StringBuilder();
 
         for (int i = 0; i < roots.size(); i++) {
@@ -799,6 +954,9 @@ final class ProtosI115RFactorialCaptureTest {
             } else if (i == moduleIndex) {
                 role = "module";
                 moduleFull += count;
+                moduleNames = instructions.stream()
+                        .map(ProtosInstructionNames::of)
+                        .toList();
             } else {
                 role = "additional";
                 additionalFull += count;
@@ -829,12 +987,16 @@ final class ProtosI115RFactorialCaptureTest {
 
         // I115-H2: retain the verified R6 physical-bytecode baseline.
         assertEquals(3, roots.size(), "Experimental physical root count");
-        assertEquals(17, moduleFull, "Experimental module DSL");
+        // I115-H4-B: 17 -> 16, enableBlockScoping=false retires clear.local.
+        assertEquals(16, moduleFull, "Experimental module DSL");
+        assertTrue(
+                moduleNames.stream().noneMatch("clear.local"::equals),
+                "Module root kept the retired clear.local: " + moduleNames);
         // I115-H3: +1 for the direct parameter binding.
         assertEquals(19, factorialFull, "Experimental factorial DSL");
         assertEquals(6, runFull, "Experimental run DSL");
         assertEquals(0, additionalFull, "Unexpected callback root");
-        assertEquals(42, total, "Experimental total DSL");
+        assertEquals(41, total, "Experimental total DSL");
 
         System.out.println("I115_R_ROOT_COUNT=" + roots.size());
         System.out.println("I115_R_MODULE_DSL_FULL=" + moduleFull);
