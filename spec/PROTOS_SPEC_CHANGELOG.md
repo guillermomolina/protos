@@ -23,6 +23,34 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.474] - 2026-10-27
+
+### D216 — Optional continuous HTTP/1.1 hosting
+- `spec/io/HTTP.md` §15: defines the separate optional `std:http/Host`
+  Standard Library module exporting `Host` and `HostError`. The public
+  `Host.owning(listener, handlerModule, handlerBinding, options)` operation
+  accepts an explicitly supplied owning `TcpListener` and produces an
+  Actor-local host. `ready()`, `shutdown("drain")`,
+  `shutdown("abort")` and
+  `termination()` return local observer Futures resolving with the host or
+  failing with a hosting-level Error; observer cancellation never undoes
+  lifecycle work.
+- `spec/io/HTTP.md` §15: specifies same-Process Worker Actors that accept
+  directly through `TcpAcceptor` delegated only by `Actor.spawn` and
+  independently invoke the unchanged `Server.serveOne.owning`. Defaults
+  are `workers: 1`, `maxConnections: 64` and
+  `maxPendingAccepts: workers`; fixed per-Worker quotas bound admissions
+  without a central accept-serializing Actor. It defines listener and
+  connection custody, readiness, draining, cooperative abort, race cleanup,
+  client-failure isolation, fatal Worker/listener failure, termination
+  outcomes, and the `kind` classification of `HostError` instances.
+- HTTP keep-alive, HTTP/2–3, TLS, WebSockets, client support, routing,
+  `TcpConnection` transfer, multinode distribution and non-portable
+  timers remain excluded. Orchestration is Protos-first and introduces
+  no new Java HTTP engine or primitive; D215 and D217 remain unchanged.
+- `AGENTS.md`: updates the normative-owner map to include
+  `std:http/Host`; this is ownership bookkeeping, not new semantics.
+
 ## [0.1.473] - 2026-10-26
 
 ### D217 — TcpAcceptor same-Process acceptance capability

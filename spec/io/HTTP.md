@@ -2,12 +2,13 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-10-25
+Last updated: 2026-10-27
 
 This document is the primary normative owner of the Standard Library HTTP/1.1
 single-request origin-server facility `std:http/Server` selected by D215
 (D215-F3–F8: Option A, A3-minimal, Q0, F3 = M1, F4 = H1, F5 = B1, F6 = L1,
-F7 = W1, F8 = S1).
+F7 = W1, F8 = S1), and of the separate optional continuous-hosting facility
+`std:http/Host` selected by D216. D216 does not revise D215.
 
 HTTP is an optional Standard Library built entirely on existing capabilities.
 Byte reading/writing, Future commitment, cancellation, and half-close semantics
@@ -27,9 +28,10 @@ those RFCs, this document governs.
 
 `std:http/Server` processes exactly one HTTP/1.1 request on a caller-supplied
 duplex byte flow, produces exactly one final response, and retires its HTTP
-session.
+session. §§1–13 describe that single-request facility; §15 separately defines
+optional continuous hosting without changing any `std:http/Server` behavior.
 
-The facility:
+The single-request facility:
 
 - does not listen on ports, accept connections, acquire or use a `Network`
   capability, resolve names, create Actors, or acquire clock, timer, TLS, or any
@@ -1021,9 +1023,10 @@ with no `status` slot; the driver may attempt a best-effort empty 500.
 
 ## 14. Approved contract versus future work
 
-This document defines only the single-request, `Connection: close`, HTTP/1.1
-origin-server facility above. The following are outside the approved contract
-and require separate explicit design:
+Sections 1–13 define the single-request, `Connection: close`, HTTP/1.1
+origin-server facility; §15 defines the separately optional continuous-hosting
+facility. The following remain outside the approved HTTP contract and require
+separate explicit design:
 
 - HTTP client;
 - TLS;
@@ -1034,5 +1037,310 @@ and require separate explicit design:
 - exposed request or response trailers;
 - routing;
 - authentication;
-- listener supervision and accept loops; and
+- general-purpose listener supervision outside §15; and
 - timeouts, deadlines, and clock-based resource bounds.
+
+## 15. Continuous HTTP/1.1 hosting (D216)
+
+D216 selects a distinct, opt-in Standard Library facility above the unchanged
+single-request `std:http/Server`. This section is the sole normative owner of
+its HTTP-hosting-specific public contract. Its network, Actor, Future, Task and
+resource obligations compose with `NETWORK.md`, `IO_CORE.md`, `BYTE_IO.md`,
+`../concurrency/ACTORS.md` and
+`../concurrency/FUTURES_AND_TASKS.md`; it introduces no alternative mechanism
+for any of those domains.
+
+### 15.1 Module and complete portable public surface (D216-1)
+
+The explicit module `std:http/Host` exports `Host` and `HostError`. There is no
+Prelude binding, ambient HTTP server, or implicit import. Its portable public
+operations are:
+
+```text
+Host.owning(listener, handlerModule, handlerBinding, options) -> host
+host.ready()                                            -> Future<host>
+host.shutdown("drain")                                  -> Future<host>
+host.shutdown("abort")                                  -> Future<host>
+host.termination()                                      -> Future<host>
+```
+
+`Host.owning` is a synchronous construction operation. The returned `host` is
+an ordinary Actor-local hosting control object with identity and the methods
+above. The Future-returning methods are local asynchronous observations, not
+cross-Actor-transferable Futures. There is no `Server.serve` operation and no
+borrowed-listener hosting variant. Calling any operation with an invalid
+receiver follows the usual receiver/dispatch rules; it does not manufacture
+hosting authority.
+
+An HTTP host services successive independent TCP connections, not successive
+HTTP requests on one connection. Each admitted connection is serviced exactly
+once by the existing `Server.serveOne.owning` operation; its HTTP parsing,
+framing, limits, body, response, cancellation, and error precedence remain
+exactly those of §§2–12. Every session sends `Connection: close`. No host
+operation alters the public surface or semantics of `Server.serveOne` or
+`Server.serveOne.owning`.
+
+### 15.2 Construction, options and start (D216-2)
+
+`listener` must be an existing live `TcpListener` held in the constructing
+Actor. It is supplied explicitly by the caller, ordinarily after acquisition
+using its own `Network` authority; `Host` itself never acquires `Network`,
+calls `listenTcp`, chooses an address or port, or inherits a capability.
+`handlerModule` and `handlerBinding` are semantic Strings identifying the
+module and its local callable top-level binding for each destination Actor;
+the worker does not receive a Closure or module instance from the caller.
+Module identity and binding lookup obey the `Actor.spawn` bootstrap and
+module-resolution rules. An invalid module or bootstrap may fail
+asynchronously after construction.
+
+`options` is `null` or an ordinary object. Only these own slots are admitted:
+
+| Own slot | Default | Contract |
+| --- | --- | --- |
+| `workers` | `1` | positive Integer in signed 32-bit range |
+| `maxConnections` | `64` | positive Integer in signed 32-bit range |
+| `maxPendingAccepts` | `workers` | positive Integer in signed 32-bit range |
+| `limits` | `null` | `Server.serveOne` limits object under §10 |
+
+Inherited option slots do not supply values; absent slots select defaults;
+unknown own slots are rejected. The required inequalities are
+`1 <= workers <= maxPendingAccepts <= maxConnections`. No coercion, clamping,
+auto-detected CPU count, hidden unbounded queue, or alternative backlog option
+is defined. Invalid construction arguments signal a fresh
+`InvalidIOArgument` synchronously, without acquiring listener custody,
+creating Workers or initiating I/O. Valid construction acquires custody of
+the supplied listener and begins asynchronous startup. A later startup
+failure is reported by hosting Futures, not by retroactively failing
+`Host.owning`.
+
+### 15.3 Listener authority and ownership (D216-3)
+
+The host's constructing Actor remains the sole Protos owner of the listener
+and its `close` authority. Once valid construction transfers logical custody
+to `host`, the caller must not concurrently accept from, close, or otherwise
+operate that listener independently. The host closes it exactly once as a
+logical release obligation on all terminal paths, including failed startup.
+Listener closure follows `IO_CORE.md` §8; a successful host terminal outcome
+cannot precede completion of required resource-release work.
+
+Each Worker receives only an attenuated `TcpAcceptor` made with
+`listener.acceptCapability()` and provisioned as an initialization argument
+of `Actor.spawn`. It may call `accept` but cannot close the listener, recover
+`Network` authority, or transfer a `TcpConnection`. `TcpAcceptor` itself is not
+a second listener; all Workers compete in the one logical acceptance domain
+owned by `NETWORK.md` §8. No central Actor accepts connections on their behalf.
+
+### 15.4 Worker organization and HTTP session ownership (D216-4)
+
+The host starts exactly `workers` Worker Actor incarnations, all constrained
+to the same Process by the supplied `TcpAcceptor`. Their bootstrap code lives
+in the Standard Library; each Worker resolves `handlerModule` and
+`handlerBinding` within its own Actor-local module instance. A missing
+module, missing local binding or non-callable binding is a startup failure.
+Neither the handler Closure, a mutable module instance, the listener, nor
+an accepted `TcpConnection` crosses an Actor boundary.
+
+Workers independently issue `acceptor.accept()` and run one owning HTTP
+service Task per accepted connection. Multiple connections within one Worker
+interleave cooperatively; distinct Workers may execute simultaneously on
+different CPU cores. One Worker owns each accepted connection from successful
+delivery through `Server.serveOne.owning` terminal cleanup. Control messages
+and lifecycle observations may coordinate shutdown and outcome reporting,
+but may not relay acceptance or transfer live connections.
+
+The hosting module uses ordinary Protos Actors, messages, Futures and Tasks,
+including `ActorRef.stop()` and `ActorRef.termination()` where appropriate.
+It does not install a new scheduler, privileged Actor kind, global worker
+registry, or Java HTTP engine.
+
+### 15.5 Admission and deterministic bounds (D216-5)
+
+The three option limits are hard global maxima for one host:
+
+- `workers` bounds Worker Actor incarnations created by this host;
+- `maxConnections` bounds accepted connections whose owning service has
+  not fully retired and released the connection; and
+- `maxPendingAccepts` bounds outstanding acceptance operations.
+
+Reservation must prevent the sum of live accepted connections and pending
+accepts from exceeding `maxConnections` at any instant. There is no
+oversubscription window and no unbounded hidden guest queue.
+
+The host assigns disjoint, fixed quotas to Workers before starting them.
+For a limit `L` and `W` Workers, Worker indexes `0..W-1` receive
+`floor(L / W)`, with one extra quota unit for each index below
+`L mod W`; this applies independently to `maxConnections` and
+`maxPendingAccepts`. No connection or pending-accept quota is lent between
+Workers. A Worker may have no more than its pending-accept quota outstanding,
+and issues a new accept only while its accepted connections plus its
+outstanding accepts are below its assigned connection quota.
+
+At capacity a Worker stops issuing new `accept` calls and resumes when a
+connection has been fully retired and its close obligation settled. It does
+not accept an extra connection merely to emit HTTP 503; it does not drop a
+previously delivered connection because another Worker is full. Selection,
+fairness and operating-system TCP listen-backlog behavior remain subject to
+`NETWORK.md`; fixed quotas provide bounds, not load-balancing or starvation
+freedom. No portable wall-clock timeout or slow-client eviction is implied.
+
+### 15.6 Accepted-connection custody and close races (D216-6)
+
+An accepted connection is delivered only to the Worker that invoked
+`acceptor.accept()`. That Worker establishes `Server.serveOne.owning` custody
+and runs the session inside its own Actor. A connection delivered during a
+concurrent shutdown cutover, but no longer admitted to HTTP service, must be
+closed by that same Worker without invoking the handler. No delivered
+connection may be abandoned, transferred, serviced twice, or counted twice.
+
+Pending `accept` operations, cancellation races, listener close, delivered
+connections and late backend resources obey `NETWORK.md` and `IO_CORE.md`:
+resources not deliverable to an Actor remain under producer/backend cleanup.
+Each owning session's own close and cleanup precedence is §§9 and 12;
+hosting does not mask a close failure as an ordinary client disconnection.
+
+### 15.7 Host state and readiness (D216-7)
+
+The hosting lifecycle has these conceptual states:
+
+```text
+STARTING -> RUNNING -> DRAINING -> TERMINATED
+                   \-> ABORTING -> TERMINATED
+STARTING -----------> ABORTING -> TERMINATED
+DRAINING -----------> ABORTING -> TERMINATED
+```
+
+`STARTING` begins after valid construction. `RUNNING` begins only after all
+configured Workers have successfully initialized and entered their hosting
+acceptance service. `ready()` resolves with the identical `host` on that
+cutover. A startup failure instead fails `ready()` with `HostError`, closes
+the listener and causes abort cleanup. A shutdown invoked during startup
+prevents later entry to `RUNNING` and does not resolve readiness
+successfully.
+
+The first shutdown cutover prevents new HTTP session admissions.
+`DRAINING` waits for already admitted sessions; `ABORTING` requests their
+cooperative cancellation. `TERMINATED` is reached only after all Worker
+Actor incarnations are known terminated, accepted connections have
+completed mandatory custody cleanup, and the listener close has settled.
+No state transition may reopen acceptance or reuse a terminated Worker.
+The public API does not expose a mutable lifecycle-state slot.
+
+### 15.8 Drain, abort and escalation (D216-8)
+
+`host.shutdown("drain")` and `host.shutdown("abort")` are the only public
+shutdown requests. Any other argument signals a fresh
+`InvalidIOArgument` and does not change lifecycle state.
+
+On the first accepted shutdown request the host stops admission and commits
+listener closure, preventing further successful accepts after the listener
+close cutover. Drain lets already admitted `serveOne.owning` services
+complete normally and waits for their close and cleanup before stopping
+the Workers. It does not wait to accept more clients. Abort requests
+cooperative cancellation of outstanding accepts and accepted services,
+ensures their owning cleanup and closes the listener; it does not preempt
+ordinary guest execution or guarantee a bounded shutdown duration.
+
+`shutdown("abort")` during `DRAINING` escalates irreversibly to `ABORTING`.
+`shutdown("drain")` cannot reverse an abort. Repeated requests of an already
+selected mode are idempotent as lifecycle requests; they never perform a
+second listener close, duplicate service cancellation, or restart Workers.
+After `TERMINATED` both modes merely observe the established result. There
+is no implicit grace period, deadline, timer, forced kill, or retry.
+
+### 15.9 Hosting Futures and cancellation (D216-9)
+
+`ready()`, `shutdown(mode)` and `termination()` return local ordinary
+Futures with the four Core states `pending`, `resolved`, `failed` and
+`cancelled`. Their normal resolved value is the exact `host` object.
+
+- `ready()` observes successful entry to `RUNNING`; if startup fails or
+  shutdown precludes readiness, it cannot resolve successfully.
+- `shutdown(mode)` observes completion of the requested host shutdown,
+  including mandatory resource and Worker cleanup. It cannot resolve on
+  mere request acceptance or listener-close initiation.
+- `termination()` observes final host termination whether shutdown was
+  requested or failure triggered it. It may be obtained before, during,
+  or after termination.
+
+An internal listener, Worker, or cleanup failure that prevents successful
+hosting completes the relevant non-cancelled observers as failed with
+`HostError`. A successful drain or abort resolves the relevant observers.
+Each observer obeys first-terminal-transition-wins; cancelling an observer
+absolves only that caller's wait and neither cancels another observer nor
+requests, reverses, accelerates, or abandons the host's underlying lifecycle
+and cleanup. No public hosting Future acts as a cross-Actor supervision
+capability.
+
+### 15.10 Failure classification and isolation (D216-10)
+
+`HostError` is a Standard Library Error prototype directly delegating from
+`Error`. It represents hosting infrastructure failure, not an alternate
+`HttpError`, TCP Error, or mechanism for exposing a Worker's private Error
+across Actor boundaries. Each hosting-level failure delivered to a caller
+uses a fresh `HostError`. The portable distinction is its `kind` String:
+
+| `kind` | Meaning |
+| --- | --- |
+| `"startup"` | Worker/bootstrap/readiness failure before `RUNNING` |
+| `"listener"` | Listener/acceptance-domain failure outside normal close |
+| `"worker"` | Unexpected Worker termination after start |
+| `"shutdown"` | Mandatory shutdown/connection/listener cleanup failure |
+
+Failures of individual client requests, rejected HTTP messages, response
+encoding, application handlers and ordinary client I/O are handled and
+retired by their respective owning sessions under §§7–12. They do not
+automatically fail or terminate the host; their failure Futures remain
+Worker-local. A fatal Worker error or unexpected known Worker termination
+is not isolated as an ordinary client failure: the host commits abort
+cleanup and fails the hosting observers. Listener failure does likewise.
+Worker failure is observed through the existing Actor lifecycle observation
+contract; its private unhandled Error is not transferred to the host.
+No Worker is silently restarted, replaced, or rebalanced.
+
+If a fatal hosting failure races with requested shutdown, the host still
+performs the required shutdown and cleanup, and the final non-cancelled
+hosting result reports failure rather than disguising it as a successful
+drain. Mandatory cleanup Error precedence remains governed by the
+general `ensure` and `Closable` contracts.
+
+### 15.11 Scope, coordination and portability (D216-11)
+
+Host control and the `TcpListener` remain confined to their constructing
+Actor. Each Worker, its `TcpAcceptor` representation, accepted connections,
+handler module instance and session Tasks remain confined to that Worker.
+Only transferable control data and `ActorRef` values traverse ordinary
+Actor communication; `TcpAcceptor` traverses only permitted same-Process
+`Actor.spawn` initialization. Completion coordination may observe
+`ActorRef.termination()`, but creation genealogy does not grant a new
+failure-authority API or implicit Actor lifetime ownership.
+
+One Worker is useful on a single CPU (C). Multiple Workers may execute on
+separate CPU cores in the same Process (A), without one mandatory
+accept-serializing Actor. No multicore throughput guarantee, fairness
+guarantee, CPU pinning, specific scheduler, or OS-backend dependence is part
+of the contract. Multiple Processes/nodes (P), migration and distributed
+listener placement are not introduced.
+
+### 15.12 Opt-in implementation and exclusions (D216-12)
+
+The intended Standard Library implementation is primarily Protos:
+`protos/lib/http/Host.protos` owns the public facility;
+`protos/lib/http/internal/HostConfig.protos` validates configuration;
+`HostLifecycle.protos` coordinates readiness, shutdown and failures;
+`HostWorker.protos` owns Actor bootstrap and acceptance loops; and
+`HostConnection.protos` owns connection admission, session bookkeeping and
+cleanup. These are implementation organization names, not additional public
+modules or normative privileges. They reuse the existing TCP, Actor, Future,
+Task and `Server.serveOne.owning` primitives. No new Java primitive or
+Java HTTP engine is selected by D216.
+
+The scope expressly excludes HTTP keep-alive/pipelining, HTTP/2, HTTP/3,
+TLS, WebSockets, Upgrade/CONNECT tunnelling, an HTTP client, routing
+frameworks, authentication, `TcpConnection` transfer, cross-Process
+`TcpAcceptor` delegation, multinode distribution, speculative proxy Actors
+and non-portable timer/deadline facilities. Trusted/protected ingress and
+explicit bounded admission remain prerequisites for practical deployment;
+an indefinitely slow admitted client may indefinitely occupy its quota
+and delay drain. Importing neither `std:http/Host` nor `std:http/Server`
+creates no hosting Workers, listening authority, global state, or runtime
+cost.

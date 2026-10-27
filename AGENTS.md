@@ -201,7 +201,8 @@ Domain owners:
   standard streams, Process-local I/O authority.
 - spec/io/NETWORK.md — network I/O semantics.
 - spec/io/HTTP.md — Standard Library HTTP/1.1 single-request server
-  (std:http/Server) semantics.
+  (std:http/Server) and optional continuous hosting (std:http/Host)
+  semantics.
 - spec/concurrency/FUTURES_AND_TASKS.md — Core Future/task semantics.
 - spec/concurrency/ACTORS.md — Core Actor semantics.
 - spec/concurrency/PARALLEL_EXECUTION.md — Core isolated-parallel (P)
