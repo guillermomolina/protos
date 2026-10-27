@@ -40,6 +40,8 @@ import org.graalvm.options.OptionStability;
     StandardTags.ExpressionTag.class,
     StandardTags.CallTag.class,
     StandardTags.RootTag.class,
+    // I115-H4-B EXPERIMENTAL: required by default Bytecode DSL root body tagging.
+    StandardTags.RootBodyTag.class,
     DebuggerTags.AlwaysHalt.class
 })
 @TruffleLanguage.Registration(

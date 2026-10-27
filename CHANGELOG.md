@@ -8,6 +8,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.17-SNAPSHOT
+
+- `WIP I115-H4-B` (experimental GraalPy-style unary-call infrastructure):
+  port an experimental `CallUnaryMethodNode`-like direct call path with
+  `ProtosExperimentalCallUnaryNode`, dispatch helpers, caller/callee contexts,
+  and a separate seven-slot GraalPy-inspired frame-argument ABI (ABI7).
+  - Admit the direct path only for a statically certified ABI7-compatible
+    recursive Integer callee; use the ordinary B5 terminal Call1 for
+    non-admitted callees. Introduce a per-Closure code-stability Assumption
+    and specialized module `ReadGlobal` support.
+  - Experiment with automatic RootTag/RootBodyTag tagging, Bytecode DSL
+    serialization configuration, frame bytecode-index storage and an optional
+    JVM-controlled call-trace instrumentation; these are not validated as
+    behaviorally equivalent to the preceding instrumentation configuration.
+  - Extend factorial and incompatible-callee tests; the original commit is
+    explicitly WIP and does not establish successful compilation, complete
+    regression coverage or a passing semantic/performance acceptance gate.
+  - **Historical semantic divergences:** the specialized route does not
+    preserve all dynamic `Object.call` selection, caller/Task/Prelude/
+    `ReturnHome` transport, suspension, bridged control transfers, null-result
+    validation or B5 interoperability. The experimental `ReadGlobal` behavior
+    still diverges from D179 C0 late lexical retargeting; H3's wrapping `long`
+    arithmetic and disabled exact-overflow test also remain. These are
+    historical characteristics, not normative changes or an acceptance.
+  - Reconstructed from original I115 commit
+    `0b75afa903a33c3fba0acca1c7b9300531aaa2f4`.
+    No behavioral tests have been run on this versioned historical replay.
+
 ## 0.4.16-SNAPSHOT
 
 - `I115-H4-A` (experimental GraalPy-style direct terminal Call1 for factorial
