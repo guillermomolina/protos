@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.407-SNAPSHOT
+
+- `I125-C` (#966, D217): real NIO conformance for cross-Actor `TcpAcceptor`
+  acceptance (tests only).
+  - A `TcpAcceptor` delegated through the `Actor.spawn` initialization
+    transfer to a second Actor of the same Process accepts real loopback
+    connections from the shared NIO listener alongside the listener's own
+    accept, on one port. Each accepted connection is owned by its accepting
+    Actor, which reads and writes it with its own activation.
+  - A pending delegated accept is cut over by the owner's listener close
+    with the worker's own `IOLifecycleError`; the close resolves in the
+    owner domain, a repeated close shares the outcome, and later delegated
+    accepts fail with a fresh failed Future.
+
 ## 0.3.406-SNAPSHOT
 
 - `I125-B` (#966, D217): delegate `TcpAcceptor` through `Actor.spawn` for
