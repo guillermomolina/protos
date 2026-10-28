@@ -284,7 +284,8 @@ httpProgressGroups: [
     ["http/server-admission.protos", "library/http/server-admission"],
     ["http/server-request.protos", "library/http/server-request"],
     ["http/server-response.protos", "library/http/server-response"],
-    ["http/server-lifecycle.protos", "library/http/server-lifecycle"]
+    ["http/server-lifecycle.protos", "library/http/server-lifecycle"],
+    ["http/host-construction.protos", "library/http/host-construction"]
 ]
 
 isHttpLeaf: (leaf) => {

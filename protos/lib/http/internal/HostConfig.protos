@@ -1,0 +1,134 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal construction-argument validation of std:http/Host (D216,
+//! HTTP.md §15.2, §15.3, §15.5). This module is an unpublished implementation
+//! artifact, not an approved Standard Library API. It performs no I/O,
+//! acquires no custody, and creates no Actor.
+
+Limits: import("std:http/internal/Limits")
+
+maxSigned32: 2147483647
+
+optionNames: ["workers", "maxConnections", "maxPendingAccepts", "limits"]
+
+positive32: (value) => {
+    Integer.recognizes(value) && (value > 0) && (value <= maxSigned32)
+}
+
+/// Validates options (null or an ordinary object with only the admitted own
+/// slots) and answers a frozen snapshot of the effective configuration, or
+/// null when options is not admissible. Inherited slots are never read.
+capture: (facility, options) => {
+    valid: true
+    if(options !== null) {
+        valid = facility.ordinaryObject(options)
+        if(valid) {
+            options.slotNames().each((name) => {
+                known: false
+                optionNames.each((optionName) => {
+                    if(name == optionName) {
+                        known = true
+                    }
+                })
+                if(!known) {
+                    valid = false
+                }
+            })
+        }
+    }
+
+    pick: (name, fallback) => {
+        chosen: fallback
+        if((options !== null) && options.hasSlot(name)) {
+            chosen = options.slotValue(name)
+        }
+        chosen
+    }
+
+    workers: null
+    maxConnections: null
+    maxPendingAccepts: null
+    limits: null
+    if(valid) {
+        workers = pick("workers", 1)
+        maxConnections = pick("maxConnections", 64)
+        maxPendingAccepts = pick("maxPendingAccepts", workers)
+        valid = positive32(workers) && positive32(maxConnections) && positive32(maxPendingAccepts)
+    }
+    if(valid) {
+        valid = (workers <= maxPendingAccepts) && (maxPendingAccepts <= maxConnections)
+    }
+    if(valid) {
+        limits = Limits.capture(facility, pick("limits", null))
+        valid = limits !== null
+    }
+
+    captured: null
+    if(valid) {
+        captured = {
+            workers: workers
+            maxConnections: maxConnections
+            maxPendingAccepts: maxPendingAccepts
+            limits: limits
+        }
+        captured.freeze()
+    }
+    captured
+}
+
+/// Answers the fixed quota of Worker index of workers for a global limit:
+/// floor(limit / workers), plus one unit for each index below
+/// limit mod workers (HTTP.md §15.5).
+quota: (limit, workers, index) => {
+    share: limit.div(workers)
+    if(index < (limit % workers)) {
+        share = share + 1
+    }
+    share
+}
+
+/// Derives count acceptance capabilities from listener, or answers null when
+/// listener is not a live TcpListener of this Actor. Only the standard
+/// listener behavior is reached: ordinary objects and receivers shadowing the
+/// listener selectors are rejected before any guest code could run. Deriving
+/// a TcpAcceptor performs no I/O and takes no custody (NETWORK.md §8.1).
+acceptors: (facility, listener, count) => {
+    derived: null
+    candidate: (listener !== null) && !facility.ordinaryObject(listener)
+    if(candidate) {
+        candidate = !listener.hasSlot("acceptCapability") && !listener.hasSlot("close")
+    }
+    if(candidate) {
+        Error.handle(
+            () => {
+                result: Array()
+                while(result.size() < count) {
+                    acceptor: listener.acceptCapability()
+                    if(facility.ordinaryObject(acceptor)) {
+                        Error().signal()
+                    }
+                    result = Array(...result, acceptor)
+                }
+                derived = result
+            },
+            (error) => {
+                derived = null
+                error
+            }
+        )
+    }
+    derived
+}

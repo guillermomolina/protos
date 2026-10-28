@@ -32,7 +32,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/datetime", 10, "datetime/construction.protos", "datetime/rfc3339.protos");
         assertPlan("protos/corpus/library/regex", 13, "regex/compile.protos", "regex/split.protos");
         assertPlan("protos/corpus/library/logging", 7, "logging/levels.protos", "logging/sinks.protos");
-        assertPlan("protos/corpus/library/http", 7, "http/request-head.protos", "http/server-lifecycle.protos");
+        assertPlan("protos/corpus/library/http", 8, "http/request-head.protos", "http/host-construction.protos");
     }
 
     @Test
@@ -74,7 +74,8 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
             "http/server-admission.protos",
             "http/server-request.protos",
             "http/server-response.protos",
-            "http/server-lifecycle.protos"
+            "http/server-lifecycle.protos",
+            "http/host-construction.protos"
         };
         for (int index = 0; index < paths.length; index++) {
             assertEquals(paths[index], path(corpus, index));

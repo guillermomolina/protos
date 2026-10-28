@@ -1,0 +1,163 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Host")
+HostConfig: import("std:http/internal/HostConfig")
+
+// The suite has no Network: every construction below is rejected before any
+// listener custody, Worker or I/O could exist (HTTP.md §15.2).
+handlerModule: "std:http/Server"
+
+construct: (listener, options) => {
+    Assertions.signals(InvalidIOArgument, () => {
+        http.Host.owning(listener, handlerModule, "Server", options)
+    })
+}
+
+invalidOptions: [
+    { workers: 0 },
+    { workers: -1 },
+    { workers: 2147483648 },
+    { workers: "1" },
+    { workers: 1.0 },
+    { maxConnections: 0 },
+    { maxConnections: null },
+    { maxPendingAccepts: 0 },
+    { maxPendingAccepts: 65 },
+    { workers: 65 },
+    { limits: 1 },
+    { limits: { maxHeaderFields: 0 } },
+    { limits: { unknownLimit: 1 } },
+    { backlog: 1 },
+    { cpus: 1 }
+]
+
+tests: [
+    Test("module exports exactly Host and HostError", () => {
+        names: http.slotNames()
+        Assertions.require(names.size() == 2)
+        Assertions.require(names[0] == "Host")
+        Assertions.require(names[1] == "HostError")
+        Assertions.require(!http.hasSlot("_httpAsyncFacility"))
+    }),
+    Test("Host and HostError are not Prelude bindings", () => {
+        Assertions.signals(SlotNotFound, () => { Host })
+        Assertions.signals(SlotNotFound, () => { HostError })
+    }),
+    Test("HostError delegates directly to Error", () => {
+        Assertions.require(http.HostError.parent() === Error)
+    }),
+    Test("the host facility exposes only owning and no serve variant", () => {
+        names: http.Host.slotNames()
+        Assertions.require(names.size() == 1)
+        Assertions.require(names[0] == "owning")
+        Assertions.require(!http.Host.hasSlot("borrowing"))
+        server: import("std:http/Server").Server
+        Assertions.require(!server.hasSlot("serve"))
+    }),
+    Test("invalid options signal InvalidIOArgument before the listener is examined", () => {
+        invalidOptions.each((options) => {
+            construct(null, options)
+        })
+        null
+    }),
+    Test("the ordering workers <= maxPendingAccepts <= maxConnections is required", () => {
+        tooFewPending: {
+            workers: 3
+            maxPendingAccepts: 2
+        }
+        tooManyPending: {
+            maxConnections: 4
+            maxPendingAccepts: 5
+        }
+        construct(null, tooFewPending)
+        construct(null, tooManyPending)
+    }),
+    Test("options must be null or an ordinary object", () => {
+        construct(null, [])
+        construct(null, 1)
+        construct(null, "workers")
+        construct(null, () => { 1 })
+    }),
+    Test("handler module and binding must be Strings", () => {
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, () => { 1 }, "Server", null)
+        })
+        Assertions.signals(InvalidIOArgument, () => {
+            http.Host.owning(null, handlerModule, 1, null)
+        })
+    }),
+    Test("no listener is acquired implicitly", () => {
+        Assertions.require(!http.hasSlot("network"))
+        Assertions.require(!http.Host.hasSlot("network"))
+        construct(null, null)
+        construct({}, null)
+        construct(42, null)
+        construct("127.0.0.1:8080", null)
+    }),
+    Test("an ordinary object posing as a listener is never invoked", () => {
+        invoked: false
+        fake: {
+            acceptCapability: () => {
+                invoked = true
+                null
+            }
+            close: () => {
+                invoked = true
+                null
+            }
+        }
+        construct(fake, null)
+        Assertions.require(!invoked)
+    }),
+    Test("every rejection is a fresh InvalidIOArgument", () => {
+        first: construct(null, null)
+        second: construct(null, null)
+        Assertions.require(first.parent() === InvalidIOArgument)
+        Assertions.require(second.parent() === InvalidIOArgument)
+        Assertions.require(first !== second)
+    }),
+    Test("quotas split each limit as floor(L / W) plus one below L mod W", () => {
+        Assertions.require(HostConfig.quota(10, 3, 0) == 4)
+        Assertions.require(HostConfig.quota(10, 3, 1) == 3)
+        Assertions.require(HostConfig.quota(10, 3, 2) == 3)
+        Assertions.require(HostConfig.quota(64, 1, 0) == 64)
+        Assertions.require(HostConfig.quota(5, 5, 4) == 1)
+        Assertions.require(HostConfig.quota(7, 4, 2) == 2)
+        Assertions.require(HostConfig.quota(7, 4, 3) == 1)
+    }),
+    Test("quotas sum exactly to the global limit", () => {
+        [[64, 1], [64, 3], [7, 4], [2147483647, 7], [9, 9]].each((pair) => {
+            total: 0
+            index: 0
+            previous: null
+            while(index < pair[1]) {
+                share: HostConfig.quota(pair[0], pair[1], index)
+                Assertions.require(share >= 1)
+                if(previous !== null) {
+                    Assertions.require((previous == share) || (previous == share + 1))
+                }
+                previous = share
+                total = total + share
+                index = index + 1
+            }
+            Assertions.require(total == pair[0])
+        })
+        null
+    })
+]
+tests.freeze()

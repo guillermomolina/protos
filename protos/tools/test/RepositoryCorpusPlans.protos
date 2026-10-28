@@ -214,7 +214,8 @@ load: (corpusId) => {
             Array("server-admission.protos", "suite-native", "-"),
             Array("server-request.protos", "suite-native", "-"),
             Array("server-response.protos", "suite-native", "-"),
-            Array("server-lifecycle.protos", "suite-native", "-")
+            Array("server-lifecycle.protos", "suite-native", "-"),
+            Array("host-construction.protos", "suite-native", "-")
             )
         )
         matched = true

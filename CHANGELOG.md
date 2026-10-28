@@ -7,6 +7,46 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.408-SNAPSHOT
+
+- `I126-A` (#967, D216): add `std:http/Host` continuous HTTP/1.1 hosting
+  with Worker Actors, bounded admission and the normal lifecycle (spec
+  0.1.474).
+  - The module exports exactly `Host` and `HostError` (delegating directly
+    from `Error`, `kind` "startup", "listener", "worker" or "shutdown"),
+    adds no Prelude binding and acquires no implicit Network authority.
+  - `Host.owning(listener, handlerModule, handlerBinding, options)`
+    validates every argument before any effect. Only the own options
+    `workers`, `maxConnections`, `maxPendingAccepts` (positive signed
+    32-bit Integers with `workers <= maxPendingAccepts <= maxConnections`)
+    and `limits` are read, without coercion or inherited slots. An invalid
+    call signals a fresh `InvalidIOArgument` without listener custody,
+    Workers or I/O.
+  - The constructing Actor keeps the listener and its single close. Each
+    of the `workers` Worker Actors is spawned with only a `TcpAcceptor`
+    from `listener.acceptCapability()`, the handler module and binding
+    names, its quotas and the captured limits; it resolves the handler in
+    its own module instance, accepts by itself and serves each accepted
+    connection exactly once with `Server.serveOne.owning`.
+  - Quotas split `maxConnections` and `maxPendingAccepts` as
+    `floor(L / W)` plus one below `L mod W` and are never lent between
+    Workers; accepted plus pending connections stay bounded without queues
+    or synthetic 503 responses.
+  - `ready()`, `shutdown("drain")`, `shutdown("abort")` and
+    `termination()` answer fresh local observer Futures; cancelling one
+    never affects the hosting lifecycle. Drain stops admission, closes the
+    listener and lets admitted sessions complete. Abort, which also
+    escalates a drain irreversibly, makes each Worker cancel its
+    outstanding accepts and admitted sessions so that their owning cleanup
+    closes every connection. Workers are stopped only after their
+    acceptance services replied.
+  - The `std:http/Server` limit validation moves unchanged to the internal
+    `std:http/internal/Limits` module shared with the host. The private
+    `std:http/Server` facility is also provisioned for `std:http/Host` and
+    its Worker bootstrap, without new operations.
+  - The repository HTTP corpus registers the `http/host-construction.protos`
+    suite source with its own progress group.
+
 ## 0.3.407-SNAPSHOT
 
 - `I125-C` (#966, D217): real NIO conformance for cross-Actor `TcpAcceptor`

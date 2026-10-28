@@ -36,77 +36,12 @@ HttpError: Error {}
 /// The single-request HTTP/1.1 server.
 Server: ((facility) => {
     Session: import("std:http/internal/Session")
-
-    maxSigned64: 9223372036854775807
-
-    limitNames: [
-        "maxRequestLineBytes",
-        "maxHeaderBytes",
-        "maxHeaderFields",
-        "maxChunkLineBytes",
-        "maxTrailerBytes",
-        "maxTrailerFields",
-        "maxRequestBodyBytes",
-        "maxPrefetchBytes",
-        "ioChunkBytes"
-    ]
+    Limits: import("std:http/internal/Limits")
 
     // Validates limits (HTTP.md §10) and answers a private snapshot of every
     // effective limit, or null when limits is not admissible.
     captureLimits: (limits) => {
-        valid: true
-        if(limits !== null) {
-            valid = facility.ordinaryObject(limits)
-            if(valid) {
-                limits.slotNames().each((name) => {
-                    if(valid) {
-                        known: false
-                        limitNames.each((limitName) => {
-                            if(name == limitName) {
-                                known = true
-                            }
-                        })
-                        if(known) {
-                            value: limits.slotValue(name)
-                            if(Integer.recognizes(value)) {
-                                if((value <= 0) || (value > maxSigned64)) {
-                                    valid = false
-                                }
-                            } else {
-                                valid = false
-                            }
-                        } else {
-                            valid = false
-                        }
-                    }
-                })
-            }
-        }
-
-        pick: (name, fallback) => {
-            chosen: fallback
-            if((limits !== null) && limits.hasSlot(name)) {
-                chosen = limits.slotValue(name)
-            }
-            chosen
-        }
-
-        captured: null
-        if(valid) {
-            captured = {
-                maxRequestLineBytes: pick("maxRequestLineBytes", 8192)
-                maxHeaderBytes: pick("maxHeaderBytes", 32768)
-                maxHeaderFields: pick("maxHeaderFields", 100)
-                maxChunkLineBytes: pick("maxChunkLineBytes", 8192)
-                maxTrailerBytes: pick("maxTrailerBytes", 8192)
-                maxTrailerFields: pick("maxTrailerFields", 100)
-                maxRequestBodyBytes: pick("maxRequestBodyBytes", 33554432)
-                maxPrefetchBytes: pick("maxPrefetchBytes", 65536)
-                ioChunkBytes: pick("ioChunkBytes", 16384)
-            }
-            captured.freeze()
-        }
-        captured
+        Limits.capture(facility, limits)
     }
 
     // HTTP.md §2.3 and §2.4: semantic validation precedes every effect. An

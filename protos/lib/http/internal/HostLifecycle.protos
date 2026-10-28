@@ -1,0 +1,328 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal lifecycle of one std:http/Host (D216, HTTP.md §§15.3, 15.7 to
+//! 15.10). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API.
+//!
+//! Everything here runs in the constructing Actor, which keeps the listener
+//! and its close authority. The host coordinates its Workers only through
+//! `ActorRef` requests, `send`, `stop()` and `termination()`; it never
+//! accepts, relays or holds a connection.
+//!
+//! Lifecycle events are observed by Tasks of this Actor that each wait for
+//! one specific Future: a readiness Task, one service Task and one
+//! termination Task per Worker, a stop Task, and one completion Task that
+//! waits for all of them and for the listener close. Public observers only
+//! wait for the readiness or completion Task, so cancelling an observer never
+//! touches the lifecycle.
+//!
+//! Drain and abort reach the Workers as "drain" and "abort" messages. The
+//! stop Task calls `stop()` only after every Worker's acceptance service has
+//! replied, so admitted sessions always retire, and close their connections,
+//! inside a READY Worker.
+
+HostConfig: import("std:http/internal/HostConfig")
+
+workerModule: "std:http/internal/HostWorker"
+
+// Waits for a Future of this Actor, discarding its outcome.
+settle: (future) => {
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            error
+        }
+    )
+}
+
+// Waits for every Future in order, discarding their outcomes.
+settleAll: (futures) => {
+    index: 0
+    while(index < futures.size()) {
+        settle(futures[index])
+        index = index + 1
+    }
+}
+
+/// Spawns the Workers of a validated construction and answers the host
+/// object. config is the captured HostConfig snapshot and acceptors holds one
+/// TcpAcceptor per Worker; listener custody is held from here on.
+start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) => {
+    // STARTING, RUNNING, DRAINING, ABORTING or TERMINATED; never a host slot.
+    state: "STARTING"
+    // Whether the host ever entered RUNNING.
+    running: false
+    // The kind of the first hosting failure, or null.
+    failureKind: null
+    // The one listener close Future, once committed.
+    closing: null
+    workers: Array()
+    stopRequested: Array()
+
+    commitClose: () => {
+        if(closing === null) {
+            closing = listener.close()
+        }
+    }
+
+    stopWorkers: () => {
+        index: 0
+        while(index < workers.size()) {
+            stopRequested[index] = true
+            workers[index].stop()
+            index = index + 1
+        }
+    }
+
+    // Abort makes every Worker cancel its own accepts and sessions while it
+    // can still run their owning cleanup; the stop Task stops the Workers
+    // once their acceptance services replied.
+    beginAbort: () => {
+        if((state != "ABORTING") && (state != "TERMINATED")) {
+            state = "ABORTING"
+            workers.each((worker) => {
+                worker.send("abort")
+            })
+            commitClose()
+        }
+    }
+
+    // The first hosting failure wins; failure always commits abort cleanup.
+    fail: (kind) => {
+        if(failureKind === null) {
+            failureKind = kind
+        }
+        beginAbort()
+    }
+
+    // A Worker failure before RUNNING is a startup failure (HTTP.md §15.10).
+    failWorker: () => {
+        if(running) {
+            fail("worker")
+        } else {
+            fail("startup")
+        }
+    }
+
+    // Drain stops admission in every Worker and commits the listener close;
+    // the stop Task stops the Workers once their sessions have retired.
+    beginDrain: () => {
+        state = "DRAINING"
+        workers.each((worker) => {
+            worker.send("drain")
+        })
+        commitClose()
+    }
+
+    // ------------------------------------------------------------ Workers
+
+    services: Array()
+    serviceWatchers: Array()
+    readiness: Array()
+    terminationWatchers: Array()
+
+    watchService: (service) => {
+        (() => {
+            outcome: null
+            Error.handle(
+                () => {
+                    outcome = service.value()
+                },
+                (error) => {
+                    error
+                }
+            )
+            // Workers are stopped only after every reply: a missing reply
+            // means the Worker terminated by itself.
+            if(outcome === null) {
+                failWorker()
+            }
+            if(outcome == "listener") {
+                fail("listener")
+            }
+            if(outcome == "cleanup") {
+                fail("shutdown")
+            }
+            // Acceptance ended although the host never closed the listener.
+            if((outcome == "drained") && ((state == "STARTING") || (state == "RUNNING"))) {
+                fail("listener")
+            }
+        }).future()
+    }
+
+    watchTermination: (worker, index) => {
+        (() => {
+            worker.termination().value()
+            if(!stopRequested[index]) {
+                failWorker()
+            }
+        }).future()
+    }
+
+    workerCount: config.workers
+    while(workers.size() < workerCount) {
+        index: workers.size()
+        worker: Actor.spawn(
+            workerModule,
+            "start",
+            acceptors[index],
+            handlerModule,
+            handlerBinding,
+            HostConfig.quota(config.maxConnections, workerCount, index),
+            HostConfig.quota(config.maxPendingAccepts, workerCount, index),
+            config.limits
+        )
+        workers = Array(...workers, worker)
+        stopRequested = Array(...stopRequested, false)
+        // Same-sender FIFO: "ready" is dispatched once "serve" has entered
+        // the acceptance service and suspended.
+        service: worker.request("serve")
+        services = Array(...services, service)
+        readiness = Array(...readiness, worker.request("ready"))
+        serviceWatchers = Array(...serviceWatchers, watchService(service))
+        terminationWatchers = Array(...terminationWatchers, watchTermination(worker, index))
+    }
+
+    // Answers true exactly when every Worker entered its acceptance service
+    // and the host then entered RUNNING.
+    readyTask: (() => {
+        ready: true
+        index: 0
+        while(index < readiness.size()) {
+            future: readiness[index]
+            Error.handle(
+                () => {
+                    if(future.value() !== true) {
+                        ready = false
+                    }
+                },
+                (error) => {
+                    ready = false
+                    error
+                }
+            )
+            index = index + 1
+        }
+        if(state == "STARTING") {
+            if(ready) {
+                state = "RUNNING"
+                running = true
+            } else {
+                fail("startup")
+            }
+        } else {
+            ready = false
+        }
+        ready
+    }).future()
+
+    // Workers are stopped only after every acceptance service replied, that
+    // is, after admission ended and every admitted session retired with its
+    // owning cleanup, and after each reply was classified. Stopping never
+    // cancels a session.
+    stopTask: (() => {
+        settleAll(services)
+        settleAll(serviceWatchers)
+        stopWorkers()
+    }).future()
+
+    // TERMINATED: every Worker is known terminated, every lifecycle Task has
+    // settled, and the listener close has settled.
+    completionTask: (() => {
+        settleAll(terminationWatchers)
+        settleAll(serviceWatchers)
+        settleAll([readyTask, stopTask])
+        commitClose()
+        Error.handle(
+            () => {
+                closing.value()
+            },
+            (error) => {
+                if(failureKind === null) {
+                    failureKind = "shutdown"
+                }
+                error
+            }
+        )
+        state = "TERMINATED"
+        null
+    }).future()
+
+    // ------------------------------------------------------------ host
+
+    host: null
+
+    // Each delivered hosting failure is a fresh HostError (HTTP.md §15.10).
+    hostFailure: (errorKind) => {
+        failure: HostError {
+            kind: errorKind
+        }
+        failure.signal()
+    }
+
+    observeCompletion: () => {
+        (() => {
+            completionTask.value()
+            if(failureKind !== null) {
+                hostFailure(failureKind)
+            }
+            host
+        }).future()
+    }
+
+    host = {
+        // Answers a fresh Future resolving to this host once every Worker
+        // accepts; fails with HostError "startup" when startup fails or a
+        // shutdown precludes readiness.
+        ready: () => {
+            (() => {
+                if(!readyTask.value()) {
+                    hostFailure("startup")
+                }
+                host
+            }).future()
+        }
+        // Requests "drain" or "abort" shutdown and answers a fresh Future
+        // resolving to this host once shutdown and all cleanup completed.
+        shutdown: (mode) => {
+            drain: String.recognizes(mode) && (mode == "drain")
+            abort: String.recognizes(mode) && (mode == "abort")
+            if(!(drain || abort)) {
+                invalid: InvalidIOArgument {}
+                invalid.signal()
+            }
+            if(abort) {
+                beginAbort()
+            } else {
+                if(state == "STARTING") {
+                    // No STARTING -> DRAINING transition exists (HTTP.md §15.7).
+                    beginAbort()
+                }
+                if(state == "RUNNING") {
+                    beginDrain()
+                }
+            }
+            observeCompletion()
+        }
+        // Answers a fresh Future resolving to this host once it terminated.
+        termination: () => {
+            observeCompletion()
+        }
+    }
+    host
+}

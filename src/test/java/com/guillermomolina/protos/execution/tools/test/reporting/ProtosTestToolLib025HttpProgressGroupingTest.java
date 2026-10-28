@@ -63,7 +63,8 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
                     "server-admission",
                     "server-request",
                     "server-response",
-                    "server-lifecycle");
+                    "server-lifecycle",
+                    "host-construction");
 
     private static final String PRELUDE =
             "SuiteGraph: import(\"self:SuiteGraph\")\n"
@@ -78,7 +79,7 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
     private static final Pattern GROUP_START = Pattern.compile("^\\[([^\\]]+)\\] 0/(\\d+)$");
 
     @Test
-    void sevenCasePathsProduceExactlyTheSevenGroups() throws Exception {
+    void everySourceCasePathProducesExactlyItsGroup() throws Exception {
         List<String> expected = new ArrayList<>();
         StringBuilder source = new StringBuilder(PRELUDE).append("Array(");
         for (int index = 0; index < SOURCES.size(); index++) {
@@ -138,7 +139,7 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
             counts.merge(owner, 1, Integer::sum);
         }
 
-        // Exactly the seven groups, in plan order of first Case, no duplicates, none empty.
+        // Exactly one group per source, in plan order of first Case, no duplicates, none empty.
         List<String> expected = new ArrayList<>();
         for (String source : SOURCES) {
             expected.add(group(source));

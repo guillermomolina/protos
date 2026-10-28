@@ -64,12 +64,20 @@ import java.util.List;
  * </ul>
  *
  * <p>Like {@code ProtosRuntimeMetadataFacility}, the facility is a deferred standard initial
- * member of exactly its module: it is created only when an Actor-local instance of the module
+ * member of exactly its modules: it is created only when an Actor-local instance of a module
  * initializes, is captured lexically by the module source, and its bootstrap slot is removed, so
  * it is never module surface or a Prelude binding. It retains no Actor, Task or session state.
+ *
+ * <p>I126 (D216, HTTP.md §15): the same facility, with no additional operation, is also a deferred
+ * member of {@code std:http/Host}, whose construction validates options and limits with {@code
+ * ordinaryObject}, and of {@code std:http/internal/HostWorker}, whose Worker bootstrap applies
+ * {@code invokable} to the resolved handler binding.
  */
 public final class ProtosHttpAsyncFacility {
     public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:http/Server");
+    public static final ProtosModuleKey HOST_MODULE_KEY = new ProtosModuleKey("std:http/Host");
+    public static final ProtosModuleKey HOST_WORKER_MODULE_KEY =
+            new ProtosModuleKey("std:http/internal/HostWorker");
     public static final String BOOTSTRAP_SLOT = "_httpAsyncFacility";
 
     private ProtosHttpAsyncFacility() {}

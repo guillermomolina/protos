@@ -1,0 +1,243 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal Worker Actor bootstrap of std:http/Host (D216, HTTP.md §§15.3 to
+//! 15.6). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API.
+//!
+//! `start` is the `Actor.spawn` bootstrap binding. Its only initialization
+//! arguments are the delegated TcpAcceptor, the handler module specifier and
+//! binding name, the Worker's fixed quotas and the captured limits; no
+//! listener, connection, Closure, Future or module instance crosses into the
+//! Worker. The handler module is resolved inside this Actor, which owns its
+//! own instance of it.
+//!
+//! The Worker accepts by itself and services each accepted connection exactly
+//! once through `Server.serveOne.owning`, inside this Actor. Acceptance runs
+//! in lanes: a lane holds at most one accepted connection or one pending
+//! accept, so live lanes bound accepted plus pending connections. A lane is
+//! added only when every live lane is serving, never beyond the connection
+//! quota, so lanes follow concurrent demand. Each lane belongs to
+//! one of `pendingQuota` groups and a group has at most one pending accept,
+//! which bounds outstanding accepts. Whenever a lane is not serving, its group
+//! has a pending accept, so freed capacity resumes acceptance.
+//!
+//! Shutdown arrives as control messages: "drain" stops admission, and "abort"
+//! also cancels the outstanding accepts and admitted sessions. The host stops
+//! this Actor only after its acceptance service replied, so every owning
+//! cleanup runs while the Worker is still READY.
+
+Server: import("std:http/Server").Server
+
+/// Worker bootstrap: answers the Worker behavior. A missing handler module,
+/// missing own binding, or non-invokable binding signals, failing this Actor's
+/// initialization (HTTP.md §15.4).
+start: ((facility) => {
+    (acceptor, handlerModule, handlerBinding, connectionQuota, pendingQuota, limits) => {
+        module: import(handlerModule)
+        if(!module.hasSlot(handlerBinding)) {
+            Error().signal()
+        }
+        handler: module.slotValue(handlerBinding)
+        if(!facility.invokable(handler)) {
+            Error().signal()
+        }
+
+        admitting: true
+        serving: false
+        listenerFailed: false
+        cleanupFailed: false
+        lanes: 0
+        busy: 0
+        // The pending accept of each group, or null.
+        groups: Array()
+        while(groups.size() < pendingQuota) {
+            groups = Array(...groups, null)
+        }
+        // The service Future of the session each lane serves, or null.
+        sessions: Array()
+        while(sessions.size() < connectionQuota) {
+            sessions = Array(...sessions, null)
+        }
+
+        // Waits for a Future of this Actor, discarding its outcome.
+        settle: (future) => {
+            Error.handle(
+                () => {
+                    future.value()
+                },
+                (error) => {
+                    error
+                }
+            )
+        }
+
+        // The acceptance domain ended: the listener close cutover (or a
+        // cancellation) is the ordinary end of acceptance; any other accept
+        // failure is a listener failure reported to the host.
+        stopAccepting: (failure) => {
+            admitting = false
+            if((failure.parent() !== IOLifecycleError) && (failure.parent() !== Cancelled)) {
+                listenerFailed = true
+            }
+        }
+
+        // A connection delivered after admission stopped is closed by this
+        // Worker without invoking the handler (HTTP.md §15.6).
+        closeUnadmitted: (connection) => {
+            Error.handle(
+                () => {
+                    closing: connection.close()
+                    (() => {
+                        closing.value()
+                    }).ensure(() => {
+                        closing.value()
+                    })
+                },
+                (error) => {
+                    cleanupFailed = true
+                    error
+                }
+            )
+        }
+
+        // Requests cancellation of every Future held in futures.
+        cancelEach: (futures) => {
+            index: 0
+            while(index < futures.size()) {
+                if(futures[index] !== null) {
+                    futures[index].cancel()
+                }
+                index = index + 1
+            }
+        }
+
+        lane: null
+        // A lane's number indexes the session slot of the connection it
+        // serves.
+        startLane: (group) => {
+            slot: lanes
+            lanes = lanes + 1
+            (() => {
+                lane(group, slot)
+            }).future()
+        }
+
+        // Client, handler and request failures are retired by the owning
+        // session and stay local to this Worker (HTTP.md §15.10).
+        admit: (connection, slot) => {
+            if(admitting) {
+                busy = busy + 1
+                if((busy == lanes) && (lanes < connectionQuota)) {
+                    startLane(lanes % pendingQuota)
+                }
+                service: Server.serveOne.owning(connection, handler, limits)
+                sessions[slot] = service
+                settle(service)
+                sessions[slot] = null
+                busy = busy - 1
+            } else {
+                closeUnadmitted(connection)
+            }
+        }
+
+        lane = (group, slot) => {
+            while(admitting) {
+                current: groups[group]
+                if(current !== null) {
+                    settle(current)
+                    // The issuing lane may not have run yet; a settled accept
+                    // no longer occupies the group.
+                    if(groups[group] === current) {
+                        groups[group] = null
+                    }
+                } else {
+                    pending: acceptor.accept()
+                    groups[group] = pending
+                    connection: null
+                    failure: null
+                    Error.handle(
+                        () => {
+                            connection = pending.value()
+                        },
+                        (error) => {
+                            failure = error
+                            error
+                        }
+                    )
+                    if(groups[group] === pending) {
+                        groups[group] = null
+                    }
+                    if(failure !== null) {
+                        stopAccepting(failure)
+                    } else {
+                        admit(connection, slot)
+                    }
+                }
+            }
+        }
+
+        behavior: {
+            // Runs the acceptance service until admission ends and every
+            // admitted session has retired; answers "drained", "listener"
+            // or "cleanup".
+            serve: () => {
+                serving = true
+                initial: Array()
+                while(initial.size() < pendingQuota) {
+                    initial = Array(...initial, startLane(initial.size()))
+                }
+                index: 0
+                while(index < initial.size()) {
+                    settle(initial[index])
+                    index = index + 1
+                }
+                outcome: "drained"
+                if(cleanupFailed) {
+                    outcome = "cleanup"
+                }
+                if(listenerFailed) {
+                    outcome = "listener"
+                }
+                outcome
+            }
+            // Answers whether the acceptance service has been entered.
+            ready: () => {
+                serving
+            }
+            // Stops admission: connections delivered from now on are closed
+            // unserved; admitted sessions continue to completion.
+            drain: () => {
+                admitting = false
+                null
+            }
+            // Stops admission and requests cooperative cancellation of the
+            // outstanding accepts and admitted sessions while this Worker can
+            // still run their owning cleanup, which closes each connection
+            // before its service Future becomes terminal (HTTP.md §15.8).
+            abort: () => {
+                admitting = false
+                cancelEach(groups)
+                cancelEach(sessions)
+                null
+            }
+        }
+        behavior
+    }
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")
