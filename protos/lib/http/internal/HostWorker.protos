@@ -252,7 +252,7 @@ start: ((facility) => {
             Error().signal()
         }
         handler: module.slotValue(handlerBinding)
-        if(!facility.invokable(handler)) {
+        if(!facility.provides(handler, "call")) {
             Error().signal()
         }
         acceptance(acceptor, connectionQuota, pendingQuota, (connection) => {

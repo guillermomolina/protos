@@ -50,10 +50,10 @@ import java.util.List;
  *       per-read results; the public body itself is a borrowing standard {@code BufferedReader}
  *       over that source, whose operation-owned C-prime execution runs the Protos framer without
  *       a Task per read (§6, §8).
- *   <li>{@code provides(value, selector)}, {@code invokable(value)}, {@code closable(value)},
- *       {@code ordinaryObject(value)}
- *       and {@code isBytes(value)} are read-only representation probes used by admission and
- *       response validation; they never invoke guest code.
+ *   <li>{@code provides(value, selector)}, {@code closable(value)},
+ *       {@code ordinaryObject(value)} and {@code isBytes(value)} are read-only
+ *       representation probes used by admission and response validation;
+ *       they never invoke guest code.
  *   <li>{@code startService(body)} creates the one service Task (§2.3) as a structured child of
  *       the invoker's Task, or of the Actor root scope, and answers its Future. The Task enters
  *       {@code body} even when cancelled before its first ordinary instruction.
@@ -72,8 +72,8 @@ import java.util.List;
  * member of {@code std:http/Host}, whose construction validates options and limits with {@code
  * ordinaryObject} and whose lifecycle runs its completion Task with {@code startService} and
  * {@code enterService}, so that its cleanup also runs when cancelled before starting, and of
- * {@code std:http/internal/HostWorker}, whose Worker bootstrap applies {@code invokable} to the
- * resolved handler binding.
+ * {@code std:http/internal/HostWorker}, whose Worker bootstrap uses
+ * {@code provides(handler, "call")} to validate the resolved handler binding.
  *
  * <p>I127 (D218-B, HTTP.md §16): the same facility, with no additional operation, is also a
  * deferred member of {@code std:http/Client}. Its single-exchange session uses {@code failed},
@@ -97,7 +97,6 @@ public final class ProtosHttpAsyncFacility {
         operation(facility, "failed", 1, ProtosHttpAsyncFacility::failed);
         operation(facility, "resolved", 1, ProtosHttpAsyncFacility::resolved);
         operation(facility, "provides", 2, ProtosHttpAsyncFacility::provides);
-        operation(facility, "invokable", 1, ProtosHttpAsyncFacility::invokable);
         operation(facility, "closable", 1, ProtosHttpAsyncFacility::closable);
         operation(facility, "ordinaryObject", 1, ProtosHttpAsyncFacility::ordinaryObject);
         operation(facility, "isBytes", 1, ProtosHttpAsyncFacility::isBytes);
@@ -145,11 +144,6 @@ public final class ProtosHttpAsyncFacility {
             throw invalid(activation);
         }
         return bool(hasCallable(supplied.get(0), selector.value(), activation));
-    }
-
-    /** CALLABLES.md "Callability inspection": lookup of {@code call} selects a Closure. */
-    private static Object invokable(ProtosActivation activation, List<?> supplied) {
-        return bool(hasCallable(supplied.get(0), "call", activation));
     }
 
     /**

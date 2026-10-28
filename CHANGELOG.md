@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.411-SNAPSHOT
+
+- `I129-A` (#974, D219-B): remove the redundant private `invokable`
+  operation from `ProtosHttpAsyncFacility`.
+  - `std:http/Server` admission, the `std:http/internal/HostWorker`
+    bootstrap and `std:http/Client` admission now validate callability with
+    `provides(value, "call")`, which uses the same non-invoking delegated
+    Closure lookup. Observable behavior is unchanged.
+  - The facility keeps exactly `failed`, `resolved`, `provides`,
+    `closable`, `ordinaryObject`, `isBytes`, `startService` and
+    `enterService`.
+
 ## 0.3.410-SNAPSHOT
 
 - `I127` (#970, D218-B): add the `std:http/Client` single-exchange HTTP/1.1

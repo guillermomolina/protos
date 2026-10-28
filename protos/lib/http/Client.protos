@@ -51,7 +51,7 @@ Client: ((facility) => {
             valid = facility.closable(duplex)
         }
         if(valid) {
-            valid = facility.invokable(onResponse)
+            valid = facility.provides(onResponse, "call")
         }
         captured: null
         if(valid) {

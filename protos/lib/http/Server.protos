@@ -54,7 +54,7 @@ Server: ((facility) => {
             valid = facility.closable(duplex)
         }
         if(valid) {
-            valid = facility.invokable(handler)
+            valid = facility.provides(handler, "call")
         }
         captured: null
         if(valid) {
