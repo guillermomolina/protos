@@ -222,6 +222,43 @@ public final class ProtosTask {
         return cancellationPhase;
     }
 
+    /**
+     * D121: enters the cleanup of a Bytecode-lowered {@code ensure} that the delivered
+     * cancellation of this Task is crossing. A protocol {@code ensure} publishes the same extent as
+     * its dynamic-control frame instead. The extent belongs to this Task only, so it follows its
+     * nested synchronous calls and the suspension and resumption of its continuation, and no other
+     * Task, callback or producer inherits it.
+     */
+    public synchronized void enterCancellationCleanupExtentForRuntime() {
+        if (cancellationPhase != CancellationPhase.UNWINDING) {
+            throw new IllegalStateException(
+                    "cancellation cleanup extent requires a delivered cancellation unwind");
+        }
+        // The depth lives in the lazily materialized dynamic-control state: a Task that never
+        // enters such a cleanup reserves nothing for it.
+        dynamicControlState().enterCancellationCleanupExtent();
+    }
+
+    /** Leaves the extent entered by {@link #enterCancellationCleanupExtentForRuntime()}. */
+    public synchronized void exitCancellationCleanupExtentForRuntime() {
+        if (dynamicControlState == null) {
+            throw new IllegalStateException("no cancellation cleanup extent to leave");
+        }
+        dynamicControlState.exitCancellationCleanupExtent();
+    }
+
+    /**
+     * Whether this Task is executing inside a Bytecode cancellation cleanup extent while that
+     * cancellation is still unwinding. A later transfer that superseded the cancellation ends the
+     * authority even before the enclosing extents are left; UNWINDING alone, such as during the
+     * final child drain, never grants it.
+     */
+    public synchronized boolean inCancellationCleanupExtentForRuntime() {
+        return cancellationPhase == CancellationPhase.UNWINDING
+                && dynamicControlState != null
+                && dynamicControlState.hasCancellationCleanupExtent();
+    }
+
     public synchronized Optional<WaitDependency> waitDependency() {
         return Optional.ofNullable(waitDependency);
     }

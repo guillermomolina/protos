@@ -297,6 +297,24 @@ public final class ProtosDynamicControlState {
         return false;
     }
 
+    /** I126 (D121): open Bytecode-lowered cancellation ensure cleanups of the owning Task. */
+    private int cancellationCleanupExtents;
+
+    void enterCancellationCleanupExtent() {
+        cancellationCleanupExtents++;
+    }
+
+    void exitCancellationCleanupExtent() {
+        if (cancellationCleanupExtents == 0) {
+            throw new IllegalStateException("no cancellation cleanup extent to leave");
+        }
+        cancellationCleanupExtents--;
+    }
+
+    boolean hasCancellationCleanupExtent() {
+        return cancellationCleanupExtents > 0;
+    }
+
     /** D121 provenance for the exact Task flow executing cancellation ensure cleanup. */
     public boolean hasActiveCancellationEnsureCleanupForRuntime() {
         for (Frame frame : framesNewestFirst) {

@@ -32,7 +32,10 @@ The optional Standard Library HTTP/1.1 single-request server `std:http/Server`
 is owned by `HTTP.md`. It is built only on the existing `ByteReadable` /
 `ByteWritable` (and `Closable`) capabilities, which a `TcpConnection` provides;
 it adds no `Network` operation and does not change TCP authority, permissions,
-or transferability. All other HTTP facilities remain deferred.
+or transferability. The optional continuous host `std:http/Host` is likewise
+owned by `HTTP.md` §15: it consumes a caller-supplied `TcpListener` and the
+`TcpAcceptor` delegation of §11, acquires no `Network`, and adds no `Network`
+operation. All other HTTP facilities remain deferred.
 
 No network authority is ambient by implication. Importing a module, knowing an
 `IpAddress`, possessing `Process`, creating an Actor, or creating P work does not

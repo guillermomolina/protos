@@ -7,6 +7,44 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.409-SNAPSHOT
+
+- `I126-B` (#967, D216): complete `std:http/Host` failure propagation,
+  custody and cleanup, and release connections when a Worker terminates
+  (spec 0.1.475, editorial).
+  - An unexpected accept failure or a failed mandatory connection close
+    aborts its Worker at once: admission stops, pending accepts and
+    sessions are cancelled cooperatively, their owning cleanup completes,
+    and the acceptance service reports "listener" or "cleanup" without an
+    external drain or abort. The host turns these into fresh `HostError`
+    kinds "listener" and "shutdown"; a mandatory cleanup failure
+    supersedes an earlier failure, as in `ensure`.
+  - New internal `HostConnection` keeps the custody of each delivered
+    connection: the owning session's close is observed directly, so
+    request, handler and ordinary client I/O failures stay local while a
+    failed close is never masked as a client disconnection. The public
+    `Server.serveOne.owning` contract is unchanged.
+  - `HostLifecycle` guards Worker creation, stops each Worker at most once,
+    ignores its own watcher cancellation, and runs its completion through
+    the existing service-Task entry so that abort, Worker termination and
+    the single listener close also run when the owning Task is cancelled.
+    The Worker acceptance service and the Worker spawning are extracted
+    into internal functions shared by production and the deterministic
+    Protos tests.
+  - Runtime (D121): a Bytecode-lowered `ensure` now publishes its
+    cancellation cleanup as its Task's termination-cleanup extent, stored
+    lazily in the Task's dynamic-control state, so a `close()` committed
+    in that cleanup after an Actor's termination cutover is admitted.
+    `UNWINDING` alone, a superseded cancellation, another Task and an
+    ordinary close remain unauthorized. The generated-bytecode BCI
+    baseline records the renamed and added proven dispatch sites.
+  - `spec/io/NETWORK.md` §1 and `spec/semantics/ERRORS.md` now reference
+    `std:http/Host` and `HostError` (editorial, spec 0.1.475).
+  - Tests: real NIO hosting, Worker stop and fatal termination with client
+    EOF, D121 cleanup-close regressions, and deterministic Protos tests for
+    fatal accept failure, late delivery, partial construction, listener
+    and connection close failures, and their precedence.
+
 ## 0.3.408-SNAPSHOT
 
 - `I126-A` (#967, D216): add `std:http/Host` continuous HTTP/1.1 hosting

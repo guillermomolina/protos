@@ -427,6 +427,7 @@ standard prototype listed above.
 | Standard Library prototype | Immediate parent | Exporting module / owner |
 | --- | --- | --- |
 | `HttpError` | `Error` | `std:http/Server` / `../io/HTTP.md` §12 |
+| `HostError` | `Error` | `std:http/Host` / `../io/HTTP.md` §15.10 |
 
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already

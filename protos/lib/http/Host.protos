@@ -55,7 +55,21 @@ Host: ((facility) => {
             invalid: InvalidIOArgument {}
             invalid.signal()
         }
-        HostLifecycle.start(HostError, listener, acceptors, handlerModule, handlerBinding, config)
+        // Only the acceptor, the handler Strings, the quotas and the
+        // captured limits cross into a Worker (HTTP.md §15.4).
+        spawnWorker: (acceptor, connectionQuota, pendingQuota) => {
+            Actor.spawn(
+                "std:http/internal/HostWorker",
+                "start",
+                acceptor,
+                handlerModule,
+                handlerBinding,
+                connectionQuota,
+                pendingQuota,
+                config.limits
+            )
+        }
+        HostLifecycle.start(facility, HostError, listener, acceptors, spawnWorker, config)
     }
 
     host: {

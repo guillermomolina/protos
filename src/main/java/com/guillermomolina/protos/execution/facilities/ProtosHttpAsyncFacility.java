@@ -70,8 +70,10 @@ import java.util.List;
  *
  * <p>I126 (D216, HTTP.md §15): the same facility, with no additional operation, is also a deferred
  * member of {@code std:http/Host}, whose construction validates options and limits with {@code
- * ordinaryObject}, and of {@code std:http/internal/HostWorker}, whose Worker bootstrap applies
- * {@code invokable} to the resolved handler binding.
+ * ordinaryObject} and whose lifecycle runs its completion Task with {@code startService} and
+ * {@code enterService}, so that its cleanup also runs when cancelled before starting, and of
+ * {@code std:http/internal/HostWorker}, whose Worker bootstrap applies {@code invokable} to the
+ * resolved handler binding.
  */
 public final class ProtosHttpAsyncFacility {
     public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:http/Server");

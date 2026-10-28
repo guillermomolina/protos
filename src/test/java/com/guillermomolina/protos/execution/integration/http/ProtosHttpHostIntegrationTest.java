@@ -57,6 +57,12 @@ final class ProtosHttpHostIntegrationTest {
             """
             active: 0
             peak: 0
+            // Module-instance state: the constructing Actor's own instance
+            // sets it; each Worker instance keeps its initial value.
+            marker: "worker"
+            mark: (value) => {
+                marker = value
+            }
             digit: (count) => {
                 bytes: Encoding.Latin1.encode("")
                 bytes.add(48 + count)
@@ -70,6 +76,17 @@ final class ProtosHttpHostIntegrationTest {
                 if(Encoding.Latin1.decode(request.target) == "/boom") {
                     active = active - 1
                     Error().signal()
+                }
+                if(Encoding.Latin1.decode(request.target) == "/crash") {
+                    // The Worker behavior has no "crash": that later turn ends
+                    // with an unhandled Error, fatal to the Worker (ACTORS.md
+                    // §24C), and its sessions unwind by cancellation.
+                    Actor.current().send("crash")
+                }
+                if(Encoding.Latin1.decode(request.target) == "/stop") {
+                    // An ordinary graceful self-stop of the Worker (ACTORS.md
+                    // §24A): its other sessions are cancelled cooperatively.
+                    Actor.current().stop()
                 }
                 if(request.method == "POST") {
                     request.body.read(1).value()
@@ -85,6 +102,14 @@ final class ProtosHttpHostIntegrationTest {
             // CALLABLES.md "Callability inspection": every object inherits the
             // Closure-valued Object.call, so only a nearer non-Closure call
             // makes a binding non-invokable.
+            showMarker: (request) => {
+                response: {
+                    status: 200
+                    headers: []
+                    body: Encoding.Latin1.encode(marker)
+                }
+                response
+            }
             notCallable: {
                 call: 42
             }
@@ -223,6 +248,116 @@ final class ProtosHttpHostIntegrationTest {
                 derived: base {}
                 host = http.Host.owning(listener, "app:site", "handle", derived)
                 host.ready().value() === host
+            }
+            startPending: (workerCount, connectionLimit, pendingLimit) => {
+                options: {
+                    workers: workerCount
+                    maxConnections: connectionLimit
+                    maxPendingAccepts: pendingLimit
+                }
+                host = http.Host.owning(listener, "app:site", "handle", options)
+                host.ready().value() === host
+            }
+            // HTTP.md §15.7: a shutdown while STARTING precludes RUNNING, so
+            // readiness fails, while the requested shutdown itself completes.
+            shutdownWhileStarting: (mode) => {
+                host = http.Host.owning(listener, "app:site", "handle", { workers: 2 })
+                requested: host.shutdown(mode)
+                repeated: host.shutdown("drain")
+                notReady: http.HostError.handle(
+                    () => {
+                        host.ready().value()
+                        false
+                    },
+                    (error) => { error.kind == "startup" }
+                )
+                notReady && (requested.value() === host) && (repeated.value() === host) && (host.termination().value() === host)
+            }
+            repeatedAbort: () => {
+                first: host.shutdown("abort")
+                second: host.shutdown("abort")
+                third: host.shutdown("drain")
+                (first !== second) && (first.value() === host) && (second.value() === host) && (third.value() === host)
+            }
+            // Fails every observer with a fresh HostError of kind; answers
+            // false when any observer resolves instead.
+            terminatedWith: (kind) => {
+                kinds: []
+                errors: []
+                record: (future) => {
+                    http.HostError.handle(
+                        () => {
+                            future.value()
+                        },
+                        (error) => {
+                            kinds = Array(...kinds, error.kind)
+                            errors = Array(...errors, error)
+                            error
+                        }
+                    )
+                }
+                record(host.termination())
+                record(host.shutdown("drain"))
+                record(host.termination())
+                fresh: (errors.size() == 3) && (errors[0] !== errors[1]) && (errors[1] !== errors[2])
+                fresh && (kinds[0] == kind) && (kinds[1] == kind) && (kinds[2] == kind)
+            }
+            startModule: (moduleSpecifier, binding) => {
+                host = http.Host.owning(listener, moduleSpecifier, binding, null)
+                hostFailureKinds()
+            }
+            // The constructing Actor's own app:site instance is not the
+            // Workers' instance, and no Closure is accepted in place of the
+            // module and binding Strings.
+            isolatedModule: () => {
+                site: import("app:site")
+                site.mark("creator")
+                closureRejected: InvalidIOArgument.handle(
+                    () => {
+                        http.Host.owning(listener, site.handle, "handle", null)
+                        false
+                    },
+                    (error) => { true }
+                )
+                host = http.Host.owning(listener, "app:site", "showMarker", { workers: 2 })
+                closureRejected && (host.ready().value() === host)
+            }
+            // FUTURES_AND_TASKS.md §24: the hosting Tasks belong to the Task
+            // that constructed the host. Cancelling an observer leaves the host
+            // running; cancelling that owning Task aborts and releases it.
+            owner: null
+            startOwned: () => {
+                owner = (() => {
+                    host = http.Host.owning(listener, "app:site", "handle", null)
+                    host.termination().value()
+                }).future()
+                0
+            }
+            ownedReady: () => {
+                // Suspends once so that the owning Task can run first.
+                (() => { null }).future().value()
+                (host !== null) && (host.ready().value() === host)
+            }
+            cancelObserver: () => {
+                observer: host.termination()
+                observer.cancel()
+                Cancelled.handle(
+                    () => {
+                        observer.value()
+                        false
+                    },
+                    (error) => { true }
+                )
+            }
+            cancelOwner: () => {
+                owner.cancel()
+                Cancelled.handle(
+                    () => {
+                        owner.value()
+                        false
+                    },
+                    (error) => { true }
+                )
             }
             closedListenerRejected: () => {
                 listener.close().value()
@@ -373,7 +508,152 @@ final class ProtosHttpHostIntegrationTest {
         }
     }
 
+    @Test
+    void concurrentSessionsInOneWorkerInterleaveWhileOneStaysBlocked() throws Exception {
+        try (Fixture x = new Fixture()) {
+            // One Worker, two connection units and one pending accept: lanes follow demand
+            // beyond the single pending accept.
+            assertTrue(x.call("startPending", 1, 2, 1));
+            try (Socket blocked = x.connect(); Socket other = x.connect()) {
+                send(blocked, post());
+                send(other, post());
+                // Both units are taken, so both sessions are admitted; the blocked one does
+                // not stop the other from completing.
+                send(other, "x");
+                assertEquals(response('2'), readAll(other), "two sessions ran concurrently");
+                // The retired unit admits a later client while the first is still blocked.
+                assertEquals(response('2'), x.get("/"));
+                send(blocked, "x");
+                assertEquals(response('2'), readAll(blocked));
+            }
+            assertTrue(x.call("drain"));
+        }
+    }
+
+    @Test
+    void successiveConnectionsAreServedOneAfterAnother() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 2, 4));
+            for (int index = 0; index < 8; index++) {
+                assertEquals(response('1'), x.get("/"), "connection " + index);
+            }
+            assertTrue(x.call("drain"));
+            x.assertRefused();
+        }
+    }
+
+    @Test
+    void shutdownWhileStartingPrecludesReadinessAndReleasesTheListener() throws Exception {
+        for (String mode : new String[] {"drain", "abort"}) {
+            try (Fixture x = new Fixture()) {
+                assertTrue(x.call("shutdownWhileStarting", mode), mode);
+                assertTrue(x.call("listenerClosed"), mode);
+            }
+        }
+    }
+
+    @Test
+    void repeatedShutdownRequestsObserveOneLifecycle() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 1, 4));
+            try (Socket held = x.connect()) {
+                send(held, post());
+                x.awaitAdmitted();
+                assertTrue(x.call("repeatedAbort"));
+                assertEquals("", readAll(held));
+            }
+            assertTrue(x.call("afterTermination"));
+            assertTrue(x.call("listenerClosed"));
+        }
+    }
+
+    @Test
+    void anUnexpectedWorkerTerminationAbortsTheHostWithWorkerKind() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 2, 4));
+            try (Socket crashing = x.connect()) {
+                send(crashing, "GET /crash HTTP/1.1\r\nHost: a\r\n\r\n");
+                assertTrue(
+                        x.call("terminatedWith", "worker"), "fresh HostError \"worker\" per observer");
+                assertTrue(x.call("listenerClosed"), "the remaining Worker was aborted");
+                x.assertRefused();
+                // Host termination waited for the failed Worker, whose termination waited for
+                // the session's owning cleanup: the connection was released, so the client sees
+                // EOF (HTTP.md §15.6). The socket timeout only bounds the wait; a timeout fails.
+                readAll(crashing);
+            }
+        }
+    }
+
+    @Test
+    void aWorkerStopReleasesTheConnectionOfASessionSuspendedInIo() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 1, 4));
+            try (Socket parked = x.connect()) {
+                // The session is suspended reading its one-octet body.
+                send(parked, post());
+                x.awaitAdmitted();
+                try (Socket stopping = x.connect()) {
+                    send(stopping, "GET /stop HTTP/1.1\r\nHost: a\r\n\r\n");
+                    assertTrue(
+                            x.call("terminatedWith", "worker"),
+                            "fresh HostError \"worker\" per observer");
+                    assertTrue(x.call("listenerClosed"));
+                    x.assertRefused();
+                    // The Worker terminated only after the cancellation cleanup of each session
+                    // closed its connection (D121): both clients see EOF. A timeout fails.
+                    assertEquals("", readAll(parked), "the parked session was closed unanswered");
+                    readAll(stopping);
+                }
+            }
+        }
+    }
+
+    @Test
+    void handlerModulesAreResolvedPerWorkerUnderTheExistingModuleRules() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("isolatedModule"));
+            assertEquals(marker("worker"), x.get("/"), "a Worker never sees the creator's instance");
+            assertEquals(marker("worker"), x.get("/"));
+            assertTrue(x.call("abort"));
+        }
+        // MODULES.md: the specifier is resolved relative to the importing module, here
+        // std:http/internal/HostWorker, never rebased onto the caller. The resolver rejects
+        // it there, which is an asynchronous startup failure.
+        for (String specifier : new String[] {"./site", "app:missing"}) {
+            try (Fixture x = new Fixture()) {
+                assertTrue(x.call("startModule", specifier, "handle"), specifier);
+                assertTrue(x.call("listenerClosed"), specifier);
+            }
+        }
+    }
+
+    @Test
+    void observerCancellationIsLocalButOwnerCancellationReleasesTheHost() throws Exception {
+        try (Fixture x = new Fixture()) {
+            x.member("startOwned").execute();
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SAFETY_MILLIS);
+            while (!x.call("ownedReady")) {
+                if (System.nanoTime() > deadline) {
+                    fail("the owned host did not become ready");
+                }
+            }
+            assertTrue(x.call("cancelObserver"));
+            assertEquals(response('1'), x.get("/"), "a cancelled observer leaves the host running");
+            assertTrue(x.call("cancelOwner"), "the owning Task ends cancelled after cleanup");
+            assertTrue(x.call("listenerClosed"), "its cancellation still released the listener");
+            x.assertRefused();
+        }
+    }
+
     // ------------------------------------------------------------ fixture
+
+    private static String marker(String value) {
+        return "HTTP/1.1 200 \r\nContent-Length: "
+                + value.length()
+                + "\r\nConnection: close\r\n\r\n"
+                + value;
+    }
 
     private static String response(char peak) {
         return "HTTP/1.1 200 \r\nContent-Length: 1\r\nConnection: close\r\n\r\n" + peak;

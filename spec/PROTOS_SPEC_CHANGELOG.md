@@ -23,6 +23,17 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.475] - 2026-10-28
+
+### I126 — Editorial reconciliation of D216 references
+- `spec/io/NETWORK.md` §1: names `std:http/Host` as the `HTTP.md` §15 owner
+  of continuous hosting over a caller-supplied listener and delegated
+  `TcpAcceptor`, instead of listing all non-`Server` HTTP facilities as
+  deferred.
+- `spec/semantics/ERRORS.md`: lists the `HostError` Standard Library
+  prototype (`std:http/Host`, `HTTP.md` §15.10) beside `HttpError`.
+- Editorial only: both entries restate `HTTP.md` §15; no semantics change.
+
 ## [0.1.474] - 2026-10-27
 
 ### D216 — Optional continuous HTTP/1.1 hosting

@@ -39,6 +39,50 @@ class ProtosDynamicControlStateTest {
         assertNotSame(parentState, child.dynamicControlState());
     }
 
+    /**
+     * I126 (D121): the Bytecode cancellation-cleanup extent is the exact authority, not the
+     * UNWINDING phase. An unwinding Task outside every extent, another Task, and a cleanup whose
+     * cancellation was superseded are not authorized; nested extents keep the authority until the
+     * outermost one is left.
+     */
+    @Test
+    void onlyAnOpenCancellationCleanupExtentOfTheUnwindingTaskIsAuthorized() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        java.util.List<Boolean> observed = new java.util.ArrayList<>();
+        ProtosTask[] other = new ProtosTask[1];
+        ProtosTask task =
+                domain.runFreshRootTaskDirectly(
+                        current -> {
+                            current.requestCancellation();
+                            observed.add(current.beginContinuationCancellationUnwindForRuntime());
+                            // Point 7: UNWINDING alone grants nothing.
+                            observed.add(current.inCancellationCleanupExtentForRuntime());
+                            current.enterCancellationCleanupExtentForRuntime();
+                            observed.add(current.inCancellationCleanupExtentForRuntime());
+                            // A nested cleanup keeps it; leaving the inner one keeps the outer.
+                            current.enterCancellationCleanupExtentForRuntime();
+                            current.exitCancellationCleanupExtentForRuntime();
+                            observed.add(current.inCancellationCleanupExtentForRuntime());
+                            // Another Task never inherits it.
+                            other[0] = domain.createTask(null, ignored -> {});
+                            observed.add(other[0].inCancellationCleanupExtentForRuntime());
+                            // A later transfer superseding the cancellation ends it at once.
+                            observed.add(current.supersedeCancellationUnwind());
+                            observed.add(current.inCancellationCleanupExtentForRuntime());
+                            current.exitCancellationCleanupExtentForRuntime();
+                            observed.add(current.inCancellationCleanupExtentForRuntime());
+                            current.complete("done");
+                        });
+
+        assertEquals(List.of(true, false, true, true, false, true, false, false), observed);
+        // A Task that never entered such a cleanup materialized no state for it.
+        assertTrue(other[0].dynamicControlStateIfPresent().isEmpty());
+        // Leaving more extents than were entered is a runtime defect, never ignored.
+        assertThrows(IllegalStateException.class, task::exitCancellationCleanupExtentForRuntime);
+        // Entering requires a delivered cancellation unwind.
+        assertThrows(IllegalStateException.class, other[0]::enterCancellationCleanupExtentForRuntime);
+    }
+
     @Test
     void replayInvocationIdentityReusesExactlyOneFrame() {
         ProtosDynamicControlState state = new ProtosDynamicControlState();

@@ -10126,14 +10126,41 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Snapshots, on entry to an {@code ensure} cleanup, whether a delivered cancellation is
+     * unwinding through it. Only then is the cleanup also published as its Task's D121
+     * termination-cleanup extent, left by {@link ExitCancellationCleanupExtent}; a cleanup entered
+     * by any other transfer materializes nothing.
+     */
     @Operation
-    public static final class IsCancellationUnwindActive {
+    public static final class BeginEnsureCleanup {
         @Specialization
         public static boolean perform(ProtosActivation activation) {
             ProtosTask task = activation.task().orElse(null);
-            return task != null
-                    && task.cancellationPhase()
-                            == ProtosTask.CancellationPhase.UNWINDING;
+            if (task == null
+                    || task.cancellationPhase()
+                            != ProtosTask.CancellationPhase.UNWINDING) {
+                return false;
+            }
+            task.enterCancellationCleanupExtentForRuntime();
+            return true;
+        }
+    }
+
+    /** Leaves the extent opened by {@link BeginEnsureCleanup} on every cleanup exit. */
+    @Operation
+    public static final class ExitCancellationCleanupExtent {
+        @Specialization
+        public static void perform(
+                ProtosActivation activation,
+                boolean cancellationWasUnwindingBeforeCleanup) {
+            if (cancellationWasUnwindingBeforeCleanup) {
+                activation.task()
+                        .orElseThrow(
+                                () -> new IllegalStateException(
+                                        "cancellation cleanup requires a task"))
+                        .exitCancellationCleanupExtentForRuntime();
+            }
         }
     }
 

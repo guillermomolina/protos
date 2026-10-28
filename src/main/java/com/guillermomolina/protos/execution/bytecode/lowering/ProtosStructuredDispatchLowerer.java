@@ -552,10 +552,24 @@ final class ProtosStructuredDispatchLowerer {
                      */
                     builder.beginStoreLocal(
                             structuredEnsureCancellationWasUnwinding);
-                    builder.beginIsCancellationUnwindActive();
+                    builder.beginBeginEnsureCleanup();
                     emitActivation.accept(builder);
-                    builder.endIsCancellationUnwindActive();
+                    builder.endBeginEnsureCleanup();
                     builder.endStoreLocal();
+
+                    /*
+                     * D121: a cleanup run by that cancellation was published as
+                     * its Task's termination-cleanup extent; it is left here,
+                     * normally or by a later transfer.
+                     */
+                    builder.beginTryFinally(
+                            () -> {
+                                builder.beginExitCancellationCleanupExtent();
+                                emitActivation.accept(builder);
+                                builder.emitLoadLocal(
+                                        structuredEnsureCancellationWasUnwinding);
+                                builder.endExitCancellationCleanupExtent();
+                            });
 
                     /*
                      * TryCatch is deliberately inside the generated finally.
@@ -591,6 +605,7 @@ final class ProtosStructuredDispatchLowerer {
                     builder.endBlock();
 
                     builder.endTryCatch();
+                    builder.endTryFinally();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredChild);

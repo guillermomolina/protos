@@ -1,0 +1,121 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal accepted-connection custody of std:http/Host (D216, HTTP.md
+//! §§15.6, 15.10). This module is an unpublished implementation artifact,
+//! not an approved Standard Library API.
+//!
+//! A Worker either admits a delivered connection to exactly one
+//! `Server.serveOne.owning` session or releases it unserved; both report
+//! whether the mandatory connection close failed. The provenance comes from
+//! the close operation itself: the session is given a delegating custody
+//! duplex that records the one close it requests, so request, handler and
+//! ordinary client I/O failures, which the session retires locally, are never
+//! taken for a close failure, and a close failure is never masked as a client
+//! disconnection. The session Future and its Error precedence are unchanged.
+
+// Answers whether waiting for the settled close Future observes a failure.
+closeFailed: (closing) => {
+    failed: false
+    Error.handle(
+        () => {
+            closing.value()
+        },
+        (error) => {
+            failed = true
+            error
+        }
+    )
+    failed
+}
+
+/// Admits connection to exactly one Server.serveOne.owning session and
+/// answers its custody: `service` is the session Future, which a Worker may
+/// cancel, and `retire()` awaits that session, also through a cancellation of
+/// the caller, and answers whether the mandatory close failed. The service
+/// Task enters its body even when cancelled before starting, so its owning
+/// cleanup always closes the connection.
+admit: (Server, connection, handler, limits) => {
+    requested: false
+    closing: null
+    duplex: {
+        read: (maxBytes) => {
+            connection.read(maxBytes)
+        }
+        write: (bytes) => {
+            connection.write(bytes)
+        }
+        close: () => {
+            requested = true
+            closing = connection.close()
+            closing
+        }
+    }
+    service: Server.serveOne.owning(duplex, handler, limits)
+    settle: () => {
+        Error.handle(
+            () => {
+                service.value()
+            },
+            (error) => {
+                error
+            }
+        )
+    }
+    custody: {
+        service: service
+        retire: () => {
+            failed: false
+            (() => {
+                settle()
+            }).ensure(() => {
+                settle()
+                if(requested) {
+                    // A close that signalled synchronously produced no Future.
+                    failed = (closing === null) || closeFailed(closing)
+                } else {
+                    // The owning session always closes; custody is kept
+                    // regardless.
+                    failed = release(connection)
+                }
+            })
+            failed
+        }
+    }
+    custody
+}
+
+/// Closes a delivered connection that is no longer admitted, without any
+/// handler, and answers whether that close failed (HTTP.md §15.6).
+release: (connection) => {
+    failed: false
+    Error.handle(
+        () => {
+            closing: connection.close()
+            (() => {
+                failed = closeFailed(closing)
+            }).ensure(() => {
+                if(!failed) {
+                    failed = closeFailed(closing)
+                }
+            })
+        },
+        (error) => {
+            failed = true
+            error
+        }
+    )
+    failed
+}

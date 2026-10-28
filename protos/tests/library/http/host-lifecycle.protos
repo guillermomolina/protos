@@ -1,0 +1,251 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+HostError: import("std:http/Host").HostError
+HostLifecycle: import("std:http/internal/HostLifecycle")
+
+// HTTP.md §§15.3, 15.7, 15.10: the production host lifecycle over in-memory
+// Workers and listener of this Actor. A synchronous Worker creation failure and
+// a failed listener close cannot be produced on demand with real Actors and
+// TCP, so they are driven through the lifecycle's own spawn and close
+// boundaries. The private asynchronous bridge is replaced by its two
+// operations over ordinary Tasks.
+
+bridge: {
+    startService: (body) => {
+        body.future()
+    }
+    enterService: () => {
+        null
+    }
+}
+
+// A Future pending until opened; opening twice is a no-op.
+latch: () => {
+    blocker: (() => {
+        Actor.current().termination().value()
+    }).future()
+    opened: (() => {
+        Error.handle(
+            () => {
+                blocker.value()
+            },
+            (error) => {
+                error
+            }
+        )
+        null
+    }).future()
+    gate: {
+        future: opened
+        open: () => {
+            blocker.cancel()
+        }
+    }
+    gate
+}
+
+// An in-memory Worker. Its acceptance service answers outcome once "drain"
+// or "abort" arrives, or at once when immediate; stop() terminates it.
+workerOf: (outcome, immediate) => {
+    serving: latch()
+    terminated: latch()
+    aborts: 0
+    drains: 0
+    stops: 0
+    if(immediate) {
+        serving.open()
+    }
+    worker: {
+        request: (selector) => {
+            answer: null
+            if(selector == "serve") {
+                answer = (() => {
+                    serving.future.value()
+                    outcome
+                }).future()
+            }
+            if(selector == "ready") {
+                answer = (() => { true }).future()
+            }
+            answer
+        }
+        send: (selector) => {
+            if(selector == "abort") {
+                aborts = aborts + 1
+            }
+            if(selector == "drain") {
+                drains = drains + 1
+            }
+            serving.open()
+        }
+        stop: () => {
+            stops = stops + 1
+            terminated.open()
+        }
+        termination: () => {
+            terminated.future
+        }
+        abortCount: () => {
+            aborts
+        }
+        drainCount: () => {
+            drains
+        }
+        stopCount: () => {
+            stops
+        }
+    }
+    worker
+}
+
+// A listener whose one close answers closeFailure as its failed outcome.
+listenerOf: (closeFailure) => {
+    closes: 0
+    listener: {
+        close: () => {
+            closes = closes + 1
+            (() => {
+                if(closeFailure !== null) {
+                    closeFailure.signal()
+                }
+                null
+            }).future()
+        }
+        closeCount: () => {
+            closes
+        }
+    }
+    listener
+}
+
+configOf: (workers) => {
+    config: {
+        workers: workers
+        maxConnections: workers
+        maxPendingAccepts: workers
+        limits: null
+    }
+    config
+}
+
+startWith: (listener, workers) => {
+    spawned: 0
+    HostLifecycle.start(bridge, HostError, listener, Array(...workers), (acceptor, connectionQuota, pendingQuota) => {
+        worker: workers[spawned]
+        spawned = spawned + 1
+        if(worker === null) {
+            Error().signal()
+        }
+        worker
+    }, configOf(workers.size()))
+}
+
+// Answers the HostError that observing future signals; any other outcome
+// fails the assertion.
+hostErrorOf: (future) => {
+    observed: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            observed = error
+            error
+        }
+    )
+    Assertions.require((observed !== null) && (observed.parent() === HostError))
+    observed
+}
+
+tests: [
+    Test("M: a synchronous failure creating the second Worker cleans up the first", () => {
+        first: workerOf("drained", false)
+        listener: listenerOf(null)
+        host: startWith(listener, [first, null])
+        notReady: hostErrorOf(host.ready())
+        terminated: hostErrorOf(host.termination())
+        Assertions.require((notReady.kind == "startup") && (terminated.kind == "startup"))
+        Assertions.require(notReady !== terminated)
+        // The first Worker was aborted, stopped once and observed terminated;
+        // the listener was closed exactly once.
+        Assertions.require((first.abortCount() == 1) && (first.stopCount() == 1))
+        Assertions.require(listener.closeCount() == 1)
+        // Later requests only observe the established result.
+        Assertions.require(hostErrorOf(host.shutdown("abort")).kind == "startup")
+        Assertions.require((first.abortCount() == 1) && (first.stopCount() == 1) && (listener.closeCount() == 1))
+    }),
+    Test("S: a failed listener close fails a drain with kind shutdown", () => {
+        worker: workerOf("drained", false)
+        closeError: IOError {}
+        listener: listenerOf(closeError)
+        host: startWith(listener, [worker])
+        Assertions.require(host.ready().value() === host)
+        failure: hostErrorOf(host.shutdown("drain"))
+        // A fresh HostError, never the private close Error.
+        Assertions.require((failure.kind == "shutdown") && (failure !== closeError))
+        Assertions.require(hostErrorOf(host.termination()) !== failure)
+        Assertions.require((worker.drainCount() == 1) && (worker.abortCount() == 0))
+        Assertions.require((worker.stopCount() == 1) && (listener.closeCount() == 1))
+    }),
+    Test("S: a listener close failure supersedes an earlier listener failure", () => {
+        fatal: workerOf("listener", true)
+        failedClose: listenerOf(IOError {})
+        host: startWith(failedClose, [fatal])
+        Assertions.require(hostErrorOf(host.termination()).kind == "shutdown")
+        Assertions.require((fatal.stopCount() == 1) && (failedClose.closeCount() == 1))
+
+        alone: workerOf("listener", true)
+        closed: listenerOf(null)
+        other: workerOf("drained", false)
+        listenerHost: startWith(closed, [alone, other])
+        Assertions.require(hostErrorOf(listenerHost.termination()).kind == "listener")
+        // The fatal reply aborted the other Worker; each was stopped once.
+        Assertions.require((other.abortCount() == 1) && (other.stopCount() == 1) && (alone.stopCount() == 1))
+        Assertions.require(closed.closeCount() == 1)
+    }),
+    Test("a connection cleanup failure is a shutdown failure of the host", () => {
+        worker: workerOf("cleanup", false)
+        listener: listenerOf(null)
+        host: startWith(listener, [worker])
+        Assertions.require(host.ready().value() === host)
+        Assertions.require(hostErrorOf(host.shutdown("drain")).kind == "shutdown")
+    }),
+    Test("a Worker cleanup failure while running fails the host with shutdown", () => {
+        failed: workerOf("cleanup", true)
+        other: workerOf("drained", false)
+        listener: listenerOf(null)
+        host: startWith(listener, [failed, other])
+        // No shutdown was requested: the reply alone aborts the host.
+        Assertions.require(hostErrorOf(host.termination()).kind == "shutdown")
+        Assertions.require((other.abortCount() == 1) && (other.stopCount() == 1))
+        Assertions.require((failed.stopCount() == 1) && (listener.closeCount() == 1))
+    }),
+    Test("abort escalates a drain once and a drain never reverses it", () => {
+        worker: workerOf("drained", false)
+        listener: listenerOf(null)
+        host: startWith(listener, [worker])
+        Assertions.require(host.ready().value() === host)
+        draining: host.shutdown("drain")
+        aborting: host.shutdown("abort")
+        host.shutdown("abort")
+        again: host.shutdown("drain")
+        Assertions.require((draining.value() === host) && (aborting.value() === host) && (again.value() === host))
+        Assertions.require((worker.drainCount() == 1) && (worker.abortCount() == 1))
+        Assertions.require((worker.stopCount() == 1) && (listener.closeCount() == 1))
+    })
+]

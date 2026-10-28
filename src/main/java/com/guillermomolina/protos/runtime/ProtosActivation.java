@@ -774,10 +774,17 @@ public final class ProtosActivation {
         return Optional.ofNullable(deferredCPrimeRelease);
     }
 
-    /** D121 authority is provenance-scoped, never inferred from TERMINATING alone. */
+    /**
+     * D121 authority is provenance-scoped, never inferred from TERMINATING alone.
+     *
+     * <p>A protocol {@code ensure} publishes its cancellation cleanup as a dynamic-control frame; a
+     * Bytecode-lowered {@code ensure} publishes the same exact extent on its Task while its
+     * generated cleanup runs. Neither is inherited by another Task.
+     */
     public boolean terminationCleanupAuthorizedForRuntime() {
         if (deferredCPrimeRelease != null) return true;
         if (task == null) return false;
+        if (task.inCancellationCleanupExtentForRuntime()) return true;
         return task.dynamicControlStateIfPresent()
                 .map(ProtosDynamicControlState::hasActiveCancellationEnsureCleanupForRuntime)
                 .orElse(false);

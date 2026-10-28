@@ -1,0 +1,368 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Server: import("std:http/Server").Server
+HostConnection: import("std:http/internal/HostConnection")
+HostWorker: import("std:http/internal/HostWorker")
+HttpError: import("std:http/Server").HttpError
+
+// HTTP.md §§15.5, 15.6, 15.10: the Worker-side admission and custody of
+// delivered connections. Real TCP cannot be made to fail an accept or a close
+// on demand, so the production HostConnection functions and the production
+// HostWorker acceptance service are exercised in this Actor over in-memory
+// acceptors and connections with the same accept/read/write/close protocol.
+// Only a failed mandatory close is reported; request, handler and ordinary
+// client I/O failures stay inside their session.
+
+// A Future that stays pending until it is cancelled.
+never: () => {
+    (() => {
+        Actor.current().termination().value()
+    }).future()
+}
+
+// Answers the Error that observing future signals, or null.
+failureOf: (future) => {
+    observed: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            observed = error
+            error
+        }
+    )
+    observed
+}
+
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+// A one-request connection. closeFailure is an Error delivered by the close
+// Future; closeSignals makes close() signal synchronously instead; readFailure
+// fails every read; blocked keeps every read pending until cancelled.
+connectionOf: (request) => {
+    delivered: false
+    output: ascii("")
+    closes: 0
+    closeFailure: null
+    closeSignals: false
+    readFailure: null
+    blocked: false
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            failure: readFailure
+            result: null
+            answer: null
+            if(blocked) {
+                answer = never()
+            } else {
+                if(!delivered) {
+                    delivered = true
+                    result = ascii(request)
+                }
+                answer = (() => {
+                    if(failure !== null) {
+                        failure.signal()
+                    }
+                    result
+                }).future()
+            }
+            answer
+        }
+        write: (bytes) => {
+            bytes.each((octet) => {
+                output.add(octet)
+            })
+            (() => {
+                null
+            }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            if(closeSignals) {
+                IOError().signal()
+            }
+            failure: closeFailure
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                null
+            }).future()
+        }
+        closeCount: () => {
+            closes
+        }
+        written: () => {
+            Encoding.Latin1.decode(output)
+        }
+        failClose: () => {
+            closeFailure = IOError {}
+            closeFailure
+        }
+        block: () => {
+            blocked = true
+        }
+        signalOnClose: () => {
+            closeSignals = true
+        }
+        failReads: () => {
+            readFailure = IOError {}
+            readFailure
+        }
+    }
+    fixture
+}
+
+get: "GET / HTTP/1.1\r\nHost: a\r\n\r\n"
+
+ok: (request) => {
+    response: {
+        status: 204
+        headers: []
+        body: null
+    }
+    response
+}
+
+failing: (request) => {
+    Error().signal()
+}
+
+serve: (connection, handler) => {
+    HostConnection.admit(Server, connection, handler, null).retire()
+}
+
+// The production Worker acceptance over an in-memory acceptor; answers the
+// service and counts the handler invocations in handled.
+handled: 0
+counting: (request) => {
+    handled = handled + 1
+    ok(request)
+}
+acceptanceOf: (acceptor, connectionQuota, pendingQuota) => {
+    handled = 0
+    HostWorker.acceptance(acceptor, connectionQuota, pendingQuota, (connection) => {
+        HostConnection.admit(Server, connection, counting, null)
+    })
+}
+
+tests: [
+    Test("a served connection is closed once and reports no close failure", () => {
+        connection: connectionOf(get)
+        Assertions.require(!serve(connection, ok))
+        Assertions.require(connection.closeCount() == 1)
+        Assertions.require(connection.written() == "HTTP/1.1 204 \r\nConnection: close\r\n\r\n")
+    }),
+    Test("request, handler and client failures stay inside the session", () => {
+        malformed: connectionOf("BAD\r\n\r\n")
+        malformedCustody: HostConnection.admit(Server, malformed, ok, null)
+        Assertions.require(!malformedCustody.retire())
+        rejected: failureOf(malformedCustody.service)
+        Assertions.require((rejected.parent() === HttpError) && (rejected.kind == "malformedRequest"))
+
+        handlerError: Error {}
+        throwing: connectionOf(get)
+        throwingCustody: HostConnection.admit(Server, throwing, (request) => { handlerError.signal() }, null)
+        Assertions.require(!throwingCustody.retire())
+        Assertions.require(failureOf(throwingCustody.service) === handlerError)
+
+        client: connectionOf(get)
+        readError: client.failReads()
+        clientCustody: HostConnection.admit(Server, client, ok, null)
+        Assertions.require(!clientCustody.retire())
+        Assertions.require(failureOf(clientCustody.service) === readError)
+        Assertions.require((malformed.closeCount() == 1) && (throwing.closeCount() == 1) && (client.closeCount() == 1))
+    }),
+    Test("a failed mandatory close is reported, not taken for a client failure", () => {
+        failedFuture: connectionOf(get)
+        closeError: failedFuture.failClose()
+        custody: HostConnection.admit(Server, failedFuture, ok, null)
+        Assertions.require(custody.retire())
+        // The public serveOne.owning outcome is unchanged: the close Error.
+        Assertions.require(failureOf(custody.service) === closeError)
+
+        signalled: connectionOf(get)
+        signalled.signalOnClose()
+        Assertions.require(serve(signalled, ok))
+
+        // ensure precedence: the close Error supersedes the client read Error
+        // in the session outcome, and the close failure is still reported.
+        both: connectionOf(get)
+        both.failReads()
+        bothClose: both.failClose()
+        bothCustody: HostConnection.admit(Server, both, ok, null)
+        Assertions.require(bothCustody.retire())
+        Assertions.require(failureOf(bothCustody.service) === bothClose)
+        Assertions.require((failedFuture.closeCount() == 1) && (signalled.closeCount() == 1) && (both.closeCount() == 1))
+    }),
+    Test("a cancelled session still closes its connection and classifies the close", () => {
+        held: connectionOf("GET / HTTP/1.1\r\nHost: a\r\n")
+        custody: HostConnection.admit(Server, held, ok, null)
+        custody.service.cancel()
+        Assertions.require(!custody.retire())
+        Assertions.require(held.closeCount() == 1)
+        failing: connectionOf(get)
+        failing.failClose()
+        cancelled: HostConnection.admit(Server, failing, ok, null)
+        cancelled.service.cancel()
+        Assertions.require(cancelled.retire())
+        Assertions.require(failing.closeCount() == 1)
+    }),
+    Test("an unadmitted connection is released without a handler", () => {
+        released: connectionOf(get)
+        Assertions.require(!HostConnection.release(released))
+        Assertions.require((released.closeCount() == 1) && (released.written() == ""))
+        failedFuture: connectionOf(get)
+        failedFuture.failClose()
+        Assertions.require(HostConnection.release(failedFuture))
+        signalled: connectionOf(get)
+        signalled.signalOnClose()
+        Assertions.require(HostConnection.release(signalled))
+    }),
+    Test("O: a fatal accept failure aborts the Worker and reports listener", () => {
+        calls: 0
+        pendingAccept: null
+        held: connectionOf(get)
+        held.block()
+        acceptor: {
+            accept: () => {
+                calls = calls + 1
+                answer: null
+                if(calls == 1) {
+                    answer = (() => { held }).future()
+                }
+                if(calls == 2) {
+                    pendingAccept = never()
+                    answer = pendingAccept
+                }
+                if(calls >= 3) {
+                    answer = (() => { IOError().signal() }).future()
+                }
+                answer
+            }
+        }
+        worker: acceptanceOf(acceptor, 3, 3)
+        Assertions.require(worker.serve() == "listener")
+        // No accept is issued after the failure, the other pending accept was
+        // cancelled, and the held connection was closed exactly once whether
+        // its blocked session was cancelled or it was released unadmitted.
+        Assertions.require(calls == 3)
+        Assertions.require(failureOf(pendingAccept).parent() === Cancelled)
+        Assertions.require(held.closeCount() == 1)
+        Assertions.require(handled == 0)
+    }),
+    Test("O: the listener close cutover is the ordinary end of acceptance", () => {
+        acceptor: {
+            accept: () => {
+                (() => { IOLifecycleError().signal() }).future()
+            }
+        }
+        Assertions.require(acceptanceOf(acceptor, 2, 2).serve() == "drained")
+    }),
+    Test("P: a connection delivered after the admission cutover is released unserved", () => {
+        worker: null
+        calls: 0
+        late: connectionOf(get)
+        failing: connectionOf(get)
+        failing.failClose()
+        acceptor: {
+            accept: () => {
+                calls = calls + 1
+                // The cutover happens before this accept delivers.
+                worker.drain()
+                delivered: late
+                if(calls > 1) {
+                    delivered = failing
+                }
+                (() => { delivered }).future()
+            }
+        }
+        worker = acceptanceOf(acceptor, 1, 1)
+        Assertions.require(worker.serve() == "drained")
+        Assertions.require((calls == 1) && (handled == 0))
+        Assertions.require((late.closeCount() == 1) && (late.written() == ""))
+        // A failed release close is a cleanup failure of this Worker.
+        calls = 1
+        worker = acceptanceOf(acceptor, 1, 1)
+        Assertions.require(worker.serve() == "cleanup")
+        Assertions.require((handled == 0) && (failing.closeCount() == 1))
+    }),
+    Test("an admitted session retires and frees its quota unit on failure", () => {
+        calls: 0
+        first: connectionOf("BAD\r\n\r\n")
+        second: connectionOf(get)
+        worker: null
+        acceptor: {
+            accept: () => {
+                calls = calls + 1
+                answer: null
+                if(calls == 1) {
+                    answer = (() => { first }).future()
+                }
+                if(calls == 2) {
+                    answer = (() => { second }).future()
+                }
+                if(calls >= 3) {
+                    worker.drain()
+                    answer = (() => { IOLifecycleError().signal() }).future()
+                }
+                answer
+            }
+        }
+        // One connection unit: the rejected request must release it.
+        worker = acceptanceOf(acceptor, 1, 1)
+        Assertions.require(worker.serve() == "drained")
+        Assertions.require((handled == 1) && (first.closeCount() == 1) && (second.closeCount() == 1))
+    }),
+    Test("a failed mandatory close aborts the admitting Worker and reports cleanup", () => {
+        calls: 0
+        acceptedAfterFailure: false
+        pendingAccept: null
+        failing: connectionOf(get)
+        failing.failClose()
+        acceptor: {
+            accept: () => {
+                calls = calls + 1
+                // The close is attempted only once its session is retiring.
+                if(failing.closeCount() > 0) {
+                    acceptedAfterFailure = true
+                }
+                answer: null
+                if(calls == 1) {
+                    answer = (() => { failing }).future()
+                } else {
+                    pendingAccept = never()
+                    answer = pendingAccept
+                }
+                answer
+            }
+        }
+        // Still admitting: two connection units and an accept kept pending.
+        worker: acceptanceOf(acceptor, 2, 1)
+        Assertions.require(worker.serve() == "cleanup")
+        Assertions.require(!acceptedAfterFailure)
+        Assertions.require((handled == 1) && (failing.closeCount() == 1))
+        if(pendingAccept !== null) {
+            Assertions.require(failureOf(pendingAccept).parent() === Cancelled)
+        }
+    })
+]

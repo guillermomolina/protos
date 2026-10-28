@@ -33,10 +33,15 @@
 //! stop Task calls `stop()` only after every Worker's acceptance service has
 //! replied, so admitted sessions always retire, and close their connections,
 //! inside a READY Worker.
+//!
+//! These Tasks are structured children of the execution that constructed the
+//! host (FUTURES_AND_TASKS.md §24): of its Task, or of the Actor root
+//! asynchronous scope. Cancelling a public observer never reaches them, but
+//! cancelling the Task that owns them does; the completion Task's cleanup then
+//! still aborts, stops and awaits every Worker and settles the one listener
+//! close, so no Worker, connection or listener is abandoned.
 
 HostConfig: import("std:http/internal/HostConfig")
-
-workerModule: "std:http/internal/HostWorker"
 
 // Waits for a Future of this Actor, discarding its outcome.
 settle: (future) => {
@@ -62,7 +67,10 @@ settleAll: (futures) => {
 /// Spawns the Workers of a validated construction and answers the host
 /// object. config is the captured HostConfig snapshot and acceptors holds one
 /// TcpAcceptor per Worker; listener custody is held from here on.
-start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) => {
+/// spawnWorker(acceptor, connectionQuota, pendingQuota) creates one Worker
+/// and answers its ActorRef. facility is the private asynchronous bridge of
+/// std:http/Host.
+start: (facility, HostError, listener, acceptors, spawnWorker, config) => {
     // STARTING, RUNNING, DRAINING, ABORTING or TERMINATED; never a host slot.
     state: "STARTING"
     // Whether the host ever entered RUNNING.
@@ -80,11 +88,14 @@ start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) =
         }
     }
 
+    // Each Worker is stopped at most once and never reused.
     stopWorkers: () => {
         index: 0
         while(index < workers.size()) {
-            stopRequested[index] = true
-            workers[index].stop()
+            if(!stopRequested[index]) {
+                stopRequested[index] = true
+                workers[index].stop()
+            }
             index = index + 1
         }
     }
@@ -102,11 +113,18 @@ start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) =
         }
     }
 
-    // The first hosting failure wins; failure always commits abort cleanup.
-    fail: (kind) => {
-        if(failureKind === null) {
+    // The first hosting failure wins, except that a mandatory cleanup
+    // failure ("shutdown") supersedes it, as a cleanup Error supersedes the
+    // transfer that ran the cleanup (ERRORS.md, `ensure`). Failure always
+    // commits abort cleanup.
+    record: (kind) => {
+        if((failureKind === null) || (kind == "shutdown")) {
             failureKind = kind
         }
+    }
+
+    fail: (kind) => {
+        record(kind)
         beginAbort()
     }
 
@@ -139,17 +157,21 @@ start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) =
     watchService: (service) => {
         (() => {
             outcome: null
+            waitCancelled: false
             Error.handle(
                 () => {
                     outcome = service.value()
                 },
                 (error) => {
+                    // This watcher's own cancellation is not a Worker event;
+                    // the termination watcher still observes the Worker.
+                    waitCancelled = error.parent() === Cancelled
                     error
                 }
             )
             // Workers are stopped only after every reply: a missing reply
             // means the Worker terminated by itself.
-            if(outcome === null) {
+            if((outcome === null) && !waitCancelled) {
                 failWorker()
             }
             if(outcome == "listener") {
@@ -174,29 +196,36 @@ start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) =
         }).future()
     }
 
+    // Listener custody is held from here on: a synchronous failure while
+    // creating the Workers is a startup failure observed through the hosting
+    // Futures (HTTP.md §15.2), whose abort cleanup reaches every Worker
+    // already created. Each Worker is recorded as soon as it exists.
     workerCount: config.workers
-    while(workers.size() < workerCount) {
-        index: workers.size()
-        worker: Actor.spawn(
-            workerModule,
-            "start",
-            acceptors[index],
-            handlerModule,
-            handlerBinding,
-            HostConfig.quota(config.maxConnections, workerCount, index),
-            HostConfig.quota(config.maxPendingAccepts, workerCount, index),
-            config.limits
-        )
-        workers = Array(...workers, worker)
-        stopRequested = Array(...stopRequested, false)
-        // Same-sender FIFO: "ready" is dispatched once "serve" has entered
-        // the acceptance service and suspended.
-        service: worker.request("serve")
-        services = Array(...services, service)
-        readiness = Array(...readiness, worker.request("ready"))
-        serviceWatchers = Array(...serviceWatchers, watchService(service))
-        terminationWatchers = Array(...terminationWatchers, watchTermination(worker, index))
-    }
+    Error.handle(
+        () => {
+            while(workers.size() < workerCount) {
+                index: workers.size()
+                worker: spawnWorker(
+                    acceptors[index],
+                    HostConfig.quota(config.maxConnections, workerCount, index),
+                    HostConfig.quota(config.maxPendingAccepts, workerCount, index)
+                )
+                workers = Array(...workers, worker)
+                stopRequested = Array(...stopRequested, false)
+                terminationWatchers = Array(...terminationWatchers, watchTermination(worker, index))
+                // Same-sender FIFO: "ready" is dispatched once "serve" has
+                // entered the acceptance service and suspended.
+                service: worker.request("serve")
+                services = Array(...services, service)
+                readiness = Array(...readiness, worker.request("ready"))
+                serviceWatchers = Array(...serviceWatchers, watchService(service))
+            }
+        },
+        (error) => {
+            fail("startup")
+            error
+        }
+    )
 
     // Answers true exactly when every Worker entered its acceptance service
     // and the host then entered RUNNING.
@@ -242,26 +271,47 @@ start: (HostError, listener, acceptors, handlerModule, handlerBinding, config) =
     }).future()
 
     // TERMINATED: every Worker is known terminated, every lifecycle Task has
-    // settled, and the listener close has settled.
-    completionTask: (() => {
-        settleAll(terminationWatchers)
-        settleAll(serviceWatchers)
-        settleAll([readyTask, stopTask])
-        commitClose()
-        Error.handle(
-            () => {
-                closing.value()
-            },
-            (error) => {
-                if(failureKind === null) {
-                    failureKind = "shutdown"
+    // settled, and the listener close has settled. The cleanup also runs when
+    // this Task is cancelled with its owner: it then aborts and stops the
+    // Workers itself. Like an HTTP service Task, it enters its body even when
+    // cancelled before starting, so this cleanup always runs. The listener
+    // close is committed exactly once, and its failure is a shutdown failure.
+    completionTask: facility.startService(() => {
+        (() => {
+            facility.enterService()
+            settleAll(terminationWatchers)
+            settleAll(serviceWatchers)
+            settleAll([readyTask, stopTask])
+        }).ensure(() => {
+            // On the normal path the stop Task already stopped every Worker;
+            // a Worker not yet stopped means this Task was cancelled.
+            unstopped: false
+            stopRequested.each((requested) => {
+                if(!requested) {
+                    unstopped = true
                 }
-                error
+            })
+            if(unstopped) {
+                beginAbort()
+                stopWorkers()
             }
-        )
-        state = "TERMINATED"
+            workers.each((worker) => {
+                settle(worker.termination())
+            })
+            commitClose()
+            Error.handle(
+                () => {
+                    closing.value()
+                },
+                (error) => {
+                    record("shutdown")
+                    error
+                }
+            )
+            state = "TERMINATED"
+        })
         null
-    }).future()
+    })
 
     // ------------------------------------------------------------ host
 
