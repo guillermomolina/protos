@@ -146,6 +146,16 @@ final class ProtosHttpHostIntegrationTest {
             drain: () => {
                 host.shutdown("drain").value() === host
             }
+            // Test-only split of drain: beginDrain returns once the shutdown
+            // request has been made, so the caller probes after the cutover.
+            pendingDrain: null
+            beginDrain: () => {
+                pendingDrain = host.shutdown("drain")
+                pendingDrain !== null
+            }
+            finishDrain: () => {
+                pendingDrain.value() === host
+            }
             abort: () => {
                 host.shutdown("abort").value() === host
             }
@@ -446,8 +456,11 @@ final class ProtosHttpHostIntegrationTest {
             try (Socket held = x.connect()) {
                 send(held, post());
                 x.awaitAdmitted();
-                Entry drain = new Entry(x.member("drain"));
+                // The shutdown request is made synchronously, so every probe below starts
+                // after the drain cutover.
+                assertTrue(x.call("beginDrain"));
                 x.assertRefused();
+                Entry drain = new Entry(x.member("finishDrain"));
                 assertFalse(drain.outcome.isDone(), "drain waits for the admitted session");
                 send(held, "x");
                 assertEquals(response('2'), readAll(held));
@@ -610,6 +623,48 @@ final class ProtosHttpHostIntegrationTest {
     }
 
     @Test
+    void aWorkerStopFromAReadySessionReleasesItsConnection() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 1, 4));
+            try (Socket stopping = x.connect()) {
+                // The handler stops its Worker and then continues without suspending: the
+                // termination cancellation is still only requested when the session reaches
+                // its owning close, which must still run as D121 cancellation cleanup.
+                send(stopping, "GET /stop HTTP/1.1\r\nHost: a\r\n\r\n");
+                assertTrue(
+                        x.call("terminatedWith", "worker"),
+                        "fresh HostError \"worker\" per observer");
+                assertTrue(x.call("listenerClosed"));
+                x.assertRefused();
+                // The Worker terminated after the owning close: the client sees EOF, so no
+                // session connection outlives the termination. A timeout fails.
+                readAll(stopping);
+            }
+        }
+    }
+
+    @Test
+    void aWorkerStopEncounteredOnAnAttemptedBodyReadReleasesItsConnection() throws Exception {
+        try (Fixture x = new Fixture()) {
+            assertTrue(x.call("start", 1, 4));
+            try (Socket stopping = x.connect()) {
+                // The declared one-octet body is never sent. The handler stops its Worker and
+                // only then attempts the body read, so the already-requested termination
+                // cancellation is encountered at that read and unwinds the session. A service
+                // already suspended in I/O when cancellation is requested is covered by
+                // aWorkerStopReleasesTheConnectionOfASessionSuspendedInIo.
+                send(stopping, "POST /stop HTTP/1.1\r\nHost: a\r\nContent-Length: 1\r\n\r\n");
+                assertTrue(
+                        x.call("terminatedWith", "worker"),
+                        "fresh HostError \"worker\" per observer");
+                assertTrue(x.call("listenerClosed"));
+                x.assertRefused();
+                assertEquals("", readAll(stopping), "the stopping session was closed unanswered");
+            }
+        }
+    }
+
+    @Test
     void handlerModulesAreResolvedPerWorkerUnderTheExistingModuleRules() throws Exception {
         try (Fixture x = new Fixture()) {
             assertTrue(x.call("isolatedModule"));
@@ -738,23 +793,102 @@ final class ProtosHttpHostIntegrationTest {
             }
         }
 
-        /** The listener close is observable as refusal once its release completed. */
+        /**
+         * The listener close is observable as refusal once its release completed. Probes start
+         * after the shutdown cutover. A reset of an overlapping connect, or a connection that was
+         * accepted but closed or reset unserved, is inconclusive and probed again; an HTTP
+         * response proves a session admitted after the cutover and fails, as does any other I/O
+         * failure or a connection left open until its socket timeout.
+         */
         void assertRefused() {
+            InetSocketAddress address;
+            try {
+                address =
+                        new InetSocketAddress(
+                                InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port);
+            } catch (IOException unexpected) {
+                throw new AssertionError(unexpected);
+            }
+            int connectResets = 0;
+            int unservedConnections = 0;
             long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(SAFETY_MILLIS);
             while (System.nanoTime() < deadline) {
-                try (Socket probe = new Socket()) {
-                    probe.connect(
-                            new InetSocketAddress(
-                                    InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port),
-                            SAFETY_MILLIS);
-                } catch (ConnectException refused) {
-                    return;
+                Socket probe = new Socket();
+                try {
+                    try {
+                        probe.connect(address, SAFETY_MILLIS);
+                    } catch (ConnectException refused) {
+                        return;
+                    } catch (java.net.SocketException connectFailure) {
+                        if (!isReset(connectFailure)) {
+                            fail("unexpected I/O failure while connecting a probe", connectFailure);
+                        }
+                        connectResets++;
+                        continue;
+                    } catch (IOException unexpected) {
+                        fail("unexpected I/O failure while connecting a probe", unexpected);
+                    }
+                    probe.setSoTimeout(SAFETY_MILLIS);
+                    String answered = probeUnserved(probe);
+                    if (!answered.isEmpty()) {
+                        fail(
+                                "an HTTP session was admitted after the shutdown cutover: "
+                                        + answered);
+                    }
+                    unservedConnections++;
+                } catch (java.net.SocketTimeoutException open) {
+                    fail("a probe connection stayed open until its socket timeout", open);
                 } catch (IOException unexpected) {
-                    fail(unexpected);
+                    fail("unexpected I/O failure on a probe connection", unexpected);
+                } finally {
+                    try {
+                        probe.close();
+                    } catch (IOException unexpected) {
+                        fail("unexpected I/O failure closing a probe", unexpected);
+                    }
                 }
                 Thread.onSpinWait();
             }
-            fail("the listener was not released");
+            fail(
+                    "the listener was not released: "
+                            + connectResets
+                            + " transient connect resets and "
+                            + unservedConnections
+                            + " unserved connections never reached refusal");
+        }
+
+        /**
+         * Sends a complete valid request on a connected probe and reads to its end. Answers the
+         * octets received, empty when the connection was closed or reset unserved.
+         */
+        private String probeUnserved(Socket probe) throws IOException {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try {
+                send(probe, "GET / HTTP/1.1\r\nHost: a\r\n\r\n");
+                InputStream in = probe.getInputStream();
+                byte[] buffer = new byte[256];
+                int read;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read);
+                }
+            } catch (java.net.SocketTimeoutException open) {
+                throw open;
+            } catch (java.net.SocketException closed) {
+                if (!isReset(closed) && !isBrokenPipe(closed)) {
+                    throw closed;
+                }
+            }
+            return out.toString(StandardCharsets.ISO_8859_1);
+        }
+
+        private static boolean isReset(java.net.SocketException failure) {
+            String message = failure.getMessage();
+            return message != null && message.startsWith("Connection reset");
+        }
+
+        private static boolean isBrokenPipe(java.net.SocketException failure) {
+            String message = failure.getMessage();
+            return message != null && message.startsWith("Broken pipe");
         }
 
         @Override

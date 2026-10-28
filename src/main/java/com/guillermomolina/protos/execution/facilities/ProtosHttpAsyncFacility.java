@@ -60,7 +60,14 @@ import java.util.List;
  *   <li>{@code enterService()}, called by {@code body} as its first instruction inside its own
  *       {@code ensure} scope, turns such a pre-start cancellation into the ordinary cancellation
  *       unwind of that scope, so session retirement and the owning close complete before the
- *       service Future becomes terminal (§9.2, §9.5).
+ *       service Future becomes terminal (§9.2, §9.5). The session calls it a second time
+ *       immediately before the owning close, inside a nested {@code ensure} whose cleanup is that
+ *       close: an already-requested cancellation of the current service Task (for example the
+ *       Actor-termination cancellation of a handler's {@code Actor.current().stop()}) is then
+ *       observed and delivered through the existing Task cancellation unwind, so the close runs as
+ *       the D121 cancellation cleanup of that {@code ensure} (ACTORS.md §24A). It never cancels a
+ *       different Task or an upstream Future, and grants no lifecycle-close authority beyond the
+ *       generated {@code ensure} cancellation-cleanup extent.
  * </ul>
  *
  * <p>Like {@code ProtosRuntimeMetadataFacility}, the facility is a deferred standard initial
@@ -194,12 +201,21 @@ public final class ProtosHttpAsyncFacility {
         return result;
     }
 
+    /**
+     * Observes an already-requested cancellation of the current service Task at one of its two
+     * cancellation-observation boundaries: the first instruction of the service body, or the
+     * entry of the nested {@code ensure} guarding the owning close. The cancellation is delivered
+     * through the existing Task cancellation unwind; no other Task or upstream Future is
+     * cancelled, and no close authority is granted beyond the {@code ensure} cleanup extent that
+     * unwind crosses. Answers {@code null} when no cancellation is pending, including while the
+     * Task is already unwinding.
+     */
     private static Object enterService(ProtosActivation activation, List<?> supplied) {
         ProtosTask task = activation.task().orElseThrow(() -> invalid(activation));
         if (task.cancellationRequested()) {
             if (!task.beginContinuationCancellationUnwindForRuntime()) {
                 throw new IllegalStateException(
-                        "pre-start service cancellation was not observable");
+                        "requested service cancellation was not observable");
             }
             throw new ProtosTaskCancellationException();
         }

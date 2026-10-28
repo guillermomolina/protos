@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.412-SNAPSHOT
+
+- `BUG028` (#979, D121/D216): repair `std:http/Host` shutdown races.
+  - The owning session close in `std:http/internal/Session` now runs as
+    the cleanup of a nested `ensure` entered through `enterService()`, so
+    an Actor-termination cancellation requested by `Actor.current().stop()`
+    but not yet observed is delivered before the close, which then commits
+    inside the D121 cancellation-cleanup extent. Without a pending
+    cancellation the close and its Error precedence are unchanged.
+  - `ProtosHttpAsyncFacility` documents both `enterService` observation
+    boundaries; no facility operation was added.
+  - Host integration tests make the drain cutover explicit, distinguish
+    refusal, transient resets and unserved connections when probing
+    listener release, and cover Worker self-stop from ready and
+    body-reading sessions. Custody and D121 regression tests cover
+    deferred close ordering, close-failure precedence and rejection or
+    preemptive cancellation of an unauthorized close attempted by a Task
+    created during termination cleanup.
+
 ## 0.3.411-SNAPSHOT
 
 - `I129-A` (#974, D219-B): remove the redundant private `invokable`

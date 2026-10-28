@@ -28,6 +28,11 @@ HttpError: import("std:http/Server").HttpError
 // Only a failed mandatory close is reported; request, handler and ordinary
 // client I/O failures stay inside their session.
 
+// Suspends once so that other Tasks of this Actor run.
+yieldTurn: () => {
+    (() => { null }).future().value()
+}
+
 // A Future that stays pending until it is cancelled.
 never: () => {
     (() => {
@@ -56,11 +61,16 @@ ascii: (text) => {
 
 // A one-request connection. closeFailure is an Error delivered by the close
 // Future; closeSignals makes close() signal synchronously instead; readFailure
-// fails every read; blocked keeps every read pending until cancelled.
+// fails every read; blocked keeps every read pending until cancelled;
+// deferClose keeps the close Future pending until releaseClose, and
+// settledCloses counts the close Futures that settled.
 connectionOf: (request) => {
     delivered: false
     output: ascii("")
     closes: 0
+    settledCloses: 0
+    closeDeferred: false
+    closeReleased: false
     closeFailure: null
     closeSignals: false
     readFailure: null
@@ -101,7 +111,14 @@ connectionOf: (request) => {
                 IOError().signal()
             }
             failure: closeFailure
+            deferred: closeDeferred
             (() => {
+                if(deferred) {
+                    while(!closeReleased) {
+                        yieldTurn()
+                    }
+                }
+                settledCloses = settledCloses + 1
                 if(failure !== null) {
                     failure.signal()
                 }
@@ -110,6 +127,15 @@ connectionOf: (request) => {
         }
         closeCount: () => {
             closes
+        }
+        settledCloseCount: () => {
+            settledCloses
+        }
+        deferClose: () => {
+            closeDeferred = true
+        }
+        releaseClose: () => {
+            closeReleased = true
         }
         written: () => {
             Encoding.Latin1.decode(output)
@@ -212,7 +238,21 @@ tests: [
         bothCustody: HostConnection.admit(Server, both, ok, null)
         Assertions.require(bothCustody.retire())
         Assertions.require(failureOf(bothCustody.service) === bothClose)
+
+        // Neither a handler failure nor a request failure conceals the
+        // mandatory close failure.
+        throwing: connectionOf(get)
+        throwingClose: throwing.failClose()
+        throwingCustody: HostConnection.admit(Server, throwing, failing, null)
+        Assertions.require(throwingCustody.retire())
+        Assertions.require(failureOf(throwingCustody.service) === throwingClose)
+        malformed: connectionOf("BAD\r\n\r\n")
+        malformedClose: malformed.failClose()
+        malformedCustody: HostConnection.admit(Server, malformed, ok, null)
+        Assertions.require(malformedCustody.retire())
+        Assertions.require(failureOf(malformedCustody.service) === malformedClose)
         Assertions.require((failedFuture.closeCount() == 1) && (signalled.closeCount() == 1) && (both.closeCount() == 1))
+        Assertions.require((throwing.closeCount() == 1) && (malformed.closeCount() == 1))
     }),
     Test("a cancelled session still closes its connection and classifies the close", () => {
         held: connectionOf("GET / HTTP/1.1\r\nHost: a\r\n")
@@ -226,6 +266,43 @@ tests: [
         cancelled.service.cancel()
         Assertions.require(cancelled.retire())
         Assertions.require(failing.closeCount() == 1)
+
+        // The cancelled session keeps its close obligation: while the close
+        // Future is pending the session Future is not terminal; it becomes
+        // terminal only after that close settled.
+        suspended: connectionOf(get)
+        suspended.block()
+        suspended.deferClose()
+        obligated: HostConnection.admit(Server, suspended, ok, null)
+        obligated.service.cancel()
+        watcherStarted: false
+        serviceTerminal: false
+        observed: null
+        watcher: (() => {
+            watcherStarted = true
+            observed = failureOf(obligated.service)
+            serviceTerminal = true
+        }).future()
+        // The cleanup releases the close even when an assertion fails, so the
+        // pending close Future never keeps the test from terminating.
+        (() => {
+            turns: 0
+            while((turns < 10000) && ((suspended.closeCount() == 0) || !watcherStarted)) {
+                yieldTurn()
+                turns = turns + 1
+            }
+            Assertions.require((suspended.closeCount() > 0) && watcherStarted)
+            Assertions.require(suspended.closeCount() == 1)
+            Assertions.require(suspended.settledCloseCount() == 0)
+            Assertions.require(!serviceTerminal)
+        }).ensure(() => {
+            suspended.releaseClose()
+        })
+        watcher.value()
+        Assertions.require(serviceTerminal && (observed.parent() === Cancelled))
+        Assertions.require((suspended.closeCount() == 1) && (suspended.settledCloseCount() == 1))
+        Assertions.require(!obligated.retire())
+        Assertions.require(suspended.closeCount() == 1)
     }),
     Test("an unadmitted connection is released without a handler", () => {
         released: connectionOf(get)
@@ -304,7 +381,7 @@ tests: [
         calls = 1
         worker = acceptanceOf(acceptor, 1, 1)
         Assertions.require(worker.serve() == "cleanup")
-        Assertions.require((handled == 0) && (failing.closeCount() == 1))
+        Assertions.require((handled == 0) && (failing.closeCount() == 1) && (failing.written() == ""))
     }),
     Test("an admitted session retires and frees its quota unit on failure", () => {
         calls: 0

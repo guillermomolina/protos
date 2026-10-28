@@ -47,15 +47,97 @@ import org.junit.jupiter.api.Timeout;
 final class ProtosTerminationCleanupCloseTest {
     private static final String CORE = Path.of("protos", "lib", "core").toAbsolutePath().toString();
     private static final int SAFETY_MILLIS = (int) TimeUnit.SECONDS.toMillis(5);
+    private static final int OPEN_PROBE_MILLIS = 200;
 
     private static final String HOLDER =
             """
             start: (acceptor) => {
                 connection: null
+                other: null
+                witness: null
                 behavior: {
+                    useWitness: (reference) => {
+                        witness = reference
+                        true
+                    }
                     accept: () => {
                         connection = acceptor.accept().value()
                         true
+                    }
+                    acceptOther: () => {
+                        other = acceptor.accept().value()
+                        true
+                    }
+                    // A: before any cutover an ordinary close keeps working.
+                    closeFirst: () => {
+                        connection.close().value()
+                        "closed"
+                    }
+                    // B: the turn stops its own Actor and continues without
+                    // suspending, so the termination cancellation is only
+                    // requested. Entering the nested owning-cleanup ensure
+                    // awaits a not yet run Task, which observes that pending
+                    // cancellation; the close then commits from the
+                    // cancellation cleanup extent, and completes.
+                    pending: () => {
+                        later: (() => { null }).future()
+                        Actor.current().stop()
+                        (() => {
+                            later.value()
+                        }).ensure(() => {
+                            connection.close().value()
+                        })
+                        null
+                    }
+                    // G: a Task created inside the cancellation cleanup cannot
+                    // close the unrelated other connection. Two safe outcomes
+                    // establish different facts: "rejected" means the Task
+                    // attempted close() and received IOLifecycleError;
+                    // "cancelled" means the Actor-termination cancellation
+                    // reached the Task before it attempted close(), which does
+                    // not by itself demonstrate a rejection. The witness
+                    // records which; the cleanup's own close is admitted.
+                    delegated: () => {
+                        (() => {
+                            connection.read(1).value()
+                        }).ensure(() => {
+                            outcome: "unset"
+                            attempted: false
+                            Error.handle(
+                                () => {
+                                    IOLifecycleError.handle(
+                                        () => {
+                                            (() => {
+                                                attempted = true
+                                                other.close().value()
+                                            }).future().value()
+                                            outcome = "closed"
+                                        },
+                                        (error) => {
+                                            outcome = "rejected"
+                                            error
+                                        }
+                                    )
+                                },
+                                (error) => {
+                                    // Anything but "cancelled" is classified
+                                    // only for diagnosis.
+                                    outcome = "error"
+                                    if(error.parent() === IOError) {
+                                        outcome = "io"
+                                    }
+                                    if(error.parent() === Cancelled) {
+                                        outcome = "cancelled"
+                                        if(attempted) {
+                                            outcome = "cancelledAfterAttempt"
+                                        }
+                                    }
+                                    error
+                                }
+                            )
+                            witness.send("record", outcome)
+                            connection.close().value()
+                        })
                     }
                     // C: the turn is suspended reading the connection when a
                     // later "halt" turn stops the Actor; the cancellation
@@ -104,6 +186,23 @@ final class ProtosTerminationCleanupCloseTest {
             }
             """;
 
+    private static final String WITNESS =
+            """
+            start: () => {
+                recorded: "none"
+                behavior: {
+                    record: (outcome) => {
+                        recorded = outcome
+                        null
+                    }
+                    recorded: () => {
+                        recorded
+                    }
+                }
+                behavior
+            }
+            """;
+
     private static final String PROGRAM =
             """
             IpAddress: import("std:network/IpAddresses").IpAddress
@@ -121,6 +220,23 @@ final class ProtosTerminationCleanupCloseTest {
             }
             accept: () => {
                 holder.request("accept").value()
+            }
+            acceptOther: () => {
+                holder.request("acceptOther").value()
+            }
+            witness: null
+            useWitness: () => {
+                witness = Actor.spawn("app:witness", "start")
+                holder.request("useWitness", witness).value()
+            }
+            // The witness outlives the holder; its record was sent before
+            // the holder terminated.
+            delegatedOutcome: () => {
+                witness.request("recorded").value()
+            }
+            halt: () => {
+                holder.send("halt")
+                true
             }
             // The request outcome is not the subject: a cancelled turn has no
             // normal reply.
@@ -177,6 +293,58 @@ final class ProtosTerminationCleanupCloseTest {
         }
     }
 
+    @Test
+    void anOrdinaryCloseBeforeTerminationStillWorks() throws Exception {
+        try (Fixture x = new Fixture(); Socket client = x.connectAndAccept()) {
+            assertEquals("closed", x.run("closeFirst").asString());
+            assertEquals("", readToEof(client));
+            assertTrue(x.member("halt").execute().asBoolean());
+            assertTrue(x.terminated());
+        }
+    }
+
+    @Test
+    void aPendingTerminationCancellationObservedByANestedEnsureAuthorizesItsClose()
+            throws Exception {
+        try (Fixture x = new Fixture(); Socket client = x.connectAndAccept()) {
+            // The turn has no normal reply: its cancellation unwinds it.
+            x.run("pending");
+            // Termination waits for the cleanup close, so EOF is already available.
+            assertTrue(x.terminated());
+            assertEquals("", readToEof(client), "the cleanup close released the connection");
+        }
+    }
+
+    @Test
+    void aTaskCreatedInsideCancellationCleanupCannotCloseAnUnrelatedConnection()
+            throws Exception {
+        try (Fixture x = new Fixture();
+                Socket client = x.connectAndAccept();
+                Socket other = x.connectAndAcceptOther()) {
+            assertTrue(x.member("useWitness").execute().asBoolean());
+            x.park("delegated");
+            assertTrue(x.terminated());
+            String outcome = x.member("delegatedOutcome").execute().asString();
+            assertTrue(
+                    outcome.equals("rejected") || outcome.equals("cancelled"),
+                    "the delegated Task must either attempt close() and receive "
+                            + "IOLifecycleError (\"rejected\") or be cancelled before attempting "
+                            + "close() (\"cancelled\"), but the outcome was: "
+                            + outcome);
+            assertEquals("", readToEof(client), "the cleanup's own close was admitted");
+            // Additional evidence: the unauthorized close left the other connection open. The
+            // client sockets are closed by try-with-resources and the server-owned ones by
+            // the context close, also when an assertion fails.
+            other.setSoTimeout(OPEN_PROBE_MILLIS);
+            try {
+                int read = other.getInputStream().read();
+                throw new AssertionError("the delegated close was admitted: read " + read);
+            } catch (SocketTimeoutException stillOpen) {
+                // Expected: the Actor does not implicitly close the connection either.
+            }
+        }
+    }
+
     /** Reads to EOF; a timeout means the connection was left open and fails the test. */
     private static String readToEof(Socket socket) throws IOException {
         InputStream in = socket.getInputStream();
@@ -206,7 +374,7 @@ final class ProtosTerminationCleanupCloseTest {
                             .allowIO(IOAccess.newBuilder().allowHostSocketAccess(true).build())
                             .allowCreateThread(true)
                             .build();
-            ProtosEmbeddedModules.install(context, Map.of("app:holder", HOLDER));
+            ProtosEmbeddedModules.install(context, Map.of("app:holder", HOLDER, "app:witness", WITNESS));
             context.eval(ProtosLanguage.ID, PROGRAM);
             port = member("open").execute().asInt();
         }
@@ -219,6 +387,15 @@ final class ProtosTerminationCleanupCloseTest {
             Socket socket = new Socket(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port);
             socket.setSoTimeout(SAFETY_MILLIS);
             assertTrue(member("accept").execute().asBoolean(), "the holder owns the connection");
+            return socket;
+        }
+
+        Socket connectAndAcceptOther() throws IOException {
+            Socket socket = new Socket(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port);
+            socket.setSoTimeout(SAFETY_MILLIS);
+            assertTrue(
+                    member("acceptOther").execute().asBoolean(),
+                    "the holder owns the other connection");
             return socket;
         }
 

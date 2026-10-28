@@ -388,7 +388,17 @@ serviceBody: (facility, HttpError, duplex, handler, limits, owning) => {
         }).ensure(() => {
             retired = true
             if(owning) {
-                awaitThroughCancellation(duplex.close())
+                // An Actor-termination cancellation already requested but not
+                // yet observed (for example after Actor.current().stop() in a
+                // handler that then returned normally) is delivered here, so
+                // the mandatory close runs as the cleanup of that cancellation
+                // unwind (ACTORS.md §24A, D121). Without a pending
+                // cancellation the close keeps its ordinary semantics.
+                (() => {
+                    facility.enterService()
+                }).ensure(() => {
+                    awaitThroughCancellation(duplex.close())
+                })
             }
         })
         null
