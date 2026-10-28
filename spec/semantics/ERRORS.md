@@ -429,6 +429,7 @@ standard prototype listed above.
 | `HttpError` | `Error` | `std:http/Server` / `../io/HTTP.md` §12 |
 | `HostError` | `Error` | `std:http/Host` / `../io/HTTP.md` §15.10 |
 | `ClientError` | `Error` | `std:http/Client` / `../io/HTTP.md` §16 |
+| `TlsError` | `Error` | `std:tls/Client` / `../io/TLS.md` §9 |
 
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already

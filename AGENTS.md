@@ -204,6 +204,8 @@ Domain owners:
   server std:http/Server (D215, §§1–13), optional continuous hosting
   std:http/Host (D216, §15) and single-exchange client std:http/Client
   (D218-B, §16) semantics.
+- spec/io/TLS.md — Standard Library client TLS std:tls/Client (D220–S12)
+  semantics.
 - spec/concurrency/FUTURES_AND_TASKS.md — Core Future/task semantics.
 - spec/concurrency/ACTORS.md — Core Actor semantics.
 - spec/concurrency/PARALLEL_EXECUTION.md — Core isolated-parallel (P)

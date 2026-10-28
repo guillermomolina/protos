@@ -41,8 +41,12 @@ adds no `Network` operation. The optional single-exchange client
 duplex, the application acquires any connection explicitly, for example with
 `connectTcp`, and the Client performs no acquisition, resolution, or other
 implicit network use; it adds no `Network` operation or implicit authority.
-HTTP/2, HTTP/3, portable TLS, DNS/URL-based acquisition, and other unapproved
-protocol extensions remain outside this revision.
+The optional client TLS facility `std:tls/Client` is owned by `TLS.md`: it
+upgrades an already-supplied duplex, takes its reference identity as data
+(including a recognized `IpAddress`, §2), and adds no `Network` operation,
+acquisition or implicit authority.
+HTTP/2, HTTP/3, TLS beyond `TLS.md`, DNS/URL-based acquisition, and other
+unapproved protocol extensions remain outside this revision.
 
 No network authority is ambient by implication. Importing a module, knowing an
 `IpAddress`, possessing `Process`, creating an Actor, or creating P work does not
@@ -647,7 +651,8 @@ remain separate explicit future designs:
 - UDP/datagram operations and truncation/size rules;
 - public NetworkInterface discovery/selection;
 - formal transferable Network attenuation/policy algebra;
-- TLS, QUIC, HTTP beyond the `HTTP.md` Server, Host, and Client facilities, and
+- TLS beyond the `TLS.md` client facility, QUIC, HTTP beyond the `HTTP.md`
+  Server, Host, and Client facilities, and
   WebSocket;
 - Unix-domain/raw sockets;
 - service discovery;

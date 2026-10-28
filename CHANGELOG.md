@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.413-SNAPSHOT
+
+- `I130-A` (#977, D220–S12): portable client TLS foundation.
+  - `spec/io/TLS.md` (new) defines `std:tls/Client`; `HTTP.md`,
+    `NETWORK.md`, `ERRORS.md` and `AGENTS.md` cross-reference it.
+  - Private host primitives under `execution/host/tls/`:
+    `ProtosTlsClientEngine` drives a client `SSLEngine` with the
+    security profile fixed before negotiation, no resumption, SNI only
+    for DNS identities and defensive post-handshake profile checks;
+    `ProtosTlsTrustVerifier` performs PKIX validation with serverAuth
+    EKU and no network fetch or revocation; `ProtosTlsTrust` decodes
+    exact DER, builds anchors, reads only the runtime `cacerts` and
+    decodes SAN DNS/IP entries. Failures are reported as backend facts
+    (`ProtosTlsFailure`), never derived from exception text or alerts.
+  - Trust policy, identity matching and `TlsError` kinds remain Protos
+    (I130-B). In-memory JSSE peer tests with generated P-256 fixtures
+    verify at a fixed PKIX instant.
+
 ## 0.3.412-SNAPSHOT
 
 - `BUG028` (#979, D121/D216): repair `std:http/Host` shutdown races.

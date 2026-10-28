@@ -1042,7 +1042,8 @@ contract and require separate explicit design:
 - higher-level HTTP client facilities beyond §16: URL interpretation,
   connection acquisition, proxies, redirects, cookies, content codings,
   retries, connection pooling and reuse, and streaming request bodies;
-- TLS;
+- TLS within the HTTP facilities, including HTTPS hosting; client TLS over an
+  application-supplied duplex is owned separately by `TLS.md`;
 - DNS and name resolution;
 - persistent connections / keep-alive and pipelining;
 - HTTP/2 and HTTP/3;
@@ -1432,7 +1433,8 @@ not acquire a `Network` capability, resolve names, open TCP connections,
 establish TLS, interpret URLs, create Actors, or use clocks or timers. The
 application obtains the duplex, for example by an explicit
 `network.connectTcp(...)` under `NETWORK.md`, and passes the resulting
-connection.
+connection, or the secure duplex delivered for it by `std:tls/Client`
+(`TLS.md` §12), unchanged.
 
 `exchangeOne` borrows `duplex`: it never invokes `close`, `shutdownRead` or
 `shutdownWrite` on it, and on every terminal path the duplex remains owned by
