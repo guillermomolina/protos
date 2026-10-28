@@ -1,125 +1,142 @@
 # Try Protos
 
-The recommended first-run artifact on the declared Native target is the
-self-contained **Protos 0.3.312 Native prerelease**. On supported Linux x86_64
-systems with dynamic glibc 2.39 or newer, you can download one archive, verify
-it, extract it, and run Protos without installing Java/GraalVM, Maven, or a
-Protos source checkout.
+The recommended first-run method on supported Linux is the **version-independent
+Native Image installer**. It finds a compatible published Native prerelease,
+verifies the official distribution, and activates Protos in your home directory.
+It does not require Java, GraalVM, Maven, root access, or a source checkout.
 
-The Protos Dev Container remains the preconfigured editor/debugging path, and
-the portable POSIX/JVM artifact remains available as the compatibility fallback
-for users who intentionally provide the supported external GraalVM/JDK runtime.
+The Dev Container remains the preconfigured editor/debugging path. The portable
+JVM release remains a separately installed distribution for users who need its
+optimizing runtime, Java embedding, or foreign providers.
 
-## Release status
+## Published releases
 
-Protos 0.3.312 is a public **prerelease** of the reference implementation:
+Protos publishes prereleases on its [GitHub Releases page](https://github.com/guillermomolina/protos/releases).
+The installer uses the published release list, not the GitHub `releases/latest`
+shortcut (which excludes prereleases), and does not hard-code a Protos version.
+For a supported host it selects the newest compatible Native release by numeric
+version, then checks the release's `RELEASE_MANIFEST.txt`, adjacent SHA-256,
+archive contents, source identity, and Native runtime contract before activation.
+An explicitly requested version never falls back to another version.
 
-| | |
-|---|---|
-| Release | [`v0.3.312`](https://github.com/guillermomolina/protos/releases/tag/v0.3.312) |
-| Source revision | `f8ff34498f3a193c9bfe15f215a181c23504a6ad` |
-| Core specification revision | `0.1.451` |
-| Core language | v0.1 **draft** specification; experimental |
+Published releases continue to have a Native ZIP and a separate portable JVM
+ZIP, each with an adjacent `.sha256` file, plus the official release manifest.
+The development `pom.xml` version is not a published release identifier.
 
-The release publishes exactly two archives, each with an adjacent `.sha256`
-file, plus a `RELEASE_MANIFEST.txt`:
+## Option 1: Linux Native installer (recommended)
 
-| Archive | Role | External Java |
-|---|---|---|
-| `protos-0.3.312-native-linux-x86_64.zip` | Recommended first run | Not required |
-| `protos-0.3.312-posix-jvm.zip` | Compatibility fallback, Java embedding | GraalVM Community 25.4.4.1.1 / JDK 25.0.4.1.1 |
+### Supported target and requirements
 
-The version in this repository's `pom.xml` (`-SNAPSHOT`) identifies the
-development line, not a published release. Only the archives attached to a
-GitHub Release are public artifacts.
+The current Native target is **Linux x86_64 with dynamic glibc**, with a
+published baseline of **glibc 2.39 or newer**. Each release manifest determines
+its precise minimum; the installer can select an older published Native release
+if a newer one requires a newer glibc. There is no claim of Native support for
+macOS, Windows, AArch64, musl, or older glibc without published evidence.
 
-## Option 1: Self-contained Native release
+The host needs common command-line tools including `sh`, `curl`, `awk`, `unzip`,
+`sha256sum`, and `flock`. Missing commands or an unsupported runtime cause an
+actionable error. The installer never upgrades glibc, installs system packages,
+or modifies shell startup files automatically.
 
-This is the recommended first-run path when your host matches the published
-Native platform contract.
+### One-command install or update
 
-### Supported target
-
-The 0.3.312 Native artifact supports exactly:
-
-- Linux;
-- x86_64;
-- dynamic glibc linkage;
-- glibc 2.39 or newer;
-- the compatibility CPU-ISA policy used by the release.
-
-The release was built on an Oracle Linux 10 baseline. It does not claim Native
-support for macOS, Windows, AArch64, musl, or glibc older than 2.39.
-
-### Download and verify
-
-Download the Native archive and its adjacent checksum from the
-[Protos 0.3.312 GitHub prerelease](https://github.com/guillermomolina/protos/releases/tag/v0.3.312):
+Run the stable installer URL on the supported host:
 
 ```sh
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip.sha256
-sha256sum -c protos-0.3.312-native-linux-x86_64.zip.sha256
+curl -fsSL https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh | sh
+"$HOME/.local/bin/protos" --version
+"$HOME/.local/bin/protos" -e 'print("Hello, Protos!")'
 ```
 
-The expected archive SHA-256 is:
+Re-running the first command checks for a newer eligible Native release. It
+does not silently downgrade an active installation. The whole verified Native
+tree, including its Standard Library, tools, and tests, stays together under
+`~/.local/share/protos/versions/`; the managed launcher lives at
+`~/.local/bin/protos`. No Java/JAR is installed.
 
-```text
-70f893d225419713b312054f3558e2e4b3f4169e8e7bd37e015aff92157d067b
-```
-
-Extract the archive:
+If the installer reports that `~/.local/bin` is not on your shell `PATH`, you
+can use the absolute command shown above or update your current shell manually:
 
 ```sh
-unzip protos-0.3.312-native-linux-x86_64.zip
-cd protos-0.3.312-native-linux-x86_64
+export PATH="$HOME/.local/bin:$PATH"
+protos --version
 ```
 
-The extracted directory is relocatable. Keep its internal layout intact.
+### Inspect before running
 
-### Run Protos
-
-Verify the release:
+Piping a remotely downloaded script directly into `sh` requires trusting its
+current contents. To examine it first, download it as a file, review it, and
+use the same downloaded bytes for every subsequent action:
 
 ```sh
-./bin/protos --version
+curl -fsSLo protos-install.sh https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh
+less protos-install.sh
+sh protos-install.sh --list-releases
+sh protos-install.sh --inspect
+sh protos-install.sh --verify-download
+sh protos-install.sh
 ```
 
-Evaluate source directly:
+`--inspect` selects the release and reports its platform/runtime identity
+without installing it. `--verify-download` additionally downloads and checks
+the Native checksum and ZIP without activating anything. Neither command
+requires Java or Maven.
+
+### Pin, roll back, and uninstall
+
+To choose a specific **published numeric** tag, assign it to `TAG` (for example,
+`TAG=v0.3.398`) before using these commands:
 
 ```sh
-./bin/protos -e 'print("Hello, Protos!")'
+sh protos-install.sh --tag "$TAG"
+sh protos-install.sh --rollback --tag "$TAG"
+sh protos-install.sh --uninstall
 ```
 
-Or create `hello.protos` containing:
+`--tag` installs only that published Native version and rejects an unsupported
+host or invalid release. `--rollback` operates offline and activates only a
+previously installed, verified Native tree. `--uninstall` deactivates and
+removes the installer-managed `protos` command but **retains versioned trees**
+for recovery; it does not purge them or remove unrelated user files.
+An existing command not owned by this installer is never replaced or removed.
+
+### Run Protos from another directory
+
+Create `hello.protos` in any working directory with this content:
 
 ```protos
 print("Hello, Protos!")
 ```
 
-and run:
+Run the file without changing to the installation directory:
 
 ```sh
-./bin/protos hello.protos
+"$HOME/.local/bin/protos" hello.protos
 ```
 
-You can invoke `bin/protos` directly from the extracted tree or add that `bin`
-directory to your `PATH`. No external Java/GraalVM runtime or Maven is required
-for this Native artifact after extraction.
-
-The same published Native artifact also contains the supported REPL, Package /
+The same Native distribution also bundles the supported REPL, Package /
 Workspace execution, Test Tool, language server, and debug adapter surfaces.
+
+### Manual Native archive alternative
+
+You can still install without the script: select a compatible published release
+on [GitHub Releases](https://github.com/guillermomolina/protos/releases),
+download its `protos-VERSION-native-linux-x86_64.zip` and adjacent `.sha256`
+asset, run `sha256sum -c` on the checksum file, extract the ZIP, and invoke the
+extracted `bin/protos`. Keep the extracted tree intact: the launcher needs
+its companion resources. Consult the selected release's manifest for its
+exact checksum and host contract; do not reuse a checksum from another release.
 
 ### Native limitations
 
-- Guest Protos code runs interpreter-only: Truffle guest JIT compilation is
-  unavailable in the Native executable while
+- Guest Protos code currently runs interpreter-only: Truffle guest JIT
+  compilation is unavailable in the Native executable while
   [oracle/graal#14579](https://github.com/oracle/graal/issues/14579) remains
-  unresolved (PLAT045). Program behavior is unchanged; long-running programs are
-  slower than on the portable JVM.
-- `--foreign-provider-path` is not available: the Native executable does not
-  load plugins dynamically.
-- Java embedding is not available; it needs the portable JVM runtime.
+  unresolved (PLAT045). Long-running programs are slower than on the portable
+  JVM, but the Native distribution remains independently executable.
+- `--foreign-provider-path` is unavailable in Native: dynamic Java-provider
+  plugins require the portable JVM release.
+- Java embedding also requires the portable JVM distribution.
 
 The full comparison is in
 [The `protos` command line](tools/cli.md#native-and-portable-jvm).
@@ -198,62 +215,29 @@ protos hello.protos
 Open a `.protos` file in VS Code and use the Protos debugging support provided
 by the official extension.
 
-## Option 3: Portable POSIX/JVM fallback
+## Option 3: Portable POSIX/JVM distribution (manual)
 
-The same 0.3.312 prerelease also publishes:
+The separately published portable ZIP (`protos-VERSION-posix-jvm.zip`) is for
+the optimizing GraalVM runtime, Java embedding, and supported external foreign
+providers. It is **not self-contained** and is **never** installed or chosen as
+a fallback by `dist/install.sh`.
 
-```text
-protos-0.3.312-posix-jvm.zip
-```
+Select the desired release on [GitHub Releases](https://github.com/guillermomolina/protos/releases).
+Download its portable ZIP and adjacent `.sha256` file, verify the digest with
+`sha256sum -c`, extract the ZIP, and retain the distribution layout. Obtain the
+exact required GraalVM/JDK identity from that release's manifest and extracted
+`RUNTIME.txt`; do not assume any generic Java 21+ or arbitrary JVM works.
 
-This artifact is the compatibility fallback and external-consumer artifact. It
-is **not self-contained**: it requires the supported external runtime contract
-published with the release:
+The portable launcher uses `$PROTOS_JAVA` when present, otherwise
+`$JAVA_HOME/bin/java`, otherwise `java` on `PATH`. Configure the supported
+release-specific GraalVM before invoking the extracted `bin/protos`.
 
-```text
-GraalVM Community 25.4.4.1.1
-JDK 25.0.4.1.1
-```
-
-Do not treat Java bytecode release 21 as a generic Java 21+ compatibility claim.
-Use the exact release metadata when provisioning the runtime.
-
-Download the portable archive and its adjacent `.sha256` file from the
-[0.3.312 release](https://github.com/guillermomolina/protos/releases/tag/v0.3.312),
-verify it with `sha256sum -c`, extract it, keep the distribution layout intact,
-and use its `bin/protos` launcher. The expected portable archive SHA-256 is:
-
-```text
-ab9cc9de494cc9189eb29ad2f2f110e53997c49adcb1d863814ddd5b89ce6d29
-```
-
-For example:
-
-```sh
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-posix-jvm.zip
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-posix-jvm.zip.sha256
-sha256sum -c protos-0.3.312-posix-jvm.zip.sha256
-unzip protos-0.3.312-posix-jvm.zip
-cd protos-0.3.312
-```
-
-The launcher uses `$PROTOS_JAVA` when set, otherwise `$JAVA_HOME/bin/java`,
-otherwise `java` from `PATH`. Point it at the supported GraalVM:
-
-```sh
-export JAVA_HOME=/path/to/graalvm-community-25.4.4.1.1
-./bin/protos --version
-./bin/protos -e 'print("Hello, Protos!")'
-```
-
-By default the launcher rejects a runtime that does not match the published
-contract; the extracted `RUNTIME.txt` records it. The portable JVM keeps the
-optimizing runtime with guest JIT, and it is the artifact to use for
-[Java embedding](embedding/java.md) and
+The portable distribution keeps the guest JIT where supported and is the
+appropriate artifact for [Java embedding](embedding/java.md) and
 [external foreign providers](interop/custom-provider.md).
 
-For ordinary first use on the declared Native target, prefer Option 1 so no
-external JVM/runtime provisioning is required.
+For ordinary first use on the declared Native target, prefer Option 1: it
+does not require external JVM provisioning.
 
 ## Where to go next
 

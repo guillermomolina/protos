@@ -1,16 +1,38 @@
 # Protos portable development distribution
 
-This directory owns the build-time layout for `DIST001`.
+This directory owns the build-time layout for `DIST001` and the independent
+user-local Linux Native installer (`dist/install.sh`, I131).
 
-To download and run a published release instead of building one, see
-[Try Protos](../docs/guide/00-try-protos.md). The current public prerelease is
-[`v0.3.312`](https://github.com/guillermomolina/protos/releases/tag/v0.3.312);
-its exact runtime contract is in the release notes and in each archive's
-metadata, not in the historical DIST001-A contract described below.
+For a published first-run installation, prefer the Native installer described
+in [Try Protos](../docs/guide/00-try-protos.md). Its stable URL is
+`https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh`;
+the script selects a compatible published Native prerelease, verifies the
+official manifest and ZIP, and activates a versioned tree under the user's
+home directory. Re-running the same script checks for updates without changing
+its URL. It never installs the portable JVM/JAR, Java, GraalVM, or Maven.
 
-It does not create a Git tag or GitHub Release. The resulting archive is a
-development distribution until a later explicitly selected release candidate
-passes DIST001-B/D/E.
+The manual published-archive path is still available from
+[GitHub Releases](https://github.com/guillermomolina/protos/releases), with
+release-specific source/runtime identity in `RELEASE_MANIFEST.txt` and each
+archive's metadata. The build commands below construct development artifacts;
+they do not create Git tags or publish a GitHub Release. A development archive
+remains unpublished until its separately approved release-candidate gates pass.
+
+## Linux Native installer commands
+
+| Purpose | Command |
+|---|---|
+| Install or check for an eligible Native update | `sh dist/install.sh` |
+| Inspect the selected published Native identity | `sh dist/install.sh --inspect` |
+| Verify the official ZIP without activation | `sh dist/install.sh --verify-download` |
+| Show published numeric release tags | `sh dist/install.sh --list-releases` |
+| Install a specific published version | `sh dist/install.sh --tag vMAJOR.MINOR.PATCH` |
+| Activate a retained Native version offline | `sh dist/install.sh --rollback --tag vMAJOR.MINOR.PATCH` |
+| Deactivate the managed command, retaining installed versions | `sh dist/install.sh --uninstall` |
+
+`dist/install.sh` is a distribution **consumer**, not a Native builder or a
+publication command. It makes no implicit changes to the current shell's
+`PATH`, host package manager, glibc, or shell profile.
 
 ## Which command
 

@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.417-SNAPSHOT
+
+- `I131` (#982, DIST018/#981): version-agnostic Linux Native Image installer.
+  - Add `dist/install.sh` with published-release discovery, deterministic
+    newest-compatible Native selection and strict explicit-tag support;
+    invalid release metadata and unavailable manifests fail closed.
+  - Verify official release/source identity, platform and glibc requirements,
+    Native archive/checksum digests and safe distribution layout before
+    installing. No JVM/JAR fallback, GraalVM, JDK or privileged host changes.
+  - Install the intact Native distribution into user-local versioned directories;
+    atomically activate a managed command wrapper after smoke checks, with
+    idempotent upgrades, offline rollback and safe uninstall retaining versions.
+  - Cover release selection, compatibility fallback, verification, unsafe
+    archives, preflight, activation and recovery with focused tests; document
+    the stable installer as the recommended Linux installation method.
+
 ## 0.3.416-SNAPSHOT
 
 - `I130-B` (D220–S12): Protos-first `std:tls/Client` exporting `Client`,

@@ -8,17 +8,16 @@
   </a>
 </p>
 
-> ### 🚀 Latest release — Protos 0.3.312
+> ### 🚀 Install Protos on Linux
 >
-> Protos ships an official **self-contained Native prerelease** for the
-> declared Linux x86_64 / glibc 2.39+ target. Download, verify, extract, and run:
-> no external Java/GraalVM runtime, Maven, or Protos source checkout is required
-> after extraction. The portable JVM artifact remains available as the
-> compatibility fallback and Java-embedding runtime for GraalVM Community
-> 25.4.4.1.1 / JDK 25.0.4.1.1.
+> Use the version-independent **Native Image installer** on supported Linux
+> x86_64 systems (dynamic glibc 2.39+). It selects a compatible published
+> Native prerelease and installs it locally without Java, GraalVM, or Maven.
+> The separately published portable JVM artifact remains available for
+> compatibility and Java embedding; it is never an installer fallback.
 >
 > **[Try Protos →](docs/guide/00-try-protos.md)** ·
-> **[Download 0.3.312 →](https://github.com/guillermomolina/protos/releases/tag/v0.3.312)**
+> **[Published releases →](https://github.com/guillermomolina/protos/releases)**
 
 # Protos
 
@@ -49,22 +48,26 @@ for durable implementation/closure history.
 
 ## Try Protos
 
-On the supported Native target — **Linux x86_64 with dynamic glibc 2.39 or
-newer** — the recommended first-run artifact is the self-contained
-[Protos 0.3.312 Native prerelease](https://github.com/guillermomolina/protos/releases/tag/v0.3.312).
-It requires no external Java/GraalVM runtime or Maven after extraction.
+On supported **Linux x86_64 with dynamic glibc**, install the latest eligible
+published Native Image with the stable installer URL. No JDK, GraalVM, Maven,
+root privileges, or Protos source checkout is required:
 
 ```sh
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip
-curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.312/protos-0.3.312-native-linux-x86_64.zip.sha256
-sha256sum -c protos-0.3.312-native-linux-x86_64.zip.sha256
-unzip protos-0.3.312-native-linux-x86_64.zip
-./protos-0.3.312-native-linux-x86_64/bin/protos --version
-./protos-0.3.312-native-linux-x86_64/bin/protos -e 'print("Hello, Protos!")'
+curl -fsSL https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh | sh
+"$HOME/.local/bin/protos" --version
+"$HOME/.local/bin/protos" -e 'print("Hello, Protos!")'
 ```
 
-For the Dev Container path, the portable JVM fallback, platform limitations,
-and next steps, see the [Try Protos guide](docs/guide/00-try-protos.md).
+The installer verifies the official Native manifest, checksum, and archive,
+then activates a versioned user-local installation. Running the same command
+later checks for a compatible update; the script URL does not change with
+the release version. It does not install the JAR or change your shell profile.
+If `~/.local/bin` is missing from `PATH`, the installer prints a setup hint.
+
+To review the script before executing it, to pin a release, or to roll back
+and uninstall safely, see the [Try Protos guide](docs/guide/00-try-protos.md).
+Manual Native ZIP extraction and the separate portable JVM distribution remain
+available from [published releases](https://github.com/guillermomolina/protos/releases).
 
 ## Why Protos?
 
