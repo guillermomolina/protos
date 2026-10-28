@@ -1,0 +1,140 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal trust sources of std:tls/Client (D220–S12, TLS.md §3). This module
+//! is an unpublished implementation artifact, not an approved Standard
+//! Library API.
+//!
+//! A trust descriptor is a value of the private sealed family `facility.trust`:
+//! only these constructors mint one, and its state is never a guest-visible
+//! slot. Its state is the String "javaCacerts" or "system", or a frozen Array
+//! ["anchors", frozen Array of frozen DER Bytes]. There is no default, no
+//! union and no fallback between sources.
+
+Errors: import("std:tls/internal/Errors")
+
+maxAnchors: 256
+maxCertificateBytes: 65536
+maxAggregateBytes: 4194304
+
+// A certificate is a usable CA anchor when its basicConstraints assert cA and
+// its keyUsage, when present, permits keyCertSign (RFC 5280 §4.2.1.3, §4.2.1.9).
+usableAnchor: (facts) => {
+    usable: facts.ca
+    if(usable && (facts.keyCertSign !== null)) {
+        usable = facts.keyCertSign
+    }
+    usable
+}
+
+/// Answers the public Trust object whose constructors mint descriptors of
+/// facility.trust. Every malformed argument signals a fresh ordinary Error
+/// synchronously; no descriptor or Future is produced for it.
+constructors: (facility) => {
+    family: facility.trust
+
+    // Snapshots the Array and every member; each member must be exact DER of
+    // a usable CA certificate within the size bounds, checked before decoding.
+    anchors: (certificates) => {
+        Array.recognizes(certificates).ifFalse(() => {
+            Error().signal()
+        })
+        count: certificates.size()
+        if((count < 1) || (count > maxAnchors)) {
+            Error().signal()
+        }
+        snapshot: Array(...certificates)
+        total: 0
+        selected: []
+        snapshot.each((element) => {
+            facility.isBytes(element).ifFalse(() => {
+                Error().signal()
+            })
+            size: element.size()
+            if((size < 1) || (size > maxCertificateBytes)) {
+                Error().signal()
+            }
+            total = total + size
+            if(total > maxAggregateBytes) {
+                Error().signal()
+            }
+            facts: facility.certificate(element)
+            if(facts === null) {
+                Error().signal()
+            }
+            usableAnchor(facts).ifFalse(() => {
+                Error().signal()
+            })
+            // facts.der is the backend's fresh frozen copy of the octets.
+            selected = Array(...selected, facts.der)
+        })
+        selected.freeze()
+        family.seal({}, Array("anchors", selected).freeze())
+    }
+
+    // Java cacerts only, resolved afresh for each admitted handshake.
+    javaCacerts: () => {
+        family.seal({}, "javaCacerts")
+    }
+
+    // Valid, but no operating-system adapter exists in this release (§3.3).
+    system: () => {
+        family.seal({}, "system")
+    }
+
+    trust: {
+        anchors: anchors
+        javaCacerts: javaCacerts
+        system: system
+    }
+    trust.freeze()
+}
+
+/// Whether trust is a descriptor minted by constructors(facility).
+recognizes: (facility, trust) => {
+    facility.trust.recognizes(trust)
+}
+
+/// Resolves the descriptor inside the handshake Task, before any TLS octet,
+/// and answers the nonempty Array of selected DER anchors. A source without
+/// usable material signals a fresh TlsError of kind "trustUnavailable"; no
+/// other source is ever substituted.
+resolve: (facility, TlsError, trust) => {
+    state: facility.trust.state(trust)
+    selected: null
+    if(String.recognizes(state)) {
+        if(state == "javaCacerts") {
+            material: facility.javaCacerts()
+            if(material !== null) {
+                selected = []
+                material.each((der) => {
+                    facts: facility.certificate(der)
+                    if(facts !== null) {
+                        if(usableAnchor(facts)) {
+                            selected = Array(...selected, facts.der)
+                        }
+                    }
+                })
+            }
+        }
+        // "system": no operating-system trust adapter exists; selected stays null.
+    } else {
+        selected = state[1]
+    }
+    if((selected === null) || (selected.size() == 0)) {
+        Errors.tlsError(TlsError, "trustUnavailable").signal()
+    }
+    selected
+}

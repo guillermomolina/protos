@@ -109,6 +109,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosInspectFacility.java", 4),
                     // LIB025 std:http/Server private asynchronous bridge.
                     Map.entry("execution/facilities/ProtosHttpAsyncFacility.java", 1),
+                    // I130-B std:tls/Client private backend bridge.
+                    Map.entry("execution/facilities/ProtosTlsBackendFacility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -160,6 +162,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // LIB025 std:http/Server private facility, not Core behavior.
                             || relative.equals(
                                     "execution/facilities/ProtosHttpAsyncFacility.java")
+                            // I130-B std:tls/Client private facility, not Core behavior.
+                            || relative.equals(
+                                    "execution/facilities/ProtosTlsBackendFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

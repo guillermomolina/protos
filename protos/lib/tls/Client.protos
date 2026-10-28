@@ -1,0 +1,110 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library TLS client (D220–S12, TLS.md).
+//!
+//! `Client.handshake(duplex, serverIdentity, trust, options)` performs one TLS
+//! client handshake over a caller-supplied, already connected duplex
+//! (`ByteReadable` and `ByteWritable`) and answers a fresh `Future` of a secure
+//! duplex (`read`, `write`, `close`), delivered only after the peer chain
+//! verified against `trust` and the peer certificate presented
+//! `serverIdentity`. It borrows `duplex` and never closes it.
+//! `Client.handshake.owning(...)` additionally requires `Closable` and closes
+//! `duplex` exactly once: on a failed or cancelled handshake, or when the
+//! secure duplex is closed.
+//!
+//! `serverIdentity` is an ASCII (A-label) DNS name or an `IpAddress`; `trust`
+//! is `Trust.anchors(certificates)`, `Trust.javaCacerts()` or
+//! `Trust.system()`; `options` is an ordinary object with the optional fields
+//! `minimumVersion`, `alpn`, `maxHandshakeBytes` and `maxQueuedWriteBytes`.
+//! There is no default trust. The facility acquires no network, name
+//! resolution, URL, clock or other ambient authority.
+
+/// The prototype of every TLS failure. Each failure is a fresh occurrence
+/// whose own `kind` is one of "trustUnavailable", "backendUnavailable",
+/// "untrustedPeer", "identityMismatch", "protocolVersion", "alpn",
+/// "handshakeFailure", "protocol", "limit" or "truncated". A failure caused
+/// by the underlying transport is that transport Error instead.
+TlsError: Error {}
+
+/// Explicit trust descriptors. `anchors(certificates)` takes 1..256 DER X.509
+/// CA certificates as Bytes (each at most 65536 octets, 4194304 in total) and
+/// snapshots them; `javaCacerts()` selects only the Java cacerts material,
+/// read for each handshake; `system()` selects operating-system trust, for
+/// which this release has no adapter, so handshakes using it fail with kind
+/// "trustUnavailable". A malformed argument signals an Error synchronously.
+Trust: ((facility) => {
+    TrustSource: import("std:tls/internal/TrustSource")
+    TrustSource.constructors(facility)
+})(_tlsBackendFacility)
+
+/// The TLS client handshake.
+Client: ((facility) => {
+    Options: import("std:tls/internal/Options")
+    Identity: import("std:tls/internal/Identity")
+    TrustSource: import("std:tls/internal/TrustSource")
+    Session: import("std:tls/internal/Session")
+
+    // TLS.md §2.1: every argument is validated before any effect. An invalid
+    // call answers an already failed Future without a Task, custody or I/O;
+    // an admitted call creates exactly one handshake Task.
+    admit: (duplex, serverIdentity, trust, options, owning) => {
+        valid: facility.provides(duplex, "read") && facility.provides(duplex, "write")
+        if(valid && owning) {
+            valid = facility.closable(duplex)
+        }
+        reference: null
+        if(valid) {
+            reference = Identity.reference(serverIdentity)
+            valid = reference !== null
+        }
+        if(valid) {
+            valid = TrustSource.recognizes(facility, trust)
+        }
+        captured: null
+        if(valid) {
+            captured = Options.capture(facility, options)
+            valid = captured !== null
+        }
+
+        answer: null
+        if(valid) {
+            answer = facility.startService(
+                Session.serviceBody(facility, TlsError, duplex, reference, trust, captured, owning)
+            )
+        } else {
+            answer = facility.failed(InvalidIOArgument {})
+        }
+        answer
+    }
+
+    // Performs one borrowed handshake over duplex; see the module documentation.
+    entry: (duplex, serverIdentity, trust, options) => {
+        admit(duplex, serverIdentity, trust, options, false)
+    }
+    // Performs one handshake and takes custody of duplex, closing it exactly once.
+    entry.owning: (duplex, serverIdentity, trust, options) => {
+        admit(duplex, serverIdentity, trust, options, true)
+    }
+
+    client: {
+        handshake: entry
+    }
+    client
+})(_tlsBackendFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_tlsBackendFacility")

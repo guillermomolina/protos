@@ -7,6 +7,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.416-SNAPSHOT
+
+- `I130-B` (D220–S12): Protos-first `std:tls/Client` exporting `Client`,
+  `Trust` and `TlsError`.
+  - Portable policy lives in `protos/lib/tls/`: admission, options
+    capture, sealed `Trust` descriptors (bounded DER anchor snapshots,
+    `javaCacerts` failing closed without fallback, `system` answering
+    `trustUnavailable`), RFC 9525 SAN-only identity with a whole-leftmost-
+    label wildcard, `TlsError` kinds from backend facts, one handshake
+    service Task with handshake-byte accounting, and the secure duplex
+    (fail-closed writes, write-queue capacity, close_notify through the
+    owning close order of `IO_CORE.md` §9).
+  - An owning handshake that fails keeps its original Error over a failing
+    close of the lower duplex; a cancelled one fails with the close Error.
+  - DNS references are temporarily restricted to ASCII NR-LDH labels:
+    R-LDH labels, including every `xn--` A-label, are rejected, and
+    presented DNS-IDs containing one are ineligible (incomplete IDNA2008
+    conformance, `TLS.md` §§4, 13).
+  - `ProtosTlsBackendFacility` is the private host bridge over the I130-A
+    engine and trust primitives, registered as an audited non-Core native
+    provider; `ProtosHttpAsyncFacility` shares its asynchronous operations
+    at package visibility.
+  - The test tool registers the `protos/corpus/library/tls` corpus. Guest
+    tests cover admission, handshake outcomes and identity; JSSE-peer
+    integration tests cover negotiation, fragmentation, close_notify and
+    truncation, precedence, cancellation, capacity and Actor confinement.
+  - Not yet covered: oversized records classified as `limit`, Native Image
+    provider and CA provenance, and the adversarial test matrix (I130-C).
+
 ## 0.3.415-SNAPSHOT
 
 - `BUG030` (#983): preserve late `BufferedReader` bytes after cancellation.

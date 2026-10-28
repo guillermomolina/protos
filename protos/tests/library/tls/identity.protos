@@ -1,0 +1,88 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// I130-B (D220–S12, TLS.md §4, RFC 9525 §6.3): the portable reference-identity
+// policy of std:tls/Client, exercised directly with controlled subjectAltName
+// inputs. The internal module is an unpublished implementation artifact; these
+// cases need no certificate.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Identity: import("std:tls/internal/Identity")
+IpAddresses: import("std:network/IpAddresses")
+
+// Whether reference matches a peer presenting exactly the DNS-ID presented.
+matchesDns: (reference, presented) => {
+    Identity.matches(Identity.reference(reference), [presented], [])
+}
+
+tests: [
+    Test("a wildcard is the whole leftmost label and matches exactly one label", () => {
+        Assertions.require(matchesDns("host.test", "*.test"))
+        Assertions.require(!matchesDns("a.host.test", "*.test"))
+        Assertions.require(matchesDns("api.wild.protos.test", "*.wild.protos.test"))
+        Assertions.require(!matchesDns("wild.protos.test", "*.wild.protos.test"))
+    }),
+    Test("partial-label, embedded and multiple wildcards never match", () => {
+        Assertions.require(!matchesDns("host.test", "h*.test"))
+        Assertions.require(!matchesDns("host.test", "*st.test"))
+        Assertions.require(!matchesDns("a.host.test", "*.*.test"))
+        Assertions.require(!matchesDns("a.host.test", "a.*.test"))
+        Assertions.require(!matchesDns("host.test", "*"))
+    }),
+    Test("DNS-IDs compare ASCII case-insensitively with one terminal dot removed", () => {
+        Assertions.require(matchesDns("Service.Protos.Test", "SERVICE.protos.TEST"))
+        Assertions.require(matchesDns("service.protos.test.", "service.protos.test"))
+        Assertions.require(!matchesDns("service.protos.test", "service.protos"))
+    }),
+    Test("presented DNS-IDs with a reserved LDH label are ineligible", () => {
+        Assertions.require(!matchesDns("host.test", "*.xn--bcher-kva.test"))
+        Assertions.require(!matchesDns("ab.test", "ab--.test"))
+        // The reference itself stays valid; only the reserved DNS-ID is skipped.
+        Assertions.require(Identity.matches(Identity.reference("host.test"), ["xn--zz.test", "host.test"], []))
+    }),
+    Test("non-ASCII presented DNS-IDs never match", () => {
+        Assertions.require(!matchesDns("host.test", "höst.test"))
+    }),
+    Test("IP references match exact SAN octets only", () => {
+        loopback: Identity.reference(IpAddresses.v4(127, 0, 0, 1))
+        Assertions.require(loopback.sni === null)
+        exact: Encoding.Latin1.encode("")
+        exact.add(127)
+        exact.add(0)
+        exact.add(0)
+        exact.add(1)
+        Assertions.require(Identity.matches(loopback, [], [exact]))
+        // A DNS-ID spelling the address is never an IP identity.
+        Assertions.require(!Identity.matches(loopback, ["127.0.0.1"], []))
+        mapped: Encoding.Latin1.encode("")
+        index: 0
+        while(index < 10) {
+            mapped.add(0)
+            index = index + 1
+        }
+        mapped.add(255)
+        mapped.add(255)
+        mapped.add(127)
+        mapped.add(0)
+        mapped.add(0)
+        mapped.add(1)
+        Assertions.require(!Identity.matches(loopback, [], [mapped]))
+    }),
+    Test("a DNS reference sends its normalized name as SNI", () => {
+        Assertions.require(Identity.reference("Service.Protos.Test.").sni == "service.protos.test")
+        Assertions.require(Identity.reference("xn--bcher-kva.test") === null)
+    })
+]

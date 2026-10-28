@@ -1,0 +1,225 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal reference identity of std:tls/Client (D220–S12, TLS.md §4,
+//! RFC 9525). This module is an unpublished implementation artifact, not an
+//! approved Standard Library API.
+//!
+//! Matching is subjectAltName-only: a DNS reference against DNS-IDs, an IP
+//! reference against exact iPAddress octets. The subject Common Name is never
+//! consulted; the backend does not even supply it.
+
+IpAddresses: import("std:network/IpAddresses")
+IpAddress: IpAddresses.IpAddress
+
+maxNameOctets: 253
+maxLabelOctets: 63
+
+// Answers {labels, text} for an ASCII NR-LDH DNS name of at least two labels,
+// lowercased, with one optional terminal root dot removed; or null. With
+// allowWildcard, only the entire leftmost label may be "*" (RFC 9525 §6.3);
+// no public-suffix check is made.
+// Any octet outside ASCII letters, digits and interior hyphens, including
+// every non-ASCII (U-label) octet, makes the name invalid.
+dnsName: (text, allowWildcard) => {
+    octets: Encoding.UTF8.encode(text)
+    size: octets.size()
+    if((size > 0) && (octets[size - 1] == 46)) {
+        size = size - 1
+    }
+    valid: (size >= 1) && (size <= maxNameOctets)
+    labels: []
+    whole: Encoding.UTF8.encode("")
+    label: Encoding.UTF8.encode("")
+    last: 0
+
+    closeLabel: () => {
+        if((label.size() == 0) || (label.size() > maxLabelOctets) || (last == 45)) {
+            valid = false
+        } else {
+            // Reserved LDH (RFC 5890): hyphens in positions 3 and 4, which
+            // includes every "xn--" A-label. Temporary I130-B restriction
+            // (TLS.md §4): without IDNA2008 validation no such label is
+            // admitted or matched; there is no conversion or fallback.
+            if(label.size() >= 4) {
+                if((label[2] == 45) && (label[3] == 45)) {
+                    valid = false
+                }
+            }
+        }
+        if(valid) {
+            labels = Array(...labels, Encoding.UTF8.decode(label))
+            label = Encoding.UTF8.encode("")
+        }
+    }
+
+    index: 0
+    while(valid && (index < size)) {
+        octet: octets[index]
+        if(octet == 46) {
+            closeLabel()
+            whole.add(46)
+        } else {
+            lowered: octet
+            if((octet >= 65) && (octet <= 90)) {
+                lowered = octet + 32
+            }
+            accepted: ((lowered >= 97) && (lowered <= 122)) || ((octet >= 48) && (octet <= 57))
+            if((octet == 45) && (label.size() > 0)) {
+                accepted = true
+            }
+            if((octet == 42) && allowWildcard && (index == 0) && (size > 1)) {
+                if(octets[1] == 46) {
+                    accepted = true
+                }
+            }
+            if(accepted) {
+                label.add(lowered)
+                whole.add(lowered)
+                last = octet
+            } else {
+                valid = false
+            }
+        }
+        index = index + 1
+    }
+    if(valid) {
+        closeLabel()
+    }
+    if(valid && (labels.size() < 2)) {
+        valid = false
+    }
+
+    answer: null
+    if(valid) {
+        labels.freeze()
+        answer = {
+            labels: labels
+            text: Encoding.UTF8.decode(whole)
+        }
+        answer.freeze()
+    }
+    answer
+}
+
+// Whether text is numeric IP-address text, which is never a DNS reference.
+numericLiteral: (text) => {
+    parsed: false
+    Error.handle(
+        () => {
+            IpAddresses.parse(text)
+            parsed = true
+        },
+        (error) => {
+            error
+        }
+    )
+    parsed
+}
+
+// The 4 or 16 network-order Integer octets of a recognized IpAddress.
+ipOctets: (address) => {
+    width: 4
+    if(address.version == 6) {
+        width = 16
+    }
+    octets: []
+    remaining: address.bits
+    while(octets.size() < width) {
+        octets = Array(remaining.mod(256), ...octets)
+        remaining = remaining.div(256)
+    }
+    octets.freeze()
+}
+
+/// Answers the frozen normalized reference for serverIdentity, or null when it
+/// is not admissible: {labels, octets, sni}. A DNS reference has labels and
+/// sends its normalized name, without the terminal dot, as SNI; an IpAddress
+/// reference has octets and sends no SNI.
+reference: (serverIdentity) => {
+    answer: null
+    if(String.recognizes(serverIdentity)) {
+        name: dnsName(serverIdentity, false)
+        if(name !== null) {
+            if(!numericLiteral(name.text)) {
+                answer = {
+                    labels: name.labels
+                    octets: null
+                    sni: name.text
+                }
+            }
+        }
+    } else {
+        if(IpAddress.recognizes(serverIdentity)) {
+            answer = {
+                labels: null
+                octets: ipOctets(serverIdentity)
+                sni: null
+            }
+        }
+    }
+    if(answer !== null) {
+        answer.freeze()
+    }
+    answer
+}
+
+// A presented wildcard label matches exactly one (always nonempty) reference
+// label; every other label compares equal after ASCII lowercasing.
+sameName: (referenceLabels, presentedLabels) => {
+    same: referenceLabels.size() == presentedLabels.size()
+    index: 0
+    while(same && (index < referenceLabels.size())) {
+        if((index > 0) || (presentedLabels[0] != "*")) {
+            same = referenceLabels[index] == presentedLabels[index]
+        }
+        index = index + 1
+    }
+    same
+}
+
+sameOctets: (referenceOctets, presented) => {
+    same: referenceOctets.size() == presented.size()
+    index: 0
+    while(same && (index < referenceOctets.size())) {
+        same = referenceOctets[index] == presented[index]
+        index = index + 1
+    }
+    same
+}
+
+/// Whether the verified peer presents reference: dnsNames are the raw
+/// subjectAltName dNSName Strings, ipAddresses the raw iPAddress Bytes.
+/// Presented names that are not valid ASCII DNS-IDs never match.
+matches: (reference, dnsNames, ipAddresses) => {
+    found: false
+    if(reference.labels !== null) {
+        dnsNames.each((presented) => {
+            if(!found) {
+                candidate: dnsName(presented, true)
+                if(candidate !== null) {
+                    found = sameName(reference.labels, candidate.labels)
+                }
+            }
+        })
+    } else {
+        ipAddresses.each((presented) => {
+            if(!found) {
+                found = sameOctets(reference.octets, presented)
+            }
+        })
+    }
+    found
+}

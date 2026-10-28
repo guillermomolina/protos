@@ -23,6 +23,23 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.478] - 2026-10-28
+
+### D220–S12 — Client TLS clarifications (I130-B)
+- `spec/io/TLS.md` §§3.2, 9: missing, unreadable, empty or unusable Java
+  `cacerts` material fails with kind `trustUnavailable` before any TLS
+  octet; usable material that does not verify the peer is `untrustedPeer`.
+- `spec/io/TLS.md` §4: DNS reference identities are temporarily restricted
+  to ASCII NR-LDH labels; R-LDH labels, including all `xn--` A-labels, are
+  inadmissible, and presented DNS-IDs containing one are ineligible. No
+  implicit Unicode conversion or fallback is permitted.
+- `spec/io/TLS.md` §8: an owning handshake that fails with an Error keeps
+  that Error when the required close also fails; a cancelled handshake
+  whose close fails fails with the close Error. `ensure` is unchanged;
+  secure-duplex close keeps the `IO_CORE.md` §9 precedence.
+- `spec/io/TLS.md` §13: the IDNA2008 A-label exclusion is incomplete
+  D220–S12 conformance, not deferred design.
+
 ## [0.1.477] - 2026-10-28
 
 ### D220–S12 — Client TLS (`std:tls/Client`)

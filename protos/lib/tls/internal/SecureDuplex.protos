@@ -1,0 +1,294 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal secure duplex of std:tls/Client (D220–S12, TLS.md §§7, 8, 10). This
+//! module is an unpublished implementation artifact, not an approved Standard
+//! Library API.
+//!
+//! No operation creates a Task. A read is a standard BufferedReader read over
+//! a private source that pumps the engine inside that read's own
+//! operation-owned execution, as std:http/Client does for response bodies. A
+//! write seals its snapshot into records at invocation and answers a non-Task
+//! Future of the one lower write carrying them. Close emits close_notify
+//! through a BufferedWriter over the lower duplex, owning exactly when the
+//! handshake was, so the lower close follows the established wrapper close
+//! order and failure precedence (IO_CORE.md §9).
+
+Errors: import("std:tls/internal/Errors")
+BufferedReader: import("std:io/BufferedReader").BufferedReader
+BufferedWriter: import("std:io/BufferedWriter").BufferedWriter
+
+encryptedRecordBytes: 18432
+
+/// Answers the secure duplex over an established, identity-verified engine.
+/// For owning, the secure duplex holds custody of duplex and its close
+/// closes duplex exactly once.
+create: (facility, TlsError, duplex, engine, options, owning) => {
+    secure: null
+    closing: false
+    closeLifecycle: null
+    // A lower read whose result has not yet been offered to the engine. It
+    // survives a cancelled read, so no received ciphertext is ever dropped.
+    pendingLower: null
+    // [lower write Future, plaintext size] of every write still retained.
+    reserved: []
+    // The first Error of any admitted lower write. ByteWritable does not
+    // reveal how much of a failed write's ciphertext was committed, so the
+    // record stream can no longer be proven intact: output fails closed and
+    // no further record, including close_notify, is emitted.
+    outputFailure: null
+
+    recordOutputFailure: (error) => {
+        if(outputFailure === null) {
+            outputFailure = error
+        }
+    }
+
+    // ------------------------------------------------------------ reading
+
+    // Ciphertext the engine produced while reading (post-handshake messages)
+    // is written in production order before the read continues.
+    // After an output failure such ciphertext is withheld: emitting it could
+    // follow an unknown committed prefix.
+    flushRead: () => {
+        if(engine.hasCiphertext()) {
+            ciphertext: engine.takeCiphertext()
+            if(outputFailure === null) {
+                Error.handle(
+                    () => {
+                        duplex.write(ciphertext).value()
+                    },
+                    (error) => {
+                        recordOutputFailure(error)
+                        error.signal()
+                    }
+                )
+            }
+        }
+    }
+
+    // Answers the next decrypted octets (1..maxBytes), or null after an
+    // authenticated close_notify. Plaintext leaves the engine only here, right
+    // before this read answers, so a cancelled read loses none of it.
+    nextPlaintext: (maxBytes) => {
+        result: null
+        done: false
+        while(!done) {
+            fact: engine.advance()
+            if(engine.plaintextAvailable() > 0) {
+                // Plaintext authenticated before any failure is returned first.
+                result = engine.takePlaintext(maxBytes)
+                done = true
+            } else {
+                if(fact !== null) {
+                    Errors.fromFact(TlsError, fact, false).signal()
+                }
+                flushRead()
+                if(engine.peerClosed()) {
+                    done = true
+                } else {
+                    capacity: engine.receiveCapacity()
+                    // A full receive buffer without one complete record (§10).
+                    if(capacity == 0) {
+                        Errors.tlsError(TlsError, "limit").signal()
+                    }
+                    if(capacity > encryptedRecordBytes) {
+                        capacity = encryptedRecordBytes
+                    }
+                    if(pendingLower === null) {
+                        pendingLower = duplex.read(capacity)
+                    }
+                    lower: pendingLower
+                    received: null
+                    Error.handle(
+                        () => {
+                            received = lower.value()
+                        },
+                        (error) => {
+                            // A failed lower read is reported once, with its
+                            // own identity, and never replayed.
+                            pendingLower = null
+                            error.signal()
+                        }
+                    )
+                    pendingLower = null
+                    if(received === null) {
+                        // Raw end of input: the next advance reports truncation.
+                        engine.endOfInput()
+                    } else {
+                        engine.offer(received)
+                    }
+                }
+            }
+        }
+        result
+    }
+
+    // The private ByteReadable under the public reads. Each read answers an
+    // already terminal Future; the BufferedReader above it supplies the
+    // per-read Futures, ordering, cancellation and lifecycle without a Task.
+    source: {
+        read: (maxBytes) => {
+            answer: null
+            Error.handle(
+                () => {
+                    answer = facility.resolved(nextPlaintext(maxBytes))
+                },
+                (error) => {
+                    answer = facility.failed(error)
+                    error
+                }
+            )
+            answer
+        }
+    }
+    reader: BufferedReader(source)
+
+    // ------------------------------------------------------------ writing
+
+    // Releases the retention of every write whose lower write is terminal,
+    // recording the first failure among them, and answers the plaintext size
+    // still retained.
+    retainedBytes: () => {
+        retained: []
+        total: 0
+        reserved.each((entry) => {
+            if(facility.pending(entry[0])) {
+                retained = Array(...retained, entry)
+                total = total + entry[1]
+            } else {
+                failure: facility.failure(entry[0])
+                if(failure !== null) {
+                    recordOutputFailure(failure)
+                }
+            }
+        })
+        reserved = retained
+        total
+    }
+
+    // The snapshot is taken and sealed into records before write answers; a
+    // write without reservable capacity contributes no TLS output at all.
+    admitWrite: (bytes) => {
+        size: bytes.size()
+        retainedSize: retainedBytes()
+        answer: null
+        if(outputFailure !== null) {
+            // As a BufferedWriter whose output side failed (IO_CORE.md §9):
+            // the recorded Error is re-observed and nothing is sealed.
+            answer = facility.failed(outputFailure)
+        } else {
+            if(size > (options.maxQueuedWriteBytes - retainedSize)) {
+                answer = facility.failed(IOCapacityExhausted {})
+            } else {
+                if(size == 0) {
+                    answer = facility.resolved(secure)
+                } else {
+                    ciphertext: engine.seal(bytes)
+                    if(ciphertext === null) {
+                        answer = facility.failed(IOLifecycleError {})
+                    } else {
+                        if(String.recognizes(ciphertext)) {
+                            answer = facility.failed(Errors.fromFact(TlsError, ciphertext, false))
+                        } else {
+                            // Committed: an admitted write that later fails may
+                            // have contributed an unknown prefix; it is never
+                            // replayed or rolled back.
+                            lower: null
+                            Error.handle(
+                                () => {
+                                    lower = duplex.write(ciphertext)
+                                },
+                                (error) => {
+                                    recordOutputFailure(error)
+                                    lower = facility.failed(error)
+                                    error
+                                }
+                            )
+                            reserved = Array(...reserved, [lower, size])
+                            answer = facility.settle([lower], [], secure)
+                        }
+                    }
+                }
+            }
+        }
+        answer
+    }
+
+    write: (bytes) => {
+        answer: null
+        if(!facility.isBytes(bytes)) {
+            answer = facility.failed(InvalidIOArgument {})
+        } else {
+            if(closing) {
+                answer = facility.failed(IOLifecycleError {})
+            } else {
+                answer = admitWrite(bytes)
+            }
+        }
+        answer
+    }
+
+    // ------------------------------------------------------------ closing
+
+    // Idempotent: the first call commits the one close lifecycle; every call
+    // answers a fresh Future observing it. close_notify is emitted without
+    // waiting for the peer's.
+    close: () => {
+        if(closeLifecycle === null) {
+            closing = true
+            // A lower read no secure read will consume is withdrawn, so it
+            // cannot take octets from a borrowed transport after close.
+            if(pendingLower !== null) {
+                pendingLower.cancel()
+            }
+            // Learns of lower write failures that are already terminal.
+            retainedBytes()
+            engine.closeOutbound()
+            // A failed engine produces no close_notify; its prepared alert,
+            // if any, is emitted instead.
+            engine.advance()
+            tail: null
+            if(owning) {
+                tail = BufferedWriter.owning(duplex)
+            } else {
+                tail = BufferedWriter(duplex)
+            }
+            if(engine.hasCiphertext()) {
+                ciphertext: engine.takeCiphertext()
+                if(outputFailure === null) {
+                    tail.write(ciphertext)
+                }
+            }
+            // Committed writes keep their own aftermath; close waits for it
+            // but does not report it.
+            awaited: []
+            reserved.each((entry) => {
+                awaited = Array(...awaited, entry[0])
+            })
+            closeLifecycle = facility.settle([tail.close(), reader.close()], awaited, secure)
+        }
+        facility.settle([closeLifecycle], [], secure)
+    }
+
+    secure = {
+        read: (maxBytes) => {
+            reader.read(maxBytes)
+        }
+        write: write
+        close: close
+    }
+    secure
+}

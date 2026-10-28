@@ -155,7 +155,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
 
         assertEquals(expected, actual);
         // LIB025: the subdivided HTTP leaf presents no group without retained Cases.
-        assertEquals(33, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(34, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -174,9 +174,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf, Array())))"));
 
-        assertEquals(27, pairs.indexedSize());
+        assertEquals(28, pairs.indexedSize());
         List<String> order = new ArrayList<>();
-        for (int index = 0; index < 27; index++) {
+        for (int index = 0; index < 28; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             String id = stringAt(pair, 0);
             List<String> names = strings(arrayAt(pair, 1));
@@ -189,7 +189,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         }
         assertEquals("protos/actor", order.get(0));
         assertEquals("protos/package-tool/project-projection", order.get(1));
-        assertEquals("protos/conformance", order.get(26));
+        assertEquals("protos/conformance", order.get(27));
     }
 
     @Test
@@ -446,6 +446,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "library/regex",
                         "library/logging",
                         "library/http",
+                        "library/tls",
                         "package-tool/version",
                         "package-tool/lock",
                         "package-tool/resolution-input",

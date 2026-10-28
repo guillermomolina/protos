@@ -87,6 +87,10 @@ import java.util.List;
  * {@code resolved}, the probes, {@code startService} and {@code enterService} exactly as the
  * server session does; every client rule lives in {@code lib/http/Client.protos} and {@code
  * lib/http/internal/Client*.protos}.
+ *
+ * <p>I130-B (D220–S12): the operations are package-visible so that {@link
+ * ProtosTlsBackendFacility} publishes the same eight operations to {@code std:tls/Client} without
+ * a second implementation; the HTTP facility surface is unchanged.
  */
 public final class ProtosHttpAsyncFacility {
     public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:http/Server");
@@ -125,7 +129,7 @@ public final class ProtosHttpAsyncFacility {
                         }));
     }
 
-    private static Object failed(ProtosActivation activation, List<?> supplied) {
+    static Object failed(ProtosActivation activation, List<?> supplied) {
         if (!(supplied.get(0) instanceof ProtosObjectValue error)) {
             throw invalid(activation);
         }
@@ -134,7 +138,7 @@ public final class ProtosHttpAsyncFacility {
         return future;
     }
 
-    private static Object resolved(ProtosActivation activation, List<?> supplied) {
+    static Object resolved(ProtosActivation activation, List<?> supplied) {
         Object value = supplied.get(0);
         if (value instanceof ProtosFutureValue) {
             // Adoption would make the result depend on another producer.
@@ -146,7 +150,7 @@ public final class ProtosHttpAsyncFacility {
     }
 
     @TruffleBoundary
-    private static Object provides(ProtosActivation activation, List<?> supplied) {
+    static Object provides(ProtosActivation activation, List<?> supplied) {
         if (!(supplied.get(1) instanceof ProtosStringValue selector)) {
             throw invalid(activation);
         }
@@ -158,7 +162,7 @@ public final class ProtosHttpAsyncFacility {
      * {@code Closable} capability, as for the standard I/O wrappers.
      */
     @TruffleBoundary
-    private static Object closable(ProtosActivation activation, List<?> supplied) {
+    static Object closable(ProtosActivation activation, List<?> supplied) {
         try {
             return bool(
                     ProtosValueLookup.lookup(
@@ -172,16 +176,16 @@ public final class ProtosHttpAsyncFacility {
     }
 
     /** An ordinary object: no standard value family, collection, Closure, or resource. */
-    private static Object ordinaryObject(ProtosActivation activation, List<?> supplied) {
+    static Object ordinaryObject(ProtosActivation activation, List<?> supplied) {
         Object value = supplied.get(0);
         return bool(value != null && value.getClass() == ProtosObjectValue.class);
     }
 
-    private static Object isBytes(ProtosActivation activation, List<?> supplied) {
+    static Object isBytes(ProtosActivation activation, List<?> supplied) {
         return bool(supplied.get(0) instanceof ProtosBytesValue);
     }
 
-    private static Object startService(ProtosActivation activation, List<?> supplied) {
+    static Object startService(ProtosActivation activation, List<?> supplied) {
         if (!(supplied.get(0) instanceof ProtosClosureValue body)) {
             throw invalid(activation);
         }
@@ -210,7 +214,7 @@ public final class ProtosHttpAsyncFacility {
      * unwind crosses. Answers {@code null} when no cancellation is pending, including while the
      * Task is already unwinding.
      */
-    private static Object enterService(ProtosActivation activation, List<?> supplied) {
+    static Object enterService(ProtosActivation activation, List<?> supplied) {
         ProtosTask task = activation.task().orElseThrow(() -> invalid(activation));
         if (task.cancellationRequested()) {
             if (!task.beginContinuationCancellationUnwindForRuntime()) {
@@ -222,7 +226,7 @@ public final class ProtosHttpAsyncFacility {
         return ProtosNullValue.INSTANCE;
     }
 
-    private static ProtosFutureValue freshFuture(ProtosActivation activation) {
+    static ProtosFutureValue freshFuture(ProtosActivation activation) {
         ProtosPrelude prelude = activation.prelude().orElseThrow(() -> invalid(activation));
         return new ProtosFutureValue(prelude.futurePrototype(), activation.executionDomain());
     }

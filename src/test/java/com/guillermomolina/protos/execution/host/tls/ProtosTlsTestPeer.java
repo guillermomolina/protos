@@ -175,6 +175,22 @@ final class ProtosTlsTestPeer {
         return failure;
     }
 
+    /** Accepts ciphertext a client wrote through a transport and runs the server (I130-B). */
+    void receive(byte[] ciphertext) {
+        fromClient.put(ciphertext);
+        step();
+    }
+
+    /** Runs the server and takes up to {@code maxBytes} ciphertext octets for the client. */
+    byte[] send(int maxBytes) {
+        step();
+        toClient.flip();
+        byte[] result = new byte[Math.min(maxBytes, toClient.remaining())];
+        toClient.get(result);
+        toClient.compact();
+        return result;
+    }
+
     /** Moves ciphertext both ways until quiescent; client failures propagate. */
     void exchange(ProtosTlsClientEngine client) {
         for (int round = 0; round < 1_000; round++) {

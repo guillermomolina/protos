@@ -577,7 +577,12 @@ public final class ProtosCoreBootstrap {
                 ProtosHttpAsyncFacility.CLIENT_MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
-                        ProtosHttpAsyncFacility::createFacility));
+                        ProtosHttpAsyncFacility::createFacility),
+                // I130-B: the private TLS backend bridge of std:tls/Client.
+                ProtosTlsBackendFacility.MODULE_KEY,
+                Map.of(
+                        ProtosTlsBackendFacility.BOOTSTRAP_SLOT,
+                        ProtosTlsBackendFacility::createFacility));
     }
 
     /**

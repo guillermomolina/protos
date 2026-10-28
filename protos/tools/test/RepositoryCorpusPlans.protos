@@ -228,6 +228,18 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/tls") {
+        selected = planFromEntries(
+            "tls/",
+            Array(
+            Array("client-admission.protos", "suite-native", "-"),
+            Array("client-handshake.protos", "suite-native", "-"),
+            Array("identity.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     matched.ifFalse(() => {
         fail()
     })

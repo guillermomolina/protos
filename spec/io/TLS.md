@@ -127,8 +127,10 @@ selected material is resolved for each admitted handshake. It is never merged
 with application anchors or operating-system trust. It is Java runtime
 material, not live operating-system trust: under an ahead-of-time compiled
 executable, its content may be fixed when the executable is built (§11).
-When that material is missing or unusable, the handshake fails closed before
-any TLS octet is written and never falls back to another source.
+When that material is missing, unreadable, empty or unusable, the handshake
+fails with a `TlsError` of kind `trustUnavailable` before any TLS octet is
+written and never falls back to another source. When usable selected material
+does not verify the peer chain, the kind is `untrustedPeer` (§9).
 
 ### 3.3 `Trust.system()`
 
@@ -142,9 +144,26 @@ never falls back to Java `cacerts` or to any union of trust stores.
 `serverIdentity` is independent of the TCP destination and of any HTTP `Host`
 header. It is admissible when it is either:
 
-- a `String` that is a valid ASCII DNS reference name in IDNA2008 A-label form,
-  already converted by the caller; or
+- a `String` that is a valid ASCII DNS reference name; or
 - a recognized canonical `IpAddress` under `NETWORK.md` §2.
+
+In this release, DNS reference identities are restricted to ASCII
+Non-Reserved LDH (NR-LDH) labels as defined by RFC 5890. Each label must
+satisfy the applicable DNS length and character constraints: ASCII letters,
+digits and hyphens, no leading or trailing hyphen, and at most 63 octets per
+label, 253 octets per name.
+
+Reserved LDH (R-LDH) labels, identified by hyphens in both the third and fourth
+positions, are inadmissible. This includes all `xn--` A-labels, even when they
+represent otherwise valid internationalized domain names.
+
+Presented certificate DNS-IDs containing an R-LDH label are ineligible for
+identity matching.
+
+This is a temporary restriction of the D220–S12 IDNA2008 contract.
+Internationalized domain names encoded as A-labels are not supported until
+conformant IDNA2008 validation is implemented. No implicit Unicode conversion,
+alternate validation scheme or fallback is permitted.
 
 A DNS reference has at least two valid labels, is compared ASCII
 case-insensitively, and has one optional terminal root dot normalized away.
@@ -242,9 +261,18 @@ peer.
 closes `duplex` exactly once after custody acquisition, on every terminal
 path, including handshake failure and cancellation.
 
-Core Future first-terminal-outcome rules, Actor isolation, the standard I/O
-lifecycle errors and the primary-error-before-cleanup-error precedence of
-`../semantics/ERRORS.md` apply unchanged.
+When a `handshake.owning` handshake fails with an Error and the required close
+of `duplex` then also fails, the handshake Future fails with the original
+handshake Error; the close failure does not replace it. When the handshake is
+instead cancelled and that close fails, the handshake Future fails with the
+close Error, under the cleanup precedence of `../semantics/ERRORS.md`. This
+TLS-specific arbitration does not change `ensure`. Closing a secure duplex
+follows the wrapper close order and failure precedence of `IO_CORE.md` §9: a
+close_notify emission failure prevails over a failure of the owned `duplex`
+close, which otherwise is the close failure.
+
+Core Future first-terminal-outcome rules, Actor isolation and the standard I/O
+lifecycle errors apply unchanged.
 
 ## 9. `TlsError`
 
@@ -254,7 +282,7 @@ own slot `kind`, whose value is exactly one of:
 
 | `kind` | Meaning |
 | --- | --- |
-| `trustUnavailable` | the selected trust source has no available adapter (§3.3) |
+| `trustUnavailable` | the selected trust source has no available adapter (§3.3), or the selected Java `cacerts` material is missing, unreadable, empty or unusable (§3.2) |
 | `backendUnavailable` | no compliant TLS backend configuration is available (§5) |
 | `untrustedPeer` | the peer chain does not verify to the selected anchors |
 | `identityMismatch` | the peer certificate does not present the reference identity (§4) |
@@ -307,4 +335,6 @@ HTTP framing, parses no URL and adds no automatic TLS to any HTTP facility.
 The following remain outside this contract and require separate explicit
 design: TLS server operation, HTTPS hosting for `std:http/Host`, mutual TLS,
 operating-system trust adapters, alternative TLS engines, session resumption,
-0-RTT, DNS/URL convenience and HTTP/2.
+0-RTT, DNS/URL convenience and HTTP/2. IDNA2008 A-label references, excluded
+by the temporary restriction of §4, are not deferred design but incomplete
+conformance to the D220–S12 contract.

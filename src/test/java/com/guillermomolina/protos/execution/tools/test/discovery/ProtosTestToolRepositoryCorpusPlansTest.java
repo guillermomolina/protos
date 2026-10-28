@@ -33,6 +33,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/regex", 13, "regex/compile.protos", "regex/split.protos");
         assertPlan("protos/corpus/library/logging", 7, "logging/levels.protos", "logging/sinks.protos");
         assertPlan("protos/corpus/library/http", 15, "http/request-head.protos", "http/client-lifecycle.protos");
+        assertPlan("protos/corpus/library/tls", 3, "tls/client-admission.protos", "tls/identity.protos");
     }
 
     @Test
