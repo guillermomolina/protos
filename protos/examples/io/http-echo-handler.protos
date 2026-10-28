@@ -1,0 +1,42 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! The handler module of `http-loopback-hosting.protos`, installed by the
+//! embedding host as `app:echo`. Each Worker Actor imports its own instance.
+
+/// Answers the request body unchanged, reading it incrementally.
+///
+/// The host's `maxRequestBodyBytes` is enforced on two paths. A declared
+/// `Content-Length` above it is rejected before this handler runs, with a
+/// best-effort 413. A chunked body that exceeds it while being read instead
+/// fails the `request.body.read` that reaches the limit with a fresh HttpError
+/// of kind "requestLimit"; the server then attempts a 413 only if the final
+/// response was not yet committed.
+handle: (request) => {
+    received: Encoding.Latin1.encode("")
+    piece: request.body.read(1024).value()
+    while(piece !== null) {
+        piece.each((octet) => {
+            received.add(octet)
+        })
+        piece = request.body.read(1024).value()
+    }
+    response: {
+        status: 200
+        headers: [["Content-Type", Encoding.Latin1.encode("application/octet-stream")]]
+        body: received
+    }
+    response
+}

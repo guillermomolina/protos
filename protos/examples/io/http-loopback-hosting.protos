@@ -1,0 +1,91 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Host HTTP on loopback with explicit bounds, serve concurrent clients, then
+// drain.
+//
+// Requires the bootstrap-local `network` capability and the handler module
+// `http-echo-handler.protos` installed as `app:echo`. The standalone CLI
+// grants no Network, so a Java Polyglot embedding with socket access runs
+// this program; it answers true on success.
+
+Host: import("std:http/Host").Host
+Client: import("std:http/Client").Client
+IpAddress: import("std:network/IpAddresses").IpAddress
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+
+loopback: IpAddress(4, 2130706433)    // 127.0.0.1
+listenRequest: {
+    ipVersion: 4
+    address: loopback
+    port: null
+}
+listener: network.listenTcp(listenRequest).value()
+port: listener.localPort()
+
+// Every bound is explicit and fixed; 1 <= workers <= maxPendingAccepts <=
+// maxConnections must hold. `limits` is passed to every Server.serveOne
+// session.
+serverLimits: {
+    maxRequestBodyBytes: 4096
+}
+options: {
+    workers: 2
+    maxPendingAccepts: 2
+    maxConnections: 4
+    limits: serverLimits
+}
+host: Host.owning(listener, "app:echo", "handle", options)
+host.ready().value()
+
+post: (text) => {
+    connection: network.connectTcp(IpEndpoint(loopback, port)).value()
+    request: {
+        method: "POST"
+        target: Encoding.Latin1.encode("/echo")
+        headers: [["Host", Encoding.Latin1.encode("127.0.0.1")]]
+        body: Encoding.UTF8.encode(text)
+    }
+    readText: (response) => {
+        received: Encoding.Latin1.encode("")
+        piece: response.body.read(1024).value()
+        while(piece !== null) {
+            piece.each((octet) => {
+                received.add(octet)
+            })
+            piece = response.body.read(1024).value()
+        }
+        Encoding.UTF8.decode(received)
+    }
+    Client.exchangeOne.owning(connection, request, readText, null).value()
+}
+
+// Three clients at once, each on its own connection.
+alpha: (() => {
+    post("alpha")
+}).future()
+beta: (() => {
+    post("beta")
+}).future()
+gamma: (() => {
+    post("gamma")
+}).future()
+echoed: (alpha.value() == "alpha") && (beta.value() == "beta") && (gamma.value() == "gamma")
+
+// Drain lets admitted sessions finish, stops both Workers and closes the
+// listener before its Future resolves.
+drained: host.shutdown("drain").value() === host
+
+echoed && drained

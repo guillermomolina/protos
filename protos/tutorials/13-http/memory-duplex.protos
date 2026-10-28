@@ -1,0 +1,140 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! An in-memory duplex for the HTTP lessons. It is a support module, not a
+//! lesson: the lessons import it with `import("./memory-duplex.protos")`.
+//!
+//! The HTTP facilities accept any value that satisfies `ByteReadable` and
+//! `ByteWritable` (and `Closable` for the owning variants). An ordinary object
+//! whose `read`, `write` and `close` methods follow those protocols is enough,
+//! so these lessons need no Network authority and run under the standalone CLI.
+//! `memory-duplex-contract.protos` checks that this duplex follows them.
+
+/// Answers a duplex whose input is the octets of `text` (Latin-1, so every
+/// character is one octet).
+///
+/// - `read(maxBytes)` requires an Integer greater than zero and answers fresh
+///   Bytes of 1 to `maxBytes` octets, then `null` at the end of the input.
+/// - `write(bytes)` requires Bytes, records a snapshot of their octets and
+///   resolves to the duplex.
+/// - `close()` resolves to the duplex. The first call releases the duplex;
+///   later calls observe the same closed lifecycle and release nothing again.
+///   After it, `read` and `write` fail with a fresh `IOLifecycleError`.
+///
+/// Invalid arguments and closed-duplex operations are reported through the
+/// returned Future, never signaled by the call itself. `written()` answers the
+/// recorded octets as text, `closeCalls()` how many times `close()` was
+/// invoked, and `releaseCount()` how many releases happened (at most one).
+of: (text) => {
+    incoming: Encoding.Latin1.encode(text)
+    offset: 0
+    outgoing: Encoding.Latin1.encode("")
+    closed: false
+    invocations: 0
+    releases: 0
+    duplex: null
+
+    // A fresh Future failed with a fresh occurrence of category.
+    failure: (category) => {
+        (() => {
+            occurrence: category {}
+            occurrence.signal()
+        }).future()
+    }
+    // A fresh Future resolved to value.
+    success: (value) => {
+        (() => {
+            value
+        }).future()
+    }
+    // A private copy of value's octets, or null when value is not Bytes; the
+    // Latin-1 round trip is lossless and never takes a String for octets.
+    snapshot: (value) => {
+        copy: null
+        Error.handle(
+            () => {
+                copy = Encoding.Latin1.encode(Encoding.Latin1.decode(value))
+            },
+            (error) => {
+                copy = null
+                error
+            }
+        )
+        copy
+    }
+
+    duplex = {
+        read: (maxBytes) => {
+            valid: Integer.recognizes(maxBytes)
+            if(valid) {
+                valid = maxBytes > 0
+            }
+            answer: null
+            if(!valid) {
+                answer = failure(InvalidIOArgument)
+            } else {
+                if(closed) {
+                    answer = failure(IOLifecycleError)
+                } else {
+                    chunk: null
+                    if(offset < incoming.size()) {
+                        chunk = Encoding.Latin1.encode("")
+                        while((offset < incoming.size()) && (chunk.size() < maxBytes)) {
+                            chunk.add(incoming[offset])
+                            offset = offset + 1
+                        }
+                    }
+                    answer = success(chunk)
+                }
+            }
+            answer
+        }
+        write: (bytes) => {
+            copy: snapshot(bytes)
+            answer: null
+            if(copy === null) {
+                answer = failure(InvalidIOArgument)
+            } else {
+                if(closed) {
+                    answer = failure(IOLifecycleError)
+                } else {
+                    copy.each((octet) => {
+                        outgoing.add(octet)
+                    })
+                    answer = success(duplex)
+                }
+            }
+            answer
+        }
+        close: () => {
+            invocations = invocations + 1
+            if(!closed) {
+                closed = true
+                releases = releases + 1
+            }
+            success(duplex)
+        }
+        written: () => {
+            Encoding.Latin1.decode(outgoing)
+        }
+        closeCalls: () => {
+            invocations
+        }
+        releaseCount: () => {
+            releases
+        }
+    }
+    duplex
+}

@@ -1,0 +1,160 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Answer one HTTP/1.1 request with a fixed response, and observe how an
+// unsupported request is rejected. std:http/Server works on any duplex, so an
+// in-memory one is enough and no Network authority is needed.
+
+http: import("std:http/Server")
+Assertions: import("std:test/Assertions")
+
+// An in-memory duplex that follows the byte-I/O protocols: read(maxBytes)
+// needs an Integer above zero and answers 1 to maxBytes octets, then null;
+// write(bytes) needs Bytes, snapshots them and resolves to the duplex; close()
+// is idempotent and resolves to the duplex. Invalid arguments fail with
+// InvalidIOArgument and I/O after close with IOLifecycleError, both through
+// the returned Future.
+duplexOf: (text) => {
+    input: Encoding.Latin1.encode(text)
+    offset: 0
+    output: Encoding.Latin1.encode("")
+    closed: false
+    duplex: null
+    failure: (category) => {
+        (() => {
+            occurrence: category {}
+            occurrence.signal()
+        }).future()
+    }
+    success: (value) => {
+        (() => {
+            value
+        }).future()
+    }
+    // Lossless Latin-1 round trip; null when value is not Bytes.
+    snapshot: (value) => {
+        copy: null
+        Error.handle(
+            () => {
+                copy = Encoding.Latin1.encode(Encoding.Latin1.decode(value))
+            },
+            (error) => {
+                copy = null
+                error
+            }
+        )
+        copy
+    }
+    duplex = {
+        read: (maxBytes) => {
+            valid: Integer.recognizes(maxBytes)
+            if(valid) {
+                valid = maxBytes > 0
+            }
+            answer: null
+            if(!valid) {
+                answer = failure(InvalidIOArgument)
+            } else {
+                if(closed) {
+                    answer = failure(IOLifecycleError)
+                } else {
+                    chunk: null
+                    if(offset < input.size()) {
+                        chunk = Encoding.Latin1.encode("")
+                        while((offset < input.size()) && (chunk.size() < maxBytes)) {
+                            chunk.add(input[offset])
+                            offset = offset + 1
+                        }
+                    }
+                    answer = success(chunk)
+                }
+            }
+            answer
+        }
+        write: (bytes) => {
+            copy: snapshot(bytes)
+            answer: null
+            if(copy === null) {
+                answer = failure(InvalidIOArgument)
+            } else {
+                if(closed) {
+                    answer = failure(IOLifecycleError)
+                } else {
+                    copy.each((octet) => {
+                        output.add(octet)
+                    })
+                    answer = success(duplex)
+                }
+            }
+            answer
+        }
+        close: () => {
+            closed = true
+            success(duplex)
+        }
+        written: () => {
+            Encoding.Latin1.decode(output)
+        }
+        isClosed: () => {
+            closed
+        }
+    }
+    duplex
+}
+
+handler: (request) => {
+    response: {
+        status: 200
+        headers: []
+        body: Encoding.UTF8.encode("ok")
+    }
+    response
+}
+
+// The owning variant closes the duplex once the session is over.
+good: duplexOf("GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+http.Server.serveOne.owning(good, handler, null).value()
+print(good.written())
+print(good.isClosed())
+
+// An HTTP/1.0 request never reaches the handler. The server writes a
+// best-effort 505 response and the service Future fails with an HttpError
+// of kind "unsupportedFeature" and status 505.
+bad: duplexOf("GET / HTTP/1.0\r\nHost: localhost\r\n\r\n")
+outcome: http.HttpError.handle(
+    () => {
+        http.Server.serveOne.owning(bad, handler, null).value()
+        "served"
+    },
+    (error) => {
+        error.kind
+    }
+)
+print(outcome)
+print(bad.written())
+print(bad.isClosed())
+
+// The closed duplex keeps its lifecycle: I/O is rejected, and closing again
+// answers the duplex without another release.
+Assertions.signals(IOLifecycleError, () => {
+    good.read(1).value()
+})
+Assertions.require(good.close().value() === good)
+Assertions.signals(InvalidIOArgument, () => {
+    duplexOf("").read(0).value()
+})
+Assertions.signals(InvalidIOArgument, () => {
+    duplexOf("").write("text").value()
+})

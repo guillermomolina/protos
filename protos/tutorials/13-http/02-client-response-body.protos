@@ -1,0 +1,75 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Client.exchangeOne performs exactly one request/response exchange on a
+// duplex you supply. The Client never opens a connection; here the duplex is
+// in memory and plays a server that answers with a chunked body.
+
+http: import("std:http/Client")
+MemoryDuplex: import("./memory-duplex.protos")
+
+duplex: MemoryDuplex.of(
+    "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nTransfer-Encoding: chunked\r\n\r\n6\r\nHello \r\n7\r\nProtos!\r\n0\r\n\r\n"
+)
+
+// Exactly one Host field is required. The target, header values and body
+// are Bytes; the Client adds Content-Length and Connection: close itself.
+request: {
+    method: "GET"
+    target: Encoding.Latin1.encode("/greeting")
+    headers: [["Host", Encoding.Latin1.encode("example.org")]]
+    body: null
+}
+
+escaped: null
+
+// onResponse runs once, for the final response. Its body is a ByteReadable
+// decoded on demand: read it here, piece by piece, before returning.
+onResponse: (response) => {
+    print(response.status)
+    received: Encoding.Latin1.encode("")
+    piece: response.body.read(4).value()
+    while(piece !== null) {
+        // Reads may be shorter than requested; null marks the end of the body.
+        print(Encoding.Latin1.decode(piece))
+        piece.each((octet) => {
+            received.add(octet)
+        })
+        piece = response.body.read(4).value()
+    }
+    escaped = response.body
+    // The callback's ordinary result becomes the result of the exchange.
+    Encoding.UTF8.decode(received)
+}
+
+// The owning variant takes custody of the duplex and closes it exactly once,
+// whatever the outcome.
+text: http.Client.exchangeOne.owning(duplex, request, onResponse, null).value()
+print(text)
+print(duplex.written())
+print(duplex.releaseCount())
+
+// The exchange retired when onResponse returned, so the body is no longer
+// readable, even though it escaped the callback.
+late: IOLifecycleError.handle(
+    () => {
+        escaped.read(4).value()
+        "still readable"
+    },
+    (error) => {
+        "retired"
+    }
+)
+print(late)

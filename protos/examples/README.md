@@ -48,6 +48,9 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
 | Execute work in an isolated parallel domain | `concurrency/parallel-execution.protos` |
 | Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |
+| Answer one HTTP request and observe a rejected request (`std:http/Server`) | `io/http-minimal-response.protos` |
+| Perform an HTTP GET over an application-opened TCP connection (`std:http/Client`, requires `network`) | `io/http-get.protos` |
+| Host HTTP on loopback with explicit bounds and drain it (`std:http/Host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
 
 Run the metadata example normally from the product repository root:
 `bin/protos protos/examples/runtime-introspection/info.protos`. The
@@ -55,3 +58,10 @@ inspection example requires explicit authority:
 `bin/protos --inspect protos/examples/runtime-introspection/inspect.protos`.
 The inspection command produces implementation-specific diagnostic text;
 do not treat its contents as a stable output format.
+
+The standalone CLI grants no `network`. The two examples marked "requires
+`network`" therefore contain no `print(...)` call and are not run by the CLI
+regression suite; they end with a Boolean verdict and are executed by
+`ProtosHttpLearningMaterialIntegrationTest` in a Java Polyglot embedding with
+socket access, which also installs `http-echo-handler.protos` as `app:echo`.
+See the [HTTP guide](../../docs/guide/library/http.md).

@@ -1,0 +1,84 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// This lesson requires the host to provision the bootstrap-local `network`
+// capability and to install `hello-handler.protos` as the module `app:hello`.
+// The standalone CLI grants no Network, so a Java Polyglot embedding with
+// socket access runs it; the program answers true when every step succeeded.
+
+Host: import("std:http/Host").Host
+Client: import("std:http/Client").Client
+IpAddress: import("std:network/IpAddresses").IpAddress
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+
+loopback: IpAddress(4, 2130706433)    // 127.0.0.1
+
+// 1. Acquire a listener with our own Network authority; port null selects a
+//    free port.
+listenRequest: {
+    ipVersion: 4
+    address: loopback
+    port: null
+}
+listener: network.listenTcp(listenRequest).value()
+port: listener.localPort()
+
+// 2. Hand the listener to the host. From now on the host owns it and closes
+//    it; we must not accept from or close it ourselves. Each of the two Worker
+//    Actors imports "app:hello" and calls its "handle" binding.
+options: {
+    workers: 2
+    maxConnections: 4
+}
+host: Host.owning(listener, "app:hello", "handle", options)
+ready: host.ready().value() === host
+
+// 3. A client exchange on a connection we acquire explicitly. The callback
+//    reads the whole body before it returns, because the body stops being
+//    readable when the callback completes.
+readText: (response) => {
+    received: Encoding.Latin1.encode("")
+    piece: response.body.read(1024).value()
+    while(piece !== null) {
+        piece.each((octet) => {
+            received.add(octet)
+        })
+        piece = response.body.read(1024).value()
+    }
+    Encoding.UTF8.decode(received)
+}
+
+get: (target) => {
+    connection: network.connectTcp(IpEndpoint(loopback, port)).value()
+    request: {
+        method: "GET"
+        target: Encoding.Latin1.encode(target)
+        headers: [["Host", Encoding.Latin1.encode("127.0.0.1")]]
+        body: null
+    }
+    // Owning: the Client closes the connection on every outcome.
+    Client.exchangeOne.owning(connection, request, readText, null).value()
+}
+
+// Every connection carries exactly one request: there is no keep-alive.
+first: get("/world")
+second: get("/again")
+
+// 4. Drain: stop accepting, let admitted sessions finish, stop the Workers
+//    and close the listener. The Future resolves only after all of that.
+drained: host.shutdown("drain").value() === host
+terminated: host.termination().value() === host
+
+ready && (first == "Hello, /world") && (second == "Hello, /again") && drained && terminated

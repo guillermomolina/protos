@@ -14,7 +14,10 @@ Importing a module never grants authority, but modules differ in whether they
 need authority that already exists:
 
 - Almost every module requires none. A module that writes text, reads a time,
-  or touches a file does so only through a value you pass to it.
+  or touches a file does so only through a value you pass to it. The HTTP
+  modules likewise use only the duplex or `TcpListener` you pass them; real TCP
+  needs a `network` that only an authorized host provisions (see
+  [HTTP/1.1](http.md)).
 - `std:inspect` requires authority the host must already have granted to the
   Context (the `protos.Inspect` option). Without it, the import itself signals
   an ordinary `Error`; importing never creates that authority.
@@ -47,6 +50,7 @@ is not a module; import `std:datetime/Date`, `std:datetime/Instant`, and so on.
 | [Structured logging](logging.md) | `std:logging/*` | Explicit loggers, levels, structured fields, text/JSON/colored formatting, and sinks |
 | [Text styling and encodings](text.md) | `std:text/*` | Styled text, ANSI rendering, color-mode policy, and UTF-8/UTF-16/Latin-1 helpers |
 | [Semantic versions](semver.md) | `std:semver/SemVer` | Strict Semantic Versioning 2.0.0 parsing, formatting, equality, and precedence |
+| [HTTP/1.1](http.md) | `std:http/Server`, `std:http/Host`, `std:http/Client` | One request on a supplied duplex, continuous hosting on an owned `TcpListener`, and one client exchange on a supplied duplex |
 | [Explicit foreign operations](interop.md) | `std:interop` | `invoke`, `instantiate`, `readMember`, and `writeMember` on foreign values |
 | [Runtime metadata](runtime.md) | `std:runtime` | Four read-only String fields: `implementation`, `implementationVersion`, `engineVersion`, `platform` (no Context mode) |
 | [Runtime inspection](inspect.md) | `std:inspect` | Host-authorized diagnostics of value representations, Closures, Bytecode and Truffle trees |
