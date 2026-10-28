@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.415-SNAPSHOT
+
+- `BUG030` (#983): preserve late `BufferedReader` bytes after cancellation.
+  - Per `BYTE_IO.md` §5.1 a read cancelled before commitment consumes zero
+    bytes: bytes a lower read delivers after the outer read was cancelled
+    are appended to the read-ahead buffer in FIFO order, exactly once, and
+    satisfy later reads before the source is read again. Bytes are not
+    retained once the wrapper is closed; terminal outer results are never
+    rewritten.
+  - C-prime settlement is serialized: one path claims the terminal lower
+    Future, and terminal-idle retirement and driver failure no longer
+    retire a request whose lower read may still deliver bytes.
+  - New legacy and C-prime regression tests cover late resolution, lower
+    cancellation without bytes, queued followers, buffered prefixes and
+    resolution racing cancellation.
+
 ## 0.3.414-SNAPSHOT
 
 - `BUG029` (#980): repair `BufferedReader` pre-start cancellation.

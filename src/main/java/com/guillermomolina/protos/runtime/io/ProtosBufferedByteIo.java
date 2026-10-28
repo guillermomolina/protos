@@ -247,6 +247,12 @@ public final class ProtosBufferedByteIo {
         ProtosFutureValue.Observer lowerObserver;
         /** Guarded by the adapter monitor; set once the request has left the queue. */
         boolean retired;
+        /**
+         * Guarded by the adapter monitor; set once one path has claimed the terminal C-prime
+         * lower Future. The request is retired only by that settlement, after any late bytes
+         * were preserved in the read-ahead buffer.
+         */
+        boolean lowerSettling;
 
         Req(
                 ProtosActivation activation,
@@ -443,11 +449,13 @@ public final class ProtosBufferedByteIo {
                     || req.readCPrimePlan == null) {
                 return;
             }
+            if (req.lowerSettling) return;
             lower = req.lower;
         }
         if (!req.operation.terminal()) return;
 
         if (lower == null) {
+            // Neither published nor claimed: no lower read can still consume input.
             done(req);
         } else if (!lower.isPending()) {
             consumeReadLowerForCPrimeRuntime(req.operation, lower);
@@ -480,20 +488,22 @@ public final class ProtosBufferedByteIo {
         return true;
     }
 
+    /**
+     * Settles one terminal lower read. Bytes obtained after the outer read became terminal are
+     * still preserved for later reads (BYTE_IO section 5.1), so a resolved lower value is always
+     * processed; failure and cancellation never rewrite an outer operation that already ended.
+     */
     private void settleReadLower(Req req, ProtosFutureValue terminal) {
-        if (req.operation.terminal()) {
-            done(req);
-            return;
-        }
-
         switch (terminal.state()) {
             case RESOLVED -> settleResolvedRead(req, terminal.resolvedValue().orElseThrow());
             case FAILED -> {
-                req.operation.fail(terminal.failedError().orElseThrow());
+                if (!req.operation.terminal()) {
+                    req.operation.fail(terminal.failedError().orElseThrow());
+                }
                 done(req);
             }
             case CANCELLED -> {
-                req.operation.requestCancellation();
+                if (!req.operation.terminal()) req.operation.requestCancellation();
                 done(req);
             }
             case PENDING -> throw new IllegalStateException(
@@ -511,18 +521,25 @@ public final class ProtosBufferedByteIo {
         }
 
         if (!(value instanceof ProtosBytesValue bytes)) {
-            req.operation.fail(ioError(req.a));
+            if (!req.operation.terminal()) req.operation.fail(ioError(req.a));
             done(req);
             return;
         }
 
         byte[] obtained = bytes.octetSnapshot();
         if (obtained.length == 0) {
-            req.operation.fail(ioError(req.a));
+            if (!req.operation.terminal()) req.operation.fail(ioError(req.a));
             done(req);
             return;
         }
         if (!req.operation.commit()) {
+            // The outer read consumed nothing; keep the late bytes, in FIFO order, for the
+            // next read. A closed wrapper can never read them, so they are not retained.
+            synchronized (this) {
+                if (lifecycle.state() == ProtosIoLifecycle.State.OPEN) {
+                    for (byte b : obtained) input.addLast(b);
+                }
+            }
             done(req);
             return;
         }
@@ -609,9 +626,13 @@ public final class ProtosBufferedByteIo {
                     || req.operation != operation
                     || req.kind != Kind.READ
                     || req.readCPrimePlan == null
-                    || req.lower != lower) {
+                    || req.lower != lower
+                    || req.lowerSettling) {
                 return;
             }
+            // Claim the lower result exclusively before releasing the references, so neither
+            // the passive observer nor a terminal-idle retirement can settle or retire twice.
+            req.lowerSettling = true;
             observer = req.lowerObserver;
             req.lowerObserver = null;
             req.lower = null;
@@ -647,7 +668,7 @@ public final class ProtosBufferedByteIo {
 
         Req req;
         ProtosFutureValue lower;
-        ProtosFutureValue.Observer observer;
+        boolean settling;
         synchronized (this) {
             req = activeReq;
             if (req == null
@@ -658,21 +679,26 @@ public final class ProtosBufferedByteIo {
                 return;
             }
             lower = req.lower;
-            observer = req.lowerObserver;
-            req.lower = null;
-            req.lowerObserver = null;
+            settling = req.lowerSettling;
         }
 
-        if (observer != null && lower != null) {
-            lower.removeObserver(observer);
-        }
-        if (lower != null && lower.isPending()) {
-            lower.cancelRequest();
-        }
         if (!operation.terminal()) {
             operation.fail(ioError(req.a));
         }
-        done(req);
+        if (settling) {
+            // Another path owns the lower result and retires the request after preserving it.
+            return;
+        }
+        if (lower == null) {
+            done(req);
+        } else if (lower.isPending()) {
+            // Keep the queue position and the passive observer: the lower read may still
+            // deliver bytes, which its terminal observer preserves before retirement.
+            lower.cancelRequest();
+            if (!lower.isPending()) consumeReadLowerForCPrimeRuntime(operation, lower);
+        } else {
+            consumeReadLowerForCPrimeRuntime(operation, lower);
+        }
     }
 
     private void cPrimeReadLowerTerminalObserved(

@@ -23,6 +23,9 @@ import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardBufferedByteIoProtocolTest {
@@ -618,6 +621,205 @@ class ProtosStandardBufferedByteIoProtocolTest {
         int writes;
         int flushes;
         int closes;
+    }
+
+    @Test
+    void cancelledLegacyReadPreservesLateResolvedBytes() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        SequencedReadSource sequenced = sequencedReadSource(activation);
+        ProtosFutureValue lower1 = sequenced.pendingLower(true);
+        sequenced.resolvedLower('Y');
+        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+
+        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        assertEquals(1, sequenced.reads);
+        assertTrue(cancelled.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        assertEquals(1, sequenced.cancelRequests);
+
+        assertTrue(lower1.resolve(bytes(sequenced.bytesPrototype, 'Z', 'W'), activation));
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+
+        assertEquals(List.of((int) 'Z'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(List.of((int) 'W'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(1, sequenced.reads, "preserved bytes must be read before new source data");
+        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(2, sequenced.reads);
+        assertEquals(1, sequenced.cancelRequests);
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+    }
+
+    @Test
+    void cancelledLegacyLowerWithoutBytesDoesNotFabricateInput() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        SequencedReadSource sequenced = sequencedReadSource(activation);
+        sequenced.pendingLower(false);
+        sequenced.resolvedLower('Y');
+        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+
+        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        assertTrue(cancelled.cancelRequest());
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        assertEquals(1, sequenced.cancelRequests);
+
+        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(2, sequenced.reads, "the next read must request fresh data from the source");
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+    }
+
+    @Test
+    void legacyLowerResolutionRacingOuterCancellationPreservesBytes() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        SequencedReadSource sequenced = sequencedReadSource(activation);
+        ProtosFutureValue lower1 = sequenced.pendingLower(true);
+        sequenced.resolvedLower('Y');
+        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+
+        CountDownLatch notificationBlocked = new CountDownLatch(1);
+        CountDownLatch releaseNotification = new CountDownLatch(1);
+        // Registered before the adapter's observer, so it runs first and holds the
+        // notification after the lower Future is RESOLVED but before the adapter settles it.
+        lower1.observe(
+                ignored -> {
+                    notificationBlocked.countDown();
+                    try {
+                        if (!releaseNotification.await(10, TimeUnit.SECONDS)) {
+                            throw new AssertionError("test observer was never released");
+                        }
+                    } catch (InterruptedException interrupted) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError("test observer was interrupted", interrupted);
+                    }
+                });
+
+        ProtosFutureValue cancelled = legacyRead(reader, activation);
+        AtomicReference<Throwable> resolverFailure = new AtomicReference<>();
+        Thread resolver =
+                new Thread(
+                        () -> {
+                            try {
+                                lower1.resolve(
+                                        bytes(sequenced.bytesPrototype, 'Z'), activation);
+                            } catch (Throwable failure) {
+                                resolverFailure.set(failure);
+                            }
+                        },
+                        "bug030-lower-resolver");
+        try {
+            resolver.start();
+            assertTrue(notificationBlocked.await(10, TimeUnit.SECONDS));
+            assertEquals(ProtosFutureValue.State.RESOLVED, lower1.state());
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        } finally {
+            releaseNotification.countDown();
+            resolver.join(TimeUnit.SECONDS.toMillis(10));
+        }
+        assertFalse(resolver.isAlive());
+        assertNull(resolverFailure.get(), () -> "resolver thread failed: " + resolverFailure.get());
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+        assertEquals(List.of((int) 'Z'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(1, sequenced.reads, "no later lower read may overtake the preserved bytes");
+        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(2, sequenced.reads);
+    }
+
+    @Test
+    void committedLegacyReadCannotBeRewrittenByCancellation() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        SequencedReadSource sequenced = sequencedReadSource(activation);
+        ProtosFutureValue lower1 = sequenced.pendingLower(true);
+        sequenced.resolvedLower('Y');
+        ProtosObjectValue reader = legacyReader(prelude, sequenced.source, activation);
+
+        ProtosFutureValue committed = legacyRead(reader, activation);
+        assertTrue(lower1.resolve(bytes(sequenced.bytesPrototype, 'Z', 'W'), activation));
+        assertEquals(ProtosFutureValue.State.RESOLVED, committed.state());
+
+        assertFalse(committed.cancelRequest());
+        assertEquals(ProtosFutureValue.State.RESOLVED, committed.state());
+        assertEquals(List.of((int) 'Z'), resolvedInts(committed));
+
+        assertEquals(List.of((int) 'W'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(1, sequenced.reads);
+        assertEquals(List.of((int) 'Y'), resolvedInts(legacyRead(reader, activation)));
+        assertEquals(2, sequenced.reads);
+    }
+
+    /** A source whose successive read calls return the supplied lower Futures in order. */
+    private static final class SequencedReadSource {
+        final ProtosObjectValue source;
+        final ProtosObjectValue bytesPrototype;
+        final ProtosActivation activation;
+        final List<ProtosFutureValue> lowers = new ArrayList<>();
+        int reads;
+        int cancelRequests;
+
+        SequencedReadSource(ProtosObjectValue source, ProtosActivation activation) {
+            this.source = source;
+            this.bytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            this.activation = activation;
+        }
+
+        private ProtosFutureValue newLower() {
+            ProtosFutureValue lower =
+                    new ProtosFutureValue(
+                            activation.prelude().orElseThrow().futurePrototype(),
+                            activation.executionDomain());
+            lowers.add(lower);
+            return lower;
+        }
+
+        ProtosFutureValue pendingLower(boolean ignoreCancellation) {
+            ProtosFutureValue lower = newLower();
+            lower.attachCancellationProducer(
+                    () -> {
+                        cancelRequests++;
+                        if (!ignoreCancellation) lower.cancelTerminal();
+                    });
+            return lower;
+        }
+
+        void resolvedLower(int... values) {
+            newLower().resolve(bytes(bytesPrototype, values), activation);
+        }
+    }
+
+    private static SequencedReadSource sequencedReadSource(ProtosActivation activation) {
+        ProtosObjectValue source = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        SequencedReadSource sequenced = new SequencedReadSource(source, activation);
+        source.createLocalSlot(
+                "read",
+                ProtosClosureValue.nativeClosure(
+                        (x, args) -> sequenced.lowers.get(sequenced.reads++)));
+        return sequenced;
+    }
+
+    private static ProtosObjectValue legacyReader(
+            ProtosPrelude prelude, ProtosObjectValue source, ProtosActivation activation) {
+        return (ProtosObjectValue)
+                call(
+                        ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
+                        "call",
+                        List.of(source),
+                        activation);
+    }
+
+    /** Reads one byte outside any entered Context, so the legacy doRead path is used. */
+    private static ProtosFutureValue legacyRead(
+            ProtosObjectValue reader, ProtosActivation activation) {
+        return (ProtosFutureValue)
+                ProtosInvocation.invokeMessage(reader, "read", List.of(i(1)), activation);
+    }
+
+    private static List<Integer> resolvedInts(ProtosFutureValue read) {
+        assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
+        return ints((ProtosBytesValue) read.resolvedValue().orElseThrow());
     }
 
     private static final class PendingReadSource {

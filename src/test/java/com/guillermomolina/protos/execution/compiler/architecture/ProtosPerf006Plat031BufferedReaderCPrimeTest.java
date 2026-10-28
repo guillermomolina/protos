@@ -125,7 +125,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
     }
 
     @Test
-    void cancelledBufferedReadDiscardsLateReadAheadAndUnblocksNextRead()
+    void cancelledBufferedReadPreservesLateReadAheadAndUnblocksNextRead()
             throws Exception {
         try (LanguageScope scope = languageScope()) {
             Fixture f = fixture();
@@ -169,33 +169,298 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
             assertEquals(1, lowerCancelRequests.get());
             assertEquals(0, f.domain.liveTaskCount());
 
-            assertTrue(lower1.resolve(bytes(f.prelude, 'Z'), f.module));
+            // The lower read ignores the cancellation request and delivers bytes anyway.
+            assertTrue(lower1.resolve(bytes(f.prelude, 'Z', 'W'), f.module));
             assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
             assertEquals(
                     1,
                     reads.get(),
                     "late lower completion must remain an inert cleanup callback");
+            drain(f);
 
-            f.module = siblingModule(f.module);
-            ProtosFutureValue next =
+            ProtosFutureValue z = readOne(scope.language(), f, "bug030-late-z.protos");
+            assertBytes(z.resolvedValue().orElseThrow(), 'Z');
+            ProtosFutureValue w = readOne(scope.language(), f, "bug030-late-w.protos");
+            assertBytes(w.resolvedValue().orElseThrow(), 'W');
+            assertEquals(
+                    1,
+                    reads.get(),
+                    "preserved late bytes must satisfy reads without invoking target.read");
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-after-late.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("PLAT031_BUFFERED_READER_LATE_READ_AHEAD=PRESERVED");
+        System.out.println("PLAT031_BUFFERED_READER_LATE_CALLBACK_GUEST_REENTRY=NO");
+    }
+
+    @Test
+    void cancelAfterLowerResolutionBeforeCPrimeResumePreservesBytes() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue cancelled =
                     invokeCPrimeReturningFuture(
                             scope.language(),
                             f,
                             "reader.read(1)",
-                            "plat031-buffered-reader-after-cancel.protos");
-            assertEquals(ProtosFutureValue.State.PENDING, next.state());
+                            "bug030-resolve-before-resume.protos");
             assertTrue(f.domain.dispatchOne());
-            assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
-            assertBytes(next.resolvedValue().orElseThrow(), 'Y');
-            assertEquals(
-                    2,
-                    reads.get(),
-                    "late bytes from the cancelled buffered read must be discarded");
-            assertFalse(f.domain.dispatchOne());
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+
+            // The lower result exists, but its C-prime continuation has not run yet.
+            assertTrue(lower1.resolve(bytes(f.prelude, 'Z'), f.module));
+            assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            drain(f);
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+
+            ProtosFutureValue z = readOne(scope.language(), f, "bug030-resume-z.protos");
+            assertBytes(z.resolvedValue().orElseThrow(), 'Z');
+            assertEquals(1, reads.get());
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-resume-y.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(0, f.domain.liveTaskCount());
         }
 
-        System.out.println("PLAT031_BUFFERED_READER_LATE_READ_AHEAD=DISCARDED");
-        System.out.println("PLAT031_BUFFERED_READER_LATE_CALLBACK_GUEST_REENTRY=NO");
+        System.out.println("BUG030_CANCEL_BEFORE_CPRIME_RESUME_PRESERVED=PASS");
+    }
+
+    @Test
+    void cancelledLowerReadWithoutBytesAllowsNextRead() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            AtomicInteger lowerCancelRequests = new AtomicInteger();
+            lower1.attachCancellationProducer(lowerCancelRequests::incrementAndGet);
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-lower-cancelled.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(1, lowerCancelRequests.get());
+
+            // The lower cancellation takes effect: no bytes exist to preserve.
+            assertTrue(lower1.cancelTerminal());
+            drain(f);
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-after-lower-cancel.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG030_CANCELLED_LOWER_NO_FABRICATED_INPUT=PASS");
+    }
+
+    @Test
+    void queuedFollowerReceivesLateCancelledReadBytesBeforeNewLowerData() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            AtomicInteger lowerCancelRequests = new AtomicInteger();
+            // The lower read ignores cancellation and may still deliver bytes.
+            lower1.attachCancellationProducer(lowerCancelRequests::incrementAndGet);
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-queued-first.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertEquals(1, reads.get());
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue follower =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-queued-follower.protos");
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(1, lowerCancelRequests.get());
+            drain(f);
+            assertEquals(
+                    ProtosFutureValue.State.PENDING,
+                    follower.state(),
+                    "a follower must wait while the cancelled lower read may still consume input");
+            assertEquals(1, reads.get());
+
+            assertTrue(lower1.resolve(bytes(f.prelude, 'Z'), f.module));
+            drain(f);
+            assertEquals(ProtosFutureValue.State.RESOLVED, follower.state());
+            assertBytes(follower.resolvedValue().orElseThrow(), 'Z');
+            assertEquals(1, reads.get(), "new lower data must not overtake preserved bytes");
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-queued-y.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG030_QUEUED_FOLLOWER_RECEIVES_LATE_BYTES=PASS");
+    }
+
+    @Test
+    void queuedCancellationDoesNotDiscardPreviouslyBufferedPrefix() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue first =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-prefix-first.protos");
+            assertTrue(f.domain.dispatchOne());
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue middle =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-prefix-middle.protos");
+            assertTrue(middle.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, middle.state());
+
+            assertTrue(lower1.resolve(bytes(f.prelude, 'A', 'B'), f.module));
+            drain(f);
+            assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
+            assertBytes(first.resolvedValue().orElseThrow(), 'A');
+
+            ProtosFutureValue b = readOne(scope.language(), f, "bug030-prefix-b.protos");
+            assertBytes(b.resolvedValue().orElseThrow(), 'B');
+            assertEquals(1, reads.get());
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-prefix-y.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, middle.state());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG030_QUEUED_CANCEL_KEEPS_BUFFERED_PREFIX=PASS");
+    }
+
+    @Test
+    void lowerResolutionDuringCancellationRequestPreservesBytesExactlyOnce()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            AtomicInteger lowerCancelRequests = new AtomicInteger();
+            ProtosActivation resolver = f.module;
+            // The lower read had already obtained data: it resolves reentrantly while the
+            // outer cancellation is being propagated to it.
+            lower1.attachCancellationProducer(
+                    () -> {
+                        lowerCancelRequests.incrementAndGet();
+                        lower1.resolve(bytes(f.prelude, 'Z', 'W'), resolver);
+                    });
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            f.module.context().createLocalSlot("reader", reader(f));
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug030-reentrant-lower-resolution.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(1, lowerCancelRequests.get());
+            assertEquals(ProtosFutureValue.State.RESOLVED, lower1.state());
+            drain(f);
+            assertEquals(
+                    ProtosFutureValue.State.CANCELLED,
+                    cancelled.state(),
+                    "the reentrant lower resolution must not reopen the outer read");
+
+            ProtosFutureValue z = readOne(scope.language(), f, "bug030-reentrant-z.protos");
+            assertBytes(z.resolvedValue().orElseThrow(), 'Z');
+            ProtosFutureValue w = readOne(scope.language(), f, "bug030-reentrant-w.protos");
+            assertBytes(w.resolvedValue().orElseThrow(), 'W');
+            assertEquals(1, reads.get());
+
+            ProtosFutureValue y = readOne(scope.language(), f, "bug030-reentrant-y.protos");
+            assertBytes(y.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(1, lowerCancelRequests.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG030_REENTRANT_LOWER_RESOLUTION_PRESERVED_ONCE=PASS");
     }
 
     @SuppressWarnings("try")
@@ -581,6 +846,20 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
         assertTrue(f.domain.dispatchOne());
         assertEquals(ProtosTask.State.COMPLETED, caller.state());
         return captured;
+    }
+
+    /** Starts one read on a sibling module and dispatches it to completion. */
+    private static ProtosFutureValue readOne(
+            ProtosLanguage language,
+            Fixture f,
+            String sourceName)
+            throws Exception {
+        f.module = siblingModule(f.module);
+        ProtosFutureValue read =
+                invokeCPrimeReturningFuture(language, f, "reader.read(1)", sourceName);
+        drain(f);
+        assertEquals(ProtosFutureValue.State.RESOLVED, read.state());
+        return read;
     }
 
     /** Explicitly dispatches every runnable Actor-local item; never waits on time. */
