@@ -65,6 +65,12 @@ public final class ProtosIoOperation {
     private boolean deferredCPrimeRescheduleRequested;
     private ProtosActivation deferredCPrimeActivation;
     private ProtosDynamicControlState deferredCPrimeDynamicControlState;
+    /**
+     * Optional retirement notification guarded by {@link #deferredCPrimeLock}; delivered at most
+     * once when the operation is terminal and no C-prime segment is running.
+     */
+    private Runnable deferredCPrimeTerminalIdleHandler;
+    private boolean deferredCPrimeTerminalIdleRegistered;
 
     ProtosIoOperation(ProtosIoLifecycle lifecycle, ProtosActivation origin, ProtosFutureValue future) {
         this(lifecycle, origin, future, false);
@@ -157,6 +163,34 @@ public final class ProtosIoOperation {
     }
 
     /**
+     * Registers the single runtime-internal notification delivered once this operation is
+     * terminal and no deferred C-prime segment is running. A registration after that point is
+     * delivered immediately. The handler runs at most once, outside every internal lock; it is a
+     * host-only retirement signal and must not run guest code.
+     */
+    public void onDeferredCPrimeTerminalIdleForRuntime(Runnable handler) {
+        Objects.requireNonNull(handler, "handler");
+        Runnable deliver;
+        synchronized (deferredCPrimeLock) {
+            if (deferredCPrimeTerminalIdleRegistered) {
+                throw new IllegalStateException(
+                        "I/O operation already has a deferred C-prime terminal-idle handler");
+            }
+            deferredCPrimeTerminalIdleRegistered = true;
+            deferredCPrimeTerminalIdleHandler = handler;
+            deliver = claimDeferredCPrimeTerminalIdleLocked();
+        }
+        if (deliver != null) deliver.run();
+    }
+
+    private Runnable claimDeferredCPrimeTerminalIdleLocked() {
+        Runnable handler = deferredCPrimeTerminalIdleHandler;
+        if (handler == null || deferredCPrimeRunning || !terminal()) return null;
+        deferredCPrimeTerminalIdleHandler = null;
+        return handler;
+    }
+
+    /**
      * Publishes Actor-local readiness for the operation without executing guest work on the
      * caller thread. Multiple requests while queued coalesce; one request while running becomes
      * exactly one later Actor-domain segment.
@@ -225,6 +259,7 @@ public final class ProtosIoOperation {
         }
 
         boolean requeue = false;
+        Runnable terminalIdle = null;
         try {
             execution.runSegment(this);
         } finally {
@@ -244,11 +279,15 @@ public final class ProtosIoOperation {
                         deferredCPrimeExecution = null;
                         deferredCPrimeActivation = null;
                         deferredCPrimeDynamicControlState = null;
+                        terminalIdle = claimDeferredCPrimeTerminalIdleLocked();
                     }
                 }
             }
             if (requeue) {
                 origin.executionDomain().enqueueActorIoOperationForRuntime(this);
+            }
+            if (terminalIdle != null) {
+                terminalIdle.run();
             }
         }
     }
@@ -558,7 +597,21 @@ public final class ProtosIoOperation {
         if (terminalizedExecution != null) {
             terminalizedExecution.operationTerminalized(this);
         }
-        origin.executionDomain().terminalActorIoOperation(this);
-        lifecycle.operationTerminal(this);
+        Runnable terminalIdle;
+        synchronized (deferredCPrimeLock) {
+            terminalIdle = claimDeferredCPrimeTerminalIdleLocked();
+        }
+        // A failing retirement callback must never leave a terminal operation registered.
+        try {
+            if (terminalIdle != null) {
+                terminalIdle.run();
+            }
+        } finally {
+            try {
+                origin.executionDomain().terminalActorIoOperation(this);
+            } finally {
+                lifecycle.operationTerminal(this);
+            }
+        }
     }
 }

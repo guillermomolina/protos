@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -13,6 +28,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
@@ -214,6 +230,370 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
 
         System.out.println("PLAT031_BUFFERED_READER_READ_SUSPENSION_CAPABLE=YES");
         System.out.println("PLAT031_BUFFERED_READER_CLOSE_INCLUDED=NO");
+    }
+
+    @Test
+    void cancelBeforeFirstCPrimeDispatchRetiresActiveReadAndUnblocksNextRead()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                return resolvedFuture(f, 'A', 'B');
+                            }));
+            ProtosObjectValue reader = reader(f);
+            f.module.context().createLocalSlot("reader", reader);
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-cancel-before-dispatch.protos");
+            assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(0, reads.get());
+            drain(f);
+            assertEquals(0, reads.get(), "a discarded C-prime dispatch must not run target.read");
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue next =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-after-pre-dispatch-cancel.protos");
+            drain(f);
+            assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
+            assertBytes(next.resolvedValue().orElseThrow(), 'A');
+            assertEquals(1, reads.get());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_PRE_DISPATCH_CANCEL_RETIRES_ACTIVE_READ=PASS");
+        System.out.println("BUG029_PRE_DISPATCH_CANCEL_HIDDEN_TASK=NO");
+    }
+
+    @Test
+    void cancelActiveReadReleasesAlreadyQueuedFollowersInOrder() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                return resolvedFuture(f, 'A', 'B');
+                            }));
+            List<ProtosFutureValue> futures = captureReads(scope.language(), f, 3);
+            ProtosFutureValue first = futures.get(0);
+            assertEquals(0, reads.get());
+
+            assertTrue(first.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, first.state());
+            assertEquals(ProtosFutureValue.State.PENDING, futures.get(2).state());
+            drain(f);
+
+            assertEquals(ProtosFutureValue.State.CANCELLED, first.state());
+            assertBytes(futures.get(1).resolvedValue().orElseThrow(), 'A');
+            assertBytes(futures.get(2).resolvedValue().orElseThrow(), 'B');
+            assertEquals(1, reads.get(), "the cancelled read must not invoke target.read");
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_QUEUED_FOLLOWERS_PROGRESS=PASS");
+    }
+
+    @Test
+    void cancelQueuedMiddleReadPreservesRelativeOrderOfOthers() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                return resolvedFuture(f, 'A', 'B');
+                            }));
+            List<ProtosFutureValue> futures = captureReads(scope.language(), f, 3);
+
+            assertTrue(futures.get(1).cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, futures.get(1).state());
+            drain(f);
+
+            assertBytes(futures.get(0).resolvedValue().orElseThrow(), 'A');
+            assertEquals(ProtosFutureValue.State.CANCELLED, futures.get(1).state());
+            assertBytes(futures.get(2).resolvedValue().orElseThrow(), 'B');
+            assertEquals(1, reads.get());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_QUEUED_MIDDLE_CANCEL_ORDER=PASS");
+    }
+
+    @Test
+    void cancelDuringSuspendedGuestTargetReadRetiresWithoutLateResume() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue firstGate = future(f);
+            ProtosFutureValue secondGate = future(f);
+            secondGate.resolve(ProtosNullValue.INSTANCE, f.module);
+            AtomicInteger probes = new AtomicInteger();
+            AtomicInteger lowerReads = new AtomicInteger();
+
+            f.module.context().createLocalSlot(
+                    "readProbe",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                probes.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            f.module.context().createLocalSlot(
+                    "readGate",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    probes.get() == 1 ? firstGate : secondGate));
+            f.module.context().createLocalSlot(
+                    "nextRead",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                lowerReads.incrementAndGet();
+                                return resolvedFuture(f, 'Q');
+                            }));
+            f.source.createLocalSlot(
+                    "read",
+                    sourceClosure(
+                            scope.language(),
+                            f.module,
+                            "(max) => { readProbe()\nreadGate().value()\nnextRead() }",
+                            "bug029-suspended-source-read.protos"));
+            ProtosObjectValue reader = reader(f);
+            f.module.context().createLocalSlot("reader", reader);
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-suspended-read.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertEquals(1, probes.get());
+            assertEquals(ProtosFutureValue.State.PENDING, cancelled.state());
+
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(0, f.domain.liveTaskCount());
+            drain(f);
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue next =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-after-suspended-cancel.protos");
+            drain(f);
+            assertEquals(ProtosFutureValue.State.RESOLVED, next.state());
+            assertBytes(next.resolvedValue().orElseThrow(), 'Q');
+            assertEquals(2, probes.get());
+            assertEquals(1, lowerReads.get());
+
+            assertTrue(firstGate.resolve(ProtosNullValue.INSTANCE, f.module));
+            drain(f);
+            assertEquals(2, probes.get());
+            assertEquals(
+                    1,
+                    lowerReads.get(),
+                    "the cancelled guest target.read must not resume after its gate resolves");
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_SUSPENDED_GUEST_READ_CANCEL_RETIRED=PASS");
+        System.out.println("BUG029_SUSPENDED_GUEST_READ_LATE_RESUME=NO");
+    }
+
+    @Test
+    void cancelAfterLowerReadStartedKeepsFollowerBehindPendingLower() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            ProtosFutureValue lower1 = future(f);
+            AtomicInteger reads = new AtomicInteger();
+            AtomicInteger lowerCancelRequests = new AtomicInteger();
+            lower1.attachCancellationProducer(lowerCancelRequests::incrementAndGet);
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) ->
+                                    reads.incrementAndGet() == 1
+                                            ? lower1
+                                            : resolvedFuture(f, 'Y')));
+            ProtosObjectValue reader = reader(f);
+            f.module.context().createLocalSlot("reader", reader);
+
+            ProtosFutureValue cancelled =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-lower-started.protos");
+            assertTrue(f.domain.dispatchOne());
+            assertEquals(1, reads.get());
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue follower =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-lower-started-follower.protos");
+            assertTrue(cancelled.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(1, lowerCancelRequests.get());
+
+            drain(f);
+            assertEquals(
+                    ProtosFutureValue.State.PENDING,
+                    follower.state(),
+                    "a follower must not overtake a lower read that may still consume input");
+            assertEquals(1, reads.get());
+
+            // The lower cancellation takes effect before any byte is consumed, so no input of
+            // the cancelled read's logical position exists to preserve.
+            assertTrue(lower1.cancelTerminal());
+            drain(f);
+            assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
+            assertEquals(ProtosFutureValue.State.RESOLVED, follower.state());
+            assertBytes(follower.resolvedValue().orElseThrow(), 'Y');
+            assertEquals(2, reads.get());
+            assertEquals(1, lowerCancelRequests.get());
+            assertFalse(f.domain.dispatchOne());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_STARTED_LOWER_FOLLOWER_NOT_OVERTAKING=PASS");
+    }
+
+    @Test
+    void closeBeforeFirstCPrimeDispatchFailsActiveAndQueuedReadsWithoutTargetRead()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            Fixture f = fixture();
+            AtomicInteger reads = new AtomicInteger();
+            f.source.createLocalSlot(
+                    "read",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                reads.incrementAndGet();
+                                return resolvedFuture(f, 'A');
+                            }));
+            f.source.createLocalSlot(
+                    "close",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                ProtosFutureValue closed = future(f);
+                                closed.resolve(ProtosNullValue.INSTANCE, activation);
+                                return closed;
+                            }));
+            List<ProtosFutureValue> futures =
+                    captureTurn(
+                            scope.language(),
+                            f,
+                            "capture(reader.read(1))\ncapture(reader.read(1))\ncapture(reader.close())",
+                            "bug029-close-before-dispatch.protos");
+            ProtosFutureValue first = futures.get(0);
+            ProtosFutureValue second = futures.get(1);
+            ProtosFutureValue close = futures.get(2);
+            drain(f);
+
+            assertEquals(ProtosFutureValue.State.FAILED, first.state());
+            assertEquals(ProtosFutureValue.State.FAILED, second.state());
+            assertNotSame(first, second);
+            assertNotSame(
+                    first.failedError().orElseThrow(),
+                    second.failedError().orElseThrow());
+            assertEquals(
+                    ProtosFutureValue.State.RESOLVED,
+                    close.state(),
+                    "close must not wait for a discarded C-prime dispatch");
+            assertSame(
+                    f.module.context().readLocalSlot("reader").orElseThrow(),
+                    close.resolvedValue().orElseThrow());
+            assertEquals(0, reads.get());
+
+            f.module = siblingModule(f.module);
+            ProtosFutureValue afterClose =
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "reader.read(1)",
+                            "bug029-read-after-close.protos");
+            drain(f);
+            assertEquals(ProtosFutureValue.State.FAILED, afterClose.state());
+            assertEquals(0, reads.get());
+            assertEquals(0, f.domain.liveTaskCount());
+        }
+
+        System.out.println("BUG029_CLOSE_BEFORE_DISPATCH_RETIRES_READS=PASS");
+    }
+
+    private static List<ProtosFutureValue> captureReads(
+            ProtosLanguage language,
+            Fixture f,
+            int count)
+            throws Exception {
+        String turn =
+                String.join(
+                        "\n",
+                        java.util.Collections.nCopies(count, "capture(reader.read(1))"));
+        return captureTurn(language, f, turn, "bug029-queued-reads.protos");
+    }
+
+    /** Runs one guest turn against a fresh reader, capturing every Future passed to capture(). */
+    private static List<ProtosFutureValue> captureTurn(
+            ProtosLanguage language,
+            Fixture f,
+            String characters,
+            String sourceName)
+            throws Exception {
+        List<ProtosFutureValue> captured = new ArrayList<>();
+        f.module.context().createLocalSlot(
+                "capture",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            captured.add(
+                                    assertInstanceOf(
+                                            ProtosFutureValue.class, supplied.get(0)));
+                            return ProtosNullValue.INSTANCE;
+                        }));
+        f.module.context().createLocalSlot("reader", reader(f));
+        ProtosTask caller =
+                execute(f.domain, f.module, lowerRoot(language, characters, sourceName));
+        assertTrue(f.domain.dispatchOne());
+        assertEquals(ProtosTask.State.COMPLETED, caller.state());
+        return captured;
+    }
+
+    /** Explicitly dispatches every runnable Actor-local item; never waits on time. */
+    private static void drain(Fixture f) {
+        while (f.domain.dispatchOne()) {
+            // Dispatch until no Actor-local work remains runnable.
+        }
+    }
+
+    private static ProtosFutureValue resolvedFuture(Fixture f, int... values) {
+        ProtosFutureValue resolved = future(f);
+        resolved.resolve(bytes(f.prelude, values), f.module);
+        return resolved;
     }
 
     private static ProtosFutureValue invokeCPrimeReturningFuture(

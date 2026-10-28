@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecution;
@@ -230,6 +245,8 @@ public final class ProtosBufferedByteIo {
         final ProtosBufferedByteWriterCPrimeExecution.Plan flushCPrimePlan;
         ProtosFutureValue lower;
         ProtosFutureValue.Observer lowerObserver;
+        /** Guarded by the adapter monitor; set once the request has left the queue. */
+        boolean retired;
 
         Req(
                 ProtosActivation activation,
@@ -282,8 +299,11 @@ public final class ProtosBufferedByteIo {
         boolean removed = false;
         synchronized (this) {
             if (activeReq != req) {
-                removed = q.remove(req);
+                removed = !req.retired && q.remove(req);
+                if (removed) req.retired = true;
             } else {
+                // An active C-prime read without a lower Future is retired by its
+                // terminal-idle notification once no C-prime segment can still publish one.
                 lower = req.lower;
             }
         }
@@ -297,7 +317,7 @@ public final class ProtosBufferedByteIo {
             if (activeReq != null) return;
             if (lifecycle.state() != ProtosIoLifecycle.State.OPEN) return;
             while (!q.isEmpty() && q.peekFirst().operation.terminal()) {
-                q.removeFirst();
+                q.removeFirst().retired = true;
             }
             if (!q.isEmpty()) {
                 req = q.peekFirst();
@@ -320,9 +340,12 @@ public final class ProtosBufferedByteIo {
         }
     }
 
+    /** Retires {@code req} at most once; a late duplicate notification never restarts pumping. */
     private void done(Req req) {
         boolean continuePumping;
         synchronized (this) {
+            if (req.retired) return;
+            req.retired = true;
             q.remove(req);
             if (activeReq == req) activeReq = null;
             continuePumping = lifecycle.state() == ProtosIoLifecycle.State.OPEN;
@@ -381,12 +404,54 @@ public final class ProtosBufferedByteIo {
         if (stopBeforeLowerWork(req)) return;
         if (completeBufferedReadIfAvailable(req)) return;
 
-        ProtosBufferedByteReaderCPrimeExecution.schedule(
-                req.readCPrimePlan,
-                req.operation,
-                this,
-                target,
-                readArguments(req));
+        req.operation.onDeferredCPrimeTerminalIdleForRuntime(
+                () -> retireTerminalCPrimeReadIfSafe(req));
+        if (req.operation.terminal()) return;
+
+        try {
+            ProtosBufferedByteReaderCPrimeExecution.schedule(
+                    req.readCPrimePlan,
+                    req.operation,
+                    this,
+                    target,
+                    readArguments(req));
+        } catch (IllegalStateException schedulingFailure) {
+            if (req.operation.terminal()) {
+                // Cancellation or close won the race against driver installation; the
+                // terminal-idle notification retires the request idempotently.
+                retireTerminalCPrimeReadIfSafe(req);
+            } else {
+                // A live operation that cannot be scheduled is a runtime defect: settle the
+                // read and free its queue position, then surface the defect.
+                failReadCPrime(req.operation);
+                throw schedulingFailure;
+            }
+        }
+    }
+
+    /**
+     * Retires a terminal active C-prime read once its execution is quiescent. A pending lower
+     * Future keeps the queue position so it cannot be overtaken while it may still consume
+     * input; its terminal observer completes the retirement through the existing settlement.
+     */
+    private void retireTerminalCPrimeReadIfSafe(Req req) {
+        ProtosFutureValue lower;
+        synchronized (this) {
+            if (req.retired
+                    || activeReq != req
+                    || req.kind != Kind.READ
+                    || req.readCPrimePlan == null) {
+                return;
+            }
+            lower = req.lower;
+        }
+        if (!req.operation.terminal()) return;
+
+        if (lower == null) {
+            done(req);
+        } else if (!lower.isPending()) {
+            consumeReadLowerForCPrimeRuntime(req.operation, lower);
+        }
     }
 
     private List<?> readArguments(Req req) {

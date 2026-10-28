@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.414-SNAPSHOT
+
+- `BUG029` (#980): repair `BufferedReader` pre-start cancellation.
+  - A read cancelled after becoming active but before its C-prime segment
+    invoked the source no longer strands the queue: `ProtosIoOperation`
+    gains a once-only runtime-internal terminal-idle notification,
+    delivered outside every lock once the operation is terminal and no
+    C-prime segment is running; `finishTerminal()` still retires the
+    operation from its Actor and lifecycle if that notification throws.
+  - `ProtosBufferedByteIo` retires such a read through that notification,
+    keeps the queue position while a pending lower Future may still
+    consume input, makes request retirement idempotent and tolerates
+    cancellation racing C-prime scheduling. Outer results and commitment
+    are unchanged.
+
 ## 0.3.413-SNAPSHOT
 
 - `I130-A` (#977, D220–S12): portable client TLS foundation.
