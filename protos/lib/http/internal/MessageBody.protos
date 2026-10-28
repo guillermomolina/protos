@@ -14,27 +14,32 @@
 // the specific language governing rights and limitations under the License.
 
 //! Internal HTTP/1.1 message-body framing for the future std:http/Server driver
-//! (D215, LIB025-B1). This module is an unpublished implementation artifact, not
-//! an approved Standard Library API. It performs no I/O and owns no authority:
-//! it only frames request-body octets and encodes response-chunk octets.
+//! (D215, LIB025-B1) and for std:http/Client (D218-B). This module is an
+//! unpublished implementation artifact, not an approved Standard Library API. It
+//! performs no I/O and owns no authority: it only frames request-body and
+//! response-body octets and encodes response-chunk octets.
 
-/// Answers a stateful request-body framer for an accepted request head.
-/// feed(bytes, offset, length, maxContentBytes) and endOfInput() answer
-/// {state, consumed, content, failure}; state() answers "OPEN", "COMPLETE", or
-/// "REJECTED". consumed counts only octets taken from the supplied slice, and
-/// octets after the logical end of the body are never consumed.
-requestBodyFramer: (head, limits) => {
-    // Scalars are captured once; later mutation of head or limits is ignored.
-    framing: head.framing
-    declaredLength: head.contentLength
-    maxChunkLineBytes: limits.maxChunkLineBytes
-    maxTrailerBytes: limits.maxTrailerBytes
-    maxTrailerFields: limits.maxTrailerFields
-    maxRequestBodyBytes: limits.maxRequestBodyBytes
+MessageSyntax: import("std:http/internal/MessageSyntax")
 
-    ((framing == "NONE") || (framing == "CONTENT_LENGTH") || (framing == "CHUNKED")).ifFalse(() => {
-        Error().signal()
-    })
+// The shared directional framing engine. config holds the framing mode, the
+// declared content length, the chunk-line, trailer, and decoded-body budgets,
+// and the failure kind and status of malformed framing and of an exceeded
+// limit. Request and response framing differ only in this configuration, so
+// one chunk-size, chunk-extension, chunk-data, CRLF, and trailer machine
+// serves both directions.
+bodyFramer: (config) => {
+    // Scalars are captured once; later mutation of the configuration is ignored.
+    framing: config.framing
+    declaredLength: config.contentLength
+    maxChunkLineBytes: config.maxChunkLineBytes
+    maxTrailerBytes: config.maxTrailerBytes
+    maxTrailerFields: config.maxTrailerFields
+    maxBodyBytes: config.maxBodyBytes
+    malformedKind: config.malformedKind
+    malformedStatus: config.malformedStatus
+    limitKind: config.limitKind
+    limitStatus: config.limitStatus
+
     if(framing == "CONTENT_LENGTH") {
         Integer.recognizes(declaredLength).ifFalse(() => {
             Error().signal()
@@ -59,13 +64,18 @@ requestBodyFramer: (head, limits) => {
     }
 
     malformed: () => {
-        reject("malformedRequest", 400)
+        reject(malformedKind, malformedStatus)
+    }
+
+    overLimit: () => {
+        reject(limitKind, limitStatus)
     }
 
     // ------------------------------------------------------------ framer state
 
     // NONE and CONTENT_LENGTH use "BODY"; CHUNKED uses SIZE_LINE, DATA,
-    // DATA_CR, DATA_LF, and TRAILER_LINE. COMPLETE and REJECTED are terminal.
+    // DATA_CR, DATA_LF, and TRAILER_LINE; CLOSE_DELIMITED uses UNTIL_EOF.
+    // COMPLETE and REJECTED are terminal.
     phase: "COMPLETE"
     remaining: 0
     totalContent: 0
@@ -76,11 +86,11 @@ requestBodyFramer: (head, limits) => {
     trailerFields: 0
 
     if(framing == "CONTENT_LENGTH") {
-        if(declaredLength > maxRequestBodyBytes) {
+        if(declaredLength > maxBodyBytes) {
             // Defensive: an accepted head never exceeds the body budget.
             phase = "REJECTED"
-            rejectKind = "requestLimit"
-            rejectStatus = 413
+            rejectKind = limitKind
+            rejectStatus = limitStatus
         } else {
             if(declaredLength > 0) {
                 phase = "BODY"
@@ -92,129 +102,15 @@ requestBodyFramer: (head, limits) => {
         phase = "SIZE_LINE"
         line = Encoding.UTF8.encode("")
     }
-
-    // ------------------------------------------------------------ octet classes
-
-    isAlpha: (octet) => {
-        ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122))
+    if(framing == "CLOSE_DELIMITED") {
+        phase = "UNTIL_EOF"
     }
 
-    isDigit: (octet) => {
-        (octet >= 48) && (octet <= 57)
-    }
-
-    // Answers the value of a hexadecimal digit, or -1.
-    hexValue: (octet) => {
-        value: -1
-        if(isDigit(octet)) {
-            value = octet - 48
-        }
-        if((octet >= 65) && (octet <= 70)) {
-            value = octet - 55
-        }
-        if((octet >= 97) && (octet <= 102)) {
-            value = octet - 87
-        }
-        value
-    }
-
-    // tchar = ALPHA / DIGIT / "!#$%&'*+-.^_`|~"
-    isTchar: (octet) => {
-        isAlpha(octet) ||
-            isDigit(octet) ||
-            (octet == 33) ||
-            (octet == 35) ||
-            (octet == 36) ||
-            (octet == 37) ||
-            (octet == 38) ||
-            (octet == 39) ||
-            (octet == 42) ||
-            (octet == 43) ||
-            (octet == 45) ||
-            (octet == 46) ||
-            (octet == 94) ||
-            (octet == 95) ||
-            (octet == 96) ||
-            (octet == 124) ||
-            (octet == 126)
-    }
-
-    isWhitespace: (octet) => {
-        (octet == 32) || (octet == 9)
-    }
-
-    // field-value octet: SP, HTAB, VCHAR, or obs-text.
-    isFieldValueOctet: (octet) => {
-        (octet == 32) || (octet == 9) || ((octet >= 33) && (octet <= 126)) || (octet >= 128)
-    }
-
-    // qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
-    isQdtext: (octet) => {
-        (octet == 9) ||
-            (octet == 32) ||
-            (octet == 33) ||
-            ((octet >= 35) && (octet <= 91)) ||
-            ((octet >= 93) && (octet <= 126)) ||
-            (octet >= 128)
-    }
-
-    // ------------------------------------------------------------ Bytes helpers
-
-    copyRange: (bytes, start, end) => {
-        copy: Encoding.UTF8.encode("")
-        index: start
-        while(index < end) {
-            copy.add(bytes[index])
-            index = index + 1
-        }
-        copy
-    }
-
-    // Answers the index after 1*tchar starting at start, or start when none.
-    skipToken: (bytes, start, end) => {
-        index: start
-        while((index < end) && isTchar(bytes[index])) {
-            index = index + 1
-        }
-        index
-    }
-
-    skipWhitespace: (bytes, start, end) => {
-        index: start
-        while((index < end) && isWhitespace(bytes[index])) {
-            index = index + 1
-        }
-        index
-    }
-
-    // Answers the index after a complete quoted-string starting at the DQUOTE.
+    // Answers the index after a complete quoted-string, rejecting a malformed one.
     skipQuotedString: (bytes, start, end) => {
-        index: start + 1
-        closed: false
-        while(!closed) {
-            if(index >= end) {
-                malformed()
-            }
-            octet: bytes[index]
-            if(octet == 34) {
-                closed = true
-            } else {
-                if(octet == 92) {
-                    index = index + 1
-                    if(index >= end) {
-                        malformed()
-                    }
-                    escaped: bytes[index]
-                    if(!(isWhitespace(escaped) || ((escaped >= 33) && (escaped <= 126)) || (escaped >= 128))) {
-                        malformed()
-                    }
-                } else {
-                    if(!isQdtext(octet)) {
-                        malformed()
-                    }
-                }
-            }
-            index = index + 1
+        index: MessageSyntax.quotedStringEnd(bytes, start, end)
+        if(index < 0) {
+            malformed()
         }
         index
     }
@@ -228,8 +124,8 @@ requestBodyFramer: (head, limits) => {
         size: line.size()
         chunkSize: 0
         index: 0
-        while((index < size) && (hexValue(line[index]) >= 0)) {
-            digit: hexValue(line[index])
+        while((index < size) && (MessageSyntax.hexValue(line[index]) >= 0)) {
+            digit: MessageSyntax.hexValue(line[index])
             if(chunkSize > (maxSigned64 - digit).div(16)) {
                 malformed()
             }
@@ -242,29 +138,29 @@ requestBodyFramer: (head, limits) => {
 
         // chunk-ext = *( BWS ";" BWS chunk-ext-name [ BWS "=" BWS chunk-ext-val ] )
         while(index < size) {
-            index = skipWhitespace(line, index, size)
+            index = MessageSyntax.skipWhitespace(line, index, size)
             if(index >= size) {
                 malformed()
             }
             if(line[index] != 59) {
                 malformed()
             }
-            index = skipWhitespace(line, index + 1, size)
-            nameEnd: skipToken(line, index, size)
+            index = MessageSyntax.skipWhitespace(line, index + 1, size)
+            nameEnd: MessageSyntax.skipToken(line, index, size)
             if(nameEnd == index) {
                 malformed()
             }
             index = nameEnd
-            afterName: skipWhitespace(line, index, size)
+            afterName: MessageSyntax.skipWhitespace(line, index, size)
             if((afterName < size) && (line[afterName] == 61)) {
-                index = skipWhitespace(line, afterName + 1, size)
+                index = MessageSyntax.skipWhitespace(line, afterName + 1, size)
                 if(index >= size) {
                     malformed()
                 }
                 if(line[index] == 34) {
                     index = skipQuotedString(line, index, size)
                 } else {
-                    valueEnd: skipToken(line, index, size)
+                    valueEnd: MessageSyntax.skipToken(line, index, size)
                     if(valueEnd == index) {
                         malformed()
                     }
@@ -276,8 +172,8 @@ requestBodyFramer: (head, limits) => {
         if(chunkSize == 0) {
             phase = "TRAILER_LINE"
         } else {
-            if(chunkSize > (maxRequestBodyBytes - totalContent)) {
-                reject("requestLimit", 413)
+            if(chunkSize > (maxBodyBytes - totalContent)) {
+                overLimit()
             }
             remaining = chunkSize
             phase = "DATA"
@@ -289,17 +185,17 @@ requestBodyFramer: (head, limits) => {
         size: line.size()
 
         // obs-fold
-        if(isWhitespace(line[0])) {
+        if(MessageSyntax.isWhitespace(line[0])) {
             malformed()
         }
         // Whitespace before ":" is not a tchar, so it ends the name early.
-        nameEnd: skipToken(line, 0, size)
+        nameEnd: MessageSyntax.skipToken(line, 0, size)
         if((nameEnd == 0) || (nameEnd >= size) || (line[nameEnd] != 58)) {
             malformed()
         }
         index: nameEnd + 1
         while(index < size) {
-            if(!isFieldValueOctet(line[index])) {
+            if(!MessageSyntax.isFieldValueOctet(line[index])) {
                 malformed()
             }
             index = index + 1
@@ -315,7 +211,7 @@ requestBodyFramer: (head, limits) => {
             } else {
                 trailerFields = trailerFields + 1
                 if(trailerFields > maxTrailerFields) {
-                    reject("requestLimit", 413)
+                    overLimit()
                 }
                 parseTrailerLine()
             }
@@ -342,12 +238,12 @@ requestBodyFramer: (head, limits) => {
                 if(phase == "SIZE_LINE") {
                     chunkLineBytes = chunkLineBytes + 1
                     if(chunkLineBytes > maxChunkLineBytes) {
-                        reject("requestLimit", 413)
+                        overLimit()
                     }
                 } else {
                     trailerBytes = trailerBytes + 1
                     if(trailerBytes > maxTrailerBytes) {
-                        reject("requestLimit", 413)
+                        overLimit()
                     }
                 }
                 if(pendingCr) {
@@ -446,7 +342,7 @@ requestBodyFramer: (head, limits) => {
                     take = maxContentBytes
                 }
                 if(take > 0) {
-                    content = copyRange(source, offset, offset + take)
+                    content = MessageSyntax.copyRange(source, offset, offset + take)
                     remaining = remaining - take
                     totalContent = totalContent + take
                     index = offset + take
@@ -459,9 +355,27 @@ requestBodyFramer: (head, limits) => {
             if(result === null) {
                 Rejection.handle(
                     () => {
+                        if((phase == "UNTIL_EOF") && (length > 0)) {
+                            // Delivers octets up to the decoded-body budget;
+                            // the first octet beyond it rejects the body.
+                            allowed: maxBodyBytes - totalContent
+                            if(allowed == 0) {
+                                overLimit()
+                            }
+                            take: length
+                            if(maxContentBytes < take) {
+                                take = maxContentBytes
+                            }
+                            if(allowed < take) {
+                                take = allowed
+                            }
+                            content = MessageSyntax.copyRange(source, offset, offset + take)
+                            totalContent = totalContent + take
+                            index = offset + take
+                        }
                         // Decoded content ends the call before any later octet
                         // is inspected.
-                        while((content === null) && (phase != "COMPLETE") && (phase != "BODY") && (index < end)) {
+                        while((content === null) && (phase != "COMPLETE") && (phase != "BODY") && (phase != "UNTIL_EOF") && (index < end)) {
                             if(phase == "DATA") {
                                 take: remaining
                                 if((end - index) < take) {
@@ -470,7 +384,7 @@ requestBodyFramer: (head, limits) => {
                                 if(maxContentBytes < take) {
                                     take = maxContentBytes
                                 }
-                                content = copyRange(source, index, index + take)
+                                content = MessageSyntax.copyRange(source, index, index + take)
                                 index = index + take
                                 remaining = remaining - take
                                 totalContent = totalContent + take
@@ -514,12 +428,21 @@ requestBodyFramer: (head, limits) => {
                 result = resultOf("COMPLETE", 0, null)
             } else {
                 if(phase != "REJECTED") {
-                    // Physical EOF before the logical end of the body.
-                    rejectKind = "malformedRequest"
-                    rejectStatus = 400
-                    terminalize()
+                    if(phase == "UNTIL_EOF") {
+                        // Clean physical EOF is the end of a close-delimited body.
+                        phase = "COMPLETE"
+                    } else {
+                        // Physical EOF before the logical end of the body.
+                        rejectKind = malformedKind
+                        rejectStatus = malformedStatus
+                        terminalize()
+                    }
                 }
-                result = rejectedResult(0)
+                if(phase == "COMPLETE") {
+                    result = resultOf("COMPLETE", 0, null)
+                } else {
+                    result = rejectedResult(0)
+                }
             }
             result
         }
@@ -537,6 +460,59 @@ requestBodyFramer: (head, limits) => {
     }
 
     framer
+}
+
+/// Answers a stateful request-body framer for an accepted request head.
+/// feed(bytes, offset, length, maxContentBytes) and endOfInput() answer
+/// {state, consumed, content, failure}; state() answers "OPEN", "COMPLETE", or
+/// "REJECTED". consumed counts only octets taken from the supplied slice, and
+/// octets after the logical end of the body are never consumed.
+requestBodyFramer: (head, limits) => {
+    framing: head.framing
+    ((framing == "NONE") || (framing == "CONTENT_LENGTH") || (framing == "CHUNKED")).ifFalse(() => {
+        Error().signal()
+    })
+    config: {
+        framing: framing
+        contentLength: head.contentLength
+        maxChunkLineBytes: limits.maxChunkLineBytes
+        maxTrailerBytes: limits.maxTrailerBytes
+        maxTrailerFields: limits.maxTrailerFields
+        maxBodyBytes: limits.maxRequestBodyBytes
+        malformedKind: "malformedRequest"
+        malformedStatus: 400
+        limitKind: "requestLimit"
+        limitStatus: 413
+    }
+    bodyFramer(config)
+}
+
+/// Answers a stateful response-body framer (HTTP.md §16.7) with the
+/// requestBodyFramer protocol. head.framing is "NONE", "CONTENT_LENGTH",
+/// "CHUNKED", or "CLOSE_DELIMITED"; limits are the captured Client limits.
+/// Malformed framing, including physical EOF before the end of a
+/// Content-Length or chunked body, fails as "malformedResponse"; an exceeded
+/// chunk-line, trailer, or decoded-body budget fails as "responseLimit". A
+/// close-delimited body completes at clean physical EOF (endOfInput()).
+/// Response failures carry no HTTP status.
+responseBodyFramer: (head, limits) => {
+    framing: head.framing
+    ((framing == "NONE") || (framing == "CONTENT_LENGTH") || (framing == "CHUNKED") || (framing == "CLOSE_DELIMITED")).ifFalse(() => {
+        Error().signal()
+    })
+    config: {
+        framing: framing
+        contentLength: head.contentLength
+        maxChunkLineBytes: limits.maxChunkLineBytes
+        maxTrailerBytes: limits.maxTrailerBytes
+        maxTrailerFields: limits.maxTrailerFields
+        maxBodyBytes: limits.maxResponseBodyBytes
+        malformedKind: "malformedResponse"
+        malformedStatus: null
+        limitKind: "responseLimit"
+        limitStatus: null
+    }
+    bodyFramer(config)
 }
 
 /// Answers new Bytes holding one response chunk: lowercase hex-size CRLF

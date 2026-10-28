@@ -74,12 +74,20 @@ import java.util.List;
  * {@code enterService}, so that its cleanup also runs when cancelled before starting, and of
  * {@code std:http/internal/HostWorker}, whose Worker bootstrap applies {@code invokable} to the
  * resolved handler binding.
+ *
+ * <p>I127 (D218-B, HTTP.md §16): the same facility, with no additional operation, is also a
+ * deferred member of {@code std:http/Client}. Its single-exchange session uses {@code failed},
+ * {@code resolved}, the probes, {@code startService} and {@code enterService} exactly as the
+ * server session does; every client rule lives in {@code lib/http/Client.protos} and {@code
+ * lib/http/internal/Client*.protos}.
  */
 public final class ProtosHttpAsyncFacility {
     public static final ProtosModuleKey MODULE_KEY = new ProtosModuleKey("std:http/Server");
     public static final ProtosModuleKey HOST_MODULE_KEY = new ProtosModuleKey("std:http/Host");
     public static final ProtosModuleKey HOST_WORKER_MODULE_KEY =
             new ProtosModuleKey("std:http/internal/HostWorker");
+    public static final ProtosModuleKey CLIENT_MODULE_KEY =
+            new ProtosModuleKey("std:http/Client");
     public static final String BOOTSTRAP_SLOT = "_httpAsyncFacility";
 
     private ProtosHttpAsyncFacility() {}

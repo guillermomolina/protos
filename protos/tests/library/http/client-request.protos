@@ -1,0 +1,529 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Client")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// Deterministic scripted duplex. Each read answers the next queued response
+// chunk, split to maxBytes, and null once the chunks are exhausted; every
+// requested maxBytes is recorded. Writes are captured at invocation.
+// Optional hooks: readFailure, writeFailure, closeFailure (Errors), and
+// onWrite (a callback run by each write).
+duplexOf: (chunks) => {
+    next: 0
+    offset: 0
+    output: ascii("")
+    reads: 0
+    writes: 0
+    closes: 0
+    shutdowns: 0
+    requested: []
+    closeCompleted: false
+    readFailure: null
+    writeFailure: null
+    closeFailure: null
+    onWrite: null
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            reads = reads + 1
+            requested = Array(...requested, maxBytes)
+            failure: readFailure
+            result: null
+            if((failure === null) && (next < chunks.size())) {
+                chunk: chunks[next]
+                end: chunk.size()
+                if((end - offset) > maxBytes) {
+                    end = offset + maxBytes
+                }
+                result = ascii("")
+                index: offset
+                while(index < end) {
+                    result.add(chunk[index])
+                    index = index + 1
+                }
+                if(end == chunk.size()) {
+                    next = next + 1
+                    offset = 0
+                } else {
+                    offset = end
+                }
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                result
+            }).future()
+        }
+        write: (bytes) => {
+            writes = writes + 1
+            if(onWrite !== null) {
+                onWrite(bytes)
+            }
+            failure: writeFailure
+            if(failure === null) {
+                bytes.each((octet) => {
+                    output.add(octet)
+                })
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                fixture
+            }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            failure: closeFailure
+            (() => {
+                closeCompleted = true
+                if(failure !== null) {
+                    failure.signal()
+                }
+                null
+            }).future()
+        }
+        shutdownRead: () => {
+            shutdowns = shutdowns + 1
+            (() => { null }).future()
+        }
+        shutdownWrite: () => {
+            shutdowns = shutdowns + 1
+            (() => { null }).future()
+        }
+        written: () => {
+            text(output)
+        }
+        readCount: () => {
+            reads
+        }
+        readSizes: () => {
+            requested
+        }
+        unreadChunks: () => {
+            chunks.size() - next
+        }
+        writeCount: () => {
+            writes
+        }
+        closeCount: () => {
+            closes
+        }
+        shutdownCount: () => {
+            shutdowns
+        }
+        closeDone: () => {
+            closeCompleted
+        }
+        failReadsWith: (error) => {
+            readFailure = error
+        }
+        failWritesWith: (error) => {
+            writeFailure = error
+        }
+        failCloseWith: (error) => {
+            closeFailure = error
+        }
+        whenWriting: (callback) => {
+            onWrite = callback
+        }
+    }
+    fixture
+}
+
+// Answers the Error a Future fails with, or null when it resolves.
+failureOf: (future) => {
+    caught: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            caught = error
+            error
+        }
+    )
+    caught
+}
+
+// Answers whether the Future ends cancelled.
+cancelledOf: (future) => {
+    Cancelled.handle(
+        () => {
+            future.value()
+            false
+        },
+        (cancellation) => {
+            true
+        }
+    )
+}
+
+hostField: () => {
+    ["Host", ascii("example.org")]
+}
+
+requestOf: (method, target, headers, body) => {
+    request: {
+        method: method
+        target: ascii(target)
+        headers: headers
+        body: body
+    }
+    request
+}
+
+get: () => {
+    requestOf("GET", "/", [hostField()], null)
+}
+
+getBytes: "GET / HTTP/1.1\r\nHost: example.org\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+
+// Reads a body to its logical end with reads of size, answering its text.
+drain: (body, size) => {
+    collected: ascii("")
+    done: false
+    while(!done) {
+        chunk: body.read(size).value()
+        if(chunk === null) {
+            done = true
+        } else {
+            Assertions.require(chunk.size() > 0)
+            Assertions.require(chunk.size() <= size)
+            chunk.each((octet) => {
+                collected.add(octet)
+            })
+        }
+    }
+    text(collected)
+}
+
+// A callback answering {status, headers, body} with the body drained.
+capture: (response) => {
+    seen: {
+        status: response.status
+        version: response.version
+        headers: response.headers
+        body: drain(response.body, 4096)
+    }
+    seen
+}
+
+// Runs one borrowed exchange and answers {duplex, value, failure}.
+exchangeWith: (chunks, request, onResponse, limits) => {
+    dx: duplexOf(chunks)
+    future: http.Client.exchangeOne(dx, request, onResponse, limits)
+    caught: failureOf(future)
+    answer: null
+    if(caught === null) {
+        answer = future.value()
+    }
+    outcome: {
+        duplex: dx
+        value: answer
+        failure: caught
+    }
+    outcome
+}
+
+exchange: (chunks, onResponse) => {
+    exchangeWith(chunks, get(), onResponse, null)
+}
+
+ok: "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n"
+
+status: (response) => {
+    response.status
+}
+
+// Runs an admitted exchange of request and answers the exact written text.
+sent: (request) => {
+    outcome: exchangeWith([ascii(ok)], request, status, null)
+    Assertions.require(outcome.failure === null)
+    Assertions.require(outcome.value == 200)
+    outcome.duplex.written()
+}
+
+headOf: (requestLine, fields, length) => {
+    requestLine + "\r\n" + fields + "Content-Length: " + length + "\r\nConnection: close\r\n\r\n"
+}
+
+// Asserts that request is rejected at admission with no effect.
+assertInadmissible: (request) => {
+    invoked: false
+    dx: duplexOf([ascii(ok)])
+    failure: failureOf(http.Client.exchangeOne(dx, request, (response) => {
+        invoked = true
+        null
+    }, null))
+    Assertions.require(failure.parent() === InvalidIOArgument)
+    Assertions.require(dx.writeCount() == 0)
+    Assertions.require(dx.readCount() == 0)
+    Assertions.require(dx.closeCount() == 0)
+    Assertions.require(!invoked)
+}
+
+withHeaders: (headers) => {
+    requestOf("GET", "/", headers, null)
+}
+
+withHost: (value) => {
+    withHeaders([["Host", ascii(value)]])
+}
+
+tests: [
+    Test("GET writes the exact request octets", () => {
+        Assertions.require(sent(get()) == getBytes)
+        Assertions.require(sent(requestOf("GET", "/a/b?c=d&e", [hostField()], null)) ==
+            headOf("GET /a/b?c=d&e HTTP/1.1", "Host: example.org\r\n", "0"))
+    }),
+    Test("HEAD writes the exact request octets", () => {
+        Assertions.require(sent(requestOf("HEAD", "/x", [hostField()], null)) ==
+            headOf("HEAD /x HTTP/1.1", "Host: example.org\r\n", "0"))
+    }),
+    Test("POST writes the head and then the snapshotted body", () => {
+        outcome: exchangeWith([ascii(ok)], requestOf("POST", "/submit", [hostField()], ascii("hello")), status, null)
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.duplex.writeCount() == 2)
+        Assertions.require(outcome.duplex.written() ==
+            headOf("POST /submit HTTP/1.1", "Host: example.org\r\n", "5") + "hello")
+    }),
+    Test("an empty Bytes body sends Content-Length 0 in one write", () => {
+        outcome: exchangeWith([ascii(ok)], requestOf("PUT", "/", [hostField()], ascii("")), status, null)
+        Assertions.require(outcome.duplex.writeCount() == 1)
+        Assertions.require(outcome.duplex.written() == headOf("PUT / HTTP/1.1", "Host: example.org\r\n", "0"))
+    }),
+    Test("OPTIONS * is the only asterisk-form request", () => {
+        Assertions.require(sent(requestOf("OPTIONS", "*", [hostField()], null)) ==
+            headOf("OPTIONS * HTTP/1.1", "Host: example.org\r\n", "0"))
+        assertInadmissible(requestOf("GET", "*", [hostField()], null))
+        assertInadmissible(requestOf("options", "*", [hostField()], null))
+    }),
+    Test("the request is written completely before any response read", () => {
+        readsAtWrite: []
+        dx: duplexOf([ascii(ok)])
+        dx.whenWriting((bytes) => {
+            readsAtWrite = Array(...readsAtWrite, dx.readCount())
+        })
+        service: http.Client.exchangeOne(dx, requestOf("POST", "/", [hostField()], ascii("ab")), status, null)
+        Assertions.require(service.value() == 200)
+        Assertions.require(readsAtWrite.size() == 2)
+        Assertions.require(readsAtWrite[0] == 0)
+        Assertions.require(readsAtWrite[1] == 0)
+    }),
+    Test("exactly one explicit Host is required and never injected", () => {
+        assertInadmissible(withHeaders([]))
+        assertInadmissible(withHeaders([["Accept", ascii("*/*")]]))
+        assertInadmissible(withHeaders([hostField(), ["host", ascii("other.org")]]))
+        Assertions.require(sent(withHeaders([["hOsT", ascii("example.org")]])) ==
+            headOf("GET / HTTP/1.1", "hOsT: example.org\r\n", "0"))
+    }),
+    Test("valid Host syntax is admitted", () => {
+        valid: ["example.org:8080", "a", "192.0.2.1", "192.0.2.1:80", "[::1]", "[::1]:80", "[2001:db8::7]", "[v1.x]", "ex%41mple", "a:"]
+        valid.each((value) => {
+            Assertions.require(sent(withHost(value)) ==
+                headOf("GET / HTTP/1.1", "Host: " + value + "\r\n", "0"))
+        })
+        null
+    }),
+    Test("invalid Host syntax is rejected", () => {
+        invalid: ["", "exa mple", "a:b", "[::1", "[::1]x", "a/b", "a@b", "[1::2::3]", "%zz", "user@host"]
+        invalid.each((value) => {
+            assertInadmissible(withHost(value))
+        })
+        null
+    }),
+    Test("outer SP and HTAB around Host are admitted and sent exactly", () => {
+        padded: [" example.org", "example.org ", "\t example.org \t", "[::1]\t", " example.org:8080 "]
+        padded.each((value) => {
+            Assertions.require(sent(withHost(value)) ==
+                headOf("GET / HTTP/1.1", "Host: " + value + "\r\n", "0"))
+        })
+        Assertions.require(sent(withHost("\t example.org \t")) ==
+            "GET / HTTP/1.1\r\nHost: \t example.org \t\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+        null
+    }),
+    Test("an empty or invalid semantic Host value is rejected despite outer whitespace", () => {
+        invalid: ["", " ", "\t \t", " exa mple.org ", " example.org:abc ", " [::1 "]
+        invalid.each((value) => {
+            assertInadmissible(withHost(value))
+        })
+        null
+    }),
+    Test("caller headers keep order, duplicates, casing, and binary values", () => {
+        binary: ascii("a")
+        binary.add(128)
+        binary.add(255)
+        headers: [
+            ["X-B", ascii("2")],
+            hostField(),
+            ["x-a", ascii("1")],
+            ["X-A", ascii("1 2\t3")],
+            ["X-Bin", binary],
+            ["X-Empty", ascii("")]
+        ]
+        expected: "X-B: 2\r\nHost: example.org\r\nx-a: 1\r\nX-A: 1 2\t3\r\nX-Bin: " + text(binary) + "\r\nX-Empty: \r\n"
+        Assertions.require(sent(withHeaders(headers)) == headOf("GET / HTTP/1.1", expected, "0"))
+    }),
+    Test("mutable request data is snapshotted at admission", () => {
+        target: ascii("/a")
+        value: ascii("v")
+        body: ascii("xy")
+        headers: [hostField(), ["X", value]]
+        request: {
+            method: "POST"
+            target: target
+            headers: headers
+            body: body
+        }
+        dx: duplexOf([ascii(ok)])
+        service: http.Client.exchangeOne(dx, request, status, null)
+        target.add(98)
+        value.add(119)
+        body.add(122)
+        request.method = "DELETE"
+        request.body = null
+        request.headers = []
+        Assertions.require(service.value() == 200)
+        Assertions.require(dx.written() ==
+            headOf("POST /a HTTP/1.1", "Host: example.org\r\nX: v\r\n", "2") + "xy")
+    }),
+    Test("invalid methods are rejected", () => {
+        ["", "G T", "GET\r", "GE:T", "G\u{E9}T", "CONNECT"].each((method) => {
+            assertInadmissible(requestOf(method, "/", [hostField()], null))
+        })
+        Assertions.require(sent(requestOf("connect", "/", [hostField()], null)) ==
+            headOf("connect / HTTP/1.1", "Host: example.org\r\n", "0"))
+        Assertions.require(sent(requestOf("X-CUSTOM!", "/", [hostField()], null)) ==
+            headOf("X-CUSTOM! / HTTP/1.1", "Host: example.org\r\n", "0"))
+    }),
+    Test("CONNECT, absolute, authority, and proxy targets are rejected", () => {
+        assertInadmissible(requestOf("CONNECT", "example.org:443", [hostField()], null))
+        assertInadmissible(requestOf("GET", "http://example.org/", [hostField()], null))
+        assertInadmissible(requestOf("GET", "https://proxy.example/x?y", [hostField()], null))
+        assertInadmissible(requestOf("GET", "example.org:80", [hostField()], null))
+        assertInadmissible(requestOf("OPTIONS", "http://example.org", [hostField()], null))
+    }),
+    Test("malformed origin-form targets are rejected", () => {
+        ["", "a/b", "/a b", "/a#f", "/%zz", "/%4", "/a\r", "/\u{E9}", "/a\"b", "/a<b"].each((target) => {
+            assertInadmissible(requestOf("GET", target, [hostField()], null))
+        })
+        Assertions.require(sent(requestOf("GET", "/%41;a=b@c:d/?q?=/", [hostField()], null)) ==
+            headOf("GET /%41;a=b@c:d/?q?=/ HTTP/1.1", "Host: example.org\r\n", "0"))
+    }),
+    Test("malformed header names are rejected", () => {
+        ["", "Bad Name", "X:", "X\r", "Na\u{EF}ve", "(x)"].each((name) => {
+            assertInadmissible(withHeaders([hostField(), [name, ascii("v")]]))
+        })
+        null
+    }),
+    Test("malformed header values are rejected", () => {
+        withOctet: (octet) => {
+            value: ascii("a")
+            value.add(octet)
+            value.add(98)
+            value
+        }
+        [0, 10, 13, 127, 1, 31].each((octet) => {
+            assertInadmissible(withHeaders([hostField(), ["X", withOctet(octet)]]))
+        })
+        null
+    }),
+    Test("outer SP and HTAB in header values are sent exactly as supplied", () => {
+        headers: [
+            hostField(),
+            ["X-Lead", ascii(" v")],
+            ["X-Trail", ascii("v\t")],
+            ["X-Both", ascii("\t a b \t")],
+            ["X-Space", ascii("  ")]
+        ]
+        expected: "Host: example.org\r\nX-Lead:  v\r\nX-Trail: v\t\r\nX-Both: \t a b \t\r\nX-Space:   \r\n"
+        Assertions.require(sent(withHeaders(headers)) == headOf("GET / HTTP/1.1", expected, "0"))
+    }),
+    Test("malformed header pairs are rejected", () => {
+        assertInadmissible(withHeaders([hostField(), ["X"]]))
+        assertInadmissible(withHeaders([hostField(), ["X", ascii("v"), ascii("w")]]))
+        assertInadmissible(withHeaders([hostField(), ascii("X: v")]))
+        assertInadmissible(withHeaders([hostField(), [ascii("X"), ascii("v")]]))
+    }),
+    Test("every prohibited control field is rejected case-insensitively", () => {
+        names: [
+            "Content-Length",
+            "transfer-encoding",
+            "CONNECTION",
+            "Expect",
+            "upgrade",
+            "Trailer",
+            "te",
+            "Keep-Alive",
+            "proxy-connection"
+        ]
+        names.each((name) => {
+            assertInadmissible(withHeaders([hostField(), [name, ascii("x")]]))
+        })
+        null
+    }),
+    Test("Strings are never coerced to Bytes", () => {
+        assertInadmissible(withHeaders([["Host", "example.org"]]))
+        assertInadmissible(requestOf("POST", "/", [hostField()], "body"))
+        stringTarget: {
+            method: "GET"
+            target: "/"
+            headers: [hostField()]
+            body: null
+        }
+        assertInadmissible(stringTarget)
+    }),
+    Test("a failed head write is not retried and nothing is read", () => {
+        writeError: IOError {}
+        dx: duplexOf([ascii(ok)])
+        dx.failWritesWith(writeError)
+        failure: failureOf(http.Client.exchangeOne(dx, requestOf("POST", "/", [hostField()], ascii("b")), status, null))
+        Assertions.require(failure === writeError)
+        Assertions.require(dx.writeCount() == 1)
+        Assertions.require(dx.readCount() == 0)
+    }),
+    Test("a failed body write after a committed head is not retried", () => {
+        writeError: IOError {}
+        invoked: false
+        dx: duplexOf([ascii(ok)])
+        dx.whenWriting((bytes) => {
+            if(dx.writeCount() == 2) {
+                dx.failWritesWith(writeError)
+            }
+        })
+        failure: failureOf(http.Client.exchangeOne(dx, requestOf("POST", "/", [hostField()], ascii("body")), (response) => {
+            invoked = true
+            null
+        }, null))
+        Assertions.require(failure === writeError)
+        Assertions.require(dx.writeCount() == 2)
+        Assertions.require(dx.readCount() == 0)
+        Assertions.require(dx.written() == headOf("POST / HTTP/1.1", "Host: example.org\r\n", "4"))
+        Assertions.require(!invoked)
+    })
+]

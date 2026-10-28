@@ -1,0 +1,638 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal HTTP/1.1 wire syntax shared by std:http/Server and
+//! std:http/Client (D215, D218-B). This module is an unpublished implementation
+//! artifact, not an approved Standard Library API. Every operation is pure: it
+//! performs no I/O, signals no rejection, and only answers Booleans, indices,
+//! Integers, or fresh Bytes. Ranges are half-open [start, end) octet indices.
+
+// ------------------------------------------------------------ octet classes
+
+isAlpha: (octet) => {
+    ((octet >= 65) && (octet <= 90)) || ((octet >= 97) && (octet <= 122))
+}
+
+isDigit: (octet) => {
+    (octet >= 48) && (octet <= 57)
+}
+
+isHexDigit: (octet) => {
+    isDigit(octet) ||
+        ((octet >= 65) && (octet <= 70)) ||
+        ((octet >= 97) && (octet <= 102))
+}
+
+/// Answers the value of a hexadecimal digit, or -1.
+hexValue: (octet) => {
+    value: -1
+    if(isDigit(octet)) {
+        value = octet - 48
+    }
+    if((octet >= 65) && (octet <= 70)) {
+        value = octet - 55
+    }
+    if((octet >= 97) && (octet <= 102)) {
+        value = octet - 87
+    }
+    value
+}
+
+isUnreserved: (octet) => {
+    isAlpha(octet) ||
+        isDigit(octet) ||
+        (octet == 45) ||
+        (octet == 46) ||
+        (octet == 95) ||
+        (octet == 126)
+}
+
+isSubDelimiter: (octet) => {
+    (octet == 33) ||
+        (octet == 36) ||
+        (octet == 38) ||
+        (octet == 39) ||
+        (octet == 40) ||
+        (octet == 41) ||
+        (octet == 42) ||
+        (octet == 43) ||
+        (octet == 44) ||
+        (octet == 59) ||
+        (octet == 61)
+}
+
+/// tchar = ALPHA / DIGIT / "!#$%&'*+-.^_`|~"
+isTchar: (octet) => {
+    isAlpha(octet) ||
+        isDigit(octet) ||
+        (octet == 33) ||
+        (octet == 35) ||
+        (octet == 36) ||
+        (octet == 37) ||
+        (octet == 38) ||
+        (octet == 39) ||
+        (octet == 42) ||
+        (octet == 43) ||
+        (octet == 45) ||
+        (octet == 46) ||
+        (octet == 94) ||
+        (octet == 95) ||
+        (octet == 96) ||
+        (octet == 124) ||
+        (octet == 126)
+}
+
+/// SP or HTAB.
+isWhitespace: (octet) => {
+    (octet == 32) || (octet == 9)
+}
+
+/// field-value octet: SP, HTAB, VCHAR, or obs-text.
+isFieldValueOctet: (octet) => {
+    (octet == 32) || (octet == 9) || ((octet >= 33) && (octet <= 126)) || (octet >= 128)
+}
+
+/// qdtext = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
+isQdtext: (octet) => {
+    (octet == 9) ||
+        (octet == 32) ||
+        (octet == 33) ||
+        ((octet >= 35) && (octet <= 91)) ||
+        ((octet >= 93) && (octet <= 126)) ||
+        (octet >= 128)
+}
+
+/// ASCII-only case folding; every other octet is answered unchanged.
+asciiLower: (octet) => {
+    lowered: octet
+    if((octet >= 65) && (octet <= 90)) {
+        lowered = octet + 32
+    }
+    lowered
+}
+
+// ------------------------------------------------------------ Bytes helpers
+
+/// Answers the first index of octet in the range, or -1.
+indexOf: (bytes, start, end, octet) => {
+    found: -1
+    index: start
+    while((found < 0) && (index < end)) {
+        if(bytes[index] == octet) {
+            found = index
+        }
+        index = index + 1
+    }
+    found
+}
+
+/// Answers fresh Bytes holding the octets of the range.
+copyRange: (bytes, start, end) => {
+    copy: Encoding.UTF8.encode("")
+    index: start
+    while(index < end) {
+        copy.add(bytes[index])
+        index = index + 1
+    }
+    copy
+}
+
+/// Lossless private snapshot of arbitrary octets through the explicit Latin1
+/// round trip; answers null for any value that is not Bytes, so no String is
+/// ever coerced into octets.
+snapshotBytes: (value) => {
+    copy: null
+    Error.handle(
+        () => {
+            copy = Encoding.Latin1.encode(Encoding.Latin1.decode(value))
+        },
+        (error) => {
+            copy = null
+            error
+        }
+    )
+    copy
+}
+
+/// Answers whether the non-empty range is 1*tchar.
+isToken: (bytes, start, end) => {
+    valid: start < end
+    index: start
+    while(valid && (index < end)) {
+        if(!isTchar(bytes[index])) {
+            valid = false
+        }
+        index = index + 1
+    }
+    valid
+}
+
+/// Answers the index after 1*tchar starting at start, or start when none.
+skipToken: (bytes, start, end) => {
+    index: start
+    while((index < end) && isTchar(bytes[index])) {
+        index = index + 1
+    }
+    index
+}
+
+/// Answers the index after *( SP / HTAB ) starting at start.
+skipWhitespace: (bytes, start, end) => {
+    index: start
+    while((index < end) && isWhitespace(bytes[index])) {
+        index = index + 1
+    }
+    index
+}
+
+/// Answers the index after a complete quoted-string whose DQUOTE is at start,
+/// or -1 when it is malformed or unterminated within the range.
+quotedStringEnd: (bytes, start, end) => {
+    index: start + 1
+    answer: 0
+    while(answer == 0) {
+        if(index >= end) {
+            answer = -1
+        } else {
+            octet: bytes[index]
+            if(octet == 34) {
+                answer = index + 1
+            } else {
+                if(octet == 92) {
+                    index = index + 1
+                    if(index >= end) {
+                        answer = -1
+                    } else {
+                        escaped: bytes[index]
+                        if(!(isWhitespace(escaped) || ((escaped >= 33) && (escaped <= 126)) || (escaped >= 128))) {
+                            answer = -1
+                        }
+                    }
+                } else {
+                    if(!isQdtext(octet)) {
+                        answer = -1
+                    }
+                }
+            }
+            index = index + 1
+        }
+    }
+    answer
+}
+
+/// Compares the range with an ASCII literal, octet by octet.
+rangeEqualsAscii: (bytes, start, end, text) => {
+    expected: Encoding.Latin1.encode(text)
+    equal: (end - start) == expected.size()
+    index: 0
+    while(equal && (index < expected.size())) {
+        if(bytes[start + index] != expected[index]) {
+            equal = false
+        }
+        index = index + 1
+    }
+    equal
+}
+
+/// Compares whole Bytes with a lowercase ASCII literal, ASCII case-insensitively.
+bytesEqualIgnoringCase: (bytes, lowercaseText) => {
+    expected: Encoding.Latin1.encode(lowercaseText)
+    equal: bytes.size() == expected.size()
+    index: 0
+    while(equal && (index < expected.size())) {
+        if(asciiLower(bytes[index]) != expected[index]) {
+            equal = false
+        }
+        index = index + 1
+    }
+    equal
+}
+
+/// Compares a token-valued field-name String with a lowercase ASCII literal,
+/// ASCII case-insensitively.
+nameIs: (name, lowercaseText) => {
+    bytesEqualIgnoringCase(Encoding.Latin1.encode(name), lowercaseText)
+}
+
+// ------------------------------------------------------------ field lines
+
+/// Parses one complete field line (without its CRLF) as
+/// field-name ":" OWS field-value OWS. Answers [name String, value Bytes]
+/// with only the outer OWS removed, or null when the line is malformed
+/// (obs-fold, missing or empty name, whitespace before ":", or a forbidden
+/// value octet).
+fieldLine: (line) => {
+    size: line.size()
+    valid: size > 0
+    if(valid) {
+        // obs-fold
+        valid = !isWhitespace(line[0])
+    }
+    colon: -1
+    if(valid) {
+        colon = indexOf(line, 0, size, 58)
+        // Whitespace before ":" is a non-token octet.
+        valid = (colon > 0) && isToken(line, 0, colon)
+    }
+    pair: null
+    if(valid) {
+        valueStart: colon + 1
+        valueEnd: size
+        while((valueStart < valueEnd) && isWhitespace(line[valueStart])) {
+            valueStart = valueStart + 1
+        }
+        while((valueEnd > valueStart) && isWhitespace(line[valueEnd - 1])) {
+            valueEnd = valueEnd - 1
+        }
+        scan: valueStart
+        while(valid && (scan < valueEnd)) {
+            if(!isFieldValueOctet(line[scan])) {
+                valid = false
+            }
+            scan = scan + 1
+        }
+        if(valid) {
+            pair = [Encoding.Latin1.decode(copyRange(line, 0, colon)), copyRange(line, valueStart, valueEnd)]
+        }
+    }
+    pair
+}
+
+// ------------------------------------------------------------ URI syntax
+
+/// unreserved / sub-delims / pct-encoded, plus the selected extra octets.
+isComponent: (bytes, start, end, allowColon, allowAtAndSlash, allowQuestion) => {
+    valid: true
+    index: start
+    while(valid && (index < end)) {
+        octet: bytes[index]
+        if(octet == 37) {
+            if((index + 2) >= end) {
+                valid = false
+            } else {
+                if(!(isHexDigit(bytes[index + 1]) && isHexDigit(bytes[index + 2]))) {
+                    valid = false
+                }
+            }
+            index = index + 3
+        } else {
+            allowed: isUnreserved(octet) || isSubDelimiter(octet)
+            if(allowColon && (octet == 58)) {
+                allowed = true
+            }
+            if(allowAtAndSlash && ((octet == 64) || (octet == 47))) {
+                allowed = true
+            }
+            if(allowQuestion && (octet == 63)) {
+                allowed = true
+            }
+            if(!allowed) {
+                valid = false
+            }
+            index = index + 1
+        }
+    }
+    valid
+}
+
+isIpv4: (bytes, start, end) => {
+    valid: true
+    partCount: 0
+    index: start
+    while(valid && (index < end)) {
+        tokenStart: index
+        while((index < end) && isDigit(bytes[index])) {
+            index = index + 1
+        }
+        tokenSize: index - tokenStart
+        if((tokenSize < 1) || (tokenSize > 3)) {
+            valid = false
+        }
+        if(valid && (tokenSize > 1) && (bytes[tokenStart] == 48)) {
+            valid = false
+        }
+        if(valid) {
+            value: 0
+            digitIndex: tokenStart
+            while(digitIndex < index) {
+                value = value * 10 + (bytes[digitIndex] - 48)
+                digitIndex = digitIndex + 1
+            }
+            if(value > 255) {
+                valid = false
+            }
+            partCount = partCount + 1
+        }
+        if(valid && (index < end)) {
+            if(bytes[index] != 46) {
+                valid = false
+            }
+            index = index + 1
+            if(index == end) {
+                valid = false
+            }
+        }
+    }
+    valid && (partCount == 4)
+}
+
+// Counts 16-bit groups in one side of an IPv6 literal, or answers -1.
+ipv6Groups: (bytes, start, end, allowIpv4Tail) => {
+    valid: true
+    count: 0
+    if(start < end) {
+        pieceStart: start
+        while(valid && (pieceStart <= end)) {
+            pieceEnd: indexOf(bytes, pieceStart, end, 58)
+            if(pieceEnd < 0) {
+                pieceEnd = end
+            }
+            last: pieceEnd == end
+            hasDot: indexOf(bytes, pieceStart, pieceEnd, 46) >= 0
+            if(last && allowIpv4Tail && hasDot) {
+                if(isIpv4(bytes, pieceStart, pieceEnd)) {
+                    count = count + 2
+                } else {
+                    valid = false
+                }
+            } else {
+                pieceSize: pieceEnd - pieceStart
+                if((pieceSize < 1) || (pieceSize > 4)) {
+                    valid = false
+                }
+                scan: pieceStart
+                while(valid && (scan < pieceEnd)) {
+                    if(!isHexDigit(bytes[scan])) {
+                        valid = false
+                    }
+                    scan = scan + 1
+                }
+                count = count + 1
+            }
+            pieceStart = pieceEnd + 1
+        }
+    }
+    result: -1
+    if(valid) {
+        result = count
+    }
+    result
+}
+
+isIpv6: (bytes, start, end) => {
+    doubleColon: -1
+    repeated: false
+    index: start
+    while((index + 1) < end) {
+        if((bytes[index] == 58) && (bytes[index + 1] == 58)) {
+            if(doubleColon >= 0) {
+                repeated = true
+            } else {
+                doubleColon = index
+            }
+        }
+        index = index + 1
+    }
+    valid: false
+    if(!repeated) {
+        if(doubleColon < 0) {
+            valid = ipv6Groups(bytes, start, end, true) == 8
+        } else {
+            head: ipv6Groups(bytes, start, doubleColon, false)
+            tail: ipv6Groups(bytes, doubleColon + 2, end, true)
+            valid = (head >= 0) && (tail >= 0) && ((head + tail) <= 7)
+        }
+    }
+    valid
+}
+
+/// IP-literal content: IPv6address / IPvFuture.
+isIpLiteral: (bytes, start, end) => {
+    valid: false
+    if(start < end) {
+        if((bytes[start] == 118) || (bytes[start] == 86)) {
+            dot: indexOf(bytes, start + 1, end, 46)
+            valid = (dot > (start + 1)) && (dot < (end - 1))
+            scan: start + 1
+            while(valid && (scan < dot)) {
+                if(!isHexDigit(bytes[scan])) {
+                    valid = false
+                }
+                scan = scan + 1
+            }
+            if(valid) {
+                scan = dot + 1
+            }
+            while(valid && (scan < end)) {
+                octet: bytes[scan]
+                if(!(isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58))) {
+                    valid = false
+                }
+                scan = scan + 1
+            }
+        } else {
+            valid = isIpv6(bytes, start, end)
+        }
+    }
+    valid
+}
+
+/// host [ ":" port ] with port = *DIGIT; requirePort makes ":" port mandatory
+/// (authority-form). Purely syntactic: no name resolution.
+isHostPort: (bytes, start, end, requirePort) => {
+    valid: start < end
+    hostEnd: end
+    if(valid) {
+        if(bytes[start] == 91) {
+            close: indexOf(bytes, start + 1, end, 93)
+            valid = (close >= 0) && isIpLiteral(bytes, start + 1, close)
+            if(valid) {
+                hostEnd = close + 1
+                if((hostEnd < end) && (bytes[hostEnd] != 58)) {
+                    valid = false
+                }
+            }
+        } else {
+            hostEnd = indexOf(bytes, start, end, 58)
+            if(hostEnd < 0) {
+                hostEnd = end
+            }
+            valid = (hostEnd > start) && isComponent(bytes, start, hostEnd, false, false, false)
+        }
+    }
+    if(valid) {
+        if(hostEnd == end) {
+            valid = !requirePort
+        } else {
+            scan: hostEnd + 1
+            while(valid && (scan < end)) {
+                if(!isDigit(bytes[scan])) {
+                    valid = false
+                }
+                scan = scan + 1
+            }
+        }
+    }
+    valid
+}
+
+/// [ userinfo "@" ] host [ ":" port ]
+isAuthority: (bytes, start, end) => {
+    hostStart: start
+    valid: true
+    at: indexOf(bytes, start, end, 64)
+    if(at >= 0) {
+        valid = isComponent(bytes, start, at, true, false, false)
+        hostStart = at + 1
+    }
+    valid && isHostPort(bytes, hostStart, end, false)
+}
+
+/// origin-form = absolute-path [ "?" query ], for a range starting with "/".
+isOriginForm: (bytes, start, end) => {
+    query: indexOf(bytes, start, end, 63)
+    valid: false
+    if(query < 0) {
+        valid = isComponent(bytes, start, end, true, true, false)
+    } else {
+        valid = isComponent(bytes, start, query, true, true, false) &&
+            isComponent(bytes, query + 1, end, true, true, true)
+    }
+    valid
+}
+
+/// absolute-URI = scheme ":" hier-part [ "?" query ], without fragment, for a
+/// non-empty range.
+isAbsoluteForm: (bytes, start, end) => {
+    valid: isAlpha(bytes[start])
+    index: start + 1
+    while(valid && (index < end) && (bytes[index] != 58)) {
+        octet: bytes[index]
+        if(!(isAlpha(octet) || isDigit(octet) || (octet == 43) || (octet == 45) || (octet == 46))) {
+            valid = false
+        }
+        index = index + 1
+    }
+    if(valid && (index == end)) {
+        valid = false
+    }
+    if(valid) {
+        rest: index + 1
+        query: indexOf(bytes, rest, end, 63)
+        hierEnd: end
+        if(query >= 0) {
+            hierEnd = query
+        }
+        pathStart: rest
+        if(((hierEnd - rest) >= 2) && (bytes[rest] == 47) && (bytes[rest + 1] == 47)) {
+            authorityStart: rest + 2
+            authorityEnd: indexOf(bytes, authorityStart, hierEnd, 47)
+            if(authorityEnd < 0) {
+                authorityEnd = hierEnd
+            }
+            valid = isAuthority(bytes, authorityStart, authorityEnd)
+            pathStart = authorityEnd
+        }
+        valid = valid && isComponent(bytes, pathStart, hierEnd, true, true, false)
+        if(valid && (query >= 0)) {
+            valid = isComponent(bytes, query + 1, end, true, true, true)
+        }
+    }
+    valid
+}
+
+/// Answers whether every octet of the range may appear in a request-target:
+/// no CTL, SP, DEL, non-ASCII octet, or "#".
+isTargetOctets: (bytes, start, end) => {
+    valid: true
+    scan: start
+    while(valid && (scan < end)) {
+        octet: bytes[scan]
+        if((octet <= 32) || (octet >= 127) || (octet == 35)) {
+            valid = false
+        }
+        scan = scan + 1
+    }
+    valid
+}
+
+// ------------------------------------------------------------ numerals
+
+/// Parses Content-Length = 1*DIGIT within the signed-64 range, or answers -1
+/// for an empty value, a non-digit octet (including a comma list), or
+/// overflow.
+parseContentLength: (value) => {
+    result: -1
+    if(value.size() > 0) {
+        result = 0
+        index: 0
+        while((result >= 0) && (index < value.size())) {
+            octet: value[index]
+            if(isDigit(octet)) {
+                digit: octet - 48
+                if((result > 922337203685477580) ||
+                        ((result == 922337203685477580) && (digit > 7))) {
+                    result = -1
+                } else {
+                    result = result * 10 + digit
+                }
+            } else {
+                result = -1
+            }
+            index = index + 1
+        }
+    }
+    result
+}

@@ -23,6 +23,36 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.476] - 2026-10-28
+
+### D218-B — Single-exchange HTTP/1.1 Client
+- `spec/io/HTTP.md`: the document now owns three independent Standard
+  Library facilities (`std:http/Server` §§1–13, `std:http/Host` §15,
+  `std:http/Client` §16); §1 and §14 distinguish the bounded
+  explicit-duplex Client from still-deferred higher-level client
+  facilities.
+- `spec/io/HTTP.md` §16 (new): `std:http/Client` exporting `Client` and
+  `ClientError`. `Client.exchangeOne(duplex, request, onResponse, limits)`
+  and `.owning` perform exactly one HTTP/1.1 exchange over a caller-supplied
+  duplex in one service Task and answer a fresh Future of the callback
+  result. Defines admission (`InvalidIOArgument`), borrowed/owning custody,
+  request snapshots and exact serialization (automatic `Content-Length` and
+  `Connection: close`, explicit Host required, caller framing and hop-by-hop
+  fields prohibited, outer OWS preserved), strict response-head parsing,
+  informational responses, 101 and non-`HTTP/1.1` versions as
+  `unsupportedFeature`, the strict single-coding `Transfer-Encoding` subset
+  with RFC 9110 parameter BWS, status-specific framing fields (1xx/204/205
+  forbidden framing; HEAD/304 representation lengths exempt from the body
+  budget), fixed, chunked and close-delimited bodies, the incremental
+  `ByteReadable` body and its retirement, cancellation, cleanup and failure
+  precedence, the `ClientError` taxonomy, and the ten Client limits.
+- `spec/io/NETWORK.md` §1 and the deferred-design list: the Client accepts
+  an already-supplied duplex and adds no `Network` operation or implicit
+  authority.
+- `spec/semantics/ERRORS.md`: lists the `ClientError` Standard Library
+  prototype (`std:http/Client`, `HTTP.md` §16).
+- D215, D216 and D217 are not revised.
+
 ## [0.1.475] - 2026-10-28
 
 ### I126 — Editorial reconciliation of D216 references

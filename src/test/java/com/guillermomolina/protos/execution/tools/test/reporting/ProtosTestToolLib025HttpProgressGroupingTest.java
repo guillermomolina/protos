@@ -66,7 +66,12 @@ final class ProtosTestToolLib025HttpProgressGroupingTest {
                     "server-lifecycle",
                     "host-construction",
                     "host-connection",
-                    "host-lifecycle");
+                    "host-lifecycle",
+                    "client-admission",
+                    "client-request",
+                    "client-response-head",
+                    "client-response-body",
+                    "client-lifecycle");
 
     private static final String PRELUDE =
             "SuiteGraph: import(\"self:SuiteGraph\")\n"

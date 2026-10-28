@@ -1,4 +1,4 @@
-# Protos HTTP/1.1 Server Library v0.1
+# Protos HTTP/1.1 Server, Hosting and Client Library v0.1
 
 Language version: 0.1
 Status: Draft
@@ -7,8 +7,16 @@ Last updated: 2026-10-27
 This document is the primary normative owner of the Standard Library HTTP/1.1
 single-request origin-server facility `std:http/Server` selected by D215
 (D215-F3–F8: Option A, A3-minimal, Q0, F3 = M1, F4 = H1, F5 = B1, F6 = L1,
-F7 = W1, F8 = S1), and of the separate optional continuous-hosting facility
-`std:http/Host` selected by D216. D216 does not revise D215.
+F7 = W1, F8 = S1), of the separate optional continuous-hosting facility
+`std:http/Host` selected by D216, and of the separate optional single-exchange
+client facility `std:http/Client` selected by D218-B. It therefore owns three
+independent Standard Library facilities:
+
+- `std:http/Server` — D215, §§1–13;
+- `std:http/Host` — D216, §15; and
+- `std:http/Client` — D218-B, §16.
+
+D216 does not revise D215. D218-B revises none of D215, D216 or D217.
 
 HTTP is an optional Standard Library built entirely on existing capabilities.
 Byte reading/writing, Future commitment, cancellation, and half-close semantics
@@ -29,7 +37,9 @@ those RFCs, this document governs.
 `std:http/Server` processes exactly one HTTP/1.1 request on a caller-supplied
 duplex byte flow, produces exactly one final response, and retires its HTTP
 session. §§1–13 describe that single-request facility; §15 separately defines
-optional continuous hosting without changing any `std:http/Server` behavior.
+optional continuous hosting without changing any `std:http/Server` behavior;
+§16 separately defines the optional single-exchange client without changing
+any `std:http/Server` or `std:http/Host` behavior.
 
 The single-request facility:
 
@@ -1025,10 +1035,13 @@ with no `status` slot; the driver may attempt a best-effort empty 500.
 
 Sections 1–13 define the single-request, `Connection: close`, HTTP/1.1
 origin-server facility; §15 defines the separately optional continuous-hosting
-facility. The following remain outside the approved HTTP contract and require
-separate explicit design:
+facility; §16 defines the separately optional, bounded, explicit-duplex,
+single-exchange HTTP/1.1 client. The following remain outside the approved HTTP
+contract and require separate explicit design:
 
-- HTTP client;
+- higher-level HTTP client facilities beyond §16: URL interpretation,
+  connection acquisition, proxies, redirects, cookies, content codings,
+  retries, connection pooling and reuse, and streaming request bodies;
 - TLS;
 - DNS and name resolution;
 - persistent connections / keep-alive and pipelining;
@@ -1344,3 +1357,478 @@ an indefinitely slow admitted client may indefinitely occupy its quota
 and delay drain. Importing neither `std:http/Host` nor `std:http/Server`
 creates no hosting Workers, listening authority, global state, or runtime
 cost.
+
+## 16. Single-exchange HTTP/1.1 Client (D218-B)
+
+D218-B selects a distinct, opt-in Standard Library facility that performs
+exactly one HTTP/1.1 request/response exchange over a byte duplex supplied by
+the application. This section is the sole normative owner of its public
+contract. It does not revise D215 (§§1–13), D216 (§15) or D217, and it adds no
+`Network`, `TcpConnection`, `TcpListener` or `TcpAcceptor` operation. Byte
+I/O, Future, Task, cancellation, Error and `ensure` semantics remain owned by
+the documents named in the introduction. RFC 9110 and RFC 9112 apply only
+where this section does not state a stricter rule.
+
+### 16.1 Independent module and exports
+
+The explicit module `std:http/Client` exports exactly `Client` and
+`ClientError`. There is no Prelude binding and no implicit import. Importing
+`std:http/Client` does not import, initialize or require `std:http/Server` or
+`std:http/Host`, and importing either of those does not make `Client`
+available. Each Actor that imports the module obtains its own module instance
+under `../semantics/MODULES.md`; no exchange state is shared between module
+instances or Actors.
+
+`ClientError` delegates immediately from `Error`. It is independent of
+`HttpError` (§12.1) and `HostError` (§15.10): neither delegates from the
+other, and `ClientError` is not a Core or Prelude Error prototype.
+
+### 16.2 Public operations and argument admission
+
+```text
+Client.exchangeOne(duplex, request, onResponse, limits) -> Future<result>
+Client.exchangeOne.owning(duplex, request, onResponse, limits) -> Future<result>
+```
+
+Each successfully dispatched invocation returns a fresh standard `Future`.
+Failures before ordinary dispatch — lookup, argument evaluation, receiver
+outside the domain and arity — follow the general language rules.
+
+After ordinary dispatch, the arguments are validated before any effect. The
+returned Future is already failed with a fresh `InvalidIOArgument` occurrence
+when any of the following holds:
+
+1. `duplex` does not satisfy both `ByteReadable` and `ByteWritable`;
+2. for `exchangeOne.owning`, `duplex` does not satisfy `Closable`;
+3. `onResponse` does not satisfy the invocability protocol;
+4. `limits` is neither `null` nor an ordinary object, has an own slot that is
+   not a limit name of §16.12, or has a recognized limit whose value is not an
+   Integer in the range 1 through 2147483647; or
+5. `request` is not admissible under §16.4 and §16.5.
+
+When validation fails, no Task is created, no exchange session is
+established, no ownership of `duplex` is acquired, no octet is read or
+written, `onResponse` is not invoked, and `duplex` is never closed. No
+synchronous Error is signaled for these conditions after dispatch, and they
+are never represented by `ClientError`.
+
+When validation succeeds, the logical order is: the limits and the request
+are captured (§16.4, §16.12); the exchange session is established and, for
+`exchangeOne.owning`, close responsibility for `duplex` is acquired; exactly
+one cooperative service Task is created; and its Future is returned. The
+service Task belongs to the invoker's Actor and is a structured child of the
+invoker's structured scope, or of the Actor-root asynchronous scope when the
+invoker has no current Task, under `../concurrency/FUTURES_AND_TASKS.md` §24.
+The entire exchange — request emission, response parsing, the callback, body
+reads, retirement and cleanup — runs in that one Task. No additional Task is
+created for the callback, a body read, a write or cleanup; I/O Futures are not
+Tasks.
+
+### 16.3 Duplex authority and borrowed/owning custody
+
+The Client exercises no authority beyond the byte-I/O capability (and, for the
+owning variant, the `Closable` capability) of the duplex it is given. It does
+not acquire a `Network` capability, resolve names, open TCP connections,
+establish TLS, interpret URLs, create Actors, or use clocks or timers. The
+application obtains the duplex, for example by an explicit
+`network.connectTcp(...)` under `NETWORK.md`, and passes the resulting
+connection.
+
+`exchangeOne` borrows `duplex`: it never invokes `close`, `shutdownRead` or
+`shutdownWrite` on it, and on every terminal path the duplex remains owned by
+the caller in whatever state the exchange left it. Octets read by the Client
+beyond what the callback consumed are not returned to the caller.
+
+`exchangeOne.owning` takes custody of `duplex` at admission and invokes
+`duplex.close()` exactly once on every admitted terminal path: normal
+completion, a `ClientError`, a callback failure, an I/O failure and
+cancellation, including cancellation requested before the service Task
+executes its first instruction. The close is awaited, through a concurrent
+cancellation, before the service Future becomes terminal. The owning variant
+performs no half-close.
+
+### 16.4 Request object, snapshots and serialization
+
+`request` is ordinary structural data: it is admissible only when it is an
+ordinary object with the own slots `method`, `target`, `headers` and `body`.
+Other own slots are ignored, and inherited slots are never read. The four
+slots must satisfy:
+
+```text
+{
+    method: String       // an HTTP token (RFC 9110 §9.1); not "CONNECT"
+    target: Bytes        // origin-form, or "*" when method is "OPTIONS"
+    headers: Array<[String, Bytes]>
+    body: null | Bytes
+}
+```
+
+- `method` is a `String` whose characters are all `tchar`. Method names are
+  case-sensitive: exactly `"CONNECT"` is rejected.
+- `target` is `Bytes` containing no CTL, SP, DEL, non-ASCII octet or `#`. It is
+  either the single octet `*`, admissible only with method `"OPTIONS"`, or an
+  origin-form target (`absolute-path [ "?" query ]`) whose path and query octets
+  are unreserved, sub-delimiter, `:`, `@`, `/` (and `?` in the query) or a
+  complete percent-encoding of two hexadecimal digits. Absolute-form,
+  authority-form and any proxy-oriented target are inadmissible, even though
+  the server request parser (§7.1) admits absolute-form.
+- `headers` is an `Array` whose every element is an `Array` of exactly two
+  elements: a `String` name and a `Bytes` value (§16.5).
+- `body` is `null` or `Bytes`.
+
+No `String` is converted to `Bytes`, nor `Bytes` to `String`, implicitly: a
+`String` target, header value or body is inadmissible.
+
+Admission takes a complete private snapshot of the method, the target octets,
+every header name and value in order, and the body octets before any I/O.
+Later mutation of the request object, its `headers` Array, any pair, or any
+`Bytes` it referenced has no effect on the exchange.
+
+The request is serialized exactly as:
+
+1. `method SP target SP "HTTP/1.1" CRLF`;
+2. every caller field, in the original order, with the original name casing,
+   as `name ": " value CRLF`, duplicates preserved;
+3. `"Content-Length: " length CRLF`, where `length` is the decimal octet count
+   of the body snapshot, `0` when `body` is `null`;
+4. `"Connection: close" CRLF`; and
+5. a final `CRLF`,
+
+followed by the body snapshot octets when it is non-empty. `Host` is never
+injected or altered. No `Expect`, `Upgrade`, `TE`, `Transfer-Encoding`,
+compression, cookie, authentication, proxy or redirect field is added.
+
+The head is written by one `write` and a non-empty body by one later `write`;
+each is awaited before the next operation, and response parsing begins only
+after every request write has completed. A failed or partially committed
+write is never retried; its Error is the exchange outcome (§16.10). The Client
+does not monitor the input for an early response while writing.
+
+### 16.5 Host and header validation
+
+Each caller field must satisfy:
+
+- the name is a non-empty `String` whose characters are all `tchar`;
+- the value octets are field-value octets (SP, HTAB, VCHAR or obs-text), so no
+  CR, LF, NUL or other CTL can be emitted; values are binary, are never
+  decoded, and are serialized exactly as supplied, including any outer SP or
+  HTAB, without trimming or normalization; and
+- the name is none of `Content-Length`, `Transfer-Encoding`, `Connection`,
+  `Expect`, `Upgrade`, `Trailer`, `TE`, `Keep-Alive` or `Proxy-Connection`,
+  compared ASCII case-insensitively. Framing, connection management and
+  protocol switching are controlled only by the Client.
+
+Exactly one field named `Host` (ASCII case-insensitively) must be present, and
+its value must be `host [ ":" port ]` with `host` an `IP-literal` (IPv6 or
+IPvFuture in brackets), an IPv4 address or a non-empty `reg-name`, and `port`
+zero or more digits — the same syntax as §7.2. The value is not resolved.
+Outer SP or HTAB is permitted on `Host` as on any other field: the Host syntax
+is checked against the semantic value obtained by excluding the leading and
+trailing SP/HTAB octets. That exclusion is for validation only; the original
+value octets, including the outer whitespace, are serialized exactly as
+supplied. An empty or syntactically invalid semantic Host value is
+inadmissible.
+
+### 16.6 Response status/head parsing and informational responses
+
+After the request is written, the Client reads the duplex with
+`duplex.read(readSize)`, where `readSize` is the lesser of `ioChunkBytes` and
+`maxPrefetchBytes`, and parses response heads incrementally. A response head
+is:
+
+```text
+status-line = HTTP-version SP 3DIGIT SP reason-phrase CRLF
+header-section = *( field-line CRLF ) CRLF
+```
+
+- Every line ends with CRLF; a bare CR or LF is malformed.
+- `HTTP-version` must be well-formed (`"HTTP/" DIGIT "." DIGIT`); any other
+  version text is malformed. A well-formed version other than `HTTP/1.1` is an
+  unsupported feature.
+- The status code is exactly three digits in the range 100 through 599; a
+  missing space, a non-digit or a value outside that range is malformed. The
+  reason-phrase may be empty, must contain only field-value octets, and is
+  discarded.
+- Each field line is `field-name ":" OWS field-value OWS` with a non-empty
+  token name and field-value octets. Whitespace before `:` and obs-fold (a line
+  beginning with SP or HTAB) are malformed. Only the outer OWS is removed.
+- Field names keep their original casing; fields keep their order and
+  duplicates; values are binary `Bytes`.
+- `Content-Length` and `Transfer-Encoding` are recognized ASCII
+  case-insensitively. More than one `Content-Length` field, a value that is
+  not `1*DIGIT` (including a comma list), or a value above
+  9223372036854775807 is malformed.
+- `Transfer-Encoding` is supported only in a strict single-coding subset:
+  exactly one `Transfer-Encoding` field whose value is exactly one list
+  element, the coding `chunked` (ASCII case-insensitive, surrounding OWS
+  permitted) without parameters. The list elements follow RFC 9110:
+
+  ```text
+  transfer-coding    = token *( OWS ";" OWS transfer-parameter )
+  transfer-parameter = token BWS "=" BWS ( token / quoted-string )
+  BWS                = *( SP / HTAB )
+  ```
+
+  BWS around `=` is syntactically valid, but it does not make a parameterized
+  coding supported. A value that is not syntactically a list of
+  `transfer-coding` elements (for example a missing parameter name, `=` or
+  value, or an unterminated quoted-string), or that contains no coding at all,
+  is malformed. A
+  syntactically valid value outside the subset — another coding, several
+  codings, a coding with parameters, any empty list element, or more than one
+  `Transfer-Encoding` field — is an unsupported feature; empty elements are
+  never silently discarded. Both `Transfer-Encoding` and `Content-Length`
+  together is malformed, and the malformed checks precede the unsupported
+  classification.
+- Status `101 Switching Protocols` is an unsupported feature.
+
+The status-line, header-byte and header-field limits of §16.12 apply to each
+response head separately. The parser stops immediately after the CRLF CRLF
+that ends a head, and every octet already received after it is retained, in
+order, for the next head or for the body.
+
+A head with status 100 through 199 (other than 101) is informational: it is
+validated completely and discarded, and the Client then parses the next head.
+At most `maxInformationalResponses` informational heads are accepted; one
+more is a `responseLimit` failure. The first head with status 200 through 599
+is the final response. Physical EOF before a complete final head is
+malformed.
+
+HTTP status codes, including 404 and 500, are ordinary protocol results: they
+invoke `onResponse` and never by themselves fail the exchange.
+
+### 16.7 Response framing, close-delimited bodies and trailers
+
+The body framing of the final response is, in order of precedence:
+
+1. none, when the request method is `HEAD` or the status is 204, 205 or 304;
+   the framing fields such a head may carry were validated by §16.6 and by the
+   status-specific rules below, and never frame content;
+2. chunked, when `Transfer-Encoding: chunked` is present;
+3. fixed, when `Content-Length` is present; a declared length above
+   `maxResponseBodyBytes` is a `responseLimit` failure before `onResponse` is
+   invoked; or
+4. close-delimited otherwise: the body is every octet until clean physical
+   EOF.
+
+Status-specific framing fields are validated when the head is completed,
+after the rules of §16.6 and before the head is accepted:
+
+- an informational (1xx) or 204 response must contain neither
+  `Content-Length` (not even `Content-Length: 0`) nor `Transfer-Encoding`;
+- a 205 response may omit `Content-Length` or carry exactly
+  `Content-Length: 0`; this client rejects a positive `Content-Length` on 205;
+- a response to `HEAD` and a 304 response may carry a syntactically valid
+  `Content-Length` describing the selected representation rather than
+  transferred content. It remains subject to the strict syntax,
+  duplicate-field and framing-conflict rules of §16.6, is preserved in
+  `response.headers`, and is never compared with `maxResponseBodyBytes`.
+
+A forbidden or contradictory framing field fails the exchange with a
+`ClientError` of kind `"malformedResponse"` without invoking `onResponse`;
+`101 Switching Protocols` and a `Transfer-Encoding` outside the strict subset
+keep their `"unsupportedFeature"` classification where §16.6 assigns it. The
+declared-length budget of rule 3 (`"responseLimit"` before `onResponse`)
+applies only to a response whose content is framed by that `Content-Length`.
+Every no-body response is at its logical end immediately.
+
+Chunked decoding uses the same chunk grammar as §7.3: a hexadecimal
+chunk-size (overflow beyond 9223372036854775807 is malformed) with optional
+chunk extensions, which are validated and discarded; chunk data followed by
+CRLF; a last chunk `0`; and a trailer section of field lines validated as
+header fields and discarded. Trailers are never exposed.
+
+A fixed or chunked body that is not complete at physical EOF is malformed.
+For a close-delimited body physical EOF is normal completion. A decoded body
+that would exceed `maxResponseBodyBytes` is a `responseLimit` failure: for a
+chunked body when a chunk-size line declares it, for a close-delimited body
+when the first octet beyond the limit is received; octets up to the limit
+are delivered first. Chunk-line and trailer octet or field limits beyond
+`maxChunkLineBytes`, `maxTrailerBytes` or `maxTrailerFields` are
+`responseLimit` failures.
+
+The Client never consumes octets beyond the logical end of the final
+response, never parses a second response, never reuses the connection and
+never restores read-ahead to the duplex.
+
+### 16.8 Incremental `ByteReadable` response-body contract
+
+The final response passed to `onResponse` is a fresh ordinary object:
+
+```text
+{
+    version: "1.1"
+    status: Integer
+    headers: Array<[String, Bytes]>
+    body: ByteReadable
+}
+```
+
+`headers` and its pairs and value `Bytes` are fresh copies owned by the
+callback; mutating them has no effect on the exchange.
+
+`response.body.read(maxBytes)` follows `BYTE_IO.md`: it returns a Future; a
+non-positive or non-Integer `maxBytes` is an `InvalidIOArgument`; a resolved
+result is non-empty `Bytes` of at most `maxBytes` octets or `null` at the
+logical end of the body; short reads are permitted; octet order is preserved;
+and empty `Bytes` never substitutes for end of body. A body with framing
+"none" or with zero length is at its logical end immediately.
+
+The body is decoded on demand. The Client never reads ahead more than one
+lower read of `readSize` octets beyond what decoding requires, never buffers
+the whole response, and never allocates storage proportional to the body
+size. A slow consumer applies backpressure to the duplex. A body read does
+not create a Task.
+
+When a body read reaches malformed framing or an exceeded limit, the session
+terminalizes: that read fails with a fresh `ClientError` that the exchange
+records as its late framing failure, and every later read of `response.body`
+fails with a fresh `IOLifecycleError`. An Error of a lower `duplex.read` is
+reported once, by the body read that reached it, with its identity
+preserved.
+
+### 16.9 Callback lifetime, result adoption and session retirement
+
+`onResponse(response)` is invoked exactly once, inside the service Task, for
+the final response, and only after the complete final head was accepted. It
+is never invoked when the exchange fails earlier.
+
+`response.body` is usable only while `onResponse` runs. The session retires
+immediately when `onResponse` returns, fails or is cancelled; afterwards
+every read of an escaped `response.body` fails with a fresh
+`IOLifecycleError`. Unread body octets are not drained.
+
+The ordinary result of `onResponse` is not awaited by the Client. After
+retirement and cleanup it becomes the result of the service Task, so the
+service Future resolves to it under the ordinary Future adoption rules of
+`../concurrency/FUTURES_AND_TASKS.md`. A returned pending Future is adopted
+as such, but it never extends the life of `response.body`.
+
+### 16.10 Cancellation, cleanup and failure precedence
+
+The service outcome, before mandatory cleanup, is:
+
+1. if a late framing failure was recorded (§16.8), that original
+   `ClientError`, even when the callback handled it and returned normally or
+   failed with another Error;
+2. otherwise, if `onResponse` failed, its Error, with identity preserved;
+3. otherwise, the ordinary callback result (§16.9).
+
+An Error of a request `write`, a lower `read` reached while parsing a head,
+or a `ClientError` of head parsing, terminates the exchange with that Error,
+with identity preserved, without invoking `onResponse`. Ordinary I/O Errors
+are never converted to `ClientError`, and `ClientError` never represents an
+I/O failure.
+
+Cancellation of the service Future follows
+`../concurrency/FUTURES_AND_TASKS.md`. Cancellation during a pending read or
+write, during the callback, or before the service Task's first instruction
+unwinds the exchange through retirement and, for `exchangeOne.owning`, the
+awaited close. Mandatory cleanup completes before the service Future becomes
+terminal. A failure of the owning `close` supersedes the earlier outcome,
+including a cancellation, a callback Error and a recorded late framing
+failure, under the general `ensure` precedence of `../semantics/ERRORS.md`.
+
+### 16.11 `ClientError` taxonomy and freshness
+
+Every protocol failure of the Client is a fresh `ClientError` occurrence whose
+`kind` slot is exactly one of:
+
+- `"malformedResponse"` — response syntax or framing violates §16.6 or
+  §16.7, including a forbidden framing field on a 1xx, 204 or 205 response
+  and physical EOF before the end of a head, a fixed body or a
+  chunked body;
+- `"responseLimit"` — a limit of §16.12 is exceeded, including a declared
+  `Content-Length` above `maxResponseBodyBytes` for a body-bearing response
+  (§16.7); and
+- `"unsupportedFeature"` — a well-formed non-`HTTP/1.1` version (§16.6), `101 Switching Protocols`, or a `Transfer-Encoding` outside the
+  strict subset of §16.6.
+
+A `ClientError` has no `status` slot; no HTTP status is manufactured. No two
+failures share an occurrence.
+
+### 16.12 Limits, memory bounds, portability and exclusions
+
+`limits` is `null` or an ordinary object whose own slots are limit names
+below; absent names take their defaults. Every supplied value is an Integer
+from 1 through 2147483647. The effective limits are captured at admission;
+later mutation of `limits` has no effect.
+
+| Limit | Default | Bound |
+|---|---:|---|
+| `maxStatusLineBytes` | 8192 | octets of one status line, including CRLF |
+| `maxHeaderBytes` | 32768 | octets of one header section after the status line, including the final CRLF |
+| `maxHeaderFields` | 100 | field lines of one response head |
+| `maxChunkLineBytes` | 8192 | octets of one chunk-size line, including CRLF |
+| `maxTrailerBytes` | 8192 | octets of the trailer section, including the final CRLF |
+| `maxTrailerFields` | 100 | trailer field lines |
+| `maxResponseBodyBytes` | 33554432 | decoded body octets |
+| `maxInformationalResponses` | 8 | informational heads before the final head |
+| `maxPrefetchBytes` | 65536 | octets read ahead by one lower read |
+| `ioChunkBytes` | 16384 | octets requested by one lower read |
+
+These limits are independent of the server limits of §10, whose names and
+signed-64-bit range they do not change. Limits bound per-exchange memory; the
+Client defines no timeout, and an indefinitely slow peer may occupy the
+exchange indefinitely unless the application cancels it.
+
+Portable behavior excludes: DNS and URL acquisition, implicit TCP or TLS,
+proxies and CONNECT, request-body streaming, `Expect: 100-continue`,
+`Upgrade`, HTTP/2 and HTTP/3, persistent connections, pipelining and
+connection pooling, redirects, cookies, authentication, content codings,
+retries, timers and timeouts, and exposed trailers. The implementation is
+Protos source (`protos/lib/http/Client.protos` and
+`protos/lib/http/internal/Client*.protos`) over the shared internal HTTP wire
+syntax and framing modules and the existing private asynchronous bridge; no
+host HTTP engine is involved. These organization names are not additional
+public modules.
+
+### 16.13 Conformance examples
+
+*Example (GET):* `request` `{method: "GET", target: "/a?b" as Bytes, headers:
+[["Host", "example.org" as Bytes]], body: null}` writes exactly
+`GET /a?b HTTP/1.1\r\nHost: example.org\r\nContent-Length: 0\r\nConnection:
+close\r\n\r\n`.
+
+*Example (informational and 404):* input `HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1
+404 Not Found\r\nContent-Length: 2\r\n\r\nno` invokes `onResponse` once with
+`status` 404 and a body yielding `no` then `null`; the service Future resolves
+to the callback result.
+
+*Example (close-delimited):* `HTTP/1.1 200 OK\r\n\r\nabc` followed by physical
+EOF yields the body `abc` then `null`.
+
+*Counterexample (premature EOF):* `HTTP/1.1 200 OK\r\nContent-Length:
+5\r\n\r\nab` followed by EOF fails the body read reaching EOF with a fresh
+`ClientError` of kind `"malformedResponse"`; the service Future fails with
+that same occurrence even if the callback handled it.
+
+*Counterexample (caller framing):* a request header `["Content-Length", "0"
+as Bytes]` or `["transfer-encoding", "chunked" as Bytes]` makes the returned
+Future already failed with `InvalidIOArgument`; nothing is written.
+
+*Counterexample (escaped body):* reading `response.body` after `onResponse`
+returned fails with a fresh `IOLifecycleError`, also when `onResponse`
+returned a pending Future.
+
+*Example (outer whitespace on Host):* a request header `["Host", "\t
+example.org \t" as Bytes]` is admitted and written as `Host: \t example.org
+\t\r\n`; `["Host", " " as Bytes]` is inadmissible.
+
+*Counterexample (parameterized coding with BWS):* a final head with
+`Transfer-Encoding: gzip; q = 1` fails with a `ClientError` of kind
+`"unsupportedFeature"`; `Transfer-Encoding: chunked; x =` fails as
+`"malformedResponse"`. `onResponse` is not invoked.
+
+*Example (representation metadata):* a response to `HEAD`, or a 304, with
+`Content-Length: 9223372036854775807` and `maxResponseBodyBytes` 4 invokes
+`onResponse`; its body yields `null` at once.
+
+*Counterexample (forbidden framing):* `HTTP/1.1 204 No Content\r\nContent-Length:
+0\r\n\r\n`, `HTTP/1.1 100 Continue\r\nTransfer-Encoding: chunked\r\n\r\n` and
+`HTTP/1.1 205 Reset Content\r\nContent-Length: 1\r\n\r\n` each fail with a
+`ClientError` of kind `"malformedResponse"`; `onResponse` is not invoked.
+
+*Counterexample (conflicting framing):* a final head with both
+`Transfer-Encoding: chunked` and `Content-Length: 3` fails the exchange with
+a `ClientError` of kind `"malformedResponse"` without invoking `onResponse`.

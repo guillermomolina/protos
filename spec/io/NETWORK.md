@@ -28,14 +28,21 @@ Network-policy introspection/attenuation, TLS, QUIC, HTTP, WebSocket, Unix-domai
 sockets, raw sockets, service discovery, generic socket options, and
 socket-local deadline/timeout APIs are outside this revision.
 
-The optional Standard Library HTTP/1.1 single-request server `std:http/Server`
-is owned by `HTTP.md`. It is built only on the existing `ByteReadable` /
-`ByteWritable` (and `Closable`) capabilities, which a `TcpConnection` provides;
-it adds no `Network` operation and does not change TCP authority, permissions,
-or transferability. The optional continuous host `std:http/Host` is likewise
-owned by `HTTP.md` §15: it consumes a caller-supplied `TcpListener` and the
-`TcpAcceptor` delegation of §11, acquires no `Network`, and adds no `Network`
-operation. All other HTTP facilities remain deferred.
+`Network` owns explicit TCP acquisition, numeric endpoints, and network
+authority. The optional Standard Library HTTP/1.1 single-request server
+`std:http/Server` is owned by `HTTP.md`. It is built only on the existing
+`ByteReadable` / `ByteWritable` (and `Closable`) capabilities, which a
+`TcpConnection` provides; it adds no `Network` operation and does not change TCP
+authority, permissions, or transferability. The optional continuous host
+`std:http/Host` is likewise owned by `HTTP.md` §15: it consumes a caller-supplied
+`TcpListener` and the `TcpAcceptor` delegation of §11, acquires no `Network`, and
+adds no `Network` operation. The optional single-exchange client
+`std:http/Client` is owned by `HTTP.md` §16: it accepts an already-supplied
+duplex, the application acquires any connection explicitly, for example with
+`connectTcp`, and the Client performs no acquisition, resolution, or other
+implicit network use; it adds no `Network` operation or implicit authority.
+HTTP/2, HTTP/3, portable TLS, DNS/URL-based acquisition, and other unapproved
+protocol extensions remain outside this revision.
 
 No network authority is ambient by implication. Importing a module, knowing an
 `IpAddress`, possessing `Process`, creating an Actor, or creating P work does not
@@ -640,7 +647,8 @@ remain separate explicit future designs:
 - UDP/datagram operations and truncation/size rules;
 - public NetworkInterface discovery/selection;
 - formal transferable Network attenuation/policy algebra;
-- TLS, QUIC, HTTP beyond the `HTTP.md` single-request server, and WebSocket;
+- TLS, QUIC, HTTP beyond the `HTTP.md` Server, Host, and Client facilities, and
+  WebSocket;
 - Unix-domain/raw sockets;
 - service discovery;
 - generic socket options and socket-local deadlines/timeouts; and

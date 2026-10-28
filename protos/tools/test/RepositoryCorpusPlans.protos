@@ -217,7 +217,12 @@ load: (corpusId) => {
             Array("server-lifecycle.protos", "suite-native", "-"),
             Array("host-construction.protos", "suite-native", "-"),
             Array("host-connection.protos", "suite-native", "-"),
-            Array("host-lifecycle.protos", "suite-native", "-")
+            Array("host-lifecycle.protos", "suite-native", "-"),
+            Array("client-admission.protos", "suite-native", "-"),
+            Array("client-request.protos", "suite-native", "-"),
+            Array("client-response-head.protos", "suite-native", "-"),
+            Array("client-response-body.protos", "suite-native", "-"),
+            Array("client-lifecycle.protos", "suite-native", "-")
             )
         )
         matched = true

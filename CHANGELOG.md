@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.410-SNAPSHOT
+
+- `I127` (#970, D218-B): add the `std:http/Client` single-exchange HTTP/1.1
+  client in Protos (spec 0.1.476).
+  - New public module `std:http/Client` exporting `Client` and
+    `ClientError`: `Client.exchangeOne` and `Client.exchangeOne.owning`
+    run one request/response exchange over a caller-supplied duplex in one
+    service Task, invoke `onResponse` once with an incremental
+    `ByteReadable` body that retires when the callback ends, and adopt the
+    callback result. No Network, DNS, TLS, URL, retry or connection reuse.
+  - New internal modules `ClientLimits`, `ClientHead` (request validation,
+    snapshot and serialization; incremental response-head parser) and
+    `ClientSession` (single-exchange driver, framing selection, owning
+    cleanup, late-failure precedence).
+  - New internal `MessageSyntax` holds the pure HTTP wire-syntax helpers
+    previously duplicated in `MessageHead` and `MessageBody`; `MessageBody`
+    now runs request and response framing (including close-delimited
+    bodies) on one shared chunk/trailer engine. `std:http/Server` and
+    `std:http/Host` behavior is unchanged.
+  - Java: `ProtosHttpAsyncFacility.CLIENT_MODULE_KEY` and its deferred
+    bootstrap registration only; no new facility operation or Java HTTP
+    logic.
+  - Tests: five Protos client suites registered in the HTTP corpus plan and
+    progress groups, and `ProtosHttpClientIntegrationTest` (Task topology,
+    real loopback TCP, cancellation, Actor-local exchange).
+
 ## 0.3.409-SNAPSHOT
 
 - `I126-B` (#967, D216): complete `std:http/Host` failure propagation,

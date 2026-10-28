@@ -572,6 +572,11 @@ public final class ProtosCoreBootstrap {
                 ProtosHttpAsyncFacility.HOST_WORKER_MODULE_KEY,
                 Map.of(
                         ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
+                        ProtosHttpAsyncFacility::createFacility),
+                // I127: the same private bridge for std:http/Client.
+                ProtosHttpAsyncFacility.CLIENT_MODULE_KEY,
+                Map.of(
+                        ProtosHttpAsyncFacility.BOOTSTRAP_SLOT,
                         ProtosHttpAsyncFacility::createFacility));
     }
 

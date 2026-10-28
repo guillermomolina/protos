@@ -1,0 +1,697 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+http: import("std:http/Client")
+
+// Latin1 keeps every test octet byte-exact, including obs-text 0x80-0xFF.
+ascii: (text) => {
+    Encoding.Latin1.encode(text)
+}
+
+text: (bytes) => {
+    Encoding.Latin1.decode(bytes)
+}
+
+// Deterministic scripted duplex. Each read answers the next queued response
+// chunk, split to maxBytes, and null once the chunks are exhausted; every
+// requested maxBytes is recorded. Writes are captured at invocation.
+// Optional hooks: readFailure, writeFailure, closeFailure (Errors), and
+// onWrite (a callback run by each write).
+duplexOf: (chunks) => {
+    next: 0
+    offset: 0
+    output: ascii("")
+    reads: 0
+    writes: 0
+    closes: 0
+    shutdowns: 0
+    requested: []
+    closeCompleted: false
+    readFailure: null
+    writeFailure: null
+    closeFailure: null
+    onWrite: null
+    fixture: null
+    fixture = {
+        read: (maxBytes) => {
+            reads = reads + 1
+            requested = Array(...requested, maxBytes)
+            failure: readFailure
+            result: null
+            if((failure === null) && (next < chunks.size())) {
+                chunk: chunks[next]
+                end: chunk.size()
+                if((end - offset) > maxBytes) {
+                    end = offset + maxBytes
+                }
+                result = ascii("")
+                index: offset
+                while(index < end) {
+                    result.add(chunk[index])
+                    index = index + 1
+                }
+                if(end == chunk.size()) {
+                    next = next + 1
+                    offset = 0
+                } else {
+                    offset = end
+                }
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                result
+            }).future()
+        }
+        write: (bytes) => {
+            writes = writes + 1
+            if(onWrite !== null) {
+                onWrite(bytes)
+            }
+            failure: writeFailure
+            if(failure === null) {
+                bytes.each((octet) => {
+                    output.add(octet)
+                })
+            }
+            (() => {
+                if(failure !== null) {
+                    failure.signal()
+                }
+                fixture
+            }).future()
+        }
+        close: () => {
+            closes = closes + 1
+            failure: closeFailure
+            (() => {
+                closeCompleted = true
+                if(failure !== null) {
+                    failure.signal()
+                }
+                null
+            }).future()
+        }
+        shutdownRead: () => {
+            shutdowns = shutdowns + 1
+            (() => { null }).future()
+        }
+        shutdownWrite: () => {
+            shutdowns = shutdowns + 1
+            (() => { null }).future()
+        }
+        written: () => {
+            text(output)
+        }
+        readCount: () => {
+            reads
+        }
+        readSizes: () => {
+            requested
+        }
+        unreadChunks: () => {
+            chunks.size() - next
+        }
+        writeCount: () => {
+            writes
+        }
+        closeCount: () => {
+            closes
+        }
+        shutdownCount: () => {
+            shutdowns
+        }
+        closeDone: () => {
+            closeCompleted
+        }
+        failReadsWith: (error) => {
+            readFailure = error
+        }
+        failWritesWith: (error) => {
+            writeFailure = error
+        }
+        failCloseWith: (error) => {
+            closeFailure = error
+        }
+        whenWriting: (callback) => {
+            onWrite = callback
+        }
+    }
+    fixture
+}
+
+// Answers the Error a Future fails with, or null when it resolves.
+failureOf: (future) => {
+    caught: null
+    Error.handle(
+        () => {
+            future.value()
+        },
+        (error) => {
+            caught = error
+            error
+        }
+    )
+    caught
+}
+
+// Answers whether the Future ends cancelled.
+cancelledOf: (future) => {
+    Cancelled.handle(
+        () => {
+            future.value()
+            false
+        },
+        (cancellation) => {
+            true
+        }
+    )
+}
+
+hostField: () => {
+    ["Host", ascii("example.org")]
+}
+
+requestOf: (method, target, headers, body) => {
+    request: {
+        method: method
+        target: ascii(target)
+        headers: headers
+        body: body
+    }
+    request
+}
+
+get: () => {
+    requestOf("GET", "/", [hostField()], null)
+}
+
+getBytes: "GET / HTTP/1.1\r\nHost: example.org\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+
+// Reads a body to its logical end with reads of size, answering its text.
+drain: (body, size) => {
+    collected: ascii("")
+    done: false
+    while(!done) {
+        chunk: body.read(size).value()
+        if(chunk === null) {
+            done = true
+        } else {
+            Assertions.require(chunk.size() > 0)
+            Assertions.require(chunk.size() <= size)
+            chunk.each((octet) => {
+                collected.add(octet)
+            })
+        }
+    }
+    text(collected)
+}
+
+// A callback answering {status, headers, body} with the body drained.
+capture: (response) => {
+    seen: {
+        status: response.status
+        version: response.version
+        headers: response.headers
+        body: drain(response.body, 4096)
+    }
+    seen
+}
+
+// Runs one borrowed exchange and answers {duplex, value, failure}.
+exchangeWith: (chunks, request, onResponse, limits) => {
+    dx: duplexOf(chunks)
+    future: http.Client.exchangeOne(dx, request, onResponse, limits)
+    caught: failureOf(future)
+    answer: null
+    if(caught === null) {
+        answer = future.value()
+    }
+    outcome: {
+        duplex: dx
+        value: answer
+        failure: caught
+    }
+    outcome
+}
+
+exchange: (chunks, onResponse) => {
+    exchangeWith(chunks, get(), onResponse, null)
+}
+
+MessageBody: import("std:http/internal/MessageBody")
+
+limitsOf: (chunkLine, trailerBytes, trailerFields, body) => {
+    limits: {
+        maxChunkLineBytes: chunkLine
+        maxTrailerBytes: trailerBytes
+        maxTrailerFields: trailerFields
+        maxResponseBodyBytes: body
+    }
+    limits
+}
+
+defaultLimits: () => {
+    limitsOf(4096, 4096, 16, 1048576)
+}
+
+framerOf: (framing, length, limits) => {
+    head: {
+        framing: framing
+        contentLength: length
+    }
+    MessageBody.responseBodyFramer(head, limits)
+}
+
+// Drives framer over input in slices of sliceSize, as the session does, and
+// answers {body, state, failure, consumed}. eof selects whether physical EOF
+// follows the input.
+drive: (framer, input, sliceSize, maxContent, eof) => {
+    bytes: ascii(input)
+    collected: ascii("")
+    offset: 0
+    consumed: 0
+    finalState: null
+    failure: null
+    while(finalState === null) {
+        if(framer.state() != "OPEN") {
+            last: framer.feed(bytes, offset, 0, maxContent)
+            finalState = last.state
+            failure = last.failure
+        } else {
+            if(offset < bytes.size()) {
+                length: sliceSize
+                if((bytes.size() - offset) < length) {
+                    length = bytes.size() - offset
+                }
+                result: framer.feed(bytes, offset, length, maxContent)
+                consumed = consumed + result.consumed
+                offset = offset + result.consumed
+                if(result.state == "CONTENT") {
+                    Assertions.require(result.content.size() > 0)
+                    Assertions.require(result.content.size() <= maxContent)
+                    result.content.each((octet) => {
+                        collected.add(octet)
+                    })
+                }
+                if(result.state == "NEED_MORE") {
+                    Assertions.require(result.consumed == length)
+                }
+                if(result.state == "REJECTED") {
+                    finalState = "REJECTED"
+                    failure = result.failure
+                }
+            } else {
+                if(eof) {
+                    last: framer.endOfInput()
+                    finalState = last.state
+                    failure = last.failure
+                } else {
+                    finalState = "OPEN"
+                }
+            }
+        }
+    }
+    outcome: {
+        body: text(collected)
+        state: finalState
+        failure: failure
+        consumed: consumed
+    }
+    outcome
+}
+
+// Checks one framing over every slice size and content bound; answers the
+// whole-input outcome.
+driveEverySplit: (framing, length, input, eof, limits) => {
+    whole: drive(framerOf(framing, length, limits), input, 1000000, 1000000, eof)
+    size: 1
+    while(size <= ascii(input).size()) {
+        split: drive(framerOf(framing, length, limits), input, size, size, eof)
+        Assertions.require(split.state == whole.state)
+        Assertions.require(split.consumed == whole.consumed)
+        if(whole.state != "REJECTED") {
+            Assertions.require(split.body == whole.body)
+        } else {
+            Assertions.require(split.failure.kind == whole.failure.kind)
+        }
+        size = size + 1
+    }
+    whole
+}
+
+complete: (framing, length, input, eof) => {
+    outcome: driveEverySplit(framing, length, input, eof, defaultLimits())
+    Assertions.require(outcome.state == "COMPLETE")
+    outcome
+}
+
+rejected: (framing, length, input, eof, limits, kind) => {
+    outcome: driveEverySplit(framing, length, input, eof, limits)
+    Assertions.require(outcome.state == "REJECTED")
+    Assertions.require(outcome.failure.kind == kind)
+    Assertions.require(outcome.failure.status === null)
+    outcome
+}
+
+malformedChunked: (input) => {
+    rejected("CHUNKED", null, input, true, defaultLimits(), "malformedResponse")
+}
+
+// Response helpers for the public exchange.
+fixed: (body, length) => {
+    "HTTP/1.1 200 OK\r\nContent-Length: " + length + "\r\n\r\n" + body
+}
+
+// A callback answering the drained body read by reads of size.
+readBy: (size) => {
+    (response) => {
+        drain(response.body, size)
+    }
+}
+
+failureOrNull: (body, size) => {
+    failureOf(body.read(size))
+}
+
+tests: [
+    Test("a fixed-length body is framed exactly", () => {
+        outcome: complete("CONTENT_LENGTH", 5, "helloEXTRA", false)
+        Assertions.require(outcome.body == "hello")
+        Assertions.require(outcome.consumed == 5)
+        Assertions.require(complete("CONTENT_LENGTH", 0, "next", false).consumed == 0)
+    }),
+    Test("an empty chunked body completes", () => {
+        outcome: complete("CHUNKED", null, "0\r\n\r\nNEXT", false)
+        Assertions.require(outcome.body == "")
+        Assertions.require(outcome.consumed == 5)
+    }),
+    Test("a nonempty chunked body is decoded without consuming later octets", () => {
+        input: "3\r\nabc\r\nA\r\n0123456789\r\n0\r\n\r\n"
+        outcome: complete("CHUNKED", null, input + "HTTP/1.1 200 OK\r\n\r\n", false)
+        Assertions.require(outcome.body == "abc0123456789")
+        Assertions.require(outcome.consumed == ascii(input).size())
+    }),
+    Test("chunk extensions are validated and discarded", () => {
+        Assertions.require(complete("CHUNKED", null, "3;a=b;c=\"x y\" ; d\r\nabc\r\n0;z\r\n\r\n", false).body == "abc")
+        malformedChunked("3;\r\nabc\r\n0\r\n\r\n")
+        malformedChunked("3;a=\r\nabc\r\n0\r\n\r\n")
+        malformedChunked("3;a=\"x\r\nabc\r\n0\r\n\r\n")
+        malformedChunked("3 x\r\nabc\r\n0\r\n\r\n")
+    }),
+    Test("trailers are validated, bounded, and discarded", () => {
+        Assertions.require(complete("CHUNKED", null, "1\r\na\r\n0\r\nX: y\r\nZ:\r\n\r\n", false).body == "a")
+        malformedChunked("0\r\nX y\r\n\r\n")
+        malformedChunked("0\r\n: y\r\n\r\n")
+        malformedChunked("0\r\n y\r\n\r\n")
+        malformedChunked("0\r\nX: \u{0}\r\n\r\n")
+        trailer: "0\r\nA: b\r\nC: d\r\n\r\n"
+        Assertions.require(driveEverySplit("CHUNKED", null, trailer, false, limitsOf(4096, 14, 16, 1048576)).state == "COMPLETE")
+        rejected("CHUNKED", null, trailer, false, limitsOf(4096, 13, 16, 1048576), "responseLimit")
+        Assertions.require(driveEverySplit("CHUNKED", null, trailer, false, limitsOf(4096, 4096, 2, 1048576)).state == "COMPLETE")
+        rejected("CHUNKED", null, trailer, false, limitsOf(4096, 4096, 1, 1048576), "responseLimit")
+    }),
+    Test("a close-delimited body ends only at clean EOF", () => {
+        Assertions.require(complete("CLOSE_DELIMITED", null, "any octets\r\n0\r\n\r\n", true).body == "any octets\r\n0\r\n\r\n")
+        Assertions.require(complete("CLOSE_DELIMITED", null, "", true).body == "")
+        open: drive(framerOf("CLOSE_DELIMITED", null, defaultLimits()), "abc", 2, 2, false)
+        Assertions.require(open.state == "OPEN")
+        Assertions.require(open.body == "abc")
+    }),
+    Test("NONE framing completes without consuming input", () => {
+        outcome: complete("NONE", null, "unread", false)
+        Assertions.require(outcome.consumed == 0)
+        Assertions.require(outcome.body == "")
+    }),
+    Test("chunk CRLF delimiters are strict", () => {
+        malformedChunked("3\r\nabcX\r\n0\r\n\r\n")
+        malformedChunked("3\r\nabc\rX0\r\n\r\n")
+        malformedChunked("3\nabc\r\n0\r\n\r\n")
+        malformedChunked("3\r\nabc\r\n0\r\n\n")
+    }),
+    Test("invalid hexadecimal chunk sizes are malformed", () => {
+        malformedChunked("\r\n\r\n")
+        malformedChunked("zz\r\n")
+        malformedChunked("-1\r\n")
+        malformedChunked("0x3\r\nabc\r\n0\r\n\r\n")
+        Assertions.require(complete("CHUNKED", null, "00a\r\n0123456789\r\n0\r\n\r\n", false).body == "0123456789")
+        Assertions.require(complete("CHUNKED", null, "B\r\n0123456789A\r\n0\r\n\r\n", false).body == "0123456789A")
+    }),
+    Test("chunk-size overflow is malformed and an oversized chunk exceeds the limit", () => {
+        malformedChunked("8000000000000000\r\n")
+        malformedChunked("10000000000000000\r\n")
+        rejected("CHUNKED", null, "7fffffffffffffff\r\n", true, defaultLimits(), "responseLimit")
+    }),
+    Test("the chunk-line limit counts the whole size line", () => {
+        input: "3;a=b\r\nabc\r\n0\r\n\r\n"
+        Assertions.require(driveEverySplit("CHUNKED", null, input, false, limitsOf(7, 4096, 16, 1048576)).state == "COMPLETE")
+        rejected("CHUNKED", null, input, false, limitsOf(6, 4096, 16, 1048576), "responseLimit")
+    }),
+    Test("premature EOF in fixed and chunked bodies is malformed", () => {
+        rejected("CONTENT_LENGTH", 5, "abc", true, defaultLimits(), "malformedResponse")
+        rejected("CHUNKED", null, "3\r\nab", true, defaultLimits(), "malformedResponse")
+        rejected("CHUNKED", null, "3\r\nabc\r\n", true, defaultLimits(), "malformedResponse")
+        rejected("CHUNKED", null, "0\r\nX: y\r\n", true, defaultLimits(), "malformedResponse")
+    }),
+    Test("body-size limit boundaries apply to every framing", () => {
+        limits: limitsOf(4096, 4096, 16, 4)
+        Assertions.require(driveEverySplit("CHUNKED", null, "2\r\nab\r\n2\r\ncd\r\n0\r\n\r\n", false, limits).body == "abcd")
+        rejected("CHUNKED", null, "2\r\nab\r\n3\r\ncde\r\n0\r\n\r\n", false, limits, "responseLimit")
+        Assertions.require(driveEverySplit("CLOSE_DELIMITED", null, "abcd", true, limits).body == "abcd")
+        over: rejected("CLOSE_DELIMITED", null, "abcde", true, limits, "responseLimit")
+        Assertions.require(over.body == "abcd")
+        Assertions.require(over.consumed == 4)
+    }),
+    Test("request framing keeps its own modes", () => {
+        Assertions.signals(Error, () => {
+            head: {
+                framing: "CLOSE_DELIMITED"
+                contentLength: null
+            }
+            limits: {
+                maxChunkLineBytes: 1
+                maxTrailerBytes: 1
+                maxTrailerFields: 1
+                maxRequestBodyBytes: 1
+            }
+            MessageBody.requestBodyFramer(head, limits)
+        })
+        Assertions.signals(Error, () => {
+            framerOf("UNKNOWN", null, defaultLimits())
+        })
+    }),
+    Test("public fixed, chunked, and close-delimited bodies are delivered", () => {
+        Assertions.require(exchange([ascii(fixed("hello", "5"))], readBy(2)).value == "hello")
+        Assertions.require(exchange([ascii("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nabc\r\n0\r\n\r\n")], readBy(1)).value == "abc")
+        Assertions.require(exchange([ascii("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n")], readBy(1)).value == "")
+        Assertions.require(exchange([ascii("HTTP/1.1 200 OK\r\n\r\nuntil"), ascii(" close")], readBy(3)).value == "until close")
+    }),
+    Test("HEAD, 204, 205, and 304 responses have no body", () => {
+        head: exchangeWith([ascii("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\n")], requestOf("HEAD", "/", [hostField()], null), readBy(4), null)
+        Assertions.require(head.failure === null)
+        Assertions.require(head.value == "")
+        [
+            "HTTP/1.1 204 No Content\r\n\r\nabc",
+            "HTTP/1.1 205 Reset Content\r\n\r\nabc",
+            "HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\nabc",
+            "HTTP/1.1 304 Not Modified\r\nContent-Length: 3\r\n\r\nabc"
+        ].each((input) => {
+            outcome: exchange([ascii(input)], (response) => {
+                response.body.read(10).value()
+            })
+            Assertions.require(outcome.failure === null)
+            Assertions.require(outcome.value === null)
+        })
+        null
+    }),
+    Test("no-body responses reach logical EOF immediately whatever the representation size", () => {
+        limits: {
+            maxResponseBodyBytes: 1
+        }
+        reads: (response) => {
+            first: response.body.read(10).value()
+            second: response.body.read(10).value()
+            (first === null) && (second === null)
+        }
+        // Each head is followed by a separate trailing chunk that must remain
+        // unread: no trailing payload is consumed and nothing is drained.
+        check: (head, request) => {
+            outcome: exchangeWith([ascii(head), ascii("trailing payload")], request, reads, limits)
+            Assertions.require(outcome.failure === null)
+            Assertions.require(outcome.value === true)
+            Assertions.require(outcome.duplex.readCount() == 1)
+            Assertions.require(outcome.duplex.unreadChunks() == 1)
+            Assertions.require(outcome.duplex.closeCount() == 0)
+        }
+        check("HTTP/1.1 200 OK\r\nContent-Length: 123456789\r\n\r\n", requestOf("HEAD", "/", [hostField()], null))
+        check("HTTP/1.1 304 Not Modified\r\nContent-Length: 999999\r\n\r\n", get())
+        check("HTTP/1.1 204 No Content\r\n\r\n", get())
+        check("HTTP/1.1 205 Reset Content\r\n\r\n", get())
+        check("HTTP/1.1 205 Reset Content\r\nContent-Length: 0\r\n\r\n", get())
+    }),
+    Test("chunk and CRLF boundaries split across reads are decoded", () => {
+        input: ascii("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n4;x=1\r\nwxyz\r\n2\r\n!?\r\n0\r\nT: t\r\n\r\n")
+        chunks: []
+        input.each((octet) => {
+            single: ascii("")
+            single.add(octet)
+            chunks = Array(...chunks, single)
+        })
+        Assertions.require(exchange(chunks, readBy(3)).value == "wxyz!?")
+    }),
+    Test("body reads are incremental short reads in order", () => {
+        sizes: []
+        outcome: exchange([ascii(fixed("abcdefg", "7"))], (response) => {
+            result: ""
+            done: false
+            while(!done) {
+                chunk: response.body.read(3).value()
+                if(chunk === null) {
+                    done = true
+                } else {
+                    sizes = Array(...sizes, chunk.size())
+                    result = result + text(chunk)
+                }
+            }
+            result
+        })
+        Assertions.require(outcome.value == "abcdefg")
+        sizes.each((size) => {
+            Assertions.require((size > 0) && (size <= 3))
+        })
+        null
+    }),
+    Test("lower reads are bounded by ioChunkBytes and maxPrefetchBytes", () => {
+        limits: {
+            ioChunkBytes: 8
+            maxPrefetchBytes: 3
+        }
+        outcome: exchangeWith([ascii(fixed("0123456789", "10"))], get(), readBy(100), limits)
+        Assertions.require(outcome.value == "0123456789")
+        outcome.duplex.readSizes().each((size) => {
+            Assertions.require(size == 3)
+        })
+        null
+    }),
+    Test("an unread body is neither materialized nor drained", () => {
+        chunks: [ascii("HTTP/1.1 200 OK\r\n\r\n")]
+        index: 0
+        while(index < 100) {
+            chunks = Array(...chunks, ascii("0123456789"))
+            index = index + 1
+        }
+        limits: {
+            ioChunkBytes: 10
+        }
+        outcome: exchangeWith(chunks, get(), (response) => {
+            text(response.body.read(1).value())
+        }, limits)
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.value == "0")
+        Assertions.require(outcome.duplex.unreadChunks() >= 98)
+        Assertions.require(outcome.duplex.readCount() <= 3)
+    }),
+    Test("a slow consumer reads the duplex only on demand", () => {
+        readsSeen: []
+        chunks: [ascii("HTTP/1.1 200 OK\r\nContent-Length: 30\r\n\r\n"), ascii("0123456789"), ascii("0123456789"), ascii("0123456789")]
+        dx: duplexOf(chunks)
+        service: http.Client.exchangeOne(dx, get(), (response) => {
+            readsSeen = Array(...readsSeen, dx.readCount())
+            response.body.read(10).value()
+            readsSeen = Array(...readsSeen, dx.readCount())
+            response.body.read(10).value()
+            readsSeen = Array(...readsSeen, dx.readCount())
+            null
+        }, null)
+        Assertions.require(service.value() === null)
+        Assertions.require(readsSeen[0] == 1)
+        Assertions.require(readsSeen[1] == 2)
+        Assertions.require(readsSeen[2] == 3)
+        Assertions.require(dx.unreadChunks() == 1)
+    }),
+    Test("no second response is parsed after the final response", () => {
+        calls: 0
+        outcome: exchange([ascii(fixed("ok", "2") + "HTTP/1.1 500 Again\r\n\r\ngarbage")], (response) => {
+            calls = calls + 1
+            drain(response.body, 100)
+        })
+        Assertions.require(outcome.failure === null)
+        Assertions.require(outcome.value == "ok")
+        Assertions.require(calls == 1)
+    }),
+    Test("a late framing error handled by the callback still fails the exchange", () => {
+        original: null
+        outcome: exchange([ascii("HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nab")], (response) => {
+            response.body.read(10).value()
+            original = failureOf(response.body.read(10))
+            "fine"
+        })
+        Assertions.require(original.parent() === http.ClientError)
+        Assertions.require(original.kind == "malformedResponse")
+        Assertions.require(outcome.failure === original)
+    }),
+    Test("a late limit violation is a responseLimit ClientError", () => {
+        limits: {
+            maxResponseBodyBytes: 3
+        }
+        reached: null
+        outcome: exchangeWith([ascii("HTTP/1.1 200 OK\r\n\r\nabcdef")], get(), (response) => {
+            Error.handle(
+                () => {
+                    drain(response.body, 10)
+                },
+                (error) => {
+                    reached = error
+                    error
+                }
+            )
+            null
+        }, limits)
+        Assertions.require(reached.kind == "responseLimit")
+        Assertions.require(outcome.failure === reached)
+    }),
+    Test("reads after a framing failure fail freshly with IOLifecycleError", () => {
+        failures: []
+        outcome: exchange([ascii("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\nzz\r\n")], (response) => {
+            failures = [
+                failureOrNull(response.body, 4),
+                failureOrNull(response.body, 4),
+                failureOrNull(response.body, 4)
+            ]
+            null
+        })
+        Assertions.require(failures[0].parent() === http.ClientError)
+        Assertions.require(failures[1].parent() === IOLifecycleError)
+        Assertions.require(failures[2].parent() === IOLifecycleError)
+        Assertions.require(failures[1] !== failures[2])
+        Assertions.require(outcome.failure === failures[0])
+    }),
+    Test("an escaped body is invalid after the callback returns", () => {
+        escaped: null
+        outcome: exchange([ascii(fixed("abcdef", "6"))], (response) => {
+            escaped = response.body
+            text(response.body.read(2).value())
+        })
+        Assertions.require(outcome.value == "ab")
+        first: failureOrNull(escaped, 2)
+        second: failureOrNull(escaped, 2)
+        Assertions.require(first.parent() === IOLifecycleError)
+        Assertions.require(second.parent() === IOLifecycleError)
+        Assertions.require(first !== second)
+    })
+]

@@ -1,0 +1,95 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Standard Library HTTP/1.1 single-exchange client (D218-B, HTTP.md §16).
+//!
+//! `Client.exchangeOne(duplex, request, onResponse, limits)` borrows a
+//! caller-supplied duplex byte flow (`ByteReadable` and `ByteWritable`),
+//! writes exactly one HTTP/1.1 request carrying `Connection: close`, reads
+//! informational responses and then exactly one final response, invokes
+//! `onResponse(response)` exactly once with that final response, and retires
+//! the exchange. `Client.exchangeOne.owning(duplex, request, onResponse,
+//! limits)` additionally requires `Closable` and closes the duplex exactly once
+//! on every terminal path. Both answer a fresh `Future` of the callback's
+//! ordinary result.
+//!
+//! The Client acquires no network, name resolution, TLS, clock, timer, or
+//! other ambient authority: the application supplies an already connected
+//! duplex. It interprets no URL, never retries, never reuses the connection,
+//! and defines no timeout.
+
+/// The prototype of every Client protocol failure. Each failure is a fresh
+/// occurrence whose `kind` is "malformedResponse", "responseLimit", or
+/// "unsupportedFeature"; it carries no HTTP status.
+ClientError: Error {}
+
+/// The single-exchange HTTP/1.1 client.
+Client: ((facility) => {
+    ClientLimits: import("std:http/internal/ClientLimits")
+    ClientHead: import("std:http/internal/ClientHead")
+    ClientSession: import("std:http/internal/ClientSession")
+
+    // HTTP.md §16.2: semantic validation and the complete request snapshot
+    // precede every effect. An invalid call answers an already failed Future
+    // without a Task, a session, ownership, or I/O; an admitted call creates
+    // exactly one service Task.
+    admit: (duplex, request, onResponse, limits, owning) => {
+        valid: facility.provides(duplex, "read") && facility.provides(duplex, "write")
+        if(valid && owning) {
+            valid = facility.closable(duplex)
+        }
+        if(valid) {
+            valid = facility.invokable(onResponse)
+        }
+        captured: null
+        if(valid) {
+            captured = ClientLimits.capture(facility, limits)
+            valid = captured !== null
+        }
+        prepared: null
+        if(valid) {
+            prepared = ClientHead.prepareRequest(facility, request)
+            valid = prepared !== null
+        }
+
+        answer: null
+        if(valid) {
+            answer = facility.startService(
+                ClientSession.serviceBody(facility, ClientError, duplex, prepared, onResponse, captured, owning)
+            )
+        } else {
+            answer = facility.failed(InvalidIOArgument {})
+        }
+        answer
+    }
+
+    // Performs one borrowed exchange over duplex; see the module documentation.
+    entry: (duplex, request, onResponse, limits) => {
+        admit(duplex, request, onResponse, limits, false)
+    }
+    // Performs one exchange and takes custody of duplex, closing it exactly once.
+    entry.owning: (duplex, request, onResponse, limits) => {
+        admit(duplex, request, onResponse, limits, true)
+    }
+
+    client: {
+        exchangeOne: entry
+    }
+    client
+})(_httpAsyncFacility)
+
+// The runtime-provisioned facility is captured privately above; it is not
+// module surface.
+context.removeSlot("_httpAsyncFacility")

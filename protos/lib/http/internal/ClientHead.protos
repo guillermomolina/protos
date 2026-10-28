@@ -1,0 +1,667 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Internal HTTP/1.1 request-head preparation and response-head parsing of
+//! std:http/Client (D218-B, HTTP.md §16.4-§16.6). This module is an
+//! unpublished implementation artifact, not an approved Standard Library API.
+//! It performs no I/O and owns no authority. Its two operations are
+//! directional and independent of the server's request parser.
+
+MessageSyntax: import("std:http/internal/MessageSyntax")
+
+requestSlots: ["method", "target", "headers", "body"]
+
+// Framing, connection-management, and protocol-switching fields are owned by
+// the Client and never accepted from the caller (HTTP.md §16.5).
+prohibitedNames: [
+    "content-length",
+    "transfer-encoding",
+    "connection",
+    "expect",
+    "upgrade",
+    "trailer",
+    "te",
+    "keep-alive",
+    "proxy-connection"
+]
+
+// A caller field-value consists only of field-value octets (SP, HTAB, VCHAR,
+// obs-text), so no CR, LF, NUL, or other CTL can be emitted. The octets are
+// serialized exactly as supplied: they are neither trimmed nor normalized.
+isRequestFieldValue: (value) => {
+    valid: true
+    index: 0
+    while(valid && (index < value.size())) {
+        if(!MessageSyntax.isFieldValueOctet(value[index])) {
+            valid = false
+        }
+        index = index + 1
+    }
+    valid
+}
+
+/// Validates an outgoing request object and snapshots every part of it before
+/// any effect (HTTP.md §16.4). Own slots other than method, target, headers,
+/// and body are ignored. Answers null when request is not admissible;
+/// otherwise a private frozen {method, headBytes, bodyBytes, isHead} whose
+/// headBytes are the complete serialized head: the request line, the caller
+/// fields in their original order and casing, the automatic Content-Length,
+/// and the automatic "Connection: close". Host is never injected. facility is
+/// the private asynchronous bridge of std:http/Client.
+prepareRequest: (facility, request) => {
+    // The request is ordinary structural data: the four specified own slots
+    // are required and every other own slot is ignored.
+    valid: facility.ordinaryObject(request)
+    if(valid) {
+        names: request.slotNames()
+        requestSlots.each((slotName) => {
+            present: false
+            names.each((name) => {
+                if(name == slotName) {
+                    present = true
+                }
+            })
+            if(!present) {
+                valid = false
+            }
+        })
+    }
+
+    // Snapshot: method, target octets, each name and value in order, and the
+    // body octets. Nothing below reads the caller's objects again.
+    method: null
+    target: null
+    fields: []
+    body: null
+    if(valid) {
+        method = request.slotValue("method")
+        valid = String.recognizes(method)
+    }
+    if(valid) {
+        rawTarget: request.slotValue("target")
+        valid = facility.isBytes(rawTarget)
+        if(valid) {
+            target = MessageSyntax.snapshotBytes(rawTarget)
+            valid = target !== null
+        }
+    }
+    if(valid) {
+        rawHeaders: request.slotValue("headers")
+        valid = Array.recognizes(rawHeaders)
+        if(valid) {
+            Array(...rawHeaders).each((pair) => {
+                if(valid) {
+                    wellShaped: Array.recognizes(pair)
+                    if(wellShaped) {
+                        wellShaped = pair.size() == 2
+                    }
+                    if(wellShaped) {
+                        wellShaped = String.recognizes(pair[0]) && facility.isBytes(pair[1])
+                    }
+                    if(wellShaped) {
+                        valueBytes: MessageSyntax.snapshotBytes(pair[1])
+                        if(valueBytes === null) {
+                            valid = false
+                        } else {
+                            fields = Array(...fields, [Encoding.UTF8.encode(pair[0]), valueBytes])
+                        }
+                    } else {
+                        valid = false
+                    }
+                }
+            })
+        }
+    }
+    if(valid) {
+        rawBody: request.slotValue("body")
+        if(rawBody !== null) {
+            valid = facility.isBytes(rawBody)
+            if(valid) {
+                body = MessageSyntax.snapshotBytes(rawBody)
+                valid = body !== null
+            }
+        }
+    }
+
+    // Validation of the snapshot.
+    methodBytes: null
+    if(valid) {
+        methodBytes = Encoding.UTF8.encode(method)
+        valid = MessageSyntax.isToken(methodBytes, 0, methodBytes.size()) && (method != "CONNECT")
+    }
+    if(valid) {
+        size: target.size()
+        valid = (size > 0) && MessageSyntax.isTargetOctets(target, 0, size)
+        if(valid) {
+            if((size == 1) && (target[0] == 42)) {
+                valid = method == "OPTIONS"
+            } else {
+                // Only origin-form: absolute-form, authority-form, and proxy
+                // targets are rejected even though the server parser admits
+                // absolute-form.
+                valid = (target[0] == 47) && MessageSyntax.isOriginForm(target, 0, size)
+            }
+        }
+    }
+    hostCount: 0
+    if(valid) {
+        fields.each((field) => {
+            nameBytes: field[0]
+            valueBytes: field[1]
+            if(!MessageSyntax.isToken(nameBytes, 0, nameBytes.size())) {
+                valid = false
+            }
+            prohibitedNames.each((prohibited) => {
+                if(MessageSyntax.bytesEqualIgnoringCase(nameBytes, prohibited)) {
+                    valid = false
+                }
+            })
+            if(!isRequestFieldValue(valueBytes)) {
+                valid = false
+            }
+            if(MessageSyntax.bytesEqualIgnoringCase(nameBytes, "host")) {
+                hostCount = hostCount + 1
+                // Host syntax is checked on the semantic value without outer
+                // SP/HTAB; the serialized octets stay exactly as supplied.
+                hostStart: MessageSyntax.skipWhitespace(valueBytes, 0, valueBytes.size())
+                hostEnd: valueBytes.size()
+                while((hostEnd > hostStart) && MessageSyntax.isWhitespace(valueBytes[hostEnd - 1])) {
+                    hostEnd = hostEnd - 1
+                }
+                if(!MessageSyntax.isHostPort(valueBytes, hostStart, hostEnd, false)) {
+                    valid = false
+                }
+            }
+        })
+        if(hostCount != 1) {
+            valid = false
+        }
+    }
+
+    prepared: null
+    if(valid) {
+        output: Encoding.UTF8.encode("")
+
+        appendAscii: (text) => {
+            Encoding.Latin1.encode(text).each((octet) => {
+                output.add(octet)
+            })
+        }
+
+        appendBytes: (bytes) => {
+            bytes.each((octet) => {
+                output.add(octet)
+            })
+        }
+
+        appendDecimal: null
+        appendDecimal = (value) => {
+            quotient: value.div(10)
+            if(quotient > 0) {
+                appendDecimal(quotient)
+            }
+            output.add(48 + value.mod(10))
+        }
+
+        bodyLength: 0
+        if(body !== null) {
+            bodyLength = body.size()
+        }
+
+        appendBytes(methodBytes)
+        appendAscii(" ")
+        appendBytes(target)
+        appendAscii(" HTTP/1.1\r\n")
+        fields.each((field) => {
+            appendBytes(field[0])
+            appendAscii(": ")
+            appendBytes(field[1])
+            appendAscii("\r\n")
+        })
+        appendAscii("Content-Length: ")
+        appendDecimal(bodyLength)
+        appendAscii("\r\nConnection: close\r\n\r\n")
+
+        prepared = {
+            method: method
+            headBytes: output
+            bodyBytes: body
+            isHead: method == "HEAD"
+        }
+        prepared.freeze()
+    }
+    prepared
+}
+
+/// Answers a stateful parser whose feed(bytes, offset, length) consumes one
+/// slice of one response head and answers {state, consumed, head, failure}
+/// with state "NEED_MORE", "ACCEPTED", or "REJECTED" (HTTP.md §16.6). The
+/// parser stops exactly after the CRLF that ends the header section, so
+/// later octets (a body, or the next head after an informational response)
+/// are never consumed. failure is {kind} with kind "malformedResponse",
+/// "responseLimit", or "unsupportedFeature". An accepted head is {status,
+/// headers, framing, contentLength, informational}; framing assumes a
+/// non-HEAD request. Feeding a terminal parser signals an Error.
+responseHeadParser: (limits) => {
+    maxStatusLineBytes: limits.maxStatusLineBytes
+    maxHeaderBytes: limits.maxHeaderBytes
+    maxHeaderFields: limits.maxHeaderFields
+
+    // Private rejection signal; only feed handles it.
+    Rejection: Error {}
+    rejectKind: null
+
+    reject: (kind) => {
+        rejectKind = kind
+        occurrence: Rejection {}
+        occurrence.signal()
+    }
+
+    malformed: () => {
+        reject("malformedResponse")
+    }
+
+    // ------------------------------------------------------------ parser state
+
+    phase: "STATUS_LINE"
+    line: Encoding.UTF8.encode("")
+    pendingCr: false
+    statusLineBytes: 0
+    headerBytes: 0
+    headerFields: 0
+    responseStatus: 0
+    fieldLines: []
+    acceptedHead: null
+
+    // HTTP-version = "HTTP" "/" DIGIT "." DIGIT
+    isWellFormedVersion: (bytes, start, end) => {
+        ((end - start) == 8) &&
+            MessageSyntax.rangeEqualsAscii(bytes, start, start + 5, "HTTP/") &&
+            MessageSyntax.isDigit(bytes[start + 5]) &&
+            (bytes[start + 6] == 46) &&
+            MessageSyntax.isDigit(bytes[start + 7])
+    }
+
+    // status-line = HTTP-version SP 3DIGIT SP reason-phrase, where the
+    // reason-phrase is validated and discarded.
+    parseStatusLine: () => {
+        size: line.size()
+        if(size < 13) {
+            malformed()
+        }
+        if(!isWellFormedVersion(line, 0, 8)) {
+            malformed()
+        }
+        if((line[8] != 32) || (line[12] != 32)) {
+            malformed()
+        }
+        code: 0
+        index: 9
+        while(index < 12) {
+            if(!MessageSyntax.isDigit(line[index])) {
+                malformed()
+            }
+            code = code * 10 + (line[index] - 48)
+            index = index + 1
+        }
+        index = 13
+        while(index < size) {
+            if(!MessageSyntax.isFieldValueOctet(line[index])) {
+                malformed()
+            }
+            index = index + 1
+        }
+        if((code < 100) || (code > 599)) {
+            malformed()
+        }
+        if(!MessageSyntax.rangeEqualsAscii(line, 0, 8, "HTTP/1.1")) {
+            reject("unsupportedFeature")
+        }
+        if(code == 101) {
+            reject("unsupportedFeature")
+        }
+        responseStatus = code
+    }
+
+    parseFieldLine: () => {
+        pair: MessageSyntax.fieldLine(line)
+        if(pair === null) {
+            malformed()
+        }
+        fieldLines = Array(...fieldLines, pair)
+    }
+
+    // Answers the list elements of one Transfer-Encoding field value as
+    // [coding Bytes, hasParameters] pairs, an empty element as [null, false],
+    // or null when its syntax is malformed:
+    // #( token *( OWS ";" OWS token BWS "=" BWS ( token / quoted-string ) ) ).
+    // Empty elements are kept so that the strict single-coding subset can
+    // classify them as unsupported rather than silently discarding them.
+    transferCodings: (value) => {
+        size: value.size()
+        codings: []
+        valid: true
+        position: 0
+        finished: false
+        while(valid && !finished) {
+            position = MessageSyntax.skipWhitespace(value, position, size)
+            if(position >= size) {
+                finished = true
+            } else {
+                if(value[position] == 44) {
+                    codings = Array(...codings, [null, false])
+                    position = position + 1
+                    // A trailing comma ends with one more empty element.
+                    if(MessageSyntax.skipWhitespace(value, position, size) >= size) {
+                        codings = Array(...codings, [null, false])
+                    }
+                } else {
+                    tokenEnd: MessageSyntax.skipToken(value, position, size)
+                    if(tokenEnd == position) {
+                        valid = false
+                    } else {
+                        coding: MessageSyntax.copyRange(value, position, tokenEnd)
+                        hasParameters: false
+                        position = tokenEnd
+                        scanning: true
+                        while(valid && scanning) {
+                            next: MessageSyntax.skipWhitespace(value, position, size)
+                            if((next < size) && (value[next] == 59)) {
+                                hasParameters = true
+                                nameStart: MessageSyntax.skipWhitespace(value, next + 1, size)
+                                nameEnd: MessageSyntax.skipToken(value, nameStart, size)
+                                // transfer-parameter = token BWS "=" BWS ( token / quoted-string )
+                                equals: MessageSyntax.skipWhitespace(value, nameEnd, size)
+                                if((nameEnd == nameStart) || (equals >= size) || (value[equals] != 61)) {
+                                    valid = false
+                                } else {
+                                    valueStart: MessageSyntax.skipWhitespace(value, equals + 1, size)
+                                    valueEnd: -1
+                                    if((valueStart < size) && (value[valueStart] == 34)) {
+                                        valueEnd = MessageSyntax.quotedStringEnd(value, valueStart, size)
+                                    } else {
+                                        valueEnd = MessageSyntax.skipToken(value, valueStart, size)
+                                        if(valueEnd == valueStart) {
+                                            valueEnd = -1
+                                        }
+                                    }
+                                    if(valueEnd < 0) {
+                                        valid = false
+                                    } else {
+                                        position = valueEnd
+                                    }
+                                }
+                            } else {
+                                scanning = false
+                            }
+                        }
+                        if(valid) {
+                            position = MessageSyntax.skipWhitespace(value, position, size)
+                            if((position < size) && (value[position] != 44)) {
+                                valid = false
+                            }
+                            codings = Array(...codings, [coding, hasParameters])
+                            if((position < size) && (value[position] == 44)) {
+                                // The delimiter after a coding is not an element.
+                                position = position + 1
+                                if(MessageSyntax.skipWhitespace(value, position, size) >= size) {
+                                    codings = Array(...codings, [null, false])
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        answer: null
+        if(valid) {
+            answer = codings
+        }
+        answer
+    }
+
+    // Malformed framing fields are rejected before an unsupported coding.
+    finishHead: () => {
+        contentLengthCount: 0
+        contentLengthValue: null
+        transferEncodingCount: 0
+        codings: []
+
+        fieldLines.each((pair) => {
+            name: pair[0]
+            value: pair[1]
+            if(MessageSyntax.nameIs(name, "content-length")) {
+                contentLengthCount = contentLengthCount + 1
+                contentLengthValue = value
+            }
+            if(MessageSyntax.nameIs(name, "transfer-encoding")) {
+                transferEncodingCount = transferEncodingCount + 1
+                parsed: transferCodings(value)
+                if(parsed === null) {
+                    malformed()
+                }
+                parsed.each((coding) => {
+                    codings = Array(...codings, coding)
+                })
+            }
+        })
+
+        // Only syntax, duplication, and framing conflicts are judged here; the
+        // body budget belongs to the session, after the effective framing is
+        // known, because a HEAD or 304 Content-Length describes a
+        // representation rather than transferred content.
+        if(contentLengthCount > 1) {
+            malformed()
+        }
+        contentLength: null
+        if(contentLengthCount == 1) {
+            // A comma list is not 1*DIGIT, so it is malformed here.
+            contentLength = MessageSyntax.parseContentLength(contentLengthValue)
+            if(contentLength < 0) {
+                malformed()
+            }
+        }
+        // Status-specific forbidden framing fields (HTTP.md §16.7). A 1xx or 204
+        // response carries no framing field at all, and a 205 at most
+        // Content-Length: 0. They are rejected, never discarded or read as
+        // representation metadata. HEAD and 304 lengths stay syntax-checked
+        // only; the body budget is applied by the session to actual framing.
+        if((responseStatus < 200) || (responseStatus == 204)) {
+            if((contentLengthCount > 0) || (transferEncodingCount > 0)) {
+                malformed()
+            }
+        }
+        if((responseStatus == 205) && (contentLength !== null) && (contentLength != 0)) {
+            malformed()
+        }
+
+        chunked: transferEncodingCount > 0
+        // A Transfer-Encoding without any coding is malformed.
+        if(chunked) {
+            hasCoding: false
+            codings.each((coding) => {
+                if(coding[0] !== null) {
+                    hasCoding = true
+                }
+            })
+            if(!hasCoding) {
+                malformed()
+            }
+        }
+        if(chunked && (contentLengthCount > 0)) {
+            malformed()
+        }
+        // Strict subset (HTTP.md §16.6): exactly one field holding exactly one
+        // element, the coding chunked without parameters. Anything else that
+        // is syntactically valid, including empty list elements, is unsupported.
+        if(chunked) {
+            if((transferEncodingCount != 1) || (codings.size() != 1)) {
+                reject("unsupportedFeature")
+            }
+            if(codings[0][1] || !MessageSyntax.bytesEqualIgnoringCase(codings[0][0], "chunked")) {
+                reject("unsupportedFeature")
+            }
+        }
+
+        informational: responseStatus < 200
+        framing: "CLOSE_DELIMITED"
+        if(informational || (responseStatus == 204) || (responseStatus == 205) || (responseStatus == 304)) {
+            framing = "NONE"
+        } else {
+            if(chunked) {
+                framing = "CHUNKED"
+            } else {
+                if(contentLength !== null) {
+                    framing = "CONTENT_LENGTH"
+                }
+            }
+        }
+
+        acceptedHead = {
+            status: responseStatus
+            headers: fieldLines
+            framing: framing
+            contentLength: contentLength
+            informational: informational
+        }
+    }
+
+    completeLine: () => {
+        if(phase == "STATUS_LINE") {
+            parseStatusLine()
+            phase = "HEADERS"
+        } else {
+            if(line.size() == 0) {
+                finishHead()
+            } else {
+                headerFields = headerFields + 1
+                if(headerFields > maxHeaderFields) {
+                    reject("responseLimit")
+                }
+                parseFieldLine()
+            }
+        }
+        line = Encoding.UTF8.encode("")
+    }
+
+    consumeOctet: (octet) => {
+        if(phase == "STATUS_LINE") {
+            statusLineBytes = statusLineBytes + 1
+            if(statusLineBytes > maxStatusLineBytes) {
+                reject("responseLimit")
+            }
+        } else {
+            headerBytes = headerBytes + 1
+            if(headerBytes > maxHeaderBytes) {
+                reject("responseLimit")
+            }
+        }
+
+        if(pendingCr) {
+            if(octet != 10) {
+                malformed()
+            }
+            pendingCr = false
+            completeLine()
+        } else {
+            if(octet == 13) {
+                pendingCr = true
+            } else {
+                if(octet == 10) {
+                    malformed()
+                }
+                line.add(octet)
+            }
+        }
+    }
+
+    parser: null
+    parser = {
+        feed: (source, offset, length) => {
+            if(phase == "TERMINAL") {
+                Error().signal()
+            }
+            (Integer.recognizes(offset) && Integer.recognizes(length)).ifFalse(() => {
+                Error().signal()
+            })
+            if(offset < 0) {
+                Error().signal()
+            }
+            if(length < 0) {
+                Error().signal()
+            }
+            // Bounds are established without computing offset + length.
+            sourceSize: source.size()
+            if(offset > sourceSize) {
+                Error().signal()
+            }
+            if(length > (sourceSize - offset)) {
+                Error().signal()
+            }
+
+            end: offset + length
+            index: offset
+            result: null
+
+            Rejection.handle(
+                () => {
+                    while((acceptedHead === null) && (index < end)) {
+                        octet: source[index]
+                        index = index + 1
+                        consumeOctet(octet)
+                    }
+                },
+                (error) => {
+                    phase = "TERMINAL"
+                    line = null
+                    fieldLines = []
+                    result = {
+                        state: "REJECTED"
+                        consumed: index - offset
+                        head: null
+                        failure: {
+                            kind: rejectKind
+                        }
+                    }
+                    error
+                }
+            )
+
+            if((result === null) && (acceptedHead !== null)) {
+                phase = "TERMINAL"
+                line = null
+                result = {
+                    state: "ACCEPTED"
+                    consumed: index - offset
+                    head: acceptedHead
+                    failure: null
+                }
+            }
+
+            if(result === null) {
+                result = {
+                    state: "NEED_MORE"
+                    consumed: length
+                    head: null
+                    failure: null
+                }
+            }
+
+            result
+        }
+    }
+
+    parser
+}

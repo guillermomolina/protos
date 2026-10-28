@@ -287,7 +287,12 @@ httpProgressGroups: [
     ["http/server-lifecycle.protos", "library/http/server-lifecycle"],
     ["http/host-construction.protos", "library/http/host-construction"],
     ["http/host-connection.protos", "library/http/host-connection"],
-    ["http/host-lifecycle.protos", "library/http/host-lifecycle"]
+    ["http/host-lifecycle.protos", "library/http/host-lifecycle"],
+    ["http/client-admission.protos", "library/http/client-admission"],
+    ["http/client-request.protos", "library/http/client-request"],
+    ["http/client-response-head.protos", "library/http/client-response-head"],
+    ["http/client-response-body.protos", "library/http/client-response-body"],
+    ["http/client-lifecycle.protos", "library/http/client-lifecycle"]
 ]
 
 isHttpLeaf: (leaf) => {
