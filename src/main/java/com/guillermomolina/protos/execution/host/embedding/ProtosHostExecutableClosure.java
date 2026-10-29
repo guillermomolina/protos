@@ -78,6 +78,12 @@ import java.util.Objects;
  *
  * <p>I102 (PLAT060-B5): every execution on the compact path enters through the single ordinary
  * Closure-call ABI; no host configuration selects a different frame-argument layout.
+ *
+ * <p>I115-H6 (experimental, deliberate semantic divergence): a source-backed execution with zero
+ * or one argument builds the compact no-home B5 frame and performs exactly one guest call, direct
+ * or indirect. It performs no Context revalidation, Process admission, RootActor entry, host-entry
+ * suspension, ReturnHome completion, failure mapping, or guest-result projection; the conventional
+ * and PLAT054-3E2 descriptions above apply only to the target-null generic path.
  */
 @ExportLibrary(InteropLibrary.class)
 final class ProtosHostExecutableClosure implements TruffleObject {
@@ -207,259 +213,53 @@ final class ProtosHostExecutableClosure implements TruffleObject {
             }
         }
 
+        /*
+         * I115-H6: the admitted source-backed host entry has exactly one
+         * guest invocation. No Process admission, RootActor ownership,
+         * host-entry extent, ReturnHome completion, continuation driver,
+         * failure mapping, or guest-result projection runs here; the raw
+         * guest-call result crosses the Polyglot boundary unchanged.
+         */
         @Specialization(
-                guards = {"receiver.target != null", "receiver.target == cachedTarget"},
+                guards = {
+                    "receiver.target != null",
+                    "receiver.target == cachedTarget",
+                    "arguments.length <= 1"
+                },
                 limit = "3")
         static Object direct(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node node,
                 @Cached("receiver.target") RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)") DirectCallNode call)
-                throws ArityException, UnsupportedTypeException {
-            ProtosEmbeddedProcess embedding = receiver.embedding;
-
-            /*
-             * I115: admit a proven no-home Call0/Call1 directly
-             * from the host argument array. The B5 frame is the
-             * first and only argument-array allocation.
-             */
-            Object[] fallbackSupplied = null;
-            if (receiver.fastNoHomeHostEntry && arguments.length <= 1) {
-                Object supplied0 =
-                        receiver.admitSmallFastHostArgument(arguments, node);
-
-                if (embedding.permitsUnadmittedNonSuspendingHostEntry()) {
-                    Object[] frame =
-                            arguments.length == 0
-                                    ? ProtosFrameArguments
-                                            .compactDirectClosureCallZeroNoHome(
-                                                    receiver.closure, receiver.caller)
-                                    : ProtosFrameArguments
-                                            .compactDirectClosureCallOneNoHome(
-                                                    receiver.closure, receiver.caller, supplied0);
-                    try {
-                        return finishNoHomeHostEntry(call.call(frame));
-                    } catch (ProtosBytecodeControlTransferException bridged) {
-                        throw bridged.transfer();
-                    } catch (ProtosSignalException failure) {
-                        embedding.fastHostEntryFailed(failure);
-                        throw failure;
-                    }
-                }
-
-                // A rejected fast admission reuses its converted argument.
-                fallbackSupplied =
-                        arguments.length == 0
-                                ? NO_SUPPLIED_ARGUMENTS
-                                : new Object[] {supplied0};
-            }
-
-            Object[] supplied =
-                    fallbackSupplied != null
-                            ? fallbackSupplied
-                            : receiver.admitArguments(arguments, node);
-
-            /*
-             * I115: GraalPy-shaped minimum host entry.
-             *
-             * A source root proven non-suspending does not need a
-             * host suspension extent. The temporary semantic
-             * deviation is that this entry does not acquire the
-             * RootActor's exclusive admission token.
-             *
-             * The Process check is intentionally non-atomic.
-             */
-            if (receiver.fastNonSuspendingHostEntry
-                    && embedding.permitsUnadmittedNonSuspendingHostEntry()) {
-                try {
-                    ProtosPreparedCalls.OrdinarySourceCall prepared =
-                            receiver.prepare(supplied);
-                    return finishNonSuspendingHostEntry(
-                            prepared,
-                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
-                                    prepared, cachedTarget, call));
-                } catch (ProtosSignalException failure) {
-                    embedding.fastHostEntryFailed(failure);
-                    throw failure;
-                }
-            }
-
-            Thread token = embedding == null ? null : embedding.enterRootActor();
-            HostEntryExtent previous =
-                    embedding == null ? null : embedding.beginHostEntryExtent(token);
-            try {
-                ProtosPreparedCalls.OrdinarySourceCall prepared =
-                        receiver.prepare(supplied);
-                return finishEntry(
-                        embedding,
-                        prepared,
-                        ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
-                                prepared, cachedTarget, call));
-            } catch (ProtosSignalException failure) {
-                if (embedding != null) {
-                    embedding.outermostEntryFailed(token, failure);
-                }
-                throw failure;
-            } finally {
-                if (embedding != null) {
-                    embedding.endHostEntryExtent(previous);
-                    embedding.exitRootActor(token);
-                }
-            }
+                throws UnsupportedTypeException {
+            Object supplied0 = receiver.admitSmallFastHostArgument(arguments);
+            Object[] frame =
+                    arguments.length == 0
+                            ? ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                                    receiver.closure, receiver.caller)
+                            : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                                    receiver.closure, receiver.caller, supplied0);
+            return call.call(frame);
         }
 
-        @Specialization(guards = "receiver.target != null", replaces = "direct")
+        /** I115-H6: megamorphic physical target dispatch with the same single invocation. */
+        @Specialization(
+                guards = {"receiver.target != null", "arguments.length <= 1"},
+                replaces = "direct")
         static Object indirect(
                 ProtosHostExecutableClosure receiver,
                 Object[] arguments,
-                @Bind("$node") Node node,
                 @Cached IndirectCallNode call)
-                throws ArityException, UnsupportedTypeException {
-            ProtosEmbeddedProcess embedding = receiver.embedding;
-
-            /*
-             * I115: admit a proven no-home Call0/Call1 directly
-             * from the host argument array. The B5 frame is the
-             * first and only argument-array allocation.
-             */
-            Object[] fallbackSupplied = null;
-            if (receiver.fastNoHomeHostEntry && arguments.length <= 1) {
-                Object supplied0 =
-                        receiver.admitSmallFastHostArgument(arguments, node);
-
-                if (embedding.permitsUnadmittedNonSuspendingHostEntry()) {
-                    Object[] frame =
-                            arguments.length == 0
-                                    ? ProtosFrameArguments
-                                            .compactDirectClosureCallZeroNoHome(
-                                                    receiver.closure, receiver.caller)
-                                    : ProtosFrameArguments
-                                            .compactDirectClosureCallOneNoHome(
-                                                    receiver.closure, receiver.caller, supplied0);
-                    try {
-                        return finishNoHomeHostEntry(call.call(receiver.target, frame));
-                    } catch (ProtosBytecodeControlTransferException bridged) {
-                        throw bridged.transfer();
-                    } catch (ProtosSignalException failure) {
-                        embedding.fastHostEntryFailed(failure);
-                        throw failure;
-                    }
-                }
-
-                // A rejected fast admission reuses its converted argument.
-                fallbackSupplied =
-                        arguments.length == 0
-                                ? NO_SUPPLIED_ARGUMENTS
-                                : new Object[] {supplied0};
-            }
-
-            Object[] supplied =
-                    fallbackSupplied != null
-                            ? fallbackSupplied
-                            : receiver.admitArguments(arguments, node);
-
-            /*
-             * I115: a megamorphic executable retains the same
-             * non-suspending host admission as a direct PIC hit.
-             * Only target dispatch changes to IndirectCallNode.
-             */
-            if (receiver.fastNonSuspendingHostEntry
-                    && embedding.permitsUnadmittedNonSuspendingHostEntry()) {
-                try {
-                    ProtosPreparedCalls.OrdinarySourceCall prepared =
-                            receiver.prepare(supplied);
-                    return finishNonSuspendingHostEntry(
-                            prepared,
-                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
-                                    prepared, call));
-                } catch (ProtosSignalException failure) {
-                    embedding.fastHostEntryFailed(failure);
-                    throw failure;
-                }
-            }
-
-            Thread token = embedding == null ? null : embedding.enterRootActor();
-            HostEntryExtent previous =
-                    embedding == null ? null : embedding.beginHostEntryExtent(token);
-            try {
-                ProtosPreparedCalls.OrdinarySourceCall prepared =
-                        receiver.prepare(supplied);
-                return finishEntry(
-                        embedding,
-                        prepared,
-                        ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(prepared, call));
-            } catch (ProtosSignalException failure) {
-                if (embedding != null) {
-                    embedding.outermostEntryFailed(token, failure);
-                }
-                throw failure;
-            } finally {
-                if (embedding != null) {
-                    embedding.endHostEntryExtent(previous);
-                    embedding.exitRootActor(token);
-                }
-            }
-        }
-
-        /**
-         * I115: completion of a root admitted by its effective
-         * non-suspension proof.
-         *
-         * An unexpected continuation is a violated optimization
-         * precondition. Never expose the private continuation to
-         * the host or try to resume without a host-entry extent.
-         */
-        /**
-         * I115: no prepared-call carrier or ReturnHome lifecycle exists
-         * for this statically admitted host entry. Only a forbidden
-         * continuation and host-facing value projection remain.
-         */
-        private static Object finishNoHomeHostEntry(Object outcome) {
-            if (ProtosTailCallContinuation.isPending(outcome)) {
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                ProtosTailCallContinuation.abandon(outcome);
-                throw new IllegalStateException(
-                        "I115 no-home host-entry proof was violated");
-            }
-            return ProtosNumericValueSupport.guestValue(outcome);
-        }
-
-        private static Object finishNonSuspendingHostEntry(
-                ProtosPreparedCalls.OrdinarySourceCall prepared,
-                Object outcome) {
-            if (ProtosTailCallContinuation.isPending(outcome)) {
-                CompilerDirectives.transferToInterpreterAndInvalidate();
-                ProtosTailCallContinuation.abandon(outcome);
-                prepared.complete();
-                throw new IllegalStateException(
-                        "I115 non-suspending host-entry proof was violated");
-            }
-            return prepared.finish(outcome);
-        }
-
-        /**
-         * PLAT054-3E2: a body that suspended yields its C-prime continuation here; only then is the
-         * host-entry driver entered. A non-suspending call pays one type check.
-         */
-        private static Object finishEntry(
-                ProtosEmbeddedProcess embedding,
-                ProtosPreparedCalls.OrdinarySourceCall prepared,
-                Object outcome) {
-            // I112: a terminal transport is pending exactly like a ContinuationResult.
-            if (ProtosTailCallContinuation.isPending(outcome)) {
-                if (embedding == null) {
-                    CompilerDirectives.transferToInterpreterAndInvalidate();
-                    // Never hand the backend-private pending result to the host.
-                    ProtosTailCallContinuation.abandon(outcome);
-                    prepared.complete();
-                    throw new IllegalStateException(
-                            "a session host executable cannot drive a suspended continuation");
-                }
-                // The driver finishes every inner terminal owner before this outer call.
-                outcome = ProtosHostEntrySuspension.resumeAfterWaits(embedding, prepared, outcome);
-            }
-            return prepared.finish(outcome);
+                throws UnsupportedTypeException {
+            Object supplied0 = receiver.admitSmallFastHostArgument(arguments);
+            Object[] frame =
+                    arguments.length == 0
+                            ? ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                                    receiver.closure, receiver.caller)
+                            : ProtosFrameArguments.compactDirectClosureCallOneNoHome(
+                                    receiver.closure, receiver.caller, supplied0);
+            return call.call(receiver.target, frame);
         }
 
         @TruffleBoundary
@@ -502,7 +302,7 @@ final class ProtosHostExecutableClosure implements TruffleObject {
      * I115: admit Call0/Call1 without copying the host argument array.
      * The null result denotes Call0 only; it is never a guest value.
      */
-    private Object admitSmallFastHostArgument(Object[] arguments, Node node)
+    private Object admitSmallFastHostArgument(Object[] arguments)
             throws UnsupportedTypeException {
         Object admitted = null;
         if (arguments.length == 1) {
@@ -512,7 +312,6 @@ final class ProtosHostExecutableClosure implements TruffleObject {
                             ? argument
                             : admitHostScalar(arguments, argument);
         }
-        requireOwningContext(node);
         return admitted;
     }
 
