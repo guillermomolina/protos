@@ -56,5 +56,8 @@ fromFact: (TlsError, fact, handshaking) => {
     if(fact == "TRUNCATED") {
         errorKind = "truncated"
     }
+    if(fact == "RECORD_LIMIT_EXCEEDED") {
+        errorKind = "limit"
+    }
     tlsError(TlsError, errorKind)
 }

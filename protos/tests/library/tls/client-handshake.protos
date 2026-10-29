@@ -22,6 +22,7 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 tls: import("std:tls/Client")
+Errors: import("std:tls/internal/Errors")
 
 // Bytes from lowercase hexadecimal text.
 hexBytes: (text) => {
@@ -275,6 +276,29 @@ tests: [
         // Not Cancelled: the cleanup Error supersedes the cancellation unwind.
         Assertions.require(failureOf(future) === closeError)
         Assertions.require(dx.closeCount() == 1)
+    }),
+    Test("a record header advertising an oversized fragment is a limit failure", () => {
+        dx: duplexOf([hexBytes("1603034801")])
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "limit")
+        Assertions.require(dx.closeCount() == 0)
+    }),
+    Test("an oversized record header split across reads is a limit failure", () => {
+        dx: duplexOf([hexBytes("16"), hexBytes("03034801")])
+        Assertions.require(kindOf(tls.Client.handshake(dx, service, anchors(), {})) == "limit")
+    }),
+    Test("an owning handshake keeps the limit kind and closes the duplex once", () => {
+        dx: duplexOf([hexBytes("1603034801")])
+        Assertions.require(kindOf(tls.Client.handshake.owning(dx, service, anchors(), {})) == "limit")
+        Assertions.require(dx.closeCount() == 1)
+    }),
+    Test("the record-limit fact maps to limit in both phases", () => {
+        handshaking: Errors.fromFact(tls.TlsError, "RECORD_LIMIT_EXCEEDED", true)
+        established: Errors.fromFact(tls.TlsError, "RECORD_LIMIT_EXCEEDED", false)
+        Assertions.require(handshaking.hasSlot("kind"))
+        Assertions.require(established.hasSlot("kind"))
+        Assertions.require(handshaking.kind == "limit")
+        Assertions.require(established.kind == "limit")
+        Assertions.require(handshaking !== established)
     }),
     Test("every failure is a fresh TlsError occurrence with an own kind", () => {
         first: failureOf(tls.Client.handshake(duplexOf([]), service, anchors(), {}))

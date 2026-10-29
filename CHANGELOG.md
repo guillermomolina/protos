@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.418-SNAPSHOT
+
+- `I130-C1` (#977, D220–S12): classify oversized inbound TLS records as
+  `TlsError` kind `"limit"`.
+  - The private JSSE engine checks the next unconsumed record header before
+    every `SSLEngine.unwrap`; a plausible header advertising an encrypted
+    fragment over 18,432 octets fails with the new sticky backend fact
+    `RECORD_LIMIT_EXCEEDED`, without waiting for the payload, during and
+    after the handshake. Unrecognized headers remain general JSSE failures.
+  - `std:tls/internal/Errors` maps the fact to `"limit"` in both phases.
+  - Correct the `Client` module documentation: DNS reference names use the
+    NR-LDH form of TLS.md §4; `xn--` A-labels are rejected until IDNA2008
+    validation exists.
+  - Cover handshake and established-phase (TLS 1.2/1.3) oversize, fragmented
+    and coalesced headers, the inclusive bound and non-TLS input in engine
+    tests, and the public `"limit"` kind with borrowed/owning custody in
+    guest tests.
+
 ## 0.3.417-SNAPSHOT
 
 - `I131` (#982, DIST018/#981): version-agnostic Linux Native Image installer.

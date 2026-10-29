@@ -67,6 +67,11 @@ public final class ProtosTlsClientEngine {
     public static final int MAX_PLAINTEXT_RECORD = 16_384;
     public static final int ENGINE_BUFFER_BYTES = 65_536;
 
+    /** The TLS record header: content type, legacy version and fragment length. */
+    private static final int RECORD_HEADER_BYTES = 5;
+    /** The approved bound on an advertised encrypted fragment, header excluded. */
+    private static final int MAX_ENCRYPTED_FRAGMENT = 18_432;
+
     private static final String HTTP_1_1 = "http/1.1";
     private static final String TLS_1_3 = "TLSv1.3";
     private static final String TLS_1_2 = "TLSv1.2";
@@ -296,12 +301,14 @@ public final class ProtosTlsClientEngine {
     }
 
     private boolean unwrap() throws SSLException {
-        if (received.position() == 0 || plaintext.remaining() < applicationSize()) {
-            return false;
-        }
         received.flip();
         SSLEngineResult result;
         try {
+            // Every engine unwrap is preceded by the check of the record it may consume next.
+            checkInboundRecordSize();
+            if (!received.hasRemaining() || plaintext.remaining() < applicationSize()) {
+                return false;
+            }
             result = engine.unwrap(received, plaintext);
         } finally {
             received.compact();
@@ -322,6 +329,34 @@ public final class ProtosTlsClientEngine {
                 yield false;
             }
         };
+    }
+
+    /**
+     * Rejects the first unconsumed record as soon as its header advertises an encrypted fragment
+     * over {@value #MAX_ENCRYPTED_FRAGMENT} octets. {@link #received} is in read mode; the header
+     * is read with absolute indices from its current position, and neither position nor limit
+     * changes. Unrecognizable headers and version-specific limits are left to JSSE.
+     */
+    private void checkInboundRecordSize() {
+        int start = received.position();
+        if (received.limit() - start < RECORD_HEADER_BYTES) {
+            return;
+        }
+        int contentType = received.get(start) & 0xFF;
+        int major = received.get(start + 1) & 0xFF;
+        int minor = received.get(start + 2) & 0xFF;
+        boolean plausible =
+                contentType >= 20 && contentType <= 23 && major == 3 && minor >= 1 && minor <= 3;
+        if (!plausible) {
+            return;
+        }
+        int fragmentLength =
+                ((received.get(start + 3) & 0xFF) << 8) | (received.get(start + 4) & 0xFF);
+        if (fragmentLength > MAX_ENCRYPTED_FRAGMENT) {
+            throw new ProtosTlsFailure(
+                    ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED,
+                    "a record advertises " + fragmentLength + " encrypted octets");
+        }
     }
 
     private boolean afterResult(SSLEngineResult result) {

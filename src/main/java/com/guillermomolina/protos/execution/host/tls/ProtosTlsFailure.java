@@ -45,7 +45,13 @@ public final class ProtosTlsFailure extends RuntimeException {
         /** Any other failure after the session was established. */
         PROTOCOL_FAILED,
         /** Transport input ended while JSSE had not received close_notify. */
-        TRUNCATED
+        TRUNCATED,
+        /**
+         * A received, syntactically plausible TLS record header advertises an encrypted fragment
+         * longer than the approved bound of 18,432 octets (header excluded); conclusive from the
+         * header alone, before any of the fragment arrives.
+         */
+        RECORD_LIMIT_EXCEEDED
     }
 
     private final Fact fact;

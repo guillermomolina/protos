@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +28,7 @@ import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.cert.TrustAnchor;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -256,6 +258,152 @@ final class ProtosTlsClientEngineTest {
                 first,
                 assertThrows(
                         ProtosTlsFailure.class, () -> client.wrapPlaintext(new byte[1], 0, 1)));
+    }
+
+    @Test
+    void oversizedInboundRecordDuringHandshakeHasConclusiveLimitFact() {
+        ProtosTlsClientEngine client = helloSent();
+        offer(client, OVERSIZED_HEADER);
+        ProtosTlsFailure failure = assertThrows(ProtosTlsFailure.class, client::advance);
+        assertEquals(ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, failure.fact());
+        assertFalse(client.established());
+        assertSame(failure, assertThrows(ProtosTlsFailure.class, client::advance));
+    }
+
+    @Test
+    void fragmentedOversizedRecordHeaderIsDetectedOnTheFifthOctet() {
+        for (int split : new int[] {1, 2, 4}) {
+            ProtosTlsClientEngine client = helloSent();
+            offer(client, Arrays.copyOfRange(OVERSIZED_HEADER, 0, split));
+            client.advance();
+            offer(client, Arrays.copyOfRange(OVERSIZED_HEADER, split, OVERSIZED_HEADER.length));
+            ProtosTlsFailure failure = assertThrows(ProtosTlsFailure.class, client::advance);
+            assertEquals(
+                    ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, failure.fact(), "split " + split);
+        }
+    }
+
+    @Test
+    void encryptedFragmentLimitIsInclusive() {
+        // Headers at or under the bound never yield the limit fact; the engine may stay pending
+        // (underflow awaiting the payload) or JSSE may reject the record on its own terms.
+        for (int length : new int[] {18_431, 18_432}) {
+            ProtosTlsClientEngine client = helloSent();
+            offer(client, header(0x16, length));
+            assertNotEquals(
+                    ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, factOfAdvance(client), "" + length);
+        }
+        for (int length : new int[] {18_433, 65_535}) {
+            ProtosTlsClientEngine client = helloSent();
+            offer(client, header(0x16, length));
+            assertEquals(ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, factOfAdvance(client));
+        }
+    }
+
+    @Test
+    void nonTlsPeerInputIsNotMisclassifiedAsRecordLimit() {
+        ProtosTlsClientEngine http = helloSent();
+        offer(http, "HTTP/1.1 400 Bad Request\r\n\r\n".getBytes(StandardCharsets.US_ASCII));
+        assertEquals(ProtosTlsFailure.Fact.HANDSHAKE_FAILED, factOfAdvance(http));
+
+        // An unrecognized content type is not a plausible record header: the engine may stay
+        // pending or fail generally, but never with the conclusive limit fact.
+        ProtosTlsClientEngine unknownType = helloSent();
+        offer(unknownType, header(0x63, 0xFFFF));
+        assertNotEquals(ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, factOfAdvance(unknownType));
+    }
+
+    @Test
+    void oversizedInboundRecordAfterHandshakeHasConclusiveLimitFact() {
+        for (String protocol : List.of(TLS13, TLS12)) {
+            ProtosTlsTestPeer peer = ProtosTlsTestPeer.server("service-leaf", protocol);
+            ProtosTlsClientEngine client = client(ProtosTlsTestPeer.SERVICE, false, true);
+            peer.exchange(client);
+            assertTrue(client.established(), protocol);
+            assertEquals(protocol, client.negotiatedProtocol());
+            offer(client, OVERSIZED_APPLICATION_HEADER);
+            ProtosTlsFailure failure = assertThrows(ProtosTlsFailure.class, client::advance);
+            assertEquals(ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, failure.fact(), protocol);
+            assertSame(failure, assertThrows(ProtosTlsFailure.class, client::advance));
+        }
+    }
+
+    @Test
+    void validRecordFollowedByOversizedHeaderChecksTheSecondBoundary() {
+        ProtosTlsTestPeer peer = ProtosTlsTestPeer.server("service-leaf", TLS13);
+        ProtosTlsClientEngine client = client(ProtosTlsTestPeer.SERVICE, false, true);
+        peer.exchange(client);
+        assertTrue(client.established());
+        byte[] hello = "hello".getBytes(StandardCharsets.US_ASCII);
+        peer.write(hello);
+        ByteArrayOutputStream inbound = new ByteArrayOutputStream();
+        byte[] valid = peer.send(1 << 18);
+        assertTrue(valid.length > 0);
+        inbound.writeBytes(valid);
+        inbound.writeBytes(OVERSIZED_APPLICATION_HEADER);
+        // Both records arrive in one supplied input.
+        offer(client, inbound.toByteArray());
+        ProtosTlsFailure failure = assertThrows(ProtosTlsFailure.class, client::advance);
+        assertEquals(ProtosTlsFailure.Fact.RECORD_LIMIT_EXCEEDED, failure.fact());
+        assertArrayEquals(hello, client.takePlaintext(100));
+        assertEquals(0, client.takePlaintext(100).length);
+    }
+
+    @Test
+    void validFragmentedTlsRecordsDoNotTriggerTheRecordLimit() {
+        byte[] payload = new byte[40_000];
+        for (int i = 0; i < payload.length; i++) {
+            payload[i] = (byte) (i * 31);
+        }
+        for (String protocol : List.of(TLS13, TLS12)) {
+            ProtosTlsTestPeer peer = ProtosTlsTestPeer.server("service-leaf", protocol);
+            ProtosTlsClientEngine client = client(ProtosTlsTestPeer.SERVICE, false, true);
+            peer.exchange(client);
+            assertEquals(protocol, client.negotiatedProtocol());
+            peer.write(payload);
+            ByteArrayOutputStream delivered = new ByteArrayOutputStream();
+            for (int round = 0; round < 10_000 && delivered.size() < payload.length; round++) {
+                offer(client, peer.send(97));
+                client.advance();
+                delivered.writeBytes(client.takePlaintext(payload.length));
+            }
+            assertArrayEquals(payload, delivered.toByteArray(), protocol);
+        }
+    }
+
+    /** Five octets advertising an 18,433-octet handshake fragment. */
+    private static final byte[] OVERSIZED_HEADER = header(0x16, 18_433);
+
+    /** Five octets advertising an 18,433-octet application-data fragment. */
+    private static final byte[] OVERSIZED_APPLICATION_HEADER = header(0x17, 18_433);
+
+    private static byte[] header(int contentType, int fragmentLength) {
+        return new byte[] {
+            (byte) contentType, 3, 3, (byte) (fragmentLength >>> 8), (byte) fragmentLength
+        };
+    }
+
+    /** A fresh engine whose ClientHello has been produced and taken. */
+    private static ProtosTlsClientEngine helloSent() {
+        ProtosTlsClientEngine client = client(ProtosTlsTestPeer.SERVICE, false, true);
+        client.advance();
+        assertTrue(client.hasCiphertext());
+        client.takeCiphertext(Integer.MAX_VALUE);
+        return client;
+    }
+
+    private static void offer(ProtosTlsClientEngine client, byte[] bytes) {
+        assertEquals(bytes.length, client.offerCiphertext(bytes, 0, bytes.length));
+    }
+
+    /** The fact {@code advance} fails with, or {@code null} when it does not fail. */
+    private static ProtosTlsFailure.Fact factOfAdvance(ProtosTlsClientEngine client) {
+        try {
+            client.advance();
+            return null;
+        } catch (ProtosTlsFailure failure) {
+            return failure.fact();
+        }
     }
 
     private static void assertFact(

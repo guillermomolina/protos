@@ -25,7 +25,10 @@
 //! `duplex` exactly once: on a failed or cancelled handshake, or when the
 //! secure duplex is closed.
 //!
-//! `serverIdentity` is an ASCII (A-label) DNS name or an `IpAddress`; `trust`
+//! `serverIdentity` is a DNS name or an `IpAddress`. In this release a DNS
+//! reference name must use the NR-LDH form accepted by TLS.md §4: reserved
+//! labels, including every `xn--` A-label, are temporarily rejected, because
+//! complete IDNA2008 A-label validation is not yet implemented. `trust`
 //! is `Trust.anchors(certificates)`, `Trust.javaCacerts()` or
 //! `Trust.system()`; `options` is an ordinary object with the optional fields
 //! `minimumVersion`, `alpn`, `maxHandshakeBytes` and `maxQueuedWriteBytes`.
