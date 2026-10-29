@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.419-SNAPSHOT</version>
+    <version>0.3.420-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -406,6 +406,10 @@
                                 </goals>
                                 <configuration>
                                     <target>
+                                        <!-- The native test goal reads the JUnit unique IDs that
+                                             Surefire writes here; a previous run's selection must
+                                             never reach this image. -->
+                                        <delete dir="${project.build.directory}/maven-surefire-plugin-test-ids" quiet="true"/>
                                         <exec executable="bash" failonerror="true">
                                             <arg value="${project.basedir}/build/native/generate-init-args.sh"/>
                                             <arg value="${project.build.outputDirectory}"/>
@@ -415,6 +419,20 @@
                                 </configuration>
                             </execution>
                         </executions>
+                    </plugin>
+                    <plugin>
+                        <!-- Profile-local selection: exactly the two TLS classes, independent of
+                             any -Dtest on the command line. Merged into the global Surefire
+                             configuration, whose argLine, reports directory and system
+                             properties are kept. -->
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/ProtosTlsClientIntegrationTest.java</include>
+                                <include>**/ProtosTlsTrustTest.java</include>
+                            </includes>
+                        </configuration>
                     </plugin>
                     <plugin>
                         <groupId>org.graalvm.buildtools</groupId>
@@ -436,6 +454,12 @@
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
                             </buildArgs>
+                            <!-- Diagnostic output only, for the Native JUnit executable: PLAT045
+                                 deliberately selects the fallback runtime, so the interpreter-only
+                                 notice is expected. It neither enables nor disables compilation. -->
+                            <runtimeArgs>
+                                <runtimeArg>-Dpolyglot.engine.WarnInterpreterOnly=false</runtimeArg>
+                            </runtimeArgs>
                         </configuration>
                     </plugin>
                 </plugins>

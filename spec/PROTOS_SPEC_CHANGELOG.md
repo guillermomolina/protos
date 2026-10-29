@@ -23,6 +23,22 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.479] - 2026-10-29
+
+### D220–S12 — Client TLS strict IDNA2008 A-labels (I130-C3)
+- `spec/io/TLS.md` §4: replaces the temporary NR-LDH-only restriction. A
+  DNS reference label is NR-LDH or a valid IDNA2008 A-label: canonical
+  RFC 3492 Punycode decoding to Unicode scalars, a non-ASCII NFC U-label
+  without a leading combining mark or RFC 5891 hyphen violation, RFC 5892
+  derived property PVALID or a satisfied CONTEXTJ/CONTEXTO rule, and the
+  RFC 5893 Bidi Rule in every label of a bidi domain name. Every other
+  R-LDH label and all U-label input stay inadmissible, with no conversion
+  or UTS #46 mapping. Presented DNS-IDs are eligible under the same rules;
+  SNI carries the lowercase ASCII name. A presented `*` is RFC 9525 §6.3
+  pattern syntax permitted only as the whole leftmost label; every other
+  presented label and the whole reference stay fully validated.
+- `spec/io/TLS.md` §13: removes the incomplete-conformance note.
+
 ## [0.1.478] - 2026-10-28
 
 ### D220–S12 — Client TLS clarifications (I130-B)

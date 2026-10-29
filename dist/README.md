@@ -217,7 +217,11 @@ JUnit integration. Neither check demonstrates:
 - complete HTTPS interoperability;
 - compatibility with every cryptographic provider and cipher suite.
 
-Server TLS, implicit Network acquisition, and IDNA2008 are not supported.
+Server TLS and implicit Network acquisition are not supported. IDNA2008 is
+supported only as strictly validated ASCII A-labels (`xn--...`) in reference
+names and certificate DNS-IDs; Unicode host names are rejected, never
+converted. A-label validation reads ICU Unicode data, including `nfkc.nrm`,
+which the Native executable includes.
 
 ## Exact-revision D064 publication (GHCR/OCI)
 

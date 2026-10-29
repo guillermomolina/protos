@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-10-28
+Last updated: 2026-10-29
 
 This document is the primary normative owner of the optional Standard Library
 TLS client facility `std:tls/Client` selected by D220–S12. It defines how an
@@ -147,29 +147,54 @@ header. It is admissible when it is either:
 - a `String` that is a valid ASCII DNS reference name; or
 - a recognized canonical `IpAddress` under `NETWORK.md` §2.
 
-In this release, DNS reference identities are restricted to ASCII
-Non-Reserved LDH (NR-LDH) labels as defined by RFC 5890. Each label must
-satisfy the applicable DNS length and character constraints: ASCII letters,
-digits and hyphens, no leading or trailing hyphen, and at most 63 octets per
-label, 253 octets per name.
+A DNS reference name is an ASCII wire name. Each label is either an ASCII
+Non-Reserved LDH (NR-LDH) label or a valid IDNA2008 A-label, both as defined
+by RFC 5890. Every label must satisfy the DNS length and character
+constraints: ASCII letters, digits and hyphens, no leading or trailing hyphen,
+and at most 63 octets per label, 253 octets per name.
 
 Reserved LDH (R-LDH) labels, identified by hyphens in both the third and fourth
-positions, are inadmissible. This includes all `xn--` A-labels, even when they
-represent otherwise valid internationalized domain names.
+positions, are inadmissible unless the label begins with `xn--` (compared
+ASCII case-insensitively) and is a valid A-label. A label beginning with
+`xn--` is a valid A-label only when all of the following hold:
 
-Presented certificate DNS-IDs containing an R-LDH label are ineligible for
-identity matching.
+1. its Punycode payload (RFC 3492) is nonempty and decodes without error, and
+   every decoded code point is a Unicode scalar value; a decode that would
+   exceed U+10FFFF fails;
+2. the decoded U-label contains at least one non-ASCII code point, is in
+   Unicode Normalization Form C, does not begin with a combining mark
+   (General_Category `Mn`, `Mc` or `Me`), does not begin or end with U+002D,
+   and does not have U+002D in both its third and fourth positions
+   (RFC 5891 §§4.2.3.1, 4.2.3.2, 5.4);
+3. every code point of the U-label has the RFC 5892 derived property value
+   PVALID, or is CONTEXTJ or CONTEXTO and satisfies its RFC 5892 Appendix A
+   rule; UNASSIGNED and DISALLOWED code points are inadmissible. The derived
+   property is computed by the RFC 5892 §3 algorithm, in its precedence, from
+   the Unicode Character Database of the implementation's Unicode version;
+4. re-encoding the U-label with Punycode yields exactly the lowercase payload,
+   so the A-label is canonical.
 
-This is a temporary restriction of the D220–S12 IDNA2008 contract.
-Internationalized domain names encoded as A-labels are not supported until
-conformant IDNA2008 validation is implemented. No implicit Unicode conversion,
-alternate validation scheme or fallback is permitted.
+A DNS name that contains a code point of Bidi_Class `R`, `AL` or `AN` in any
+A-label is a bidi domain name; then every label must satisfy the RFC 5893 §2
+Bidi Rule, ASCII NR-LDH labels included.
+
+Non-ASCII (U-label) input is rejected, never converted: there is no implicit
+Unicode-to-ASCII conversion, UTS #46 mapping, alternate validation scheme or
+fallback. The same rules decide whether a presented certificate DNS-ID is
+eligible for identity matching; an ineligible DNS-ID never matches and is
+skipped without failing the handshake.
+
+A presented `*` is RFC 9525 §6.3 wildcard-pattern syntax, not a DNS label, and
+is permitted only as the complete leftmost label of a presented DNS-ID. Every
+other label of that DNS-ID is validated as above, including the Bidi Rule when
+the DNS-ID is a bidi domain name. The reference identity is always validated
+in full, including the label a wildcard matches, before any comparison, so
+wildcard matching never admits a name that fails these rules.
 
 A DNS reference has at least two valid labels, is compared ASCII
 case-insensitively, and has one optional terminal root dot normalized away.
-Non-ASCII (U-label) input is rejected, never silently converted. A numeric
-IP-literal `String` is rejected; an IP identity is expressed only as an
-`IpAddress`.
+A numeric IP-literal `String` is rejected; an IP identity is expressed only as
+an `IpAddress`.
 
 Certificate identity is RFC 9525 subjectAltName-only:
 
@@ -181,8 +206,9 @@ A DNS-ID wildcard matches only when it occupies the entire leftmost label, and
 it matches exactly one reference label. Partial-label, multi-label and
 identity-broadening wildcards do not match.
 
-Server Name Indication is sent only for a DNS reference. An IP reference sends
-no SNI.
+Server Name Indication is sent only for a DNS reference, as its normalized
+lowercase ASCII name without the terminal root dot; an A-label is sent in that
+form, never as a U-label. An IP reference sends no SNI.
 
 Trust verification (§3) and reference-identity verification must both
 succeed. The application remains responsible for aligning the TLS reference
@@ -335,6 +361,5 @@ HTTP framing, parses no URL and adds no automatic TLS to any HTTP facility.
 The following remain outside this contract and require separate explicit
 design: TLS server operation, HTTPS hosting for `std:http/Host`, mutual TLS,
 operating-system trust adapters, alternative TLS engines, session resumption,
-0-RTT, DNS/URL convenience and HTTP/2. IDNA2008 A-label references, excluded
-by the temporary restriction of §4, are not deferred design but incomplete
-conformance to the D220–S12 contract.
+0-RTT, DNS/URL convenience and HTTP/2. Unicode (U-label) reference input and
+any Unicode-to-ASCII conversion are outside this contract (§4).

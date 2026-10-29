@@ -25,10 +25,10 @@
 //! `duplex` exactly once: on a failed or cancelled handshake, or when the
 //! secure duplex is closed.
 //!
-//! `serverIdentity` is a DNS name or an `IpAddress`. In this release a DNS
-//! reference name must use the NR-LDH form accepted by TLS.md §4: reserved
-//! labels, including every `xn--` A-label, are temporarily rejected, because
-//! complete IDNA2008 A-label validation is not yet implemented. `trust`
+//! `serverIdentity` is a DNS name or an `IpAddress`. A DNS reference name is
+//! an ASCII wire name (TLS.md §4) whose labels are NR-LDH labels or strict
+//! IDNA2008 A-labels; every other reserved label and every Unicode (U-label)
+//! input is rejected, never converted. `trust`
 //! is `Trust.anchors(certificates)`, `Trust.javaCacerts()` or
 //! `Trust.system()`; `options` is an ordinary object with the optional fields
 //! `minimumVersion`, `alpn`, `maxHandshakeBytes` and `maxQueuedWriteBytes`.
@@ -70,7 +70,7 @@ Client: ((facility) => {
         }
         reference: null
         if(valid) {
-            reference = Identity.reference(serverIdentity)
+            reference = Identity.reference(facility, serverIdentity)
             valid = reference !== null
         }
         if(valid) {

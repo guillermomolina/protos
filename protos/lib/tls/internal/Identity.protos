@@ -20,20 +20,513 @@
 //! Matching is subjectAltName-only: a DNS reference against DNS-IDs, an IP
 //! reference against exact iPAddress octets. The subject Common Name is never
 //! consulted; the backend does not even supply it.
+//!
+//! DNS names are ASCII wire names: NR-LDH labels and strict IDNA2008 A-labels
+//! (RFC 5890, 5891 §5.4, 5892, 5893, Punycode RFC 3492). Every rule is decided
+//! here. The `unicode` argument is the private TLS backend facility, which
+//! supplies only raw Unicode facts of one scalar (`codePoint`) and the NFC
+//! test (`isNfc`); it is consulted only for labels beginning "xn--". There is
+//! no Unicode-to-ASCII conversion, mapping or fallback.
 
 IpAddresses: import("std:network/IpAddresses")
 IpAddress: IpAddresses.IpAddress
+Arrays: import("std:collections/Array")
 
 maxNameOctets: 253
 maxLabelOctets: 63
 
-// Answers {labels, text} for an ASCII NR-LDH DNS name of at least two labels,
-// lowercased, with one optional terminal root dot removed; or null. With
-// allowWildcard, only the entire leftmost label may be "*" (RFC 9525 §6.3);
-// no public-suffix check is made.
-// Any octet outside ASCII letters, digits and interior hyphens, including
-// every non-ASCII (U-label) octet, makes the name invalid.
-dnsName: (text, allowWildcard) => {
+// Whether value equals one element of choices.
+oneOf: (value, choices) => {
+    found: false
+    choices.each((choice) => {
+        if(choice == value) {
+            found = true
+        }
+    })
+    found
+}
+
+// ------------------------------------------------------------ Punycode (RFC 3492)
+
+// Unicode scalars end below 1114112 (U+10FFFF + 1); 55296..57343 are the
+// surrogates (U+D800..U+DFFF), which are not scalars.
+scalarLimit: 1114112
+
+// The digit value of a lowercase LDH octet ("a".."z" 0..25, "0".."9"
+// 26..35), or -1.
+digitValue: (octet) => {
+    value: -1
+    if((octet >= 97) && (octet <= 122)) {
+        value = octet - 97
+    }
+    if((octet >= 48) && (octet <= 57)) {
+        value = octet - 22
+    }
+    value
+}
+
+// The lowercase octet of digit value 0..35.
+digitOctet: (value) => {
+    octet: value + 22
+    if(value < 26) {
+        octet = value + 97
+    }
+    octet
+}
+
+// RFC 3492 §6.1 threshold with base 36, tmin 1, tmax 26.
+threshold: (k, bias) => {
+    t: k - bias
+    if(k <= bias) {
+        t = 1
+    }
+    if(k >= bias + 26) {
+        t = 26
+    }
+    t
+}
+
+// RFC 3492 §6.1 bias adaptation with damp 700 and skew 38.
+adapt: (delta, points, first) => {
+    scaled: delta.div(2)
+    if(first) {
+        scaled = delta.div(700)
+    }
+    scaled = scaled + scaled.div(points)
+    k: 0
+    while(scaled > 455) {
+        scaled = scaled.div(35)
+        k = k + 36
+    }
+    k + (36 * scaled).div(scaled + 38)
+}
+
+// RFC 3492 §6.2: the frozen Array of Unicode scalars that the lowercase LDH
+// payload octets encode, or null. Protos Integers are exact, so nothing
+// wraps; RFC 3492 overflow is replaced by explicit bounds checked before the
+// next operation can grow a value:
+// - i stays below limit = (scalarLimit - n) * count <= 1114112 * 60, since
+//   i >= limit is exactly the point at which n + i.div(count) would leave
+//   the scalar range, and the decode fails there;
+// - weight is checked against weightLimit before each multiplication; a
+//   decode that has not failed always has weight <= 35 * i < 35 * limit
+//   (every non-terminal digit is >= t >= 1), so the check only rejects;
+// - n < scalarLimit and count <= 60 (a 63-octet label), so bias adaptation
+//   operates on delta = i - old < limit.
+// A surrogate is rejected.
+punycodeDecode: (payload) => {
+    size: payload.size()
+    basic: 0
+    index: 0
+    while(index < size) {
+        if(payload[index] == 45) {
+            basic = index
+        }
+        index = index + 1
+    }
+    output: []
+    index = 0
+    while(index < basic) {
+        output = Arrays.append(output, payload[index])
+        index = index + 1
+    }
+    position: 0
+    if(basic > 0) {
+        position = basic + 1
+    }
+    valid: size > 0
+    n: 128
+    i: 0
+    bias: 72
+    while(valid && (position < size)) {
+        old: i
+        weight: 1
+        k: 36
+        count: output.size() + 1
+        // i reaching limit means n + i.div(count) leaves the scalar range.
+        limit: (scalarLimit - n) * count
+        weightLimit: 36 * limit
+        done: false
+        while(valid && !done) {
+            if(position >= size) {
+                valid = false
+            } else {
+                digit: digitValue(payload[position])
+                position = position + 1
+                if(digit < 0) {
+                    valid = false
+                } else {
+                    i = i + digit * weight
+                    if(i >= limit) {
+                        valid = false
+                    } else {
+                        t: threshold(k, bias)
+                        if(digit < t) {
+                            done = true
+                        } else {
+                            if(weight > weightLimit.div(36 - t)) {
+                                valid = false
+                            } else {
+                                weight = weight * (36 - t)
+                                k = k + 36
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if(valid) {
+            bias = adapt(i - old, count, old == 0)
+            n = n + i.div(count)
+            i = i.mod(count)
+            if((n >= 55296) && (n <= 57343)) {
+                valid = false
+            } else {
+                output = Arrays.insertAt(output, i, n)
+                i = i + 1
+            }
+        }
+    }
+    answer: null
+    if(valid) {
+        answer = output.freeze()
+    }
+    answer
+}
+
+// RFC 3492 §6.3: the lowercase Punycode octets (Bytes) of scalars. Only
+// scalars that punycodeDecode produced are encoded (at most 60, each below
+// scalarLimit), so delta stays below scalarLimit * 61 per step and every
+// value is exact.
+punycodeEncode: (scalars) => {
+    result: Encoding.Latin1.encode("")
+    scalars.each((scalar) => {
+        if(scalar < 128) {
+            result.add(scalar)
+        }
+    })
+    basic: result.size()
+    handled: basic
+    if(basic > 0) {
+        result.add(45)
+    }
+    n: 128
+    delta: 0
+    bias: 72
+    while(handled < scalars.size()) {
+        m: scalarLimit
+        scalars.each((scalar) => {
+            if((scalar >= n) && (scalar < m)) {
+                m = scalar
+            }
+        })
+        delta = delta + (m - n) * (handled + 1)
+        n = m
+        scalars.each((scalar) => {
+            if(scalar < n) {
+                delta = delta + 1
+            }
+            if(scalar == n) {
+                q: delta
+                k: 36
+                done: false
+                while(!done) {
+                    t: threshold(k, bias)
+                    if(q < t) {
+                        done = true
+                    } else {
+                        result.add(digitOctet(t + (q - t).mod(36 - t)))
+                        q = (q - t).div(36 - t)
+                        k = k + 36
+                    }
+                }
+                result.add(digitOctet(q))
+                bias = adapt(delta, handled + 1, handled == basic)
+                delta = 0
+                handled = handled + 1
+            }
+        })
+        delta = delta + 1
+        n = n + 1
+    }
+    result
+}
+
+// ------------------------------------------------------------ IDNA2008 (RFC 5892)
+
+// RFC 5892 §2.6 Exceptions (F), or null.
+exceptionStatus: (scalar) => {
+    status: null
+    // U+00DF, U+03C2, U+06FD, U+06FE, U+0F0B, U+3007.
+    if(oneOf(scalar, [223, 962, 1789, 1790, 3851, 12295])) {
+        status = "PVALID"
+    }
+    // U+00B7, U+0375, U+05F3, U+05F4, U+30FB, U+0660..0669, U+06F0..06F9.
+    if(oneOf(scalar, [183, 885, 1523, 1524, 12539]) || ((scalar >= 1632) && (scalar <= 1641)) || ((scalar >= 1776) && (scalar <= 1785))) {
+        status = "CONTEXTO"
+    }
+    // U+0640, U+07FA, U+302E, U+302F, U+3031..3035, U+303B.
+    if(oneOf(scalar, [1600, 2042, 12334, 12335, 12347]) || ((scalar >= 12337) && (scalar <= 12341))) {
+        status = "DISALLOWED"
+    }
+    status
+}
+
+// The RFC 5892 §3 derived property value of scalar, whose backend facts are
+// facts, applying the categories in their normative precedence.
+derivedProperty: (scalar, facts) => {
+    status: exceptionStatus(scalar)
+    // BackwardCompatible (G, RFC 5892 §2.7) has no members.
+    if((status === null) && (facts.generalCategory == "Cn") && !facts.noncharacter) {
+        status = "UNASSIGNED"
+    }
+    // LDH (H): U+002D, U+0030..0039, U+0061..007A.
+    if((status === null) && ((scalar == 45) || ((scalar >= 48) && (scalar <= 57)) || ((scalar >= 97) && (scalar <= 122)))) {
+        status = "PVALID"
+    }
+    // JoinControl (H).
+    if((status === null) && facts.joinControl) {
+        status = "CONTEXTJ"
+    }
+    // Unstable (B): changed by NFKC(casefold(NFKC(cp))).
+    if((status === null) && !facts.stable) {
+        status = "DISALLOWED"
+    }
+    // IgnorableProperties (C).
+    if((status === null) && (facts.defaultIgnorable || facts.whiteSpace || facts.noncharacter)) {
+        status = "DISALLOWED"
+    }
+    // IgnorableBlocks (D): Combining Diacritical Marks for Symbols
+    // (U+20D0..20FF), Musical Symbols (U+1D100..1D1FF) and Ancient Greek
+    // Musical Notation (U+1D200..1D24F).
+    if((status === null) && (((scalar >= 8400) && (scalar <= 8447)) || ((scalar >= 119040) && (scalar <= 119375)))) {
+        status = "DISALLOWED"
+    }
+    // OldHangulJamo (I).
+    if((status === null) && oneOf(facts.hangulSyllableType, ["L", "V", "T"])) {
+        status = "DISALLOWED"
+    }
+    // LetterDigits (A).
+    if((status === null) && oneOf(facts.generalCategory, ["Ll", "Lu", "Lo", "Nd", "Lm", "Mn", "Mc"])) {
+        status = "PVALID"
+    }
+    if(status === null) {
+        status = "DISALLOWED"
+    }
+    status
+}
+
+// RFC 5892 Appendix A.1 (U+200C) and A.2 (U+200D) at index.
+contextJ: (scalars, facts, index) => {
+    virama: 9
+    allowed: (index > 0) && (facts[index - 1].combiningClass == virama)
+    if(!allowed && (scalars[index] == 8204)) {
+        // (Joining_Type:{L,D})(Joining_Type:T)*ZWNJ(Joining_Type:T)*(Joining_Type:{R,D})
+        left: index - 1
+        while((left >= 0) && (facts[left].joiningType == "T")) {
+            left = left - 1
+        }
+        right: index + 1
+        while((right < scalars.size()) && (facts[right].joiningType == "T")) {
+            right = right + 1
+        }
+        allowed = (left >= 0) && oneOf(facts[left].joiningType, ["L", "D"]) && (right < scalars.size()) && oneOf(facts[right].joiningType, ["R", "D"])
+    }
+    allowed
+}
+
+// RFC 5892 Appendix A.3–A.9 at index.
+contextO: (scalars, facts, index) => {
+    scalar: scalars[index]
+    last: scalars.size() - 1
+    allowed: false
+    // A.3 MIDDLE DOT between two U+006C.
+    if(scalar == 183) {
+        allowed = (index > 0) && (index < last) && (scalars[index - 1] == 108) && (scalars[index + 1] == 108)
+    }
+    // A.4 GREEK LOWER NUMERAL SIGN (KERAIA) before Greek.
+    if(scalar == 885) {
+        allowed = (index < last) && (facts[index + 1].script == "Greek")
+    }
+    // A.5 HEBREW PUNCTUATION GERESH, A.6 GERSHAYIM after Hebrew.
+    if((scalar == 1523) || (scalar == 1524)) {
+        allowed = (index > 0) && (facts[index - 1].script == "Hebrew")
+    }
+    // A.7 KATAKANA MIDDLE DOT in a label with Hiragana, Katakana or Han.
+    if(scalar == 12539) {
+        facts.each((other) => {
+            if(oneOf(other.script, ["Hiragana", "Katakana", "Han"])) {
+                allowed = true
+            }
+        })
+    }
+    // A.8 ARABIC-INDIC DIGITS and A.9 EXTENDED ARABIC-INDIC DIGITS never mix.
+    if((scalar >= 1632) && (scalar <= 1641)) {
+        allowed = true
+        scalars.each((other) => {
+            if((other >= 1776) && (other <= 1785)) {
+                allowed = false
+            }
+        })
+    }
+    if((scalar >= 1776) && (scalar <= 1785)) {
+        allowed = true
+        scalars.each((other) => {
+            if((other >= 1632) && (other <= 1641)) {
+                allowed = false
+            }
+        })
+    }
+    allowed
+}
+
+// The frozen Array of Bidi_Class names of a valid U-label, or null. The
+// U-label must contain a non-ASCII scalar, satisfy the RFC 5891 §§4.2.3,
+// 5.4 hyphen, leading-mark and NFC rules, and contain only PVALID scalars
+// or CONTEXTJ/CONTEXTO scalars whose rule holds.
+uLabelClasses: (unicode, scalars) => {
+    size: scalars.size()
+    valid: size > 0
+    if(valid) {
+        nonAscii: false
+        scalars.each((scalar) => {
+            if(scalar >= 128) {
+                nonAscii = true
+            }
+        })
+        valid = nonAscii && (scalars[0] != 45) && (scalars[size - 1] != 45)
+    }
+    if(valid && (size >= 4)) {
+        valid = (scalars[2] != 45) || (scalars[3] != 45)
+    }
+    facts: []
+    if(valid) {
+        facts = Arrays.map(scalars, (scalar) => {
+            unicode.codePoint(scalar)
+        })
+        valid = !oneOf(facts[0].generalCategory, ["Mn", "Mc", "Me"])
+    }
+    if(valid) {
+        valid = unicode.isNfc(scalars)
+    }
+    index: 0
+    while(valid && (index < size)) {
+        status: derivedProperty(scalars[index], facts[index])
+        if(status == "CONTEXTJ") {
+            valid = contextJ(scalars, facts, index)
+        } else {
+            if(status == "CONTEXTO") {
+                valid = contextO(scalars, facts, index)
+            } else {
+                valid = status == "PVALID"
+            }
+        }
+        index = index + 1
+    }
+    answer: null
+    if(valid) {
+        answer = Arrays.map(facts, (fact) => {
+            fact.bidiClass
+        }).freeze()
+    }
+    answer
+}
+
+// The frozen Bidi_Class names of the U-label of a lowercase "xn--" label
+// (Bytes), or null unless it is a valid A-label: a nonempty payload that
+// decodes, is a valid U-label, and re-encodes to exactly the same octets.
+aLabelClasses: (unicode, label) => {
+    payload: Encoding.Latin1.encode("")
+    index: 4
+    while(index < label.size()) {
+        payload.add(label[index])
+        index = index + 1
+    }
+    scalars: punycodeDecode(payload)
+    canonical: false
+    if(scalars !== null) {
+        encoded: punycodeEncode(scalars)
+        canonical = encoded.size() == payload.size()
+        index = 0
+        while(canonical && (index < payload.size())) {
+            canonical = encoded[index] == payload[index]
+            index = index + 1
+        }
+    }
+    answer: null
+    if(canonical) {
+        answer = uLabelClasses(unicode, scalars)
+    }
+    answer
+}
+
+// Bidi_Class names of an ASCII NR-LDH label: letters L, digits EN, hyphen ES.
+asciiClasses: (label) => {
+    classes: []
+    Encoding.UTF8.encode(label).each((octet) => {
+        bidi: "L"
+        if((octet >= 48) && (octet <= 57)) {
+            bidi = "EN"
+        }
+        if(octet == 45) {
+            bidi = "ES"
+        }
+        classes = Arrays.append(classes, bidi)
+    })
+    classes
+}
+
+// The six conditions of the RFC 5893 §2 Bidi Rule for one label.
+bidiRule: (classes) => {
+    first: classes[0]
+    satisfied: oneOf(first, ["L", "R", "AL"])
+    if(satisfied) {
+        rtl: first != "L"
+        permitted: ["L", "EN", "ES", "CS", "ET", "ON", "BN", "NSM"]
+        endings: ["L", "EN"]
+        if(rtl) {
+            permitted = ["R", "AL", "AN", "EN", "ES", "CS", "ET", "ON", "BN", "NSM"]
+            endings = ["R", "AL", "EN", "AN"]
+        }
+        hasEn: false
+        hasAn: false
+        classes.each((bidi) => {
+            if(!oneOf(bidi, permitted)) {
+                satisfied = false
+            }
+            if(bidi == "EN") {
+                hasEn = true
+            }
+            if(bidi == "AN") {
+                hasAn = true
+            }
+        })
+        end: classes.size() - 1
+        while((end > 0) && (classes[end] == "NSM")) {
+            end = end - 1
+        }
+        satisfied = satisfied && oneOf(classes[end], endings)
+        if(rtl && hasEn && hasAn) {
+            satisfied = false
+        }
+    }
+    satisfied
+}
+
+// ------------------------------------------------------------ DNS names
+
+// Answers {labels, text} for an ASCII DNS name of at least two labels,
+// lowercased, with one optional terminal root dot removed; or null. Each
+// label is NR-LDH or a valid A-label; every other reserved LDH label (RFC
+// 5890: hyphens in positions 3 and 4) and every non-ASCII (U-label) octet
+// makes the name invalid. A name with a right-to-left label must satisfy the
+// RFC 5893 Bidi Rule in every label. With allowWildcard, only the entire
+// leftmost label may be "*": RFC 9525 §6.3 pattern syntax, not a DNS label,
+// so it carries no IDNA2008 or Bidi checks of its own; every other label is
+// validated in full. The reference it is compared with is always a fully
+// validated name (reference), so a wildcard cannot admit an invalid label.
+// No public-suffix check is made.
+dnsName: (unicode, text, allowWildcard) => {
     octets: Encoding.UTF8.encode(text)
     size: octets.size()
     if((size > 0) && (octets[size - 1] == 46)) {
@@ -41,26 +534,39 @@ dnsName: (text, allowWildcard) => {
     }
     valid: (size >= 1) && (size <= maxNameOctets)
     labels: []
+    // Per label: the A-label Bidi_Class names, or null for an ASCII label.
+    labelClasses: []
+    bidiName: false
     whole: Encoding.UTF8.encode("")
     label: Encoding.UTF8.encode("")
     last: 0
 
     closeLabel: () => {
+        classes: null
         if((label.size() == 0) || (label.size() > maxLabelOctets) || (last == 45)) {
             valid = false
         } else {
-            // Reserved LDH (RFC 5890): hyphens in positions 3 and 4, which
-            // includes every "xn--" A-label. Temporary I130-B restriction
-            // (TLS.md §4): without IDNA2008 validation no such label is
-            // admitted or matched; there is no conversion or fallback.
             if(label.size() >= 4) {
                 if((label[2] == 45) && (label[3] == 45)) {
-                    valid = false
+                    // Only "xn--" (already lowercased) introduces an A-label.
+                    valid = (label[0] == 120) && (label[1] == 110)
+                    if(valid) {
+                        classes = aLabelClasses(unicode, label)
+                        valid = classes !== null
+                    }
                 }
             }
         }
         if(valid) {
-            labels = Array(...labels, Encoding.UTF8.decode(label))
+            if(classes !== null) {
+                classes.each((bidi) => {
+                    if(oneOf(bidi, ["R", "AL", "AN"])) {
+                        bidiName = true
+                    }
+                })
+            }
+            labels = Arrays.append(labels, Encoding.UTF8.decode(label))
+            labelClasses = Arrays.append(labelClasses, classes)
             label = Encoding.UTF8.encode("")
         }
     }
@@ -100,6 +606,19 @@ dnsName: (text, allowWildcard) => {
     }
     if(valid && (labels.size() < 2)) {
         valid = false
+    }
+    if(valid && bidiName) {
+        index = 0
+        while(valid && (index < labels.size())) {
+            if(labels[index] != "*") {
+                classes: labelClasses[index]
+                if(classes === null) {
+                    classes = asciiClasses(labels[index])
+                }
+                valid = bidiRule(classes)
+            }
+            index = index + 1
+        }
     }
 
     answer: null
@@ -147,11 +666,12 @@ ipOctets: (address) => {
 /// Answers the frozen normalized reference for serverIdentity, or null when it
 /// is not admissible: {labels, octets, sni}. A DNS reference has labels and
 /// sends its normalized name, without the terminal dot, as SNI; an IpAddress
-/// reference has octets and sends no SNI.
-reference: (serverIdentity) => {
+/// reference has octets and sends no SNI. unicode is the private backend
+/// facility (see the module documentation).
+reference: (unicode, serverIdentity) => {
     answer: null
     if(String.recognizes(serverIdentity)) {
-        name: dnsName(serverIdentity, false)
+        name: dnsName(unicode, serverIdentity, false)
         if(name !== null) {
             if(!numericLiteral(name.text)) {
                 answer = {
@@ -202,13 +722,14 @@ sameOctets: (referenceOctets, presented) => {
 
 /// Whether the verified peer presents reference: dnsNames are the raw
 /// subjectAltName dNSName Strings, ipAddresses the raw iPAddress Bytes.
-/// Presented names that are not valid ASCII DNS-IDs never match.
-matches: (reference, dnsNames, ipAddresses) => {
+/// Presented names that are not valid ASCII DNS-IDs under the same NR-LDH
+/// and strict A-label rules never match.
+matches: (unicode, reference, dnsNames, ipAddresses) => {
     found: false
     if(reference.labels !== null) {
         dnsNames.each((presented) => {
             if(!found) {
-                candidate: dnsName(presented, true)
+                candidate: dnsName(unicode, presented, true)
                 if(candidate !== null) {
                     found = sameName(reference.labels, candidate.labels)
                 }

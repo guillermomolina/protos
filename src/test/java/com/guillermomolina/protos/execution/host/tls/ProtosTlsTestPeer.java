@@ -48,7 +48,14 @@ import javax.net.ssl.SSLParameters;
  * intermediate-ca.pem}, which issues {@code service-leaf.pem} (subject CN {@code
  * cn-only.protos.test}; SAN DNS {@code service.protos.test}, DNS {@code *.wild.protos.test}, IP
  * {@code 127.0.0.1}, IP {@code ::1}; serverAuth) and {@code cn-only-leaf.pem} (subject CN {@code
- * service.protos.test}, no SAN). {@code untrusted-ca.pem} is an unrelated self-signed CA. The keys
+ * service.protos.test}, no SAN). {@code untrusted-ca.pem} is an unrelated self-signed CA. For
+ * I130-C3, {@code idna-root-ca.pem} directly issues {@code idna-leaf.pem} (SAN DNS only the valid
+ * A-label names {@code xn--bcher-kva.protos.test} and {@code *.xn--fa-hia.protos.test};
+ * serverAuth) and {@code idna-malformed-leaf.pem} (SAN DNS {@code xn--zz.protos.test}, {@code
+ * xn--a-0hc.protos.test}, {@code *.xn--a.protos.test}, {@code xn--bucher-xyd.protos.test} and the
+ * NR-LDH {@code fallback.protos.test}; serverAuth). Every SAN of both leaves is an ASCII LDH
+ * string, so certificate parsing and PKIX path validation accept them; identity is decided only
+ * by the Protos layer. The IDNA root key is not retained. The keys
  * are unencrypted PKCS#8 and exist only for these tests. The fixtures were produced by the
  * implementation agent, not by the build. Client verification runs at a fixed PKIX instant inside
  * the validity window, so no test depends on the machine clock relative to {@code notBefore}.
@@ -83,17 +90,32 @@ final class ProtosTlsTestPeer {
             String leaf,
             BiFunction<SSLEngine, List<String>, String> alpnSelector,
             String... protocols) {
+        return serverWithIssuers(leaf, List.of("intermediate-ca.pem"), alpnSelector, protocols);
+    }
+
+    /**
+     * A server presenting {@code leaf} followed by exactly the {@code issuers} fixtures, in order;
+     * otherwise as {@link #server(String, BiFunction, String...)}.
+     */
+    static ProtosTlsTestPeer serverWithIssuers(
+            String leaf,
+            List<String> issuers,
+            BiFunction<SSLEngine, List<String>, String> alpnSelector,
+            String... protocols) {
         try {
             KeyStore store = KeyStore.getInstance("PKCS12");
             store.load(null, null);
             char[] password = "test".toCharArray();
+            List<Certificate> chain = new ArrayList<>();
+            chain.add(certificate(leaf + ".pem"));
+            for (String issuer : issuers) {
+                chain.add(certificate(issuer));
+            }
             store.setKeyEntry(
                     "server",
                     privateKey(leaf + "-key.pem"),
                     password,
-                    new Certificate[] {
-                        certificate(leaf + ".pem"), certificate("intermediate-ca.pem")
-                    });
+                    chain.toArray(new Certificate[0]));
             KeyManagerFactory keys =
                     KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             keys.init(store, password);

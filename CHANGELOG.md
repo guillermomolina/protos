@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.420-SNAPSHOT
+
+- `I130-C3` (#977, D220–S12): strict IDNA2008 A-label identities for
+  `std:tls/Client`.
+  - `Identity.protos` admits valid `xn--` A-labels in DNS references and
+    presented SAN dNSNames, and keeps rejecting every other reserved LDH
+    label and all Unicode input. Validation covers RFC 3492 Punycode
+    decoding with overflow and scalar checks, the canonical re-encoding,
+    NFC, the RFC 5891 hyphen and leading-mark rules, the RFC 5892 derived
+    property with CONTEXTJ/CONTEXTO, and the RFC 5893 Bidi Rule. SNI stays
+    lowercase ASCII.
+  - The private TLS backend facility adds `codePoint` and `isNfc`, which
+    supply raw ICU facts only. All policy stays in Protos. `java.net.IDN` and
+    UTS #46 processing are not used.
+  - Native Image includes ICU `nfkc.nrm`, alongside the already registered
+    `*.icu` property data and `nfc.nrm`.
+  - New IDNA test fixtures: `idna-root-ca.pem`; `idna-leaf.pem` with its key,
+    which has only valid A-label SANs; and `idna-malformed-leaf.pem` with its
+    key, which has invalid A-label SANs and one NR-LDH SAN. The CA key is not
+    kept.
+
 ## 0.3.419-SNAPSHOT
 
 - `I130-C2` (#977, D220–S12): Native Image TLS execution gate and

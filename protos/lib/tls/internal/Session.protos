@@ -134,7 +134,7 @@ serviceBody: (facility, TlsError, duplex, reference, trust, options, owning) => 
         }
         negotiate(engine)
         // engine.established() proves chain, version, suite and ALPN only.
-        Identity.matches(reference, engine.peerDnsNames(), engine.peerIpAddresses()).ifFalse(() => {
+        Identity.matches(facility, reference, engine.peerDnsNames(), engine.peerIpAddresses()).ifFalse(() => {
             fail("identityMismatch")
         })
         secure: SecureDuplex.create(facility, TlsError, duplex, engine, options, owning)

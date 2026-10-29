@@ -58,8 +58,9 @@ import org.junit.jupiter.api.Timeout;
  * ProtosTlsTestPeer} JSSE server presenting the fixture chain: client writes reach the server at
  * once, and a pending client read resolves as soon as the server has ciphertext. Every TLS policy
  * exercised here (trust, identity, SNI, ALPN acceptance, Futures, retention, custody) is the
- * Protos library's; Java contributes only the engine. PKIX uses the real clock: the fixtures are
- * valid from 2026-10-28T09:04:19Z through 2126.
+ * Protos library's; Java contributes only the engine and raw Unicode facts. PKIX uses the real
+ * clock: the fixtures are valid from 2026-10-28T09:04:19Z through 2126; the I130-C3 IDNA fixtures
+ * from their generation through 2126.
  */
 @Timeout(value = 30, unit = TimeUnit.SECONDS)
 final class ProtosTlsClientIntegrationTest {
@@ -111,6 +112,9 @@ final class ProtosTlsClientIntegrationTest {
             }
             trust: () => {
                 tls.Trust.anchors([rootCa])
+            }
+            idnaTrust: () => {
+                tls.Trust.anchors([idnaRootCa])
             }
             connect: () => {
                 tls.Client.handshake(dx, "service.protos.test", trust(), {}).value()
@@ -280,13 +284,95 @@ final class ProtosTlsClientIntegrationTest {
     }
 
     @Test
-    void reservedLdhReferencesAreRejectedAtAdmissionWithoutEffects() {
+    void anALabelSubjectAltNameVerifiesAndSendsTheCanonicalLowercaseSni() {
+        Run run =
+                run(
+                        idnaServer("idna-leaf"),
+                        """
+                        secure: tls.Client.handshake(dx, "XN--BCHER-KVA.Protos.Test.", idnaTrust(), {}).value()
+                        secure.write(ascii("idna")).value()
+                        Assertions.require(dx.serverText() == "idna")
+                        true
+                        """);
+        run.assertCompleted();
+        assertEquals(List.of(new SNIHostName("xn--bcher-kva.protos.test")), run.duplex.sni());
+    }
+
+    @Test
+    void malformedALabelSubjectAltNamesAreIneligibleAfterChainVerification() {
+        // The chain verifies; only the NR-LDH SAN is eligible.
+        Run eligible =
+                run(
+                        idnaServer("idna-malformed-leaf"),
+                        """
+                        tls.Client.handshake(dx, "fallback.protos.test", idnaTrust(), {}).value()
+                        true
+                        """);
+        eligible.assertCompleted();
+        // A valid reference never matches the ineligible SANs: identity, not trust, fails.
+        Run mismatch =
+                run(
+                        idnaServer("idna-malformed-leaf"),
+                        """
+                        Assertions.require(kindOf(tls.Client.handshake(dx, "xn--bcher-kva.protos.test", idnaTrust(), {})) == "identityMismatch")
+                        true
+                        """);
+        mismatch.assertCompleted();
+    }
+
+    @Test
+    void aWildcardOverAnALabelMatchesOneLabelAndSharpSIsNotSs() {
+        assertIdnaIdentity("\"api.xn--fa-hia.protos.test\"", true);
+        assertIdnaIdentity("\"xn--fa-hia.protos.test\"", false);
+        assertIdnaIdentity("\"a.b.xn--fa-hia.protos.test\"", false);
+        // IDNA2008: faß (xn--fa-hia) and fass are different names.
+        assertIdnaIdentity("\"api.fass.protos.test\"", false);
+        assertIdnaIdentity("\"bucher.protos.test\"", false);
+    }
+
+    @Test
+    void presentedDnsIdsMustPassStrictIdnaValidation() {
+        Run run =
+                run(
+                        server(TLS13),
+                        """
+                        Identity: import("std:tls/internal/Identity")
+                        Assertions.require(Identity.dnsName(unicode, "*.xn--bcher-kva.protos.test", true) !== null)
+                        Assertions.require(Identity.dnsName(unicode, "xn--4dbrk0ce.example", true) !== null)
+                        invalid: [
+                            "xn--zz.protos.test",
+                            "*.xn--a.protos.test",
+                            "xn--a-0hc.protos.test",
+                            "xn--bucher-xyd.protos.test",
+                            "xn--ab-j1t.protos.test",
+                            "1a.xn--4dbrk0ce",
+                            "*.ab--cd.protos.test",
+                            "xn--*.protos.test",
+                            "a.*.protos.test",
+                            "bücher.protos.test"
+                        ]
+                        invalid.each((name) => {
+                            Assertions.require(Identity.dnsName(unicode, name, true) === null)
+                        })
+                        reference: Identity.reference(unicode, "xn--fa-hia.protos.test")
+                        Assertions.require(!Identity.matches(unicode, reference, invalid, []))
+                        Assertions.require(Identity.matches(unicode, reference, Array(...invalid, "XN--FA-HIA.protos.test"), []))
+                        Assertions.require(!Identity.matches(unicode, reference, ["fass.protos.test"], []))
+                        fass: Identity.reference(unicode, "fass.protos.test")
+                        Assertions.require(!Identity.matches(unicode, fass, ["xn--fa-hia.protos.test"], []))
+                        true
+                        """);
+        run.assertCompleted();
+    }
+
+    @Test
+    void invalidDnsReferencesAreRejectedAtAdmissionWithoutEffects() {
         Run run =
                 run(
                         server(TLS13),
                         """
                         before: liveTasks()
-                        ["xn--bcher-kva.test", "xn--zz.test", "ab--cd.test"].each((name) => {
+                        ["xn--zz.test", "ab--cd.test", "xn--a-0hc.test", "xn--bucher-xyd.test", "bücher.test"].each((name) => {
                             failure: failureOf(tls.Client.handshake.owning(dx, name, trust(), {}))
                             Assertions.require(failure.parent() === InvalidIOArgument)
                             Assertions.require(liveTasks() == before)
@@ -716,6 +802,26 @@ final class ProtosTlsClientIntegrationTest {
         return run.duplex;
     }
 
+    /** Runs one handshake against the IDNA leaf and asserts success or identityMismatch. */
+    private void assertIdnaIdentity(String serverIdentity, boolean matches) {
+        Run run =
+                run(
+                        idnaServer("idna-leaf"),
+                        "future: tls.Client.handshake(dx, "
+                                + serverIdentity
+                                + ", idnaTrust(), {})\n"
+                                + (matches
+                                        ? "future.value()\n"
+                                        : "Assertions.require(kindOf(future) == \"identityMismatch\")\n")
+                                + "true\n");
+        run.assertCompleted();
+    }
+
+    /** A TLS 1.3 server presenting only {@code leaf}, issued directly by {@code idna-root-ca.pem}. */
+    private static Duplex idnaServer(String leaf) {
+        return new Duplex(ProtosTlsTestPeer.serverWithIssuers(leaf, List.of(), null, TLS13));
+    }
+
     private static Duplex server(String... protocols) {
         return serverWith("service-leaf", null, protocols);
     }
@@ -738,6 +844,9 @@ final class ProtosTlsClientIntegrationTest {
         context.createLocalSlot("dx", duplex.object);
         context.createLocalSlot("rootCa", bytes(ProtosTlsTestPeer.der("root-ca.pem")));
         context.createLocalSlot("untrustedCa", bytes(ProtosTlsTestPeer.der("untrusted-ca.pem")));
+        context.createLocalSlot("idnaRootCa", bytes(ProtosTlsTestPeer.der("idna-root-ca.pem")));
+        // The private backend facility, for direct Identity checks with real Unicode facts.
+        context.createLocalSlot("unicode", ProtosTlsBackendFacility.createFacility());
         context.createLocalSlot(
                 "keep",
                 fn(

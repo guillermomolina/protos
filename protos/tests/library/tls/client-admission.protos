@@ -263,13 +263,80 @@ tests: [
         assertIdentityRejected("127.0.0.1.")
         assertIdentityRejected("::1")
     }),
-    Test("reserved LDH labels, including every xn-- A-label, are inadmissible", () => {
-        // Temporary I130-B restriction (TLS.md §4): no IDNA2008 validation yet.
-        assertIdentityRejected("xn--bcher-kva.test")
-        assertIdentityRejected("xn--zz.test")
+    Test("reserved LDH labels other than xn-- A-labels are inadmissible", () => {
+        assertIdentityRejected("ab--cd.example")
         assertIdentityRejected("ab--cd.test")
-        assertIdentityRejected("service.XN--p1ai")
-        assertIdentityRejected("www.xn--bcher-kva.test.")
+        assertIdentityRejected("a1--b.test")
+    }),
+    Test("Unicode U-label input is rejected, never converted", () => {
+        assertIdentityRejected("bücher.example")
+        assertIdentityRejected("faß.example")
+        assertIdentityRejected("テスト.test")
+        assertIdentityRejected("xn--bcher-kva.bücher.example")
+    }),
+    Test("malformed A-labels and invalid Punycode are inadmissible", () => {
+        // Truncated digits, delimiter-only payload, an invalid first digit.
+        assertIdentityRejected("xn--zz.test")
+        assertIdentityRejected("xn--.test")
+        assertIdentityRejected("xn---kva.test")
+        // Arithmetic overflow and a decoded surrogate (U+D800).
+        assertIdentityRejected("xn--999999999999.test")
+        assertIdentityRejected("xn--en32g.test")
+        assertIdentityRejected("xn--dn32ge.test")
+        assertIdentityRejected("xn--ib9b.test")
+        // An A-label of 64 octets.
+        long: "xn--"
+        while(long.size() < 64) {
+            long = long + "a"
+        }
+        assertIdentityRejected(long + ".test")
+    }),
+    Test("A-labels whose U-label violates IDNA2008 are inadmissible", () => {
+        // U+0080, a control: DISALLOWED.
+        assertIdentityRejected("xn--a.test")
+        // "aÜ": U+00DC is unstable under NFKC case folding.
+        assertIdentityRejected("xn--a-kfa.test")
+        // "a" U+0378: unassigned.
+        assertIdentityRejected("xn--a-qib.test")
+        // "bu" U+0308 "cher": not NFC.
+        assertIdentityRejected("xn--bucher-xyd.test")
+        // U+0308 "bc": a leading combining mark.
+        assertIdentityRejected("xn--bc-tub.test")
+        // "ab--ü": hyphens in the third and fourth U-label positions.
+        assertIdentityRejected("xn--ab---3ra.test")
+    }),
+    Test("CONTEXTJ, CONTEXTO and Bidi violations are inadmissible", () => {
+        // "a" U+200C "b": ZWNJ without a virama or joining context.
+        assertIdentityRejected("xn--ab-j1t.test")
+        // "a" U+00B7 "b": MIDDLE DOT not between two "l".
+        assertIdentityRejected("xn--ab-0ea.test")
+        // "a" U+30FB "b": KATAKANA MIDDLE DOT without Hiragana, Katakana or Han.
+        assertIdentityRejected("xn--ab-3n4a.test")
+        // "a" U+05D0: a left-to-right label holding a right-to-left letter.
+        assertIdentityRejected("xn--a-0hc.test")
+        // A label beginning with a digit in a name with a Hebrew label.
+        assertIdentityRejected("1a.xn--4dbrk0ce")
+    }),
+    Test("a reference is never a wildcard, even over A-labels", () => {
+        assertIdentityRejected("*.xn--bcher-kva.example")
+        assertIdentityRejected("xn--*.example")
+    }),
+    Test("valid A-labels are admitted in any ASCII case with a terminal dot", () => {
+        admitted: (serverIdentity) => {
+            future: tls.Client.handshake(quietDuplex(), serverIdentity, tls.Trust.system(), {})
+            failure: failureOf(future)
+            Assertions.require(failure.parent() === tls.TlsError)
+            Assertions.require(failure.kind == "trustUnavailable")
+        }
+        // bücher, faß, l·l, ישראל, テスト, рф.
+        admitted("xn--bcher-kva.example")
+        admitted("XN--BCHER-KVA.Example")
+        admitted("www.xn--bcher-kva.example.")
+        admitted("xn--fa-hia.example")
+        admitted("xn--ll-0ea.example")
+        admitted("xn--4dbrk0ce.example")
+        admitted("xn--zckzah.test")
+        admitted("service.XN--p1ai")
     }),
     Test("NR-LDH names, case, a terminal dot and IpAddress values are admitted", () => {
         admitted: (serverIdentity) => {

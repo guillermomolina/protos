@@ -26,6 +26,8 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
     /** The Native Image profiles: the distributed executable and the I130-C2 JUnit test image. */
     private static final String NATIVE_PROFILE = "native";
     private static final String NATIVE_TLS_TESTS_PROFILE = "native-tls-tests";
+    private static final String WARNING_RUNTIME_ARG =
+            "<runtimeArg>-Dpolyglot.engine.WarnInterpreterOnly=false</runtimeArg>";
 
     @Test
     void surefireUsesExactOptimizingRuntimeWithoutSuppression() {
@@ -60,9 +62,27 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertTrue(launcher.contains("-cp \"$JAR:$RUNTIME_DIR/*\""));
         assertFalse(launcher.contains("-jar \"$JAR\""));
 
-        assertFalse(pom.contains("WarnInterpreterOnly=false"));
         String nativeProfile = profile(pom, NATIVE_PROFILE);
         String nativeTlsTestsProfile = profile(pom, NATIVE_TLS_TESTS_PROFILE);
+        // I130-C3: the interpreter-only notice is silenced only as a runtime argument of the
+        // Native JUnit executable; never for the JVM, Surefire or the distributed executable.
+        assertEquals(
+                1,
+                occurrences(nativeTlsTestsProfile, WARNING_RUNTIME_ARG),
+                "native-tls-tests must silence the fallback notice exactly once");
+        assertEquals(1, occurrences(nativeTlsTestsProfile, "WarnInterpreterOnly"));
+        int runtimeArgs = nativeTlsTestsProfile.indexOf("<runtimeArgs>");
+        int warningArg = nativeTlsTestsProfile.indexOf(WARNING_RUNTIME_ARG);
+        assertTrue(
+                runtimeArgs >= 0
+                        && warningArg > runtimeArgs
+                        && warningArg < nativeTlsTestsProfile.indexOf("</runtimeArgs>"),
+                "the fallback notice suppression must be a Native JUnit runtime argument");
+        assertTrue(
+                warningArg > nativeTlsTestsProfile.indexOf("<artifactId>native-maven-plugin</artifactId>"),
+                "the fallback notice suppression belongs to the native-maven-plugin");
+        assertFalse(nativeProfile.contains("WarnInterpreterOnly"));
+        assertFalse(pom.replace(nativeTlsTestsProfile, "").contains("WarnInterpreterOnly"));
         assertEquals(
                 1,
                 occurrences(nativeProfile, FALLBACK_BUILD_ARG),
@@ -88,6 +108,61 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         System.out.println("PLAT045_JVM_FALLBACK_RUNTIME=NO");
         System.out.println("BUG014_NATIVE_PROFILE_SHADE_SKIP=NO");
         System.out.println("BUG014_NATIVE_PROFILE_APPLICATION_INPUT=CLASSES_DIRECTORY");
+        System.out.println("I130_C3_NATIVE_TLS_TESTS_FALLBACK_NOTICE=SILENCED_RUNTIME_ARG_ONLY");
+    }
+
+    /**
+     * I130-C3: the Native JUnit profile selects exactly the two TLS classes by itself, so a direct
+     * {@code mvn -Pnative-tls-tests test} builds the same image as {@code build/native}, and a
+     * stale Surefire unique-ID selection never reaches that image.
+     */
+    @Test
+    void nativeTlsTestsProfileSelectsExactlyTheTlsClasses() throws Exception {
+        String pom = Files.readString(Path.of("pom.xml"));
+        String nativeTlsTestsProfile = profile(pom, NATIVE_TLS_TESTS_PROFILE);
+
+        int surefire =
+                nativeTlsTestsProfile.indexOf("<artifactId>maven-surefire-plugin</artifactId>");
+        assertTrue(surefire >= 0, "native-tls-tests must configure Surefire locally");
+        int includesStart = nativeTlsTestsProfile.indexOf("<includes>", surefire);
+        int includesEnd = nativeTlsTestsProfile.indexOf("</includes>", surefire);
+        assertTrue(
+                includesStart > surefire
+                        && includesEnd > includesStart
+                        && includesEnd < nativeTlsTestsProfile.indexOf("</plugin>", surefire),
+                "the TLS selection must belong to the profile-local Surefire plugin");
+        String includes = nativeTlsTestsProfile.substring(includesStart, includesEnd);
+        assertEquals(2, occurrences(includes, "<include>"));
+        assertEquals(
+                1, occurrences(includes, "<include>**/ProtosTlsClientIntegrationTest.java</include>"));
+        assertEquals(1, occurrences(includes, "<include>**/ProtosTlsTrustTest.java</include>"));
+        // Only the directory part may be a wildcard; no class-name pattern selects other tests.
+        assertFalse(includes.replace("<include>**/", "<include>").contains("*"));
+        assertEquals(1, occurrences(nativeTlsTestsProfile, "<includes>"));
+        assertFalse(nativeTlsTestsProfile.contains("<test>"));
+
+        int cleanup =
+                nativeTlsTestsProfile.indexOf(
+                        "<delete dir=\"${project.build.directory}/maven-surefire-plugin-test-ids\""
+                                + " quiet=\"true\"/>");
+        int prepare = nativeTlsTestsProfile.indexOf("<id>prepare-native-tls-tests-init-args</id>");
+        assertTrue(
+                prepare >= 0 && cleanup > prepare,
+                "the stale Surefire unique IDs must be removed by the profile's antrun execution");
+        assertTrue(
+                nativeTlsTestsProfile
+                        .substring(prepare, cleanup)
+                        .contains("<phase>process-test-classes</phase>"),
+                "the cleanup must run before Surefire");
+
+        // The selection stays profile-local: the ordinary JVM suite is never restricted.
+        String outside = pom.replace(nativeTlsTestsProfile, "");
+        assertFalse(outside.contains("ProtosTlsClientIntegrationTest"));
+        assertFalse(outside.contains("ProtosTlsTrustTest"));
+        assertFalse(outside.contains("maven-surefire-plugin-test-ids"));
+
+        System.out.println("I130_C3_NATIVE_TLS_TESTS_SELECTION=PROFILE_LOCAL_EXACT");
+        System.out.println("I130_C3_NATIVE_TLS_TESTS_STALE_IDS=CLEANED");
     }
 
     /** PLAT045 (#772): Native admission is interpreter-only and must never claim guest JIT. */

@@ -13,19 +13,72 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-// I130-B (D220–S12, TLS.md §4, RFC 9525 §6.3): the portable reference-identity
-// policy of std:tls/Client, exercised directly with controlled subjectAltName
-// inputs. The internal module is an unpublished implementation artifact; these
-// cases need no certificate.
+// I130-B, I130-C3 (D220–S12, TLS.md §4, RFC 9525 §6.3, RFC 3492, RFC 5892,
+// RFC 5893): the portable reference-identity policy of std:tls/Client,
+// exercised directly with controlled subjectAltName inputs and controlled
+// Unicode facts. The internal module is an unpublished implementation
+// artifact; these cases need no certificate. The private backend facility is
+// not reachable from guest code, so A-label admission against real Unicode
+// data is covered through std:tls/Client (client-admission.protos) and the
+// Java TLS integration test.
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 Identity: import("std:tls/internal/Identity")
 IpAddresses: import("std:network/IpAddresses")
 
+// A Unicode provider that must never be consulted: ASCII NR-LDH names and
+// malformed A-labels are decided without Unicode facts.
+asciiOnly: {
+    codePoint: (scalar) => {
+        Error().signal()
+    }
+    isNfc: (scalars) => {
+        Error().signal()
+    }
+}
+
 // Whether reference matches a peer presenting exactly the DNS-ID presented.
 matchesDns: (reference, presented) => {
-    Identity.matches(Identity.reference(reference), [presented], [])
+    Identity.matches(asciiOnly, Identity.reference(asciiOnly, reference), [presented], [])
+}
+
+// Whether two Arrays hold equal elements in order.
+sameElements: (left, right) => {
+    same: left.size() == right.size()
+    index: 0
+    while(same && (index < left.size())) {
+        same = left[index] == right[index]
+        index = index + 1
+    }
+    same
+}
+
+decodes: (payload, expected) => {
+    scalars: Identity.punycodeDecode(Encoding.Latin1.encode(payload))
+    (scalars !== null) && sameElements(scalars, expected)
+}
+
+encodes: (scalars, expected) => {
+    Encoding.Latin1.decode(Identity.punycodeEncode(scalars)) == expected
+}
+
+// Controlled backend facts of one scalar.
+fact: (generalCategory, joiningType, combiningClass, script) => {
+    facts: {
+        generalCategory: generalCategory
+        hangulSyllableType: "NA"
+        joiningType: joiningType
+        bidiClass: "L"
+        script: script
+        combiningClass: combiningClass
+        noncharacter: false
+        defaultIgnorable: false
+        whiteSpace: false
+        joinControl: false
+        stable: true
+    }
+    facts
 }
 
 tests: [
@@ -47,26 +100,150 @@ tests: [
         Assertions.require(matchesDns("service.protos.test.", "service.protos.test"))
         Assertions.require(!matchesDns("service.protos.test", "service.protos"))
     }),
-    Test("presented DNS-IDs with a reserved LDH label are ineligible", () => {
-        Assertions.require(!matchesDns("host.test", "*.xn--bcher-kva.test"))
+    Test("presented DNS-IDs with a non-A-label reserved label or a malformed A-label are ineligible", () => {
         Assertions.require(!matchesDns("ab.test", "ab--.test"))
-        // The reference itself stays valid; only the reserved DNS-ID is skipped.
-        Assertions.require(Identity.matches(Identity.reference("host.test"), ["xn--zz.test", "host.test"], []))
+        // No valid reference can contain "ab--cd", so check the DNS-ID itself.
+        Assertions.require(Identity.dnsName(asciiOnly, "*.ab--cd.test", true) === null)
+        // The reference itself stays valid; only the ineligible DNS-IDs are
+        // skipped, and malformed Punycode is rejected before any Unicode fact.
+        reference: Identity.reference(asciiOnly, "host.test")
+        Assertions.require(Identity.matches(asciiOnly, reference, ["xn--zz.test", "xn---kva.test", "ab--cd.test", "host.test"], []))
+    }),
+    Test("Punycode decodes and re-encodes RFC 3492 labels exactly", () => {
+        // bücher, faß, ישראל, рф.
+        Assertions.require(decodes("bcher-kva", [98, 252, 99, 104, 101, 114]))
+        Assertions.require(decodes("fa-hia", [102, 97, 223]))
+        Assertions.require(decodes("4dbrk0ce", [1497, 1513, 1512, 1488, 1500]))
+        Assertions.require(decodes("p1ai", [1088, 1092]))
+        Assertions.require(encodes([98, 252, 99, 104, 101, 114], "bcher-kva"))
+        Assertions.require(encodes([102, 97, 223], "fa-hia"))
+        Assertions.require(encodes([1497, 1513, 1512, 1488, 1500], "4dbrk0ce"))
+        Assertions.require(encodes([1088, 1092], "p1ai"))
+        // The IDNA2008 sharp s is its own code point, never "ss".
+        Assertions.require(!encodes([102, 97, 115, 115], "fa-hia"))
+    }),
+    Test("Punycode rejects empty, truncated, invalid, overflowing and surrogate payloads", () => {
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("")) === null)
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("zz")) === null)
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("-kva")) === null)
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("999999999999")) === null)
+        // "ib9b" decodes to U+D800, which is not a Unicode scalar.
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("ib9b")) === null)
+    }),
+    Test("Punycode arithmetic is bounded at the scalar limit", () => {
+        // "dn32g" is exactly U+10FFFF; "en32g" is the first delta past it.
+        Assertions.require(decodes("dn32g", [1114111]))
+        Assertions.require(encodes([1114111], "dn32g"))
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("en32g")) === null)
+        // A second code point at U+10FFFF is representable; one more is not.
+        Assertions.require(decodes("dn32ga", [1114111, 1114111]))
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("dn32ge")) === null)
+        // Maximal digits grow the weight geometrically; the decode fails
+        // without completing an unbounded value.
+        nines: ""
+        while(nines.size() < 59) {
+            nines = nines + "9"
+        }
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode(nines)) === null)
+        Assertions.require(Identity.punycodeDecode(Encoding.Latin1.encode("abc-" + nines)) === null)
+    }),
+    Test("the RFC 5892 derived property follows its normative precedence", () => {
+        letter: fact("Ll", "U", 0, "Latin")
+        Assertions.require(Identity.derivedProperty(97, letter) == "PVALID")
+        // Exceptions precede every other category.
+        Assertions.require(Identity.derivedProperty(223, letter) == "PVALID")
+        Assertions.require(Identity.derivedProperty(1600, fact("Lm", "C", 0, "Common")) == "DISALLOWED")
+        Assertions.require(Identity.derivedProperty(183, fact("Po", "U", 0, "Common")) == "CONTEXTO")
+        Assertions.require(Identity.derivedProperty(1632, fact("Nd", "U", 0, "Arabic")) == "CONTEXTO")
+        Assertions.require(Identity.derivedProperty(888, fact("Cn", "U", 0, "Unknown")) == "UNASSIGNED")
+        Assertions.require(Identity.derivedProperty(1114111, {
+            generalCategory: "Cn"
+            noncharacter: true
+            defaultIgnorable: false
+            whiteSpace: false
+            joinControl: false
+            stable: true
+            hangulSyllableType: "NA"
+        }) == "DISALLOWED")
+        Assertions.require(Identity.derivedProperty(8204, {
+            generalCategory: "Cf"
+            noncharacter: false
+            defaultIgnorable: true
+            whiteSpace: false
+            joinControl: true
+            stable: true
+            hangulSyllableType: "NA"
+        }) == "CONTEXTJ")
+        Assertions.require(Identity.derivedProperty(220, {
+            generalCategory: "Lu"
+            noncharacter: false
+            defaultIgnorable: false
+            whiteSpace: false
+            joinControl: false
+            stable: false
+            hangulSyllableType: "NA"
+        }) == "DISALLOWED")
+        Assertions.require(Identity.derivedProperty(8400, fact("Mn", "T", 230, "Inherited")) == "DISALLOWED")
+        Assertions.require(Identity.derivedProperty(4352, {
+            generalCategory: "Lo"
+            noncharacter: false
+            defaultIgnorable: false
+            whiteSpace: false
+            joinControl: false
+            stable: true
+            hangulSyllableType: "L"
+        }) == "DISALLOWED")
+        Assertions.require(Identity.derivedProperty(128, fact("Cc", "U", 0, "Common")) == "DISALLOWED")
+    }),
+    Test("CONTEXTJ and CONTEXTO rules read their neighbours", () => {
+        latin: fact("Ll", "U", 0, "Latin")
+        dual: fact("Lo", "D", 0, "Arabic")
+        virama: fact("Mn", "T", 9, "Devanagari")
+        joiner: fact("Cf", "U", 0, "Inherited")
+        Assertions.require(!Identity.contextJ([97, 8204, 98], [latin, joiner, latin], 1))
+        Assertions.require(Identity.contextJ([1576, 8204, 1576], [dual, joiner, dual], 1))
+        Assertions.require(Identity.contextJ([2325, 2381, 8205], [fact("Lo", "U", 0, "Devanagari"), virama, joiner], 2))
+        Assertions.require(!Identity.contextJ([97, 8205], [latin, joiner], 1))
+        dot: fact("Po", "U", 0, "Common")
+        Assertions.require(Identity.contextO([108, 183, 108], [latin, dot, latin], 1))
+        Assertions.require(!Identity.contextO([97, 183, 98], [latin, dot, latin], 1))
+        Assertions.require(!Identity.contextO([108, 183], [latin, dot], 1))
+        Assertions.require(Identity.contextO([885, 945], [dot, fact("Ll", "U", 0, "Greek")], 0))
+        Assertions.require(!Identity.contextO([885, 97], [dot, latin], 0))
+        Assertions.require(Identity.contextO([1488, 1523], [fact("Lo", "U", 0, "Hebrew"), dot], 1))
+        Assertions.require(!Identity.contextO([97, 1524], [latin, dot], 1))
+        Assertions.require(Identity.contextO([12450, 12539], [fact("Lo", "U", 0, "Katakana"), dot], 1))
+        Assertions.require(!Identity.contextO([97, 12539, 98], [latin, dot, latin], 1))
+        arabicDigit: fact("Nd", "U", 0, "Arabic")
+        Assertions.require(Identity.contextO([1632, 1633], [arabicDigit, arabicDigit], 0))
+        Assertions.require(!Identity.contextO([1632, 1776], [arabicDigit, arabicDigit], 0))
+        Assertions.require(!Identity.contextO([1776, 1632], [arabicDigit, arabicDigit], 0))
+    }),
+    Test("the RFC 5893 Bidi Rule constrains every label of a bidi name", () => {
+        Assertions.require(Identity.bidiRule(["L", "EN", "ES", "L"]))
+        Assertions.require(Identity.bidiRule(["R", "AL", "EN"]))
+        Assertions.require(Identity.bidiRule(["R", "NSM", "NSM"]))
+        Assertions.require(!Identity.bidiRule(["EN", "L"]))
+        Assertions.require(!Identity.bidiRule(["L", "R"]))
+        Assertions.require(!Identity.bidiRule(["R", "L"]))
+        Assertions.require(!Identity.bidiRule(["R", "ON"]))
+        Assertions.require(!Identity.bidiRule(["R", "EN", "AN"]))
+        Assertions.require(!Identity.bidiRule(["L", "ES"]))
     }),
     Test("non-ASCII presented DNS-IDs never match", () => {
         Assertions.require(!matchesDns("host.test", "höst.test"))
     }),
     Test("IP references match exact SAN octets only", () => {
-        loopback: Identity.reference(IpAddresses.v4(127, 0, 0, 1))
+        loopback: Identity.reference(asciiOnly, IpAddresses.v4(127, 0, 0, 1))
         Assertions.require(loopback.sni === null)
         exact: Encoding.Latin1.encode("")
         exact.add(127)
         exact.add(0)
         exact.add(0)
         exact.add(1)
-        Assertions.require(Identity.matches(loopback, [], [exact]))
+        Assertions.require(Identity.matches(asciiOnly, loopback, [], [exact]))
         // A DNS-ID spelling the address is never an IP identity.
-        Assertions.require(!Identity.matches(loopback, ["127.0.0.1"], []))
+        Assertions.require(!Identity.matches(asciiOnly, loopback, ["127.0.0.1"], []))
         mapped: Encoding.Latin1.encode("")
         index: 0
         while(index < 10) {
@@ -79,10 +256,10 @@ tests: [
         mapped.add(0)
         mapped.add(0)
         mapped.add(1)
-        Assertions.require(!Identity.matches(loopback, [], [mapped]))
+        Assertions.require(!Identity.matches(asciiOnly, loopback, [], [mapped]))
     }),
     Test("a DNS reference sends its normalized name as SNI", () => {
-        Assertions.require(Identity.reference("Service.Protos.Test.").sni == "service.protos.test")
-        Assertions.require(Identity.reference("xn--bcher-kva.test") === null)
+        Assertions.require(Identity.reference(asciiOnly, "Service.Protos.Test.").sni == "service.protos.test")
+        Assertions.require(Identity.reference(asciiOnly, "ab--cd.test") === null)
     })
 ]
