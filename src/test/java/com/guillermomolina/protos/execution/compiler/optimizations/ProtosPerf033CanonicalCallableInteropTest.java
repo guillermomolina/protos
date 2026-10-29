@@ -39,7 +39,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
 import java.util.List;
-import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -62,6 +61,8 @@ final class ProtosPerf033CanonicalCallableInteropTest {
                 process.stdout().write(process.stdoutEncoding().encode("x")).value()
                 2
             }
+
+            identity: (value) => { value }
 
             owned: () => { ^ 5 }
 
@@ -326,28 +327,36 @@ final class ProtosPerf033CanonicalCallableInteropTest {
         System.out.println("CONTEXT_BOUND_VALUE_REUSED=PASS");
     }
 
+    /**
+     * I115-H6: a session-prepared source-backed executable runs through the single compact no-home
+     * invocation without a Task or a host-entry extent.
+     */
     @Test
-    void returnHomeAndControlSemanticsArePreserved() throws Exception {
-        try (ProtosStandaloneHostedSession session = open(new RecordingStream())) {
-            assertEquals(5, session.prepareTopLevel("owned").executable().execute().asInt());
-            assertEquals(7, session.prepareTopLevel("nested").executable().execute().asInt());
-
-            Value escaped = session.prepareTopLevel("escaped").executable();
-            PolyglotException failure = assertThrows(PolyglotException.class, escaped::execute);
-            assertTrue(failure.isGuestException());
-            assertEquals(1, session.prepareTopLevel("run").executable().execute().asInt());
-        }
-        System.out.println("NON_LOCAL_RETURN=PASS");
-    }
-
-    @Test
-    void unsupportedArgumentsFailThroughInteropArity() throws Exception {
+    void experimentalCompactSourceBackedHostInvocation() throws Exception {
         try (ProtosStandaloneHostedSession session = open(new RecordingStream())) {
             Value run = session.prepareTopLevel("run").executable();
-            assertThrows(IllegalArgumentException.class, () -> run.execute(1));
-            assertEquals(1, run.execute().asInt());
+            for (int index = 0; index < 3; index++) {
+                assertEquals(1, run.execute().asInt());
+            }
+            assertEquals(0, rootDomain(session).liveTaskCount());
+            assertEquals(
+                    ProtosActorExecutionDomain.HostEntryExtent.NONE,
+                    rootDomain(session).hostEntryExtentForRuntime());
         }
-        System.out.println("ARITY_REJECTED=PASS");
+        System.out.println("I115_H6_COMPACT_SESSION_ENTRY=PASS");
+    }
+
+    /** I115-H6: the admitted source-backed contract is zero or one supplied argument. */
+    @Test
+    void zeroAndOneArgumentSourceBackedPathIsAdmitted() throws Exception {
+        try (ProtosStandaloneHostedSession session = open(new RecordingStream())) {
+            Value run = session.prepareTopLevel("run").executable();
+            Value identity = session.prepareTopLevel("identity").executable();
+            assertEquals(1, run.execute().asInt());
+            assertEquals(11, identity.execute(11).asInt());
+            assertEquals(-3, identity.execute(-3L).asInt());
+        }
+        System.out.println("I115_H6_CALL0_CALL1_ADMITTED=PASS");
     }
 
     @Test

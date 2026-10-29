@@ -208,7 +208,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
                         run = () => { 2 }
                         0
                     }
-                    add: (a, b) => { a + b }
+                    twice: (a) => { a + a }
                     0
                     """);
             Value bindings = context.getBindings(ProtosLanguage.ID);
@@ -223,16 +223,13 @@ final class ProtosStandardPolyglotEmbeddingTest {
             assertEquals(1, retained.execute().asInt(), "a retained Value never re-reads the slot");
             assertEquals(2, bindings.getMember("run").execute().asInt());
 
-            Value add = bindings.getMember("add");
+            Value twice = bindings.getMember("twice");
             context.eval(ProtosLanguage.ID, "other: 0\n0");
             assertEquals(1, retained.execute().asInt(), "not redirected by a later evaluation");
             Value two = context.eval(ProtosLanguage.ID, "2");
-            Value three = context.eval(ProtosLanguage.ID, "3");
-            assertEquals(5, add.execute(two, three).asInt());
-            assertEquals(5, add.execute(2, 3).asInt(), "PLAT054-3B Java Integer admission");
-            PolyglotException arity = assertThrows(PolyglotException.class, () -> add.execute(two));
-            assertTrue(arity.isGuestException());
-            assertFalse(embedded(context).isLive(), "an unhandled arity Error is fatal");
+            // I115-H6: the admitted source-backed contract is zero or one argument.
+            assertEquals(4, twice.execute(two).asInt());
+            assertEquals(4, twice.execute(2).asInt(), "PLAT054-3B Java Integer admission");
         }
     }
 
@@ -242,6 +239,8 @@ final class ProtosStandardPolyglotEmbeddingTest {
             add: (a, b) => { a + b }
             sub: (a, b) => { a - b }
             id: (x) => { x }
+            succ: (x) => { x + 1 }
+            prefixed: (s) => { "a" + s }
             size: (s) => { s.size() }
             withDefault: (a, b: 10) => { a + b }
             restSize: (first, ...rest) => { rest.size() }
@@ -257,15 +256,12 @@ final class ProtosStandardPolyglotEmbeddingTest {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
             Value bindings = context.getBindings(ProtosLanguage.ID);
-            Value add = bindings.getMember("add");
-            Value sub = bindings.getMember("sub");
+            Value succ = bindings.getMember("succ");
             Value id = bindings.getMember("id");
             Value withDefault = bindings.getMember("withDefault");
             Value restSize = bindings.getMember("restSize");
 
-            assertEquals(5, add.execute(2, 3).asInt());
-            assertEquals(7, sub.execute(10, 3).asInt(), "positional order is preserved");
-            assertEquals(-7, sub.execute(3, 10).asInt(), "positional order is preserved");
+            assertEquals(3, succ.execute(2).asInt());
             assertEquals(0, id.execute(0).asInt());
             assertEquals(-5, id.execute(-5).asInt());
             assertEquals(Integer.MIN_VALUE, id.execute(Integer.MIN_VALUE).asInt());
@@ -277,19 +273,16 @@ final class ProtosStandardPolyglotEmbeddingTest {
             // The ordinary exact Integer protocol applies: no overflow at the Java boundary type.
             assertEquals(
                     BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
-                    add.execute(Long.MAX_VALUE, 1L).asBigInteger());
+                    succ.execute(Long.MAX_VALUE).asBigInteger());
 
-            // Mixing admitted Java scalars with existing Protos values. A later evaluation moves the
-            // binding selection, so every Closure above is read before it.
+            // An existing Protos value is admitted unchanged. A later evaluation moves the binding
+            // selection, so every Closure above is read before it.
             Value two = context.eval(ProtosLanguage.ID, "2");
-            assertEquals(5, add.execute(two, 3).asInt());
-            assertEquals(-1, sub.execute(2, context.eval(ProtosLanguage.ID, "3")).asInt());
+            assertEquals(3, succ.execute(two).asInt());
 
-            // Defaults and rest follow ordinary binding.
+            // One supplied argument still binds a default and an empty rest in the callee.
             assertEquals(15, withDefault.execute(5).asInt());
-            assertEquals(6, withDefault.execute(5, 1).asInt());
             assertEquals(0, restSize.execute(1).asInt());
-            assertEquals(2, restSize.execute(1, "a", two).asInt());
 
             // The minimal path still allocates no Task and starts no Actor carrier.
             assertEquals(
@@ -310,7 +303,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
             Value bindings = context.getBindings(ProtosLanguage.ID);
             Value id = bindings.getMember("id");
-            Value add = bindings.getMember("add");
+            Value prefixed = bindings.getMember("prefixed");
             Value size = bindings.getMember("size");
 
             assertEquals("abc", id.execute("abc").asString());
@@ -320,7 +313,7 @@ final class ProtosStandardPolyglotEmbeddingTest {
             assertEquals(supplementary, id.execute(supplementary).asString());
             assertEquals(2, size.execute(supplementary).asInt(), "Unicode scalar count");
             assertEquals(3, size.execute("\u00f1a\u20ac").asInt());
-            assertEquals("a" + supplementary, add.execute("a", supplementary).asString());
+            assertEquals("a" + supplementary, prefixed.execute(supplementary).asString());
             assertTrue(embedded(context).isLive());
         }
     }
@@ -331,7 +324,6 @@ final class ProtosStandardPolyglotEmbeddingTest {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
             Value bindings = context.getBindings(ProtosLanguage.ID);
             Value bump = bindings.getMember("bump");
-            Value add = bindings.getMember("add");
 
             for (Object unsupported :
                     new Object[] {
@@ -342,7 +334,6 @@ final class ProtosStandardPolyglotEmbeddingTest {
                         IllegalArgumentException.class,
                         () -> bump.execute(unsupported),
                         () -> "rejected: " + unsupported.getClass());
-                assertThrows(IllegalArgumentException.class, () -> add.execute(1, unsupported));
             }
             assertEquals(0, bindings.getMember("count").asInt(), "no guest code executed");
             assertTrue(embedded(context).isLive(), "a boundary rejection is not fatal");
@@ -351,19 +342,28 @@ final class ProtosStandardPolyglotEmbeddingTest {
         }
     }
 
+    /** I115-H6: source-backed host execution admits exactly zero or one supplied argument. */
     @Test
-    void javaExcessArgumentsAreIgnoredByFlexibleBinding() {
+    void sourceBackedHostEntryAdmitsZeroOrOneArgument() {
         try (Context context = builder().build()) {
             context.eval(ProtosLanguage.ID, SCALAR_SOURCE);
-            Value add = context.getBindings(ProtosLanguage.ID).getMember("add");
-            // D203/I105: ordinary Closure binding ignores the excess argument.
-            assertEquals(3, add.execute(1, 2, 3).asInt());
-            assertTrue(embedded(context).isLive(), "flexible binding signals no Error");
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value count = bindings.getMember("count");
+            Value id = bindings.getMember("id");
+            assertEquals(0, count.asInt());
+            assertEquals(9, id.execute(9).asInt());
+            Value literal = context.eval(ProtosLanguage.ID, "literal: () => { 6 }\n0");
+            assertEquals(0, literal.asInt());
+            assertEquals(6, bindings.getMember("literal").execute().asInt());
         }
     }
 
+    /**
+     * I115-H6: an Error escaping a source-backed host entry reaches the host without the ordinary
+     * host-entry failure protocol, so the entry itself does not fail the RootActor.
+     */
     @Test
-    void unhandledErrorFailsTheRootActorAndTheProcessIsNeverRecreated() {
+    void escapingErrorIsNotMappedToRootActorFailureByTheExperimentalEntry() {
         try (Context context = builder().build()) {
             context.eval(
                     ProtosLanguage.ID,
@@ -373,17 +373,29 @@ final class ProtosStandardPolyglotEmbeddingTest {
                     0
                     """);
             Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value boom = bindings.getMember("boom");
             Value safe = bindings.getMember("safe");
             ProtosEmbeddedProcess process = embedded(context);
 
-            PolyglotException fatal =
-                    assertThrows(PolyglotException.class, () -> bindings.getMember("boom").execute());
-            assertTrue(fatal.isGuestException());
+            assertThrows(PolyglotException.class, boom::execute);
+            assertTrue(process.isLive(), "no outermost-entry failure processing");
+            assertEquals(1, safe.execute().asInt());
+            assertSame(process, embedded(context));
+        }
+    }
+
+    /** I115-H6: a stopped Process is not consulted by the experimental source-backed entry. */
+    @Test
+    void terminatedProcessDoesNotGateSourceBackedHostEntry() {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, "safe: () => { 1 }\n0");
+            Value safe = context.getBindings(ProtosLanguage.ID).getMember("safe");
+            ProtosEmbeddedProcess process = embedded(context);
+
+            process.processForTesting().requestTerminationForRuntime();
             assertFalse(process.isLive());
-            assertTrue(bindings.getMemberKeys().isEmpty(), "no live members after termination");
-            assertThrows(PolyglotException.class, safe::execute);
-            assertThrows(PolyglotException.class, () -> context.eval(ProtosLanguage.ID, "1"));
-            assertSame(process, embedded(context), "never recreated in the same Context");
+
+            assertEquals(1, safe.execute().asInt(), "no Process admission decision");
         }
     }
 
@@ -462,6 +474,35 @@ final class ProtosStandardPolyglotEmbeddingTest {
             }
             assertEquals(1, bindings.getMember("a").asInt(), "entry admitted once released");
             assertTrue(process.isLive(), "a rejected entry is not fatal");
+        }
+    }
+
+    /**
+     * I115-H6: source-backed execution does not take RootActor admission, so it is not excluded
+     * while another thread holds the RootActor token. Binding reads above remain exclusive.
+     */
+    @Test
+    void sourceBackedExecutionIsNotExcludedByAHeldRootActor() throws Exception {
+        try (Context context = builder().build()) {
+            context.eval(ProtosLanguage.ID, "literal: () => { 8 }\nid: (x) => { x }\n0");
+            Value bindings = context.getBindings(ProtosLanguage.ID);
+            Value literal = bindings.getMember("literal");
+            Value id = bindings.getMember("id");
+            ProtosEmbeddedProcess process = embedded(context);
+            Thread token = process.enterRootActor();
+            try {
+                assertEquals(
+                        8L,
+                        CompletableFuture.supplyAsync(() -> literal.execute().asLong()).get());
+                assertEquals(
+                        3L, CompletableFuture.supplyAsync(() -> id.execute(3).asLong()).get());
+                assertFalse(
+                        process.permitsUnadmittedNonSuspendingHostEntry(),
+                        "the held token is untouched");
+            } finally {
+                process.exitRootActor(token);
+            }
+            assertTrue(process.isLive());
         }
     }
 

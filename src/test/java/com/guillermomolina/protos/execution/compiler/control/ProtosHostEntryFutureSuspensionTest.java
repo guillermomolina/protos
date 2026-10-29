@@ -18,8 +18,8 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -30,11 +30,9 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import org.graalvm.polyglot.Context;
-import org.graalvm.polyglot.PolyglotException;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Test;
 
@@ -271,25 +269,26 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115: an already-admitted RootActor selects the
-     * conventional nested host-entry path, even when the
-     * source root has a non-suspension certificate.
+     * I115-H6: an ownership token already present does not select a conventional nested entry.
+     * The experimental source-backed entry neither consults nor changes RootActor ownership.
      */
     @Test
-    void occupiedRootActorFallsBackToConventionalEntry() {
+    void occupiedRootActorDoesNotAlterExperimentalEntry() {
         try (Context context = newContext()) {
-            Fixture f = new Fixture(context, "trivial: () => { 1 }");
+            Fixture f = new Fixture(context, "trivial: () => { 1 }\nidentity: (value) => { value }");
             Value trivial = f.member("trivial");
+            Value identity = f.member("identity");
 
             Thread token = f.process.enterRootActor();
             try {
                 assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
 
                 assertEquals(1, trivial.execute().asInt());
+                assertEquals(5, identity.execute(5).asInt());
 
                 assertFalse(
                         f.process.permitsUnadmittedNonSuspendingHostEntry(),
-                        "nested invocation must preserve outer admission");
+                        "the entry neither released nor reacquired the present token");
                 assertCompactState(f);
             } finally {
                 f.process.exitRootActor(token);
@@ -302,11 +301,11 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115 / PERF042: report the exact host-entry eligibility
-     * of the primitive-closure-call benchmark workload.
+     * I115-H6 / PERF042: the primitive-closure-call benchmark workload runs through the experimental
+     * host entry, which does not consult the root non-suspension proof.
      */
     @Test
-    void benchmarkClosureCallHostEntryEligibility() {
+    void benchmarkClosureCallRunsThroughExperimentalHostEntry() {
         try (Context context = newContext()) {
             Fixture f =
                     new Fixture(
@@ -317,42 +316,6 @@ final class ProtosHostEntryFutureSuspensionTest {
                                 identity(1)
                             }
                             """);
-
-            ProtosHostExecutableClosure adapter;
-
-            context.enter();
-            try {
-                adapter =
-                        (ProtosHostExecutableClosure)
-                                f.process.readSelectedMember(
-                                        f.module,
-                                        f.module.readLocalSlot("run").orElseThrow());
-            } finally {
-                context.leave();
-            }
-
-            boolean proven =
-                    adapter.target != null
-                            && adapter.target.getRootNode()
-                                    instanceof ProtosBytecodeRootNode root
-                            && root.provablyNonSuspendingBody();
-
-            assertEquals(
-                    proven,
-                    adapter.fastNonSuspendingHostEntry,
-                    "embedding eligibility must match the root proof");
-
-            System.out.println("I115_PRIMITIVE_CLOSURE_ROOT_PROVEN=" + proven);
-            System.out.println(
-                    "I115_PRIMITIVE_CLOSURE_FAST_ENTRY="
-                            + adapter.fastNonSuspendingHostEntry);
-
-            assertTrue(
-                    proven,
-                    "the emitted static terminal Call1 is non-suspending");
-            assertTrue(
-                    adapter.fastNonSuspendingHostEntry,
-                    "the embedding must consume the refined root proof");
 
             for (int index = 0; index < 5; index++) {
                 assertEquals(1, f.member("run").execute().asInt());
@@ -460,12 +423,11 @@ final class ProtosHostEntryFutureSuspensionTest {
     }
 
     /**
-     * I115: transitive static Call1 may forward its caller's
-     * required parameter without acquiring suspension machinery.
-     * Defaults and captured arguments remain unproven.
+     * I115-H6: a host call of a Closure that forwards its required parameter through a static
+     * Call1 runs through the experimental host entry, independent of the root proof.
      */
     @Test
-    void staticCallProofAcceptsRequiredCallerParameter() {
+    void forwardedParameterCallRunsThroughExperimentalHostEntry() {
         try (Context context = newContext()) {
             Fixture f =
                     new Fixture(
@@ -475,57 +437,21 @@ final class ProtosHostEntryFutureSuspensionTest {
                                 identity: (item) => { item }
                                 identity(value)
                             }
-                            withDefault: (value: gate.value()) => {
-                                identity: (item) => { item }
-                                identity(value)
-                            }
-                            withCapture: () => {
-                                identity: (item) => { item }
-                                identity(before)
-                            }
                             """);
 
-            for (String name : java.util.List.of(
-                    "forwarded",
-                    "withDefault",
-                    "withCapture")) {
-                ProtosHostExecutableClosure adapter;
-
-                context.enter();
-                try {
-                    adapter =
-                            (ProtosHostExecutableClosure)
-                                    f.process.readSelectedMember(
-                                            f.module,
-                                            f.module.readLocalSlot(name).orElseThrow());
-                } finally {
-                    context.leave();
-                }
-
-                assertEquals(
-                        name.equals("forwarded"),
-                        adapter.fastNonSuspendingHostEntry,
-                        name + " must have the expected static proof");
-            }
-
             for (int value : new int[] {0, 1, 7, -7}) {
-                assertEquals(
-                        value,
-                        f.member("forwarded").execute(value).asInt());
+                assertEquals(value, f.member("forwarded").execute(value).asInt());
                 assertCompactState(f);
             }
-
-            assertEquals(0, f.member("withCapture").execute().asInt());
-            assertCompactState(f);
         }
     }
 
     /**
-     * I115: indirect host execution shares direct admission.
-     * The negative case retains the ordinary RootActor path.
+     * I115-H6: the megamorphic specialization builds the compact no-home B5 frame and performs one
+     * {@link IndirectCallNode} call for zero- and one-argument source-backed Closures.
      */
     @Test
-    void indirectHostEntryUsesNonSuspendingProof() throws Exception {
+    void indirectHostEntryPerformsOneCompactInvocation() throws Exception {
         try (Context context = newContext()) {
             Fixture f =
                     new Fixture(
@@ -533,10 +459,7 @@ final class ProtosHostEntryFutureSuspensionTest {
                             """
                             trivial: () => { 1 }
                             identity: (value) => { value }
-                            suspending: () => { gate.value() }
                             """);
-
-            f.resolve(9);
 
             context.enter();
             try {
@@ -550,65 +473,23 @@ final class ProtosHostEntryFutureSuspensionTest {
                                 f.process.readSelectedMember(
                                         f.module,
                                         f.module.readLocalSlot("identity").orElseThrow());
-                ProtosHostExecutableClosure suspending =
-                        (ProtosHostExecutableClosure)
-                                f.process.readSelectedMember(
-                                        f.module,
-                                        f.module.readLocalSlot("suspending").orElseThrow());
-
-                assertTrue(trivial.fastNonSuspendingHostEntry);
-                assertTrue(identity.fastNonSuspendingHostEntry);
-                assertFalse(suspending.fastNonSuspendingHostEntry);
 
                 IndirectCallNode indirect = IndirectCallNode.create();
 
                 Object literal =
                         ProtosHostExecutableClosure.Execute.indirect(
-                                trivial, new Object[0], null, indirect);
-
-                assertEquals(
-                        "1",
-                        com.guillermomolina.protos.runtime
-                                .ProtosNumericValueSupport.integerDecimalText(literal));
+                                trivial, new Object[0], indirect);
+                assertEquals("1", decimal(literal));
 
                 Object forwarded =
                         ProtosHostExecutableClosure.Execute.indirect(
-                                identity, new Object[] {37}, null, indirect);
+                                identity, new Object[] {37}, indirect);
+                assertEquals("37", decimal(forwarded));
 
-                assertEquals(
-                        "37",
-                        com.guillermomolina.protos.runtime
-                                .ProtosNumericValueSupport.integerDecimalText(forwarded));
-
-                assertCompactState(f);
-
-                // A resolved Future still has no static proof.
-                Object ordinary =
+                Object guest =
                         ProtosHostExecutableClosure.Execute.indirect(
-                                suspending, new Object[0], null, indirect);
-
-                assertEquals(
-                        "9",
-                        com.guillermomolina.protos.runtime
-                                .ProtosNumericValueSupport.integerDecimalText(ordinary));
-
-                // An occupied RootActor requires conventional admission.
-                Thread token = f.process.enterRootActor();
-                try {
-                    assertFalse(
-                            f.process.permitsUnadmittedNonSuspendingHostEntry());
-
-                    Object nested =
-                            ProtosHostExecutableClosure.Execute.indirect(
-                                    trivial, new Object[0], null, indirect);
-
-                    assertEquals(
-                            "1",
-                            com.guillermomolina.protos.runtime
-                                    .ProtosNumericValueSupport.integerDecimalText(nested));
-                } finally {
-                    f.process.exitRootActor(token);
-                }
+                                identity, new Object[] {new ProtosIntegerValue(-4)}, indirect);
+                assertEquals("-4", decimal(guest));
 
                 assertCompactState(f);
             } finally {
@@ -617,27 +498,32 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
     }
 
+    /** Decimal text of a raw guest Integer result, which H6 no longer projects. */
+    private static String decimal(Object integer) {
+        return integer instanceof Long raw
+                ? Long.toString(raw)
+                : com.guillermomolina.protos.runtime.ProtosNumericValueSupport.integerDecimalText(
+                        integer);
+    }
+
     /**
-     * I115: termination must reject a retained fast-path
-     * executable rather than execute through a stopped Process.
+     * I115-H6: the experimental source-backed entry makes no Process admission decision, so a
+     * retained executable still runs after the Process stopped.
      */
     @Test
-    void terminatedProcessRejectsNonSuspendingHostEntry() {
+    void terminatedProcessIsNotConsultedByExperimentalHostEntry() {
         try (Context context = newContext()) {
             Fixture f = new Fixture(context, "trivial: () => { 1 }");
             Value trivial = f.member("trivial");
 
             assertEquals(1, trivial.execute().asInt());
-            assertCompactState(f);
 
             f.process.processForTesting().requestTerminationForRuntime();
 
             assertFalse(f.process.isLive());
             assertFalse(f.process.permitsUnadmittedNonSuspendingHostEntry());
 
-            PolyglotException rejected =
-                    assertThrows(PolyglotException.class, trivial::execute);
-            assertFalse(rejected.isInternalError());
+            assertEquals(1, trivial.execute().asInt(), "no Process admission decision");
         }
     }
 
@@ -653,109 +539,27 @@ final class ProtosHostEntryFutureSuspensionTest {
         }
     }
 
+    /**
+     * I115-H6: the source-backed host entry has no continuation driver. A pending Future
+     * observation returns to the host without waiting, and resolving the Future afterwards never
+     * resumes the abandoned body.
+     */
     @Test
-    void pendingFutureSuspendsAndResumesExactlyOnceAtTheContinuation() throws Exception {
+    void pendingFutureObservationIsNotDrivenByTheExperimentalHostEntry() throws Exception {
         try (Context context = newContext()) {
             Fixture f = new Fixture(context, SUSPENDING_RUN);
             Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            assertEquals(0, f.slot("after"), "no effect after the suspension point runs early");
-
-            f.resolve(41);
-            assertEquals(42L, entry.await(), "the final result, not a suspension descriptor");
-            assertEquals(0, f.gate.observerCountForTesting(), "terminalization cleared the observer");
-            assertEquals(1, f.slot("before"), "effects before the suspension are not replayed");
-            assertEquals(1, f.slot("after"));
-            assertFalse(f.gate.resolve(new ProtosIntegerValue(0), null), "first terminal wins");
-            assertEquals(1, f.slot("after"), "no double resumption");
-            assertCompactState(f);
-            assertTrue(f.process.isLive());
-            // The same retained executable keeps working, now without suspending.
-            assertEquals(42, f.member("run").execute().asInt());
-        }
-    }
-
-    @Test
-    void producerWorkInTheRootActorTerminalizesTheFutureWhileTheEntryWaits() {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: () => {
-                                produced: (() => { before = before + 1
-                                    20 }).future()
-                                produced.value() + 1
-                            }
-                            """);
-            // The producer Task is queued, not run, when value() registers its observer: the
-            // terminalization happens after registration and before the entry blocks.
-            assertEquals(21, f.member("run").execute().asInt());
-            assertEquals(1, f.slot("before"));
-            assertCompactState(f);
-        }
-    }
-
-    @Test
-    void taskWaiterAndHostEntryObserveTheSameFuture() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: () => {
-                                waiter: (() => { before = before + 1
-                                    gate.value() + 1 }).future()
-                                a: gate.value()
-                                a + waiter.value()
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"));
-            // The Task waiter was dispatched by the waiting entry and suspended on gate too.
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            f.resolve(10);
-            assertEquals(21L, entry.await());
-            assertCompactState(f);
-        }
-    }
-
-    @Test
-    void failedFutureSignalsItsErrorWhichAHandlerCatches() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: () => {
-                                Error.handle(() => { gate.value() }, (caught) => { caught === failure })
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> true);
-            assertTrue(f.gate.fail(f.failureError()));
-            assertEquals(true, entry.await(), "the resumed observation signals the Future's Error");
-            assertTrue(f.process.isLive(), "a handled resumed failure is not fatal");
-        }
-    }
-
-    @Test
-    void unhandledResumedFailureIsFatalToTheRootActor() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f = new Fixture(context, SUSPENDING_RUN);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            assertTrue(f.gate.fail(f.failureError()));
             Object outcome = entry.await();
-            PolyglotException failure = assertInstanceOfPolyglot(outcome);
-            assertTrue(failure.isGuestException());
-            assertFalse(failure.isInternalError());
-            assertEquals(0, f.slot("after"));
-            assertFalse(f.process.isLive(), "§24C/§32: an escaping Error fails the RootActor");
+            assertEquals(1, f.slot("before"));
+            assertEquals(0, f.slot("after"), "nothing after the observation point ran");
+            assertNotEquals(42L, outcome, "no resumed result");
+            f.resolve(41);
+            assertEquals(0, f.slot("after"), "no later resumption");
         }
     }
 
     @Test
-    void cancelledFutureSignalsCancelledAtTheResumedObservation() throws Exception {
+    void alreadyCancelledFutureSignalsCancelledWithoutSuspension() {
         try (Context context = newContext()) {
             Fixture f =
                     new Fixture(
@@ -763,252 +567,12 @@ final class ProtosHostEntryFutureSuspensionTest {
                             "run: () => { Error.handle(() => { gate.value() }, (caught) => { 9 }) }");
             assertEquals(ProtosFutureValue.State.CANCELLED, cancelledBeforeEntry(f));
             assertEquals(9, f.member("run").execute().asInt(), "already cancelled");
-
-            Fixture g = new Fixture(context, "run2: () => { Error.handle(() => { gate.value() }, (caught) => { 9 }) }");
-            Entry entry = new Entry(g.member("run2"));
-            entry.awaitSuspended(() -> true);
-            assertTrue(g.gate.cancelRequest(), "a non-Task Future without producer cancels");
-            assertEquals(9L, entry.await());
-            assertTrue(g.process.isLive());
         }
     }
 
     private static ProtosFutureValue.State cancelledBeforeEntry(Fixture f) {
         assertTrue(f.gate.cancelTerminal());
         return f.gate.state();
-    }
-
-    @Test
-    void cancellationRacingResolutionResumesExactlyOnce() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: () => {
-                                v: Error.handle(() => { gate.value() }, (caught) => { 99 })
-                                after = after + 1
-                                v
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> true);
-            CountDownLatch start = new CountDownLatch(1);
-            Thread canceller =
-                    new Thread(
-                            () -> {
-                                awaitLatch(start);
-                                f.gate.cancelTerminal();
-                            });
-            Thread resolver =
-                    new Thread(
-                            () -> {
-                                awaitLatch(start);
-                                f.gate.resolve(new ProtosIntegerValue(5), null);
-                            });
-            canceller.start();
-            resolver.start();
-            start.countDown();
-            canceller.join();
-            resolver.join();
-            Object result = entry.await();
-            long expected = f.gate.state() == ProtosFutureValue.State.RESOLVED ? 5L : 99L;
-            assertEquals(expected, result, "the entry observes exactly the winning terminal state");
-            assertEquals(1, f.slot("after"));
-        }
-    }
-
-    private static void awaitLatch(CountDownLatch latch) {
-        try {
-            latch.await();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
-    @Test
-    void ensureCleanupRunsOnceAfterResumption() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: () => {
-                                (() => {
-                                    before = before + 1
-                                    gate.value()
-                                }).ensure(() => { cleaned = cleaned + 1 })
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            assertEquals(0, f.slot("cleaned"), "suspension does not run cleanup");
-            f.resolve(3);
-            assertEquals(3L, entry.await());
-            assertEquals(1, f.slot("cleaned"));
-        }
-    }
-
-    @Test
-    void nonLocalReturnArgumentsAndLocalsSurviveSuspension() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            run: (a, b) => {
-                                local: a * 10
-                                escape: () => { ^(local + gate.value() + b) }
-                                escape()
-                                0
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"), 2, 3);
-            entry.awaitSuspended(() -> true);
-            f.resolve(100);
-            assertEquals(123L, entry.await(), "ReturnHome of run receives the non-local return");
-            assertCompactState(f);
-        }
-    }
-
-    @Test
-    void nestedSameThreadEntryIsAForeignCallbackAndRejectsSuspension() {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            "nested: () => { Error.handle(() => { gate.value() }, (caught) => { 7 }) }");
-            Value nested = f.member("nested");
-            Thread token = f.process.enterRootActor();
-            try {
-                // The outer entry plays the enclosing Protos execution of a synchronous callback.
-                assertEquals(7, nested.execute().asInt(), "a fresh Error at the suspension point");
-            } finally {
-                f.process.exitRootActor(token);
-            }
-            assertTrue(f.process.isLive());
-            assertCompactState(f);
-            // As an outermost entry the same Closure observes the now-terminal Future normally.
-            f.resolve(1);
-            assertEquals(1, nested.execute().asInt());
-        }
-    }
-
-    @Test
-    void concurrentEntryIsStillRejectedWhileAnEntryIsSuspended() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f = new Fixture(context, SUSPENDING_RUN + "trivial: () => { 1 }");
-            Value trivial = f.member("trivial");
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            PolyglotException rejected = assertThrows(PolyglotException.class, trivial::execute);
-            assertFalse(rejected.isInternalError(), "rejected, not queued behind the suspension");
-            f.resolve(1);
-            assertEquals(2L, entry.await());
-            assertEquals(1, trivial.execute().asInt());
-        }
-    }
-
-    @Test
-    void ordinaryCloseOfAnExecutingContextIsRefusedAndTheEntryCompletes() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f = new Fixture(context, SUSPENDING_RUN);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            assertThrows(IllegalStateException.class, context::close);
-            f.resolve(1);
-            assertEquals(2L, entry.await());
-        }
-    }
-
-    @Test
-    void cancellingCloseEndsTheWaitWithoutResumingGuestCode() throws Exception {
-        Context context = newContext();
-        Fixture f;
-        Value retained;
-        Entry entry;
-        try {
-            f = new Fixture(context, SUSPENDING_RUN);
-            retained = f.member("run");
-            entry = new Entry(retained);
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-        } catch (Throwable setup) {
-            context.close(true);
-            throw setup;
-        }
-        context.close(true);
-        Object outcome = entry.await();
-        assertTrue(assertInstanceOfPolyglot(outcome).isCancelled());
-        assertEquals(0, f.gate.observerCountForTesting(), "the abandoned wait released its observer");
-        f.resolve(1);
-        assertEquals(0, f.slot("after"), "no guest code after the terminal boundary");
-        assertFalse(f.process.isLive());
-        // The closed Context executes nothing for a retained executable.
-        assertThrows(PolyglotException.class, retained::execute);
-    }
-
-    @Test
-    void processTerminationEndsTheWaitAndReleasesTheObserver() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f = new Fixture(context, SUSPENDING_RUN);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            assertEquals(1, f.gate.observerCountForTesting());
-            f.process.processForTesting().requestTerminationForRuntime();
-            PolyglotException terminated = assertInstanceOfPolyglot(entry.await());
-            assertFalse(terminated.isInternalError(), "the host observes termination");
-            assertFalse(f.process.isLive());
-            assertEquals(0, f.gate.observerCountForTesting(), "the abandoned wait released its observer");
-            f.resolve(1);
-            assertEquals(0, f.slot("after"), "the dropped continuation never resumes");
-            assertEquals(ProtosFutureValue.State.RESOLVED, f.gate.state(), "Future unaffected");
-        }
-    }
-
-    @Test
-    void terminationThatTerminalizesTheObservedFutureStillNeverResumes() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f = new Fixture(context, SUSPENDING_RUN);
-            // A RootActor-registered non-Task Future is cancelled by the TERMINATING cutover, so
-            // the dependency becomes ready by the termination itself.
-            f.domain().registerActorNonTaskFutureForRuntime(f.gate);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            f.process.processForTesting().requestTerminationForRuntime();
-            PolyglotException terminated = assertInstanceOfPolyglot(entry.await());
-            assertFalse(terminated.isInternalError());
-            assertEquals(ProtosFutureValue.State.CANCELLED, f.gate.state());
-            assertEquals(0, f.slot("after"), "no guest code after the terminal boundary");
-        }
-    }
-
-    @Test
-    void nestedOrdinaryCallsAndStructuredControlSuspendWithinTheEntry() throws Exception {
-        try (Context context = newContext()) {
-            Fixture f =
-                    new Fixture(
-                            context,
-                            """
-                            inner: () => { gate.value() }
-                            middle: () => { inner() + 1 }
-                            apply: (block) => { block() }
-                            run: () => {
-                                r: 0
-                                (gate === gate).ifTrue(() => {
-                                    r = apply(() => { middle() * 10 })
-                                })
-                                before = before + 1
-                                r
-                            }
-                            """);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> true);
-            assertEquals(0, f.slot("before"));
-            f.resolve(4);
-            assertEquals(50L, entry.await(), "Closure-to-Closure calls stay suspendible");
-            assertEquals(1, f.slot("before"));
-            assertCompactState(f);
-        }
     }
 
     @Test
@@ -1038,27 +602,5 @@ final class ProtosHostEntryFutureSuspensionTest {
             assertEquals(0, f.gate.observerCountForTesting());
             assertCompactState(f);
         }
-    }
-
-    @Test
-    void suspensionInOneContextDoesNotBlockAnother() throws Exception {
-        try (Context first = newContext();
-                Context second = newContext()) {
-            Fixture f = new Fixture(first, SUSPENDING_RUN);
-            Fixture g = new Fixture(second, SUSPENDING_RUN);
-            Entry entry = new Entry(f.member("run"));
-            entry.awaitSuspended(() -> f.slot("before") == 1);
-            g.resolve(9);
-            assertEquals(10, g.member("run").execute().asInt());
-            f.resolve(1);
-            assertEquals(2L, entry.await());
-        }
-    }
-
-    private static PolyglotException assertInstanceOfPolyglot(Object outcome) {
-        if (outcome instanceof PolyglotException polyglot) {
-            return polyglot;
-        }
-        throw new AssertionError("expected a PolyglotException but the entry produced " + outcome);
     }
 }

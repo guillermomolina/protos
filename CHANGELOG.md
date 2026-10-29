@@ -8,6 +8,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.20-SNAPSHOT
+
+- `I115-H6` (experimental collapse of source-backed Java/Polyglot host entry):
+  enter the guest with exactly one compact no-home B5 call when a source-backed
+  executable receives zero or one supplied argument. The installed call target
+  is invoked directly or indirectly; the target-null generic path remains.
+  - Remove host-entry processing from this admitted route: no Context
+    revalidation, Process or RootActor admission, host-entry extent or Task,
+    ReturnHome completion, suspension/continuation driver, bridged
+    control-transfer translation, failure mapping, or guest-result projection.
+    Raw guest-call results cross the Polyglot boundary without conversion.
+  - Add focused H6 host-entry regression tests and revise interop and future-
+    suspension oracles to reflect the narrower experimental entry contract.
+    These original test changes are evidence of historical intent, not proof
+    that ordinary host entry remains semantically equivalent.
+  - **Historical semantic limitations:** bypassing RootActor and Context
+    checks can violate normal concurrency and lifecycle guarantees; omitting
+    suspension, ReturnHome, and control-transfer handling can change observable
+    program behavior. Existing H5 stale global-value caching and H3 wrapping
+    long arithmetic remain, as does the D179 C0 late-retargeting divergence.
+    This is not a normative change or a complete correctness/performance gate.
+  - Reconstructed from original I115 commit
+    `f8e51ff6b76fbbe011c77dfdcc43f9f7ac26afb8`.
+    No behavioral tests were run on this versioned historical replay.
+
 ## 0.4.19-SNAPSHOT
 
 - `I115-H5` (experimental factorial hot-path reductions): retain the physical
