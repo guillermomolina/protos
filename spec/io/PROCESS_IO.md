@@ -145,10 +145,11 @@ evaluation initializes the Process and its RootActor and executes the
 RootActor's initial module.
 
 Only that initial module receives the bootstrap-local slots defined in this
-section: `process` always, and `filesystem` and `network` only when the
-corresponding default authority is granted, under Root filesystem capability
-provisioning and Root network capability provisioning. Later host entries do
-not receive implicit duplicates of those slots.
+section: `process` always, and `filesystem`, `network` and `resolver` only
+when the corresponding default authority is granted, under Root filesystem
+capability provisioning, Root network capability provisioning and Root resolver
+capability provisioning. Later host entries do not receive implicit duplicates
+of those slots.
 
 Process arguments, environment, and standard streams are derived from the
 embedding language environment supplied by the Polyglot host (the Truffle
@@ -158,7 +159,10 @@ the host grants to the Context. Loading Core library resources from the
 distribution, language home, or an internal packaged resource confers no
 general filesystem authority. No default `Network` capability is created
 unless the host explicitly grants network authority; `NETWORK.md` owns network
-semantics.
+semantics. The standard Polyglot embedding defines no Resolver grant: neither
+the Context's socket authorization nor any other Context permission confers
+one, so an embedded Process's initial `resolver` slot is absent (Root resolver
+capability provisioning).
 
 The Process persists across host evaluations in the same Context; evaluations
 do not repeat bootstrap. Concurrent host entries that would execute unsafely in
@@ -562,3 +566,29 @@ Filesystem authority or by source/package loading authority.
 `Network`, `TcpConnection`, and `TcpListener` have no initial Actor- or P-transfer
 contract; `NETWORK.md` owns their networking semantics while the concurrency
 specifications own boundary behavior.
+
+### Root resolver capability provisioning (D223-A1)
+
+D223-A1 keeps name-resolution authority separate from Process, Filesystem and
+Network authority. When the host explicitly grants the initial program a
+`Resolver` capability (`NETWORK.md` §14), before the first source expression it
+provisions an additional local slot named `resolver` on the same initial
+`moduleContext`. Without that explicit grant the slot is absent rather than
+bound to `null`. The grant is separately optional: each of `filesystem`,
+`network` and `resolver` may be present or absent independently, and the
+existing `process`, `filesystem`, `network` and `resources` slots are
+unchanged.
+
+No existing authority implies a Resolver grant. Process authority, Filesystem
+authority, a `Network` capability, host socket permissions, thread-creation
+permissions, and source/package import authority each confer no `resolver`
+slot, and a `resolver` slot confers none of them. The slot is bootstrap-local,
+not prelude/global state, an intrinsic, import side effect, or service locator.
+Imported modules, other Actors' module contexts, and later host evaluations do
+not receive it automatically, and possessing `Process` cannot recover it.
+
+A granted Resolver lives at most as long as its Process incarnation and its
+provisioning host. Its host resources are retired when it is closed or when the
+host that provisioned it is closed; Process termination makes it unusable and
+no guest callback runs afterwards. A Resolver has no Actor- or P-transfer
+contract (`NETWORK.md` §§11, 14.9).

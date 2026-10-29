@@ -20,11 +20,13 @@ import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -58,6 +60,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private ExecutorService actorCarrierExecutor;
     private ProtosActorScheduler actorScheduler;
     private ProtosNioNetworkHost networkHost;
+    /** Host custody of every provisioned, not yet retired Resolver capability. */
+    private final List<ProtosResolverCapabilityValue> resolverCapabilities = new ArrayList<>();
+    private boolean resolversRetired;
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(
@@ -349,6 +354,45 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         return networkHost.provision(prelude);
     }
 
+    /**
+     * Explicitly provisions one host Resolver capability (D223-A1) for the supplied Prelude.
+     *
+     * <p>Independent of {@link #provisionHostNetwork}: neither implies the other. This operation
+     * does not install the capability into a Process or module; the caller owns that grant
+     * decision. Each capability owns its own backend instance, admission capacity, pending
+     * request state and lifecycle; its bounded worker pool starts lazily at the first lookup. No
+     * Protos-managed cache or result state is shared with any other capability; the host name
+     * service behind the backend keeps its own caching policy (see {@link
+     * ProtosHostResolverBackend}).
+     *
+     * <p>The host keeps custody of the capability itself, not only of its backend: closing this
+     * host retires every capability it provisioned that is still live, whether unused, never
+     * granted, or granted to a Process that has not terminated. A Process termination retires only
+     * its own grant.
+     */
+    public synchronized ProtosResolverCapabilityValue provisionHostResolver(ProtosPrelude prelude) {
+        Objects.requireNonNull(prelude, "prelude");
+        if (closed || resolversRetired) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        // Throws IllegalStateException when the Prelude does not retain the Resolver family.
+        prelude.resolverPrototypeForRuntime();
+        prelude.ipAddressPrototypeForRuntime();
+        // Custody stays bounded by the live capabilities: already-retired ones are released.
+        resolverCapabilities.removeIf(ProtosResolverCapabilityValue::retiredForRuntime);
+        ProtosResolverCapabilityValue capability =
+                new ProtosResolverCapabilityValue(prelude, new ProtosHostResolverBackend());
+        resolverCapabilities.add(capability);
+        return capability;
+    }
+
+    /** Capabilities provisioned by this host and still in its custody. */
+    int provisionedResolverCountForTesting() {
+        synchronized (this) {
+            return resolverCapabilities.size();
+        }
+    }
+
     boolean networkHostInitializedForTesting() {
         synchronized (this) {
             return networkHost != null;
@@ -392,6 +436,14 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         if (networkHost != null) {
             networkHost.close();
         }
+        // Host-only retirement: drops queued host requests undelivered and joins no worker, so
+        // no guest callback or Future settlement runs on this closing thread. Retirement is
+        // idempotent, so a grant its Process already retired is not closed twice.
+        resolversRetired = true;
+        for (ProtosResolverCapabilityValue capability : resolverCapabilities) {
+            capability.retireForRuntime();
+        }
+        resolverCapabilities.clear();
         if (failure != null) {
             throw new IllegalStateException("A Process Context failed to close", failure);
         }

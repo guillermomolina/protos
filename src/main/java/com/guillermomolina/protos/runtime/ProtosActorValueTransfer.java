@@ -349,6 +349,8 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosFileValue
                     || value instanceof ProtosFilesystemValue
                     || value instanceof ProtosNetworkCapabilityValue
+                    // D223-A1: Resolver authority is never transferred or delegated.
+                    || value instanceof ProtosResolverCapabilityValue
                     || value instanceof ProtosTcpConnectionValue
                     || value instanceof ProtosTcpListenerValue
                     // LIB020-A sealed families are not portable; copying would drop the family.

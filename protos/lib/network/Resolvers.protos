@@ -1,0 +1,49 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Explicit hostname-to-`IpAddress` resolution (D223-A1, NETWORK.md §14).
+//!
+//! The module exports exactly two members, both installed by the runtime from
+//! the source-backed Core definitions: `Resolver`, the authority-free protocol
+//! prototype, and `ResolutionError`, the prototype of every resolution
+//! failure. Importing this module creates no Resolver capability, starts no
+//! name service and grants no `Network` authority.
+//!
+//! A concrete Resolver capability is granted only explicitly by the host, as
+//! the RootActor initial module's bootstrap-local `resolver` slot. It is
+//! independent of `network`: neither implies the other. It is live and never
+//! transferable to another Actor or into P.
+//!
+//! `resolver.lookupAddresses(name)` answers `Future<Array<IpAddress>>`. `name`
+//! is a String of ASCII NR-LDH labels or strict IDNA2008 A-labels, ASCII
+//! case-insensitive, optionally ending with one root dot; one label is
+//! permitted; labels have 1..63 octets and the name at most 253. Unicode
+//! U-labels, numeric address text and any other name fail with a fresh
+//! `InvalidIOArgument` before any name-service work; no search domain is ever
+//! appended. A successful lookup is a fresh frozen Array of 1..64 distinct
+//! canonical frozen `IpAddress` values in advisory order. Failures are fresh
+//! `ResolutionError` occurrences whose own `kind` is "noAddress",
+//! "unavailable", "denied" or "limit" (more than 64 distinct addresses is
+//! "limit", never truncated). Use after close fails with `IOLifecycleError`.
+//! The lookup Future is an ordinary operation Future, not a Task; cancelling
+//! it before its result is published suppresses that result.
+//!
+//! `resolver.close()` answers `Future<Resolver>` under the ordinary idempotent
+//! close rules and closes no Network, connection, HTTP or TLS resource.
+//!
+//! Resolution never connects. `network.connectTcp` takes only an `IpEndpoint`:
+//! choose an address, build `IpEndpoint(address, port)` and connect
+//! explicitly. Keep the original hostname as the TLS reference identity and
+//! the HTTP `Host` authority.

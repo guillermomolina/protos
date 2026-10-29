@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.ByteArrayOutputStream;
@@ -192,7 +193,52 @@ public final class ProtosStandaloneHostedExecution {
                 runtimeHost);
     }
 
-    /** {@code runtimeHost} is consulted only for {@link NetworkGrant#HOST_NETWORK}. */
+    /**
+     * Explicit host selection of the optional D223-A1 Resolver grant. It is independent of
+     * {@link NetworkGrant}: {@link #NONE} leaves the initial {@code resolver} slot absent whatever
+     * Network grant is selected, and no CLI or default policy selects {@link #HOST_RESOLVER}.
+     */
+    public enum ResolverGrant {
+        NONE,
+        HOST_RESOLVER
+    }
+
+    /**
+     * As {@link #bootstrapProcess(Path, ProtosModuleResolver, List,
+     * ProtosProcessStandardStreamBinding.ReadableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend, NetworkGrant, ProtosPolyglotRuntimeHost)},
+     * additionally applying the embedder's independent Resolver selection. With {@link
+     * ResolverGrant#HOST_RESOLVER} the capability is provisioned on {@code runtimeHost} from the
+     * exact Prelude created here.
+     */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(resolverGrant, "resolverGrant");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                resolverGrant,
+                runtimeHost);
+    }
+
+    /** {@code runtimeHost} is consulted only for a HOST grant. */
     private static ProtosStandaloneProcessBootstrap.Result bootstrapProcessWithGrant(
             Path coreRoot,
             ProtosModuleResolver moduleResolver,
@@ -203,12 +249,40 @@ public final class ProtosStandaloneHostedExecution {
             NetworkGrant networkGrant,
             ProtosPolyglotRuntimeHost runtimeHost)
             throws IOException {
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                ResolverGrant.NONE,
+                runtimeHost);
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result bootstrapProcessWithGrant(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ResolverGrant resolverGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
         ProtosNetworkCapabilityValue network =
                 switch (networkGrant) {
                     case NONE -> null;
                     case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
+                };
+        ProtosResolverCapabilityValue resolver =
+                switch (resolverGrant) {
+                    case NONE -> null;
+                    case HOST_RESOLVER -> runtimeHost.provisionHostResolver(prelude);
                 };
         return ProtosStandaloneProcessBootstrap.create(
                 prelude,
@@ -222,7 +296,8 @@ public final class ProtosStandaloneHostedExecution {
                 utf8,
                 utf8,
                 null,
-                network);
+                network,
+                resolver);
     }
 
     /**

@@ -100,7 +100,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
-        assertEquals(27, flattened.indexedSize());
+        assertEquals(28, flattened.indexedSize());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "protos/conformance");
         assertLeafId(flattened, 1, "protos/process-snapshot");
@@ -115,20 +115,21 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafId(flattened, 10, "protos/library/crypto/sha256");
         assertLeafId(flattened, 11, "protos/library/network/ip-addresses");
         assertLeafId(flattened, 12, "protos/library/network/ip-endpoints");
-        assertLeafId(flattened, 13, "protos/library/semver");
-        assertLeafId(flattened, 14, "protos/library/datetime");
-        assertLeafId(flattened, 15, "protos/library/regex");
-        assertLeafId(flattened, 16, "protos/library/logging");
-        assertLeafId(flattened, 17, "protos/library/http");
-        assertLeafId(flattened, 18, "protos/library/tls");
-        assertLeafId(flattened, 19, "protos/package-tool/version");
-        assertLeafId(flattened, 20, "protos/package-tool/lock");
-        assertLeafId(flattened, 21, "protos/package-tool/resolution-input");
-        assertLeafId(flattened, 22, "protos/package-tool/content-identity");
-        assertLeafId(flattened, 23, "protos/package-tool/resolution-input-lock");
-        assertLeafId(flattened, 24, "protos/package-tool/resolution-root");
-        assertLeafId(flattened, 25, "protos/package-tool/execution-plan");
-        assertLeafId(flattened, 26, "protos/package-tool/project-projection");
+        assertLeafId(flattened, 13, "protos/library/network/resolvers");
+        assertLeafId(flattened, 14, "protos/library/semver");
+        assertLeafId(flattened, 15, "protos/library/datetime");
+        assertLeafId(flattened, 16, "protos/library/regex");
+        assertLeafId(flattened, 17, "protos/library/logging");
+        assertLeafId(flattened, 18, "protos/library/http");
+        assertLeafId(flattened, 19, "protos/library/tls");
+        assertLeafId(flattened, 20, "protos/package-tool/version");
+        assertLeafId(flattened, 21, "protos/package-tool/lock");
+        assertLeafId(flattened, 22, "protos/package-tool/resolution-input");
+        assertLeafId(flattened, 23, "protos/package-tool/content-identity");
+        assertLeafId(flattened, 24, "protos/package-tool/resolution-input-lock");
+        assertLeafId(flattened, 25, "protos/package-tool/resolution-root");
+        assertLeafId(flattened, 26, "protos/package-tool/execution-plan");
+        assertLeafId(flattened, 27, "protos/package-tool/project-projection");
     }
 
     @Test
@@ -141,7 +142,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(27, leaves.indexedSize());
+        assertEquals(28, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
         assertLeafCorpus(leaves, 1, "protos/process-snapshot", "protos/corpus/process-snapshot");
@@ -156,20 +157,21 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafCorpus(leaves, 10, "protos/library/crypto/sha256", "protos/corpus/library/crypto/sha256");
         assertLeafCorpus(leaves, 11, "protos/library/network/ip-addresses", "protos/corpus/library/network/ip-addresses");
         assertLeafCorpus(leaves, 12, "protos/library/network/ip-endpoints", "protos/corpus/library/network/ip-endpoints");
-        assertLeafCorpus(leaves, 13, "protos/library/semver", "protos/corpus/library/semver");
-        assertLeafCorpus(leaves, 14, "protos/library/datetime", "protos/corpus/library/datetime");
-        assertLeafCorpus(leaves, 15, "protos/library/regex", "protos/corpus/library/regex");
-        assertLeafCorpus(leaves, 16, "protos/library/logging", "protos/corpus/library/logging");
-        assertLeafCorpus(leaves, 17, "protos/library/http", "protos/corpus/library/http");
-        assertLeafCorpus(leaves, 18, "protos/library/tls", "protos/corpus/library/tls");
-        assertLeafCorpus(leaves, 19, "protos/package-tool/version", "protos/corpus/package-tool/version");
-        assertLeafCorpus(leaves, 20, "protos/package-tool/lock", "protos/corpus/package-tool/lock");
-        assertLeafCorpus(leaves, 21, "protos/package-tool/resolution-input", "protos/corpus/package-tool/resolution-input");
-        assertLeafCorpus(leaves, 22, "protos/package-tool/content-identity", "protos/corpus/package-tool/content-identity");
-        assertLeafCorpus(leaves, 23, "protos/package-tool/resolution-input-lock", "protos/corpus/package-tool/resolution-input-lock");
-        assertLeafCorpus(leaves, 24, "protos/package-tool/resolution-root", "protos/corpus/package-tool/resolution-root");
-        assertLeafCorpus(leaves, 25, "protos/package-tool/execution-plan", "protos/corpus/package-tool/execution-plan");
-        assertLeafCorpus(leaves, 26, "protos/package-tool/project-projection", "protos/corpus/package-tool/project-projection");
+        assertLeafCorpus(leaves, 13, "protos/library/network/resolvers", "protos/corpus/library/network/resolvers");
+        assertLeafCorpus(leaves, 14, "protos/library/semver", "protos/corpus/library/semver");
+        assertLeafCorpus(leaves, 15, "protos/library/datetime", "protos/corpus/library/datetime");
+        assertLeafCorpus(leaves, 16, "protos/library/regex", "protos/corpus/library/regex");
+        assertLeafCorpus(leaves, 17, "protos/library/logging", "protos/corpus/library/logging");
+        assertLeafCorpus(leaves, 18, "protos/library/http", "protos/corpus/library/http");
+        assertLeafCorpus(leaves, 19, "protos/library/tls", "protos/corpus/library/tls");
+        assertLeafCorpus(leaves, 20, "protos/package-tool/version", "protos/corpus/package-tool/version");
+        assertLeafCorpus(leaves, 21, "protos/package-tool/lock", "protos/corpus/package-tool/lock");
+        assertLeafCorpus(leaves, 22, "protos/package-tool/resolution-input", "protos/corpus/package-tool/resolution-input");
+        assertLeafCorpus(leaves, 23, "protos/package-tool/content-identity", "protos/corpus/package-tool/content-identity");
+        assertLeafCorpus(leaves, 24, "protos/package-tool/resolution-input-lock", "protos/corpus/package-tool/resolution-input-lock");
+        assertLeafCorpus(leaves, 25, "protos/package-tool/resolution-root", "protos/corpus/package-tool/resolution-root");
+        assertLeafCorpus(leaves, 26, "protos/package-tool/execution-plan", "protos/corpus/package-tool/execution-plan");
+        assertLeafCorpus(leaves, 27, "protos/package-tool/project-projection", "protos/corpus/package-tool/project-projection");
     }
 
     @Test
@@ -182,7 +184,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(27, leaves.indexedSize());
+        assertEquals(28, leaves.indexedSize());
         assertTrue(leaves.isFrozen());
         assertLeafRequirement(leaves, 0, "protos/conformance", "protos/test/ordinary");
         assertLeafRequirement(leaves, 1, "protos/process-snapshot", "protos/test/process-snapshot");
@@ -197,20 +199,21 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafRequirement(leaves, 10, "protos/library/crypto/sha256", "protos/test/ordinary");
         assertLeafRequirement(leaves, 11, "protos/library/network/ip-addresses", "protos/test/ordinary");
         assertLeafRequirement(leaves, 12, "protos/library/network/ip-endpoints", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 13, "protos/library/semver", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 14, "protos/library/datetime", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 15, "protos/library/regex", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 16, "protos/library/logging", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 17, "protos/library/http", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 18, "protos/library/tls", "protos/test/ordinary");
-        assertLeafRequirement(leaves, 19, "protos/package-tool/version", "protos/test/package");
-        assertLeafRequirement(leaves, 20, "protos/package-tool/lock", "protos/test/package");
-        assertLeafRequirement(leaves, 21, "protos/package-tool/resolution-input", "protos/test/package");
-        assertLeafRequirement(leaves, 22, "protos/package-tool/content-identity", "protos/test/package");
-        assertLeafRequirement(leaves, 23, "protos/package-tool/resolution-input-lock", "protos/test/package");
-        assertLeafRequirement(leaves, 24, "protos/package-tool/resolution-root", "protos/test/package");
-        assertLeafRequirement(leaves, 25, "protos/package-tool/execution-plan", "protos/test/package");
-        assertLeafRequirement(leaves, 26, "protos/package-tool/project-projection", "protos/test/package");
+        assertLeafRequirement(leaves, 13, "protos/library/network/resolvers", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 14, "protos/library/semver", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 15, "protos/library/datetime", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 16, "protos/library/regex", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 17, "protos/library/logging", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 18, "protos/library/http", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 19, "protos/library/tls", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 20, "protos/package-tool/version", "protos/test/package");
+        assertLeafRequirement(leaves, 21, "protos/package-tool/lock", "protos/test/package");
+        assertLeafRequirement(leaves, 22, "protos/package-tool/resolution-input", "protos/test/package");
+        assertLeafRequirement(leaves, 23, "protos/package-tool/content-identity", "protos/test/package");
+        assertLeafRequirement(leaves, 24, "protos/package-tool/resolution-input-lock", "protos/test/package");
+        assertLeafRequirement(leaves, 25, "protos/package-tool/resolution-root", "protos/test/package");
+        assertLeafRequirement(leaves, 26, "protos/package-tool/execution-plan", "protos/test/package");
+        assertLeafRequirement(leaves, 27, "protos/package-tool/project-projection", "protos/test/package");
     }
 
     @Test

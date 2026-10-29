@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
@@ -141,6 +142,73 @@ final class ProtosNetworkBootstrapAuthorityTest {
                         .orElseThrow()
                         .instance()
                         .hasLocalSlot("network"));
+    }
+
+    @Test
+    void resolverGrantIsIndependentRootOnlyAndNeverImpliedByNetwork() throws Exception {
+        Resolver resolver =
+                new Resolver()
+                        .module(
+                                "root-resolver",
+                                "child: import(\"resolver-imported-child\")\nboot: () => { {} }")
+                        .module("resolver-imported-child", "value: 1")
+                        .module("resolver-hosted-child", "boot: () => { {} }")
+                        .module("network-only-root", "boot: () => { {} }");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosResolverCapabilityValue granted =
+                new ProtosResolverCapabilityValue(prelude, new InertResolverBackend());
+        ProtosProcessRuntime process =
+                new ProtosProcessRuntime(
+                        prelude.actorRefPrototypeForRuntime(), null, null, null, granted);
+        ProtosActorBootstrap bootstrap =
+                new ProtosActorBootstrap(new ProtosModuleRuntime(resolver));
+        ProtosModuleKey rootKey = new ProtosModuleKey("root-resolver");
+        assertTrue(
+                bootstrap.initialize(
+                        process.rootActorForRuntime(), prelude, rootKey, "boot", List.of()));
+        ProtosObjectValue root =
+                process.rootActorForRuntime().moduleState().lookup(rootKey).orElseThrow().instance();
+        assertSame(granted, root.readLocalSlot("resolver").orElseThrow());
+        assertFalse(root.hasLocalSlot("network"));
+        assertFalse(
+                process.rootActorForRuntime()
+                        .moduleState()
+                        .lookup(new ProtosModuleKey("resolver-imported-child"))
+                        .orElseThrow()
+                        .instance()
+                        .hasLocalSlot("resolver"));
+        ProtosActor child =
+                process.createHostedActorForRuntime(prelude.actorRefPrototypeForRuntime());
+        ProtosModuleKey childKey = new ProtosModuleKey("resolver-hosted-child");
+        assertTrue(bootstrap.initialize(child, prelude, childKey, "boot", List.of()));
+        assertFalse(
+                child.moduleState().lookup(childKey).orElseThrow().instance().hasLocalSlot("resolver"));
+
+        ProtosProcessRuntime networkOnly =
+                new ProtosProcessRuntime(
+                        prelude.actorRefPrototypeForRuntime(),
+                        null,
+                        new ProtosNetworkCapabilityValue(prelude, new Object()));
+        assertTrue(networkOnly.rootResolverForRuntime().isEmpty());
+        ProtosModuleKey networkKey = new ProtosModuleKey("network-only-root");
+        assertTrue(
+                bootstrap.initialize(
+                        networkOnly.rootActorForRuntime(), prelude, networkKey, "boot", List.of()));
+        ProtosObjectValue networkRoot =
+                networkOnly.rootActorForRuntime().moduleState().lookup(networkKey).orElseThrow().instance();
+        assertTrue(networkRoot.hasLocalSlot("network"));
+        assertFalse(networkRoot.hasLocalSlot("resolver"));
+    }
+
+    private static final class InertResolverBackend
+            implements com.guillermomolina.protos.runtime.io.ProtosResolverBackend {
+        @Override
+        public Cancellation lookup(String absoluteName, Completion completion) {
+            throw new AssertionError("bootstrap must never consult the backend");
+        }
+
+        @Override
+        public void close() {}
     }
 
     @Test

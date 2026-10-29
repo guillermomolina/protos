@@ -111,6 +111,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/facilities/ProtosHttpAsyncFacility.java", 1),
                     // I130-B std:tls/Client private backend bridge.
                     Map.entry("execution/facilities/ProtosTlsBackendFacility.java", 1),
+                    // I132-A std:network/Resolvers private host Resolver bridge (D223-A1).
+                    Map.entry("execution/facilities/ProtosResolverHostFacility.java", 1),
                     Map.entry("execution/facilities/ProtosRegexUnicodeFacility.java", 3),
                     Map.entry("execution/facilities/ProtosRegexSemanticTransferFamily.java", 3),
                     Map.entry("execution/facilities/ProtosSealedFamilyFacility.java", 3),
@@ -165,6 +167,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             // I130-B std:tls/Client private facility, not Core behavior.
                             || relative.equals(
                                     "execution/facilities/ProtosTlsBackendFacility.java")
+                            // I132-A std:network/Resolvers private host bridge, not Core
+                            // behavior: it confers no authority and only forwards to the
+                            // independently granted Resolver capability.
+                            || relative.equals(
+                                    "execution/facilities/ProtosResolverHostFacility.java")
                             || relative.equals(
                                     "execution/facilities/ProtosSealedFamilyFacility.java")) {
                         actualNonCore.put(relative, count);

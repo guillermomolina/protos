@@ -201,6 +201,21 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("network/TcpAcceptor.protos"))
                 .call(bootstrapActivation);
+        // D223-A1: the frozen private Resolver bridge is a bootstrap-local anchor that the
+        // source-backed Resolver methods resolve lexically when they run. Like _corePathKernel it
+        // stays in this unpublished bootstrap context and is never a Prelude binding; the source
+        // load itself only declares and invokes nothing. A failed load leaves no anchor behind.
+        bootstrapContext.createLocalSlot(
+                ProtosResolverHostFacility.BOOTSTRAP_SLOT,
+                ProtosResolverHostFacility.createBridge());
+        try {
+            sourceLoader
+                    .load(coreDirectory.resolve("network/Resolver.protos"))
+                    .call(bootstrapActivation);
+        } catch (RuntimeException | Error failure) {
+            bootstrapContext.removeLocalSlot(ProtosResolverHostFacility.BOOTSTRAP_SLOT);
+            throw failure;
+        }
         sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
@@ -365,6 +380,17 @@ public final class ProtosCoreBootstrap {
         // std:network modules, not public Prelude bindings.
         bootstrapContext.removeLocalSlot("IpAddress");
         bootstrapContext.removeLocalSlot("IpEndpoint");
+        // D223-A1: the source-backed Resolver protocol and source-defined ResolutionError are
+        // std:network/Resolvers members, never public Prelude bindings.
+        ProtosObjectValue resolverPrototype =
+                requirePrototype(
+                        bootstrapContext, "Resolver", ProtosObjectValue.rootObject());
+        ProtosObjectValue resolutionErrorPrototype =
+                requirePrototype(bootstrapContext, "ResolutionError", errorPrototype);
+        bootstrapContext.removeLocalSlot("Resolver");
+        bootstrapContext.removeLocalSlot("ResolutionError");
+        resolverPrototype.freeze();
+        resolutionErrorPrototype.freeze();
         ProtosObjectValue networkPrototype =
                 requirePrototype(
                         bootstrapContext, "Network", ProtosObjectValue.rootObject());
@@ -529,6 +555,8 @@ public final class ProtosCoreBootstrap {
                 standardModuleMembers(
                         ipAddressPrototype,
                         ipEndpointPrototype,
+                        resolverPrototype,
+                        resolutionErrorPrototype,
                         bufferedReaderFactory,
                         bufferedWriterFactory,
                         vectorPrototype,
@@ -595,6 +623,8 @@ public final class ProtosCoreBootstrap {
     private static Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers(
             ProtosObjectValue ipAddressPrototype,
             ProtosObjectValue ipEndpointPrototype,
+            ProtosObjectValue resolverPrototype,
+            ProtosObjectValue resolutionErrorPrototype,
             ProtosObjectValue bufferedReaderFactory,
             ProtosObjectValue bufferedWriterFactory,
             ProtosObjectValue vectorPrototype,
@@ -609,6 +639,11 @@ public final class ProtosCoreBootstrap {
                 Map.entry(
                         new ProtosModuleKey("std:network/IpEndpoints"),
                         Map.of("IpEndpoint", ipEndpointPrototype)),
+                Map.entry(
+                        ProtosPrelude.RESOLVERS_MODULE_KEY,
+                        Map.of(
+                                "Resolver", resolverPrototype,
+                                "ResolutionError", resolutionErrorPrototype)),
                 Map.entry(
                         new ProtosModuleKey("std:io/BufferedReader"),
                         Map.of("BufferedReader", bufferedReaderFactory)),

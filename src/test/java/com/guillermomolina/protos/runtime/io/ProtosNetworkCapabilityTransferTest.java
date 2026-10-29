@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -113,6 +114,52 @@ final class ProtosNetworkCapabilityTransferTest {
         assertNotSame(ordinary, pCopy);
         assertSame(prelude.networkPrototype(), pCopy.parent().orElseThrow());
         assertTrue(pCopy.isFrozen());
+    }
+
+    @Test
+    void actorAndPRejectResolverAuthorityButTransferResolvedFrozenAddresses() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosResolverCapabilityValue resolver =
+                new ProtosResolverCapabilityValue(prelude, new InertResolverBackend());
+        ProtosObjectValue descendant = new ProtosObjectValue(resolver);
+        ProtosObjectValue holder = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        holder.createLocalSlot("resolver", resolver);
+
+        assertSame(prelude.resolverPrototypeForRuntime(), resolver.representedDelegationParent(prelude));
+        assertNonTransferable(prelude, () -> ProtosActorValueTransfer.snapshotValue(resolver, activation));
+        assertNonTransferable(prelude, () -> ProtosActorValueTransfer.snapshotValue(descendant, activation));
+        assertNonTransferable(prelude, () -> ProtosActorValueTransfer.snapshotValue(holder, activation));
+        Method copy = pCopyMethod();
+        assertNonParallel(copy, resolver, activation);
+        assertNonParallel(copy, descendant, activation);
+
+        // A resolved address is ordinary frozen IpAddress data.
+        ProtosObjectValue address = new ProtosObjectValue(prelude.ipAddressPrototypeForRuntime());
+        address.createLocalSlot("version", ProtosNumericValueSupport.integer(4));
+        address.createLocalSlot("bits", new ProtosIntegerValue(0xC0000201L));
+        address.freeze();
+        ProtosObjectValue actorCopy =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosActorValueTransfer.snapshotValue(address, activation));
+        assertSame(prelude.ipAddressPrototypeForRuntime(), actorCopy.parent().orElseThrow());
+        assertTrue(actorCopy.isFrozen());
+        ProtosObjectValue pCopy =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        copy.invoke(null, address, activation, new IdentityHashMap<Object, Object>()));
+        assertTrue(pCopy.isFrozen());
+    }
+
+    private static final class InertResolverBackend implements ProtosResolverBackend {
+        @Override
+        public Cancellation lookup(String absoluteName, Completion completion) {
+            throw new AssertionError("transfer must never consult the backend");
+        }
+
+        @Override
+        public void close() {}
     }
 
     private static void assertNonTransferable(ProtosPrelude prelude, ThrowingAction action) {

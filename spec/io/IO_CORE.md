@@ -505,7 +505,9 @@ A standard Socket's remote/end-of-stream `null` is thus a permanent end of that 
 
 Possessing such a Socket transfers only the capabilities exposed by that endpoint. It does not implicitly transfer a broader capability to create sibling sockets, reconnect elsewhere, perform DNS/name resolution, inspect the host network namespace, or bypass the Process host's network policy.
 
-A future networking domain model may define creation/listening/datagram/address/name-resolution facilities. Those facilities must make network authority and any host-dependent namespace behavior explicit and must compose with the I/O protocols defined here. Until such a model exists, implementations must not treat host APIs such as BSD/POSIX sockets, Java networking, WinSock, or ambient DNS as portable Protos semantics merely because an already-provisioned Socket object exists.
+A standard `Resolver` capability (`NETWORK.md` §14, D223-A1) exposes `Closable` and the Future-returning `lookupAddresses(name)` operation. Its lookups are ordinary I/O operation Futures under §4: a lookup becomes committed only when its validated result or `ResolutionError` is published in the owning Actor domain, so pre-commit cancellation yields `cancelled` and a close cutover fails still-uncommitted lookups with `IOLifecycleError`. Its `close()` follows §8 and the idempotent lifecycle Future identity rule, resolves with the Resolver itself, and closes no other capability. These cross-references add no new commitment or close rule.
+
+A future networking domain model may define further creation/listening/datagram/address/name-resolution facilities. Those facilities must make network authority and any host-dependent namespace behavior explicit and must compose with the I/O protocols defined here. Until such a model exists, implementations must not treat host APIs such as BSD/POSIX sockets, Java networking, WinSock, or ambient DNS as portable Protos semantics merely because an already-provisioned Socket object exists.
 
 A `BufferedReader(source)` requires a `ByteReadable` source and exposes `ByteReadable` over its own buffered state. It may read ahead.
 

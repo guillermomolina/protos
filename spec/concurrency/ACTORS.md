@@ -647,6 +647,7 @@ Transferability currently follows these rules:
 -   GroupRef: transferable as a special communication capability
 -   Process capability: transferable only through the explicit Actor-delegation contract owned by `../io/PROCESS_IO.md`; the destination receives Actor-local capability authority, not a copied host resource
 -   Network: not transferable
+-   Resolver: not transferable and not delegable (`../io/NETWORK.md` §14.9); resolved `IpAddress` values remain ordinary transferable data
 -   TcpListener: not transferable
 -   TcpConnection: not transferable
 -   TcpAcceptor: explicitly delegable only for same-Process `Actor.spawn` initialization arguments, through the contract owned by `../io/NETWORK.md` §11; not transferable through `send()`/`request()` payloads or replies, and its delegation authorizes no transfer of any other resource
@@ -2339,3 +2340,14 @@ D217 later defines one such distinct, attenuated authority: `TcpAcceptor`,
 explicitly delegable for same-Process `Actor.spawn` initialization under
 `../io/NETWORK.md` §11. It does not make `Network`, `TcpConnection`, or
 `TcpListener` transferable.
+
+D223-A1 adds the live `Resolver` capability (`../io/NETWORK.md` §14). A
+Resolver is non-transferable between Actors and into P: an `Actor.spawn`
+initialization argument, `send()`/`request()` payload or reply, or P input
+graph that reaches a Resolver capability, directly or through an ordinary
+object whose delegation graph reaches it, fails under the existing
+non-transferable-value rules. No automatic Resolver delegation, proxy, or
+per-Actor grant exists; a child Actor receives name-resolution authority only
+through a future explicitly standardized delegation facility. The frozen
+`IpAddress` values a lookup publishes are ordinary data and transfer under the
+ordinary value rules above.

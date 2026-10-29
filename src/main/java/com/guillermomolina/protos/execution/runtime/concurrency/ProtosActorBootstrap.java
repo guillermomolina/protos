@@ -180,6 +180,16 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("network", network);
                         });
+        process.rootResolverForRuntime()
+                .ifPresent(
+                        resolver -> {
+                            if (resolver.representedDelegationParent(prelude)
+                                    != prelude.resolverPrototypeForRuntime()) {
+                                throw new IllegalStateException(
+                                        "RootActor Resolver grant belongs to another Core prelude");
+                            }
+                            locals.put("resolver", resolver);
+                        });
         process.rootResourcesForRuntime()
                 .ifPresent(
                         resources -> {

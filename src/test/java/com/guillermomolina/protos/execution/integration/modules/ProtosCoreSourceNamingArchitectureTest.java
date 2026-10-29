@@ -58,6 +58,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "TcpConnection.protos",
                     "TcpListener.protos",
                     "TcpAcceptor.protos",
+                    "Resolver.protos",
                     "Future.protos",
                     "Actor.protos",
                     "Process.protos",
@@ -78,7 +79,8 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Network.protos",
                     "TcpConnection.protos",
                     "TcpListener.protos",
-                    "TcpAcceptor.protos");
+                    "TcpAcceptor.protos",
+                    "Resolver.protos");
 
     private static Path sourcePath(String name) {
         return NETWORK_SOURCE_NAMES.contains(name)

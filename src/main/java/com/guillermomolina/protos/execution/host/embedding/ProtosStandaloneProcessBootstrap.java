@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.util.List;
@@ -89,7 +90,7 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosEncodingValue stderrEncoding,
             ProtosFilesystemValue defaultFilesystem,
             ProtosNetworkCapabilityValue defaultNetwork) {
-        return createInternal(
+        return create(
                 prelude,
                 applicationArguments,
                 environmentNameDomain,
@@ -103,6 +104,47 @@ public final class ProtosStandaloneProcessBootstrap {
                 defaultFilesystem,
                 defaultNetwork,
                 null);
+    }
+
+    /**
+     * As the Network overload, additionally forwarding an optional explicit D223-A1 Resolver
+     * grant. The grant is never derived from {@code defaultNetwork}; null leaves the initial
+     * {@code resolver} slot absent. The grant is bound to the created Process incarnation before
+     * the initial module can run and is retired by that incarnation's termination, or here when
+     * bootstrap fails after binding.
+     *
+     * @throws IllegalArgumentException when {@code defaultResolver} is already granted to a
+     *     Process or retired
+     */
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver) {
+        return createInternal(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                null,
+                defaultResolver);
     }
 
     static Result createWithRootResources(
@@ -133,7 +175,8 @@ public final class ProtosStandaloneProcessBootstrap {
                 stderrEncoding,
                 defaultFilesystem,
                 defaultNetwork,
-                rootResources);
+                rootResources,
+                null);
     }
 
     private static Result createInternal(
@@ -149,7 +192,8 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosEncodingValue stderrEncoding,
             ProtosFilesystemValue defaultFilesystem,
             ProtosNetworkCapabilityValue defaultNetwork,
-            ProtosMapValue rootResources) {
+            ProtosMapValue rootResources,
+            ProtosResolverCapabilityValue defaultResolver) {
         Objects.requireNonNull(prelude, "prelude");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
         Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
@@ -160,28 +204,37 @@ public final class ProtosStandaloneProcessBootstrap {
                         prelude.actorRefPrototypeForRuntime(),
                         defaultFilesystem,
                         defaultNetwork,
-                        rootResources);
+                        rootResources,
+                        defaultResolver);
 
-        process.establishArgumentsForRuntime(List.copyOf(applicationArguments));
-        process.establishEnvironmentForRuntime(
-                ProtosStandardEnvironmentProtocol.createPrototype(),
-                environmentNameDomain,
-                List.copyOf(environmentEntries));
-        process.establishStandardStreamsForRuntime(
-                ProtosStandardProcessStreamProtocol.createReadablePrototype(),
-                ProtosStandardProcessStreamProtocol.createWritablePrototype(),
-                prelude.bytesPrototypeForRuntime(),
-                stdinBackend,
-                stdoutBackend,
-                stderrBackend);
-        process.establishStandardStreamEncodingsForRuntime(
-                stdinEncoding,
-                stdoutEncoding,
-                stderrEncoding);
+        // The Resolver grant is now owned by this incarnation. If bootstrap fails before the
+        // initial Activation escapes, retire it so no unowned live backend survives; the Process
+        // lifecycle and every other grant are left exactly as before.
+        try {
+            process.establishArgumentsForRuntime(List.copyOf(applicationArguments));
+            process.establishEnvironmentForRuntime(
+                    ProtosStandardEnvironmentProtocol.createPrototype(),
+                    environmentNameDomain,
+                    List.copyOf(environmentEntries));
+            process.establishStandardStreamsForRuntime(
+                    ProtosStandardProcessStreamProtocol.createReadablePrototype(),
+                    ProtosStandardProcessStreamProtocol.createWritablePrototype(),
+                    prelude.bytesPrototypeForRuntime(),
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend);
+            process.establishStandardStreamEncodingsForRuntime(
+                    stdinEncoding,
+                    stdoutEncoding,
+                    stderrEncoding);
 
-        return new Result(
-                process,
-                ProtosActorBootstrap.newStandaloneInitialActivation(
-                        process, prelude));
+            return new Result(
+                    process,
+                    ProtosActorBootstrap.newStandaloneInitialActivation(
+                            process, prelude));
+        } catch (RuntimeException | Error failure) {
+            process.retireResolverForRuntime();
+            throw failure;
+        }
     }
 }

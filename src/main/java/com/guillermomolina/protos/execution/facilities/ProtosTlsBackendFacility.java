@@ -32,9 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.callables.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
-import com.ibm.icu.lang.UCharacter;
-import com.ibm.icu.lang.UProperty;
-import com.ibm.icu.text.Normalizer2;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.io.ByteArrayOutputStream;
 import java.security.cert.CertificateEncodingException;
@@ -72,7 +69,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  *       duplex; the probes are read-only and never wait;
  *   <li>{@code codePoint(scalar)} and {@code isNfc(scalars)}: raw ICU Unicode facts of one scalar
  *       and the NFC test, read by the Protos IDNA2008 A-label rules (I130-C3). They perform no
- *       mapping, conversion or IDNA processing and decide no admission.
+ *       mapping, conversion or IDNA processing and decide no admission; they are the shared
+ *       {@link ProtosIdnaUnicodeFactsFacility} operations.
  * </ul>
  *
  * <p>Like {@link ProtosHttpAsyncFacility}, the facility is a deferred standard initial member of
@@ -104,8 +102,8 @@ public final class ProtosTlsBackendFacility {
         operation(facility, "settle", 3, ProtosTlsBackendFacility::settle);
         operation(facility, "pending", 1, ProtosTlsBackendFacility::pending);
         operation(facility, "failure", 1, ProtosTlsBackendFacility::failure);
-        operation(facility, "codePoint", 1, ProtosTlsBackendFacility::codePoint);
-        operation(facility, "isNfc", 1, ProtosTlsBackendFacility::isNfc);
+        operation(facility, "codePoint", 1, ProtosIdnaUnicodeFactsFacility::codePoint);
+        operation(facility, "isNfc", 1, ProtosIdnaUnicodeFactsFacility::isNfc);
         return facility.freeze();
     }
 
@@ -372,100 +370,6 @@ public final class ProtosTlsBackendFacility {
             addresses.add(frozenBytes(a, address));
         }
         return prelude(a).newFrozenArray(addresses);
-    }
-
-    // ------------------------------------------------------------ Unicode facts
-
-    /**
-     * {@code codePoint(scalar)}: a frozen object of the ICU Unicode properties of one Unicode
-     * scalar value that the RFC 5892/5893 rules in {@code Identity.protos} read: {@code
-     * generalCategory}, {@code hangulSyllableType}, {@code joiningType} and {@code bidiClass} (short
-     * property value aliases), {@code script} (long alias), {@code combiningClass} (Integer), the
-     * Booleans {@code noncharacter}, {@code defaultIgnorable}, {@code whiteSpace} and {@code
-     * joinControl}, and {@code stable}, whether {@code NFKC(casefold(NFKC(cp)))} is the scalar
-     * itself. A non-scalar argument signals.
-     *
-     * <p>Every call reads every property, so one successful call proves that all ICU data it needs
-     * is present: {@code uprops.icu} (category, script, binary properties), {@code ubidi.icu}
-     * (Bidi_Class, Joining_Type), {@code ucase.icu} (case folding), {@code pnames.icu} (value
-     * aliases), {@code nfc.nrm} (combining class, NFC) and {@code nfkc.nrm}. Native Image includes
-     * them through the {@code icudata/*.icu}, {@code nfc.nrm} and {@code nfkc.nrm} resource globs.
-     * Missing data fails the operation; there is no fallback.
-     */
-    @TruffleBoundary
-    private static Object codePoint(ProtosActivation activation, List<?> supplied) {
-        int scalar = scalar(activation, supplied.get(0));
-        String text = new StringBuilder().appendCodePoint(scalar).toString();
-        Normalizer2 nfkc = Normalizer2.getNFKCInstance();
-        String folded = nfkc.normalize(UCharacter.foldCase(nfkc.normalize(text), true));
-        ProtosObjectValue facts = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        facts.createLocalSlot(
-                "generalCategory",
-                propertyValueName(
-                        UProperty.GENERAL_CATEGORY,
-                        UCharacter.getType(scalar),
-                        UProperty.NameChoice.SHORT));
-        facts.createLocalSlot(
-                "hangulSyllableType",
-                intPropertyName(scalar, UProperty.HANGUL_SYLLABLE_TYPE, UProperty.NameChoice.SHORT));
-        facts.createLocalSlot(
-                "joiningType",
-                intPropertyName(scalar, UProperty.JOINING_TYPE, UProperty.NameChoice.SHORT));
-        facts.createLocalSlot(
-                "bidiClass",
-                intPropertyName(scalar, UProperty.BIDI_CLASS, UProperty.NameChoice.SHORT));
-        facts.createLocalSlot(
-                "script", intPropertyName(scalar, UProperty.SCRIPT, UProperty.NameChoice.LONG));
-        facts.createLocalSlot(
-                "combiningClass",
-                ProtosNumericValueSupport.integer(UCharacter.getCombiningClass(scalar)));
-        facts.createLocalSlot(
-                "noncharacter", binary(scalar, UProperty.NONCHARACTER_CODE_POINT));
-        facts.createLocalSlot(
-                "defaultIgnorable", binary(scalar, UProperty.DEFAULT_IGNORABLE_CODE_POINT));
-        facts.createLocalSlot("whiteSpace", binary(scalar, UProperty.WHITE_SPACE));
-        facts.createLocalSlot("joinControl", binary(scalar, UProperty.JOIN_CONTROL));
-        facts.createLocalSlot("stable", bool(folded.equals(text)));
-        return facts.freeze();
-    }
-
-    /** {@code isNfc(scalars)}: whether the Array of Unicode scalar values is in NFC. */
-    @TruffleBoundary
-    private static Object isNfc(ProtosActivation activation, List<?> supplied) {
-        if (!(supplied.get(0) instanceof ProtosArrayValue array)) {
-            throw invalid(activation);
-        }
-        StringBuilder text = new StringBuilder();
-        for (Object element : array.indexedSnapshot()) {
-            text.appendCodePoint(scalar(activation, element));
-        }
-        return bool(Normalizer2.getNFCInstance().isNormalized(text));
-    }
-
-    private static int scalar(ProtosActivation activation, Object value) {
-        if (!ProtosNumericValueSupport.isIntegerInIntRange(value)) {
-            throw invalid(activation);
-        }
-        int scalar = ProtosNumericValueSupport.exactInt(value);
-        if (scalar < 0
-                || scalar > Character.MAX_CODE_POINT
-                || (scalar >= Character.MIN_SURROGATE && scalar <= Character.MAX_SURROGATE)) {
-            throw invalid(activation);
-        }
-        return scalar;
-    }
-
-    private static ProtosStringValue intPropertyName(int scalar, int property, int nameChoice) {
-        return propertyValueName(
-                property, UCharacter.getIntPropertyValue(scalar, property), nameChoice);
-    }
-
-    private static ProtosStringValue propertyValueName(int property, int value, int nameChoice) {
-        return new ProtosStringValue(UCharacter.getPropertyValueName(property, value, nameChoice));
-    }
-
-    private static ProtosBooleanValue binary(int scalar, int property) {
-        return bool(UCharacter.hasBinaryProperty(scalar, property));
     }
 
     // ------------------------------------------------------------ Future plumbing

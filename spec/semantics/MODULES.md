@@ -470,6 +470,15 @@ importable initial module, after cache-before-execute registration) but before t
 first source expression executes. It is ordinary local module state thereafter.
 Imported modules and non-root Actor initial modules do not receive it implicitly.
 
+The same lifecycle placement applies to every other optional bootstrap-local
+grant of the RootActor initial module, including the D223-A1 `resolver` slot
+(`../io/PROCESS_IO.md`, Root resolver capability provisioning). The
+`std:network/Resolvers` module (`../io/NETWORK.md` §14.1) and its grant are
+separate: importing that module yields only the authority-free `Resolver`
+protocol prototype and the `ResolutionError` prototype, installs no `resolver`
+slot, creates no Resolver capability, and initializes no name-service
+machinery. Neither member is a standard-prelude binding.
+
 ### Initial Modules Without an Importable Canonical Identity
 
 Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If, when execution of an Actor's initial entry begins, that entry is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it executes as a standalone entry point and remains outside the normal import lookup namespace. The instance created for that standalone execution:

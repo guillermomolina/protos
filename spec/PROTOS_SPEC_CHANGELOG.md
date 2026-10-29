@@ -23,6 +23,47 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.480] - 2026-10-29
+
+### D223-A1 — Explicit Resolver authority and hostname resolution (I132-A)
+- `spec/io/NETWORK.md` §14 (new): optional module `std:network/Resolvers`
+  exporting exactly the authority-free `Resolver` protocol prototype and
+  `ResolutionError`. A concrete Resolver is an independently host-granted
+  live capability, not derived from `Network`/`Process`, imports, socket
+  permissions or a service locator. `lookupAddresses(name)` answers
+  `Future<Array<IpAddress>>` and `close()` answers `Future<Resolver>`.
+  Names are ASCII NR-LDH labels or strict IDNA2008 A-labels (the `TLS.md`
+  §4 label rules), case-insensitive, optionally root-dotted, one label
+  permitted, 63/253-octet bounds; U-labels, UTS #46 mapping, numeric
+  address text and search-domain expansion are rejected/excluded. Results
+  are fresh frozen Arrays of 1–64 structurally distinct canonical
+  `IpAddress` values in advisory order; zero addresses fail `noAddress`,
+  more than 64 fail atomically `limit`. `ResolutionError` kinds are exactly
+  `noAddress`, `unavailable`, `denied`, `limit`; invalid arguments fail
+  `InvalidIOArgument`, post-close use `IOLifecycleError`. Bounded host
+  name-service work, Actor-domain publication, commitment at publication,
+  pre-commit cancellation, close and isolation are specified. Isolation
+  (§14.9) covers cache and result state managed by the Protos
+  implementation; caching internal to the host-authorized name service is
+  outside it, unexposed and authority-free (owner-approved).
+  `connectTcp(IpEndpoint)` stays numeric; the original hostname remains
+  TLS reference identity and HTTP `Host`. §§1, 5, 11, 13 updated: only the
+  listed connect-by-name and advanced DNS facilities remain deferred.
+- `spec/io/PROCESS_IO.md`: new Root resolver capability provisioning; the
+  separately optional bootstrap-local `resolver` slot exists only with an
+  explicit host grant; no existing authority implies it; the standard
+  Polyglot embedding defines no Resolver grant.
+- `spec/io/IO_CORE.md` §13: Resolver lookup commitment and close
+  cross-references; no general rule changes.
+- `spec/concurrency/FUTURES_AND_TASKS.md` §27: Resolver lookups are ordinary
+  operation Futures, not Tasks.
+- `spec/concurrency/ACTORS.md`: Resolver is non-transferable and never
+  automatically delegated; resolved `IpAddress` values stay transferable.
+- `spec/semantics/MODULES.md`: bootstrap-local grant placement is separate
+  from importing `std:network/Resolvers`.
+- `spec/semantics/ERRORS.md`: registers `ResolutionError` as a Standard
+  Library Error prototype with its four kinds.
+
 ## [0.1.479] - 2026-10-29
 
 ### D220–S12 — Client TLS strict IDNA2008 A-labels (I130-C3)

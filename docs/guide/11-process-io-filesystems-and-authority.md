@@ -1293,12 +1293,13 @@ authority.
 The bootstrap-local slots an initial module receives depend on who starts the
 Process. At the current revision and in the 0.3.312 release:
 
-| Launcher | `process` | `filesystem` | `network` |
-|---|---|---|---|
-| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Not bound |
-| `protos run <entry>` | Bound | Not bound | Not bound |
-| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access |
-| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound |
+| Launcher | `process` | `filesystem` | `network` | `resolver` |
+|---|---|---|---|---|
+| `protos file.protos`, `protos -e`, REPL | Bound | Not bound | Not bound | Not bound |
+| `protos run <entry>` | Bound | Not bound | Not bound | Not bound |
+| Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound |
+| Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound |
+| A Java host using `ProtosPolyglotRuntimeHost.provisionHostResolver` explicitly | Bound | As selected | As selected | Bound |
 
 The Native and portable JVM command lines grant the same authority. There is no
 command-line option that grants a Filesystem or a Network to an application.
@@ -1309,6 +1310,48 @@ The embedding rules, including the `IOAccess` settings that grant each slot, are
 in [Embedding Protos in a Java application](embedding/java.md#authority-and-thread-policy).
 Code supplied through the [`app:` catalog](embedding/application-modules.md)
 receives no authority either: it must be passed capabilities explicitly.
+
+## Name resolution is a separate capability
+
+`std:network/Resolvers` (D223-A1, `spec/io/NETWORK.md` §14) turns a hostname
+into numeric `IpAddress` candidates. Resolution authority is its own
+capability: the bootstrap-local `resolver` slot exists only when the host
+grants it explicitly. A `network` grant does not imply it, socket permission
+does not imply it, and a `resolver` grant does not imply `network`. Importing
+the module yields only the authority-free `Resolver` protocol and
+`ResolutionError`; it starts no name service.
+
+```protos
+originalHostname: "api.github.com"
+addresses: resolver.lookupAddresses(originalHostname).value()
+endpoint: IpEndpoint(addresses[0], 443)
+connection: network.connectTcp(endpoint).value()
+```
+
+- `lookupAddresses(name)` takes a String of ASCII NR-LDH labels or strict
+  IDNA2008 A-labels (`xn--`), case-insensitive, with an optional terminal
+  root dot. One-label names such as `localhost` are allowed. Labels have at
+  most 63 octets and the name at most 253. Unicode input, numeric address
+  text, and other names fail with `InvalidIOArgument` before any lookup; no
+  search domain is ever appended.
+- Success is a fresh frozen Array of 1 to 64 distinct `IpAddress` values in
+  advisory order. Order does not promise reachability or a preferred family.
+- Failures are fresh `ResolutionError` occurrences whose `kind` is
+  `"noAddress"`, `"unavailable"`, `"denied"`, or `"limit"`. More than 64
+  distinct addresses is `"limit"`; the result is never truncated.
+- The lookup Future is an ordinary operation Future, not a Task. Cancelling it
+  before the result is published suppresses that result, but an operating-system
+  lookup that is already running may still finish.
+- `close()` is idempotent, answers the Resolver, fails later lookups with
+  `IOLifecycleError`, and closes no Network, connection, HTTP, or TLS resource.
+- `connectTcp` takes only an `IpEndpoint`. Keep using the original hostname as
+  the TLS reference identity and the HTTP `Host` value.
+- A Resolver cannot be sent to another Actor or into P. The resolved
+  `IpAddress` values can.
+
+Connect-by-name, Happy Eyeballs, DNS record APIs, DNSSEC, DNS over HTTPS or
+TLS, TTL/cache APIs, search domains, Actor delegation, and timeouts remain
+deferred. See [`hostname-resolution.protos`](../../protos/examples/io/hostname-resolution.protos).
 
 ## Practical examples
 

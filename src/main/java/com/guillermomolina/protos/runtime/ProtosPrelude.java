@@ -601,6 +601,33 @@ public final class ProtosPrelude {
         return runtimeTcpAcceptorPrototype != null && candidate == runtimeTcpAcceptorPrototype;
     }
 
+    /** The D223-A1 module key whose two standard members are the Resolver family prototypes. */
+    public static final ProtosModuleKey RESOLVERS_MODULE_KEY =
+            new ProtosModuleKey("std:network/Resolvers");
+
+    /**
+     * Runtime-only canonical source-backed Resolver protocol prototype (D223-A1), retained as a
+     * standard member of {@code std:network/Resolvers} and omitted from public Prelude bindings.
+     */
+    public ProtosObjectValue resolverPrototypeForRuntime() {
+        return resolversMember("Resolver");
+    }
+
+    /** Runtime-only canonical source-defined ResolutionError prototype (D223-A1). */
+    public ProtosObjectValue resolutionErrorPrototypeForRuntime() {
+        return resolversMember("ResolutionError");
+    }
+
+    private ProtosObjectValue resolversMember(String name) {
+        Map<String, ProtosObjectValue> members = standardModuleMembers.get(RESOLVERS_MODULE_KEY);
+        ProtosObjectValue member = members == null ? null : members.get(name);
+        if (member == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime " + name + " prototype");
+        }
+        return member;
+    }
+
     /** Runtime-only canonical IpAddress family omitted from public Prelude bindings. */
     public ProtosObjectValue ipAddressPrototypeForRuntime() {
         if (runtimeIpAddressPrototype == null) {

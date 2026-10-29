@@ -93,6 +93,10 @@ resultFuture: work.future()
 
 `future()` is a visible message whose fundamental implementation reaches a runtime primitive.
 
+### Resolver lookups are operation Futures, not Tasks
+
+A `Resolver.lookupAddresses(name)` call (`../io/NETWORK.md` §14, D223-A1) returns an ordinary I/O operation Future owned by the calling Actor's execution domain. It does not spawn a Task, start asynchronous guest execution, or enter the caller's structured-concurrency scope as a child. Waiting on it, cancelling it, and observing its outcome follow the existing Future rules of this document and the commitment rules of `../io/IO_CORE.md` §4: its outcome is settled only in the owning Actor domain, pre-commit cancellation yields the ordinary `cancelled` outcome, and host name-service workers never execute guest code or settle the Future directly.
+
 ### Ordinary ownership of `future`
 
 The standard `future` selector is the ordinary local Closure-valued

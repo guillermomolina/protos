@@ -1,0 +1,77 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D223-A1 (NETWORK.md §14): the authority-free Resolver protocol and the
+// ResolutionError prototype, published only through std:network/Resolvers.
+// Every portable rule of lookupAddresses — arity, the semantic String check,
+// strict DNS-name admission through the shared std:network/internal/DnsNames
+// module (one label permitted, no wildcard), numeric-address rejection and
+// normalization to one lowercase absolute name — is decided here before the
+// private host bridge is consulted.
+//
+// This source only declares; it invokes nothing while Core bootstraps. The
+// DnsNames module is imported when lookupAddresses runs, and the private
+// bridge is reached through the bootstrap-local anchor _coreResolverBridge,
+// which stays in the unpublished Core bootstrap context (like
+// _corePathKernel) and is never a Prelude binding, module member or slot of
+// Resolver. The bridge supplies only Unicode facts, an already failed Future,
+// the authority-checked submission of an admitted name, and lifecycle close;
+// it rejects every receiver that is not a host-granted Resolver capability,
+// so knowing this prototype confers no name-resolution authority.
+
+// The prototype of every resolution failure. Each failure is a fresh
+// occurrence whose own kind is "noAddress", "unavailable", "denied" or
+// "limit".
+ResolutionError: Error {}
+
+Resolver: {
+    // Answers a Future of a fresh frozen Array of 1..64 distinct canonical
+    // IpAddress values; see NETWORK.md §14.3–14.8.
+    lookupAddresses: (...args) => {
+        bridge: _coreResolverBridge
+        name: null
+        if(args.size() == 1) {
+            if(String.recognizes(args[0])) {
+                DnsNames: import("std:network/internal/DnsNames")
+                admitted: DnsNames.admit(bridge, args[0], 1, false)
+                if(admitted !== null) {
+                    if(!DnsNames.numericLiteral(admitted.text)) {
+                        // One lowercase absolute name: never search-expanded.
+                        name = admitted.text + "."
+                    }
+                }
+            }
+        }
+        answer: null
+        if(name === null) {
+            answer = bridge.failed(InvalidIOArgument {})
+        } else {
+            answer = bridge.lookup(this, name)
+        }
+        answer
+    }
+
+    // Closes this Resolver under IO_CORE.md §8; answers Future<Resolver>.
+    close: (...args) => {
+        bridge: _coreResolverBridge
+        answer: null
+        if(args.size() == 0) {
+            answer = bridge.close(this)
+        } else {
+            answer = bridge.failed(InvalidIOArgument {})
+        }
+        answer
+    }
+}

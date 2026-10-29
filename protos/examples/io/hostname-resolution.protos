@@ -1,0 +1,55 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// Resolve a hostname explicitly, then connect to a chosen numeric address
+// (D223-A1, NETWORK.md §14.10).
+//
+// Requires TWO independent host grants, neither of which the standalone CLI
+// provides: the bootstrap-local `resolver` capability (for example from
+// ProtosPolyglotRuntimeHost.provisionHostResolver) and the bootstrap-local
+// `network` capability. Neither implies the other. It also needs whatever
+// external name service and connectivity the host grants; CI never runs it.
+// A self-contained, controlled-fixture version of the same composition runs in
+// ProtosResolverAuthorityTest.
+
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
+
+originalHostname: "api.github.com"
+
+// Name-service resolution only: a Future of 1..64 distinct IpAddress
+// candidates in advisory order. It never connects and never appends a search
+// domain; a failure is a ResolutionError with kind "noAddress",
+// "unavailable", "denied" or "limit".
+addresses: resolver.lookupAddresses(originalHostname).value()
+
+// The application chooses an address; ordering promises no reachability.
+endpoint: IpEndpoint(addresses[0], 443)
+
+// Network applies its own connect authorization to the numeric endpoint;
+// connectTcp has no hostname form.
+connection: network.connectTcp(endpoint).value()
+
+// For HTTPS, the ORIGINAL hostname — never a resolved address or alias — is
+// the TLS reference identity (and SNI), and the HTTP Host authority:
+//
+//     Client: import("std:tls/Client").Client
+//     secure: Client.handshake(connection, originalHostname, trust, options).value()
+//     headers: [["Host", Encoding.Latin1.encode(originalHostname)], ...]
+//
+// `trust` must be selected explicitly, e.g. Trust.javaCacerts().
+
+connection.close().value()
+resolver.close().value()
+true

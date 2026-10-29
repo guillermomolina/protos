@@ -70,11 +70,15 @@ final class ProtosNioNetworkProvisioningTest {
             assertTrue(host.networkHostInitializedForTesting());
             assertSame(prelude.networkPrototype(), network.representedDelegationParent(prelude));
 
+            // D223-A1: provisioning Network creates no Resolver authority or resolver backend.
+            assertEquals(0, host.provisionedResolverCountForTesting());
+
             ProtosStandaloneProcessBootstrap.Result bootstrap = standalone(prelude, network);
             try {
                 assertSame(
                         network,
                         bootstrap.activation().context().readLocalSlot("network").orElseThrow());
+                assertFalse(bootstrap.activation().context().hasLocalSlot("resolver"));
             } finally {
                 bootstrap.process().requestTerminationForRuntime();
             }

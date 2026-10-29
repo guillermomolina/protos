@@ -18,6 +18,10 @@ need authority that already exists:
   modules likewise use only the duplex or `TcpListener` you pass them; real TCP
   needs a `network` that only an authorized host provisions (see
   [HTTP/1.1](http.md)).
+- `std:network/Resolvers` exports the authority-free `Resolver` protocol and
+  `ResolutionError`. Resolving names needs a `resolver` capability that only an
+  explicit host grant provisions, independently of `network`; see
+  [Name resolution is a separate capability](../11-process-io-filesystems-and-authority.md#name-resolution-is-a-separate-capability).
 - `std:inspect` requires authority the host must already have granted to the
   Context (the `protos.Inspect` option). Without it, the import itself signals
   an ordinary `Error`; importing never creates that authority.

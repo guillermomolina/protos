@@ -156,6 +156,11 @@ final class ProtosEmbeddedProcess implements ProtosProcessExecutionHost {
          * grant. Truffle's socket permission is all-or-nothing, which the NIO backend represents
          * exactly. Thread-creation and file permissions are deliberately not consulted (HOST-NET-2).
          */
+        /*
+         * D223-A1: the standard embedding defines no Resolver grant. Socket authorization and every
+         * other Context permission deliberately confer none, so the initial resolver slot stays
+         * absent and no Resolver custody exists to retire.
+         */
         ProtosEmbeddedNetworkCustody networkCustody =
                 env.isSocketIOAllowed() ? new ProtosEmbeddedNetworkCustody(prelude) : null;
         ProtosNetworkCapabilityValue network =

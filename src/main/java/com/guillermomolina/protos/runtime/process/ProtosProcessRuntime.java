@@ -33,7 +33,9 @@ import java.util.function.Supplier;
  * no OS termination. It owns the current local Process incarnation, its unique RootActor, hosted
  * Actor incarnations, stable bootstrap state, and the runtime authority behind represented Process
  * capability proxies. Optional default Filesystem and Network grants remain separate authority
- * and are exposed only to RootActor bootstrap machinery.
+ * and are exposed only to RootActor bootstrap machinery. An optional Resolver grant is likewise
+ * separate authority, but it is owned by exactly this incarnation and retired at its termination
+ * cutover.
  */
 public final class ProtosProcessRuntime {
     public enum LifecycleState {
@@ -71,6 +73,7 @@ public final class ProtosProcessRuntime {
     private final ProtosFilesystemValue rootFilesystem;
     private final ProtosNetworkCapabilityValue rootNetwork;
     private final ProtosMapValue rootResources;
+    private final ProtosResolverCapabilityValue rootResolver;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -138,14 +141,42 @@ public final class ProtosProcessRuntime {
             ProtosFilesystemValue rootFilesystem,
             ProtosNetworkCapabilityValue rootNetwork,
             ProtosMapValue rootResources) {
+        this(actorRefPrototype, rootFilesystem, rootNetwork, rootResources, null);
+    }
+
+    /**
+     * Creates one Process incarnation that additionally carries an optional explicit D223-A1
+     * Resolver grant. The grant is independent of every other one: no Network, Filesystem,
+     * Process or socket authority implies it, and null means the RootActor initial module
+     * receives no {@code resolver} local.
+     *
+     * <p>The grant is bound to this exact incarnation here, before any initial module can run;
+     * a Resolver already granted to another Process, or already retired, is rejected. This
+     * incarnation's termination cutover retires it (§14.9).
+     *
+     * @throws IllegalArgumentException when {@code rootResolver} is already owned or retired
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork,
+            ProtosMapValue rootResources,
+            ProtosResolverCapabilityValue rootResolver) {
+        Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+        if (rootResolver != null) {
+            rootResolver.bindOwnerForRuntime(this);
+        }
+        this.rootResolver = rootResolver;
         this.rootFilesystem = rootFilesystem;
         this.rootNetwork = rootNetwork;
         this.rootResources = rootResources;
-        rootActor =
-                new ProtosActor(
-                        Objects.requireNonNull(actorRefPrototype, "actorRefPrototype"),
-                        this,
-                        true);
+        try {
+            rootActor = new ProtosActor(actorRefPrototype, this, true);
+        } catch (RuntimeException | Error failure) {
+            // The bound grant must not outlive an incarnation that never came to exist.
+            retireResolverForRuntime();
+            throw failure;
+        }
         liveActors.add(rootActor);
     }
 
@@ -230,6 +261,22 @@ public final class ProtosProcessRuntime {
     /** Optional default Network authority granted only to the RootActor initial module. */
     public Optional<ProtosNetworkCapabilityValue> rootNetworkForRuntime() {
         return Optional.ofNullable(rootNetwork);
+    }
+
+    /** Optional explicit D223-A1 Resolver authority granted only to the RootActor initial module. */
+    public Optional<ProtosResolverCapabilityValue> rootResolverForRuntime() {
+        return Optional.ofNullable(rootResolver);
+    }
+
+    /**
+     * Retires this incarnation's Resolver grant, if any; idempotent and activation-free. The
+     * termination cutover calls it, and bootstrap machinery calls it when this incarnation fails
+     * before its initial module runs. No other grant is affected.
+     */
+    public void retireResolverForRuntime() {
+        if (rootResolver != null) {
+            rootResolver.retireForRuntime();
+        }
     }
 
     /** Optional frozen D107 resource capability bundle granted only to RootActor bootstrap. */
@@ -643,6 +690,11 @@ public final class ProtosProcessRuntime {
             terminate = Set.copyOf(liveActors);
             terminateGroups = Set.copyOf(ownedGroups);
         }
+
+        // Withdraw the Resolver host authority at the cutover, outside the Process monitor: no
+        // DNS work can start afterwards, and a running host lookup is never waited for. Pending
+        // lookup Futures keep the ordinary Actor termination contract below.
+        retireResolverForRuntime();
 
         // Stop Group routing at the Process cutover before member-Actor termination can trigger
         // routing eligibility callbacks. Group termination itself never stops a member Actor.

@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import com.oracle.truffle.api.source.Source;
@@ -47,6 +48,13 @@ import java.util.Objects;
  * {@code network} only when the grant is present. The executor never provisions Network itself; a
  * grant must come from {@link ProtosPolyglotRuntimeHost#provisionHostNetwork} on the same live host
  * that executes the Process, so the no-host overload rejects requests that carry one.
+ *
+ * <p>An optional D223-A1 Resolver grant follows the same rule independently: it binds the
+ * initial {@code resolver} slot only when present, must come from {@link
+ * ProtosPolyglotRuntimeHost#provisionHostResolver} on the executing host, and is never derived
+ * from the Network grant. It is owned by the one Process incarnation executed for the request:
+ * a capability already granted to another Process, or retired, is rejected, and the Process
+ * termination at the end of execution retires it. Each request therefore needs its own grant.
  */
 public final class ProtosFreshProcessExecutor {
     private ProtosFreshProcessExecutor() {}
@@ -64,7 +72,40 @@ public final class ProtosFreshProcessExecutor {
             ProtosEncodingValue stdoutEncoding,
             ProtosEncodingValue stderrEncoding,
             ProtosFilesystemValue defaultFilesystem,
-            ProtosNetworkCapabilityValue defaultNetwork) {
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosResolverCapabilityValue defaultResolver) {
+
+        /** A request without a Resolver grant (the pre-D223-A1 shape). */
+        public Request(
+                ProtosPrelude prelude,
+                Source entry,
+                List<String> applicationArguments,
+                ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+                List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+                ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+                ProtosEncodingValue stdinEncoding,
+                ProtosEncodingValue stdoutEncoding,
+                ProtosEncodingValue stderrEncoding,
+                ProtosFilesystemValue defaultFilesystem,
+                ProtosNetworkCapabilityValue defaultNetwork) {
+            this(
+                    prelude,
+                    entry,
+                    applicationArguments,
+                    environmentNameDomain,
+                    environmentEntries,
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend,
+                    stdinEncoding,
+                    stdoutEncoding,
+                    stderrEncoding,
+                    defaultFilesystem,
+                    defaultNetwork,
+                    null);
+        }
 
         public Request {
             Objects.requireNonNull(prelude, "prelude");
@@ -82,6 +123,10 @@ public final class ProtosFreshProcessExecutor {
         if (request.defaultNetwork() != null) {
             throw new IllegalArgumentException(
                     "a Network grant requires execution on the RuntimeHost that provisioned it");
+        }
+        if (request.defaultResolver() != null) {
+            throw new IllegalArgumentException(
+                    "a Resolver grant requires execution on the RuntimeHost that provisioned it");
         }
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
             return execute(request, runtimeHost);
@@ -106,7 +151,8 @@ public final class ProtosFreshProcessExecutor {
                         request.stdoutEncoding(),
                         request.stderrEncoding(),
                         request.defaultFilesystem(),
-                        request.defaultNetwork());
+                        request.defaultNetwork(),
+                        request.defaultResolver());
         ProtosProcessRuntime process = bootstrap.process();
 
         try {

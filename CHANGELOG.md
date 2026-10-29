@@ -7,6 +7,43 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.421-SNAPSHOT
+
+- `I132-A` (#990, D223-A1): explicit hostname-to-`IpAddress` resolution
+  through an independently host-granted `Resolver` capability (spec 0.1.480).
+  - New module `std:network/Resolvers` exports exactly `Resolver` and
+    `ResolutionError` (kinds `noAddress`, `unavailable`, `denied`, `limit`).
+    `lookupAddresses(name)` answers `Future<Array<IpAddress>>` and `close()`
+    answers `Future<Resolver>`. Both are Protos methods in
+    `protos/lib/core/network/Resolver.protos`.
+  - Name admission is Protos-first. The strict NR-LDH/IDNA2008 label rules
+    moved from the TLS `Identity` module into the shared
+    `std:network/internal/DnsNames`. A Resolver accepts one-label names,
+    while TLS keeps its two-label minimum. Numeric address text is rejected.
+    The ICU Unicode facts moved into the shared
+    `ProtosIdnaUnicodeFactsFacility`.
+  - Results are fresh frozen Arrays of 1–64 distinct canonical `IpAddress`
+    values, published in the owning Actor domain. More than 64 distinct or
+    256 raw answers fail atomically with `limit`. Lookups are ordinary
+    operation Futures, not Tasks.
+  - The host backend (`InetAddress.getAllByName`) runs on at most 4 lazy
+    daemon workers with at most 64 queued requests. Each capability owns its
+    own backend. The JVM and OS name-service caches remain the host's.
+  - No implicit grant. `ProtosPolyglotRuntimeHost.provisionHostResolver`
+    and `ResolverGrant.HOST_RESOLVER` install the RootActor-only `resolver`
+    slot. Network, socket or Process authority never implies it, and Actor
+    and P transfer reject it. `connectTcp` stays numeric, and the original
+    hostname stays the TLS reference identity and HTTP `Host`.
+  - A Resolver grant is owned by exactly one Process incarnation. That
+    Process's termination retires it once without waiting for a running
+    lookup. A failed bootstrap retires it too. Reusing a grant is rejected,
+    and closing the host retires every capability it provisioned.
+  - The new native Test Tool corpus `protos/corpus/library/network/resolvers`
+    has 11 Logical Cases across four sources, run by ordinary `make test`.
+  - New Java tests: `ProtosResolverAuthorityTest`,
+    `ProtosResolverLookupFlowTest` and `ProtosResolverBackendTest`, plus
+    extended network, transfer, corpus and native-boundary audits.
+
 ## 0.3.420-SNAPSHOT
 
 - `I130-C3` (#977, D220–S12): strict IDNA2008 A-label identities for

@@ -134,6 +134,19 @@ load: (corpusId) => {
         matched = true
     }
 
+    if(corpusId == "protos/corpus/library/network/resolvers") {
+        selected = planFromEntries(
+            "network/resolvers/",
+            Array(
+            Array("surface.protos", "suite-native", "-"),
+            Array("admission.protos", "suite-native", "-"),
+            Array("results.protos", "suite-native", "-"),
+            Array("lifecycle.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    }
+
     if(corpusId == "protos/corpus/library/semver") {
         selected = planFromEntries(
             "semver/",

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-09
+Last updated: 2026-10-29
 
 This document is the primary normative owner of portable network authority,
 numeric IP-address/endpoint semantics, and the initial TCP connection/listener
@@ -22,8 +22,10 @@ live authority capability whose effective routing/namespace/policy domain is
 selected by the host or by a future explicitly standardized derivation
 facility.
 
-The initial portable model standardizes numeric IP data and TCP only. DNS/name
-resolution, Happy Eyeballs, UDP/datagrams, NetworkInterface enumeration, formal
+The initial portable model standardizes numeric IP data and TCP. D223-A1 adds
+explicit hostname-to-`IpAddress` resolution through an independently granted
+`Resolver` capability (§14); it adds no hostname-based TCP acquisition.
+Connect-by-name, explicit DNS record/protocol operations, Happy Eyeballs, UDP/datagrams, NetworkInterface enumeration, formal
 Network-policy introspection/attenuation, TLS, QUIC, HTTP, WebSocket, Unix-domain
 sockets, raw sockets, service discovery, generic socket options, and
 socket-local deadline/timeout APIs are outside this revision.
@@ -45,12 +47,15 @@ The optional client TLS facility `std:tls/Client` is owned by `TLS.md`: it
 upgrades an already-supplied duplex, takes its reference identity as data
 (including a recognized `IpAddress`, §2), and adds no `Network` operation,
 acquisition or implicit authority.
-HTTP/2, HTTP/3, TLS beyond `TLS.md`, DNS/URL-based acquisition, and other
+HTTP/2, HTTP/3, TLS beyond `TLS.md`, DNS/URL-based acquisition (§14 resolves
+names only; it acquires nothing), and other
 unapproved protocol extensions remain outside this revision.
 
 No network authority is ambient by implication. Importing a module, knowing an
 `IpAddress`, possessing `Process`, creating an Actor, or creating P work does not
-confer a `Network` capability.
+confer a `Network` capability. Likewise, no name-resolution authority is
+ambient: a `Network` capability does not confer a `Resolver` capability and a
+`Resolver` capability does not confer a `Network` capability (§14.2).
 
 ## 2. `IpAddress` semantic data
 
@@ -276,7 +281,8 @@ failed Future and no backend network effect attributable to that invalid request
 occurs.
 
 No hostname/String-to-endpoint coercion or DNS lookup is performed by either
-operation.
+operation. D223-A1 keeps this rule: `connectTcp` accepts only an `IpEndpoint`,
+has no String overload, and never consults a `Resolver` (§14.10).
 
 ## 6. TCP connect acquisition
 
@@ -559,8 +565,8 @@ programs, not merely by a host status-code taxonomy.
 
 ## 11. Actor, P, and distributed-runtime boundary
 
-`Network`, `TcpConnection`, and `TcpListener` are live resource capabilities and
-have no Actor-transfer or P-transfer contract in this initial model. Attempting
+`Network`, `Resolver` (§14), `TcpConnection`, and `TcpListener` are live
+resource capabilities and have no Actor-transfer or P-transfer contract in this initial model. Attempting
 to move them through a boundary that accepts only ordinary transferable values
 fails under that boundary's existing non-transferable-value rules.
 
@@ -646,7 +652,14 @@ D048 / specification revision `0.1.391` resolves the former
 `IpAddress` / `IpEndpoint` construction and recognition checkpoint. The following
 remain separate explicit future designs:
 
-- DNS/name resolution and resolver authority;
+- connect-by-name acquisition (a `NameConnector`, `connectTcp(hostname)` or
+  any String overload of `connectTcp`); D223-A1 standardizes only explicit
+  name-to-address resolution (§14);
+- `std:dns` record APIs, explicit DNS protocol operations, DNSSEC, DNS over
+  HTTPS and DNS over TLS;
+- public DNS TTL/cache APIs and search-domain expansion;
+- Resolver delegation to Actors, Resolver transfer into P, and Resolver
+  timeout/deadline APIs;
 - Happy Eyeballs and general time/delay composition;
 - UDP/datagram operations and truncation/size rules;
 - public NetworkInterface discovery/selection;
@@ -659,3 +672,216 @@ remain separate explicit future designs:
 - generic socket options and socket-local deadlines/timeouts; and
 - a stronger `===` identity relation among TcpConnection endpoint observations or the
   original outgoing acquisition endpoint.
+
+## 14. Explicit name resolution: `Resolver` (D223-A1)
+
+D223-A1 standardizes explicit hostname-to-`IpAddress` resolution. It does not
+introduce hostname-based TCP connection acquisition (§14.10).
+
+### 14.1 Module placement
+
+The optional Standard Library module `std:network/Resolvers` exports exactly
+two members:
+
+```text
+Resolver          // authority-free protocol prototype
+ResolutionError   // ordinary Standard Library Error subtype (§14.7)
+```
+
+`Resolver` is an ordinary frozen direct child of `Object`. It is the protocol
+prototype of every concrete Resolver capability and carries no authority:
+importing the module, reading `Resolver`, delegating to it, or invoking its
+operations on any object other than a host-provisioned capability grants no
+name-resolution authority. Neither member is a public Prelude binding, and the
+module publishes no authority-bearing singleton (`../semantics/MODULES.md`).
+
+### 14.2 Authority
+
+A concrete Resolver capability is a live host-provisioned object that delegates
+to `Resolver` and carries its authority outside the ordinary Protos object
+graph; it exposes no authority through guest-visible slots.
+
+A Resolver capability is independently granted. It is not derived from
+`Network` or `Process`, is not granted by importing a module, is not installed
+globally, is not implied by any host socket permission, is not implicitly
+transferred to Actors, cannot be transferred into P, and is not available
+through any ambient service locator. Only an explicit host grant may install it,
+as the bootstrap-local slot `resolver` on the RootActor initial
+`moduleContext` (`PROCESS_IO.md`); without that grant the slot is absent.
+
+A `Network` capability does not imply a Resolver capability, and a Resolver
+capability does not imply a `Network` capability. Resolution never amplifies
+`Network` authority: knowing a resolved `IpAddress` grants nothing (§1).
+
+### 14.3 Operations
+
+```text
+resolver.lookupAddresses(name)  -> Future<Array<IpAddress>>
+resolver.close()                -> Future<Resolver>
+```
+
+`lookupAddresses` requires exactly one argument and a concrete Resolver
+capability receiver. After successful ordinary dispatch, every failure —
+including an invalid receiver, arity or argument — is a failed Future, never a
+synchronous host exception: an invalid receiver, arity or name (§14.4) fails
+with a fresh `InvalidIOArgument`; use after the Resolver's close has been
+committed fails with a fresh `IOLifecycleError`. No backend name-service effect
+attributable to an invalid request occurs.
+
+### 14.4 Name admission
+
+The argument must be a semantic Protos `String`. It is admitted only when it is
+a DNS name of ASCII labels:
+
+- every label is an ASCII NR-LDH label or a strictly valid IDNA2008 A-label;
+- comparison and normalization are ASCII case-insensitive;
+- the name may end with exactly one root dot;
+- one-label names are permitted (unlike the TLS reference identity of
+  `TLS.md` §4, which requires at least two labels);
+- each label has 1 through 63 octets; and
+- the whole name has at most 253 octets, excluding the optional root dot.
+
+A label whose third and fourth octets are both `-` is admitted only when it
+begins with `xn--` (after ASCII lowercasing) and is a valid A-label: its
+payload is canonical RFC 3492 Punycode that decodes to a non-ASCII NFC U-label
+without a leading combining mark or RFC 5891 hyphen violation, every scalar is
+RFC 5892 PVALID or CONTEXTJ/CONTEXTO with its rule satisfied, and re-encoding
+the decoded scalars reproduces the payload exactly. When any label of the name
+contains a right-to-left scalar, every label must satisfy the RFC 5893 Bidi
+Rule. These are exactly the label rules of `TLS.md` §4.
+
+The following are rejected with `InvalidIOArgument`: non-String arguments;
+Unicode U-label (non-ASCII) input; any UTS #46 mapping; malformed ACE/A-label
+encodings; invalid IDNA2008 code points; unsatisfied CONTEXTJ/CONTEXTO and Bidi
+cases; reserved hyphen patterns other than a valid A-label; empty labels
+(including an empty name, a lone root dot, or consecutive dots); labels with a
+leading or trailing hyphen; overlong labels and names; and numeric IPv4/IPv6
+address text passed as a String (an admitted name that
+`std:network/IpAddresses.parse` accepts as numeric address text). Numeric addresses are already represented by
+`IpAddress`, so numeric-looking text is never resolved implicitly.
+
+An admitted name is normalized to one lowercase absolute DNS name. The
+resolution request never requires and never receives search-domain expansion:
+a one-label name is resolved as that absolute name.
+
+### 14.5 Resolution
+
+A host-authorized name service may combine DNS A and AAAA records, CNAME
+chains, local host-name sources, and private or split-horizon naming sources.
+Resolution is name-service resolution; it does not guarantee that a literal DNS
+protocol query occurred. The backend must not silently append a search domain.
+
+Aliases discovered during resolution are never observable and never change
+the original hostname that an application uses as HTTP `Host` authority or as
+TLS reference identity/SNI (§14.10).
+
+### 14.6 Result
+
+A successful lookup resolves its Future with one fresh frozen `Array` that
+contains 1 through 64 elements. Every element is a recognized canonical frozen
+`IpAddress` (§2); IPv4 and IPv6 are both supported. The elements are
+structurally deduplicated under `IpAddress` equality. The result carries no
+TTL, DNS alias, metadata, backend handle, or authority.
+
+Element order is advisory. It guarantees neither reachability, a preferred
+address family, connection success, safe egress, nor DNSSEC validation.
+
+A resolution that yields zero addresses fails with `ResolutionError` kind
+`"noAddress"`. A resolution that yields more than 64 distinct addresses fails
+atomically with kind `"limit"`; the implementation never truncates to 64 and
+reports success.
+
+### 14.7 Failure taxonomy
+
+`ResolutionError` is an ordinary Standard Library Error subtype (a descendant of
+`Error`); it is not a Core Error taxonomy member (`../semantics/ERRORS.md`).
+Every failure occurrence is fresh and has one own `kind` slot whose value is
+exactly one of:
+
+| kind | meaning |
+|---|---|
+| `"noAddress"` | the name service reported no usable address for the name; a host adapter that cannot tell a negative answer from a transient failure reports `"noAddress"` |
+| `"unavailable"` | the name service could not answer |
+| `"denied"` | host security or policy refused the resolution |
+| `"limit"` | a bounded backend resource or the 64-address result bound was exceeded |
+
+Native host exceptions, operating-system error numbers, and platform-specific
+resolver codes are never exposed as portable taxonomy (§10). Invalid arguments
+fail with `InvalidIOArgument` and post-close use with `IOLifecycleError`
+(§14.3); they are not `ResolutionError` kinds.
+
+### 14.8 Concurrency, commitment and cancellation
+
+Each lookup returns an ordinary operation Future (`IO_CORE.md`); it does not
+create an implicit Task (`../concurrency/FUTURES_AND_TASKS.md`). Waiting with
+`value()` follows the ordinary Future rules.
+
+Name-service work is bounded: bounded host workers, a bounded waiting queue,
+bounded response materialization, and bounded retained request state.
+Exhausting a bound fails the lookup with kind `"limit"`. Blocking name-service
+calls never execute on an Actor's guest execution; host workers never execute
+guest code, create guest objects, settle guest Futures, or enter an Actor.
+
+The outcome is published in the owning Actor execution domain. A lookup's
+completion becomes committed only when its validated canonical result (or its
+`ResolutionError`) is published there. Ordinary Future cancellation before that
+commitment produces the ordinary `cancelled` outcome and suppresses any late
+result. Cancellation does not promise to interrupt operating-system
+name-resolution work already in progress; a late backend callback is discarded
+safely.
+
+### 14.9 Lifecycle and isolation
+
+`close()` follows the `IO_CORE.md` commitment and idempotence rules: close is
+committed at invocation, repeated calls on the same capability observe the same
+logical outcome, and the successful Future resolves with the Resolver itself.
+At close cutover, still-uncommitted lookups fail with `IOLifecycleError`;
+after commitment every new lookup fails with `IOLifecycleError`; late backend
+results cannot revive the capability.
+
+Closing a Resolver does not close any `Network` capability, `TcpConnection`,
+HTTP client, or TLS connection. Already-published `IpAddress` values remain
+ordinary transferable data.
+
+A Resolver is a live, non-transferable capability (§11). No mutable cache or
+result state managed by the Protos implementation is shared across Resolver
+authorities or Polyglot Contexts. Caching internal to the host-authorized name
+service (the operating system or host runtime) is outside this guarantee, is not
+exposed through the Resolver API, and confers no authority. A
+Resolver granted to a Process lives at most as long as that Process; host
+resources behind it are retired when the capability is closed or its
+provisioning host is closed.
+
+### 14.10 Explicit TCP composition
+
+`network.connectTcp(IpEndpoint)` keeps its exact numeric signature (§6): no
+String overload, no hostname coercion, and no implicit lookup. An application
+composes resolution and connection explicitly:
+
+```protos
+originalHostname: "api.example.com"
+addresses: resolver.lookupAddresses(originalHostname).value()
+endpoint: IpEndpoint(addresses[0], 443)
+connection: network.connectTcp(endpoint).value()
+```
+
+The Network applies its own connect authorization to the chosen endpoint
+independently of how the address was obtained. The original hostname, not any
+resolved address or alias, remains the TLS reference identity/SNI
+(`TLS.md` §4) and the HTTP `Host` authority (`HTTP.md` §16). No Network
+permission is amplified by resolution.
+
+### 14.11 Security limitations
+
+Resolution results are advisory host data. They are not authenticated
+(no DNSSEC guarantee), are not an authorization to connect, and may name
+private, loopback, or otherwise sensitive addresses. D223-A1 defines no
+universal private-address rejection rule: outbound endpoint authorization
+remains the independent responsibility of the `Network` policy domain.
+
+### 14.12 Implementation freedom
+
+The semantics do not expose or require a particular resolver library,
+operating-system API, thread pool size, or cache. A Process that never receives
+a Resolver grant must not initialize name-service machinery, and importing
+`std:network/Resolvers` alone never initializes it.

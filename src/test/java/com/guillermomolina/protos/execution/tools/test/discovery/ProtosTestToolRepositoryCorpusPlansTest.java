@@ -28,6 +28,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
         assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
         assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
+        assertPlan("protos/corpus/library/network/resolvers", 4, "network/resolvers/surface.protos", "network/resolvers/lifecycle.protos");
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
         assertPlan("protos/corpus/library/datetime", 10, "datetime/construction.protos", "datetime/rfc3339.protos");
         assertPlan("protos/corpus/library/regex", 13, "regex/compile.protos", "regex/split.protos");
@@ -88,6 +89,29 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         for (int index = 0; index < paths.length; index++) {
             assertEquals(paths[index], path(corpus, index));
             assertEquals("suite-native", expectation(corpus, index));
+        }
+    }
+
+    @Test
+    void resolverCasesCoverEveryCorpusSourceInOrderAndAreSuiteNative() throws Exception {
+        String corpus = "protos/corpus/library/network/resolvers";
+        String[] paths = {
+            "network/resolvers/surface.protos",
+            "network/resolvers/admission.protos",
+            "network/resolvers/results.protos",
+            "network/resolvers/lifecycle.protos"
+        };
+        for (int index = 0; index < paths.length; index++) {
+            assertEquals(paths[index], path(corpus, index));
+            assertEquals("suite-native", expectation(corpus, index));
+        }
+        // A source added to the directory without a plan entry would never be discovered.
+        try (java.util.stream.Stream<Path> sources =
+                java.nio.file.Files.list(Path.of("protos", "tests", "library", "network", "resolvers"))) {
+            assertEquals(
+                    java.util.Set.of(paths),
+                    sources.map(source -> "network/resolvers/" + source.getFileName())
+                            .collect(java.util.stream.Collectors.toSet()));
         }
     }
 

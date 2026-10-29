@@ -114,7 +114,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(27, registry.localSlotsSnapshot().size());
+            assertEquals(28, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -176,6 +176,12 @@ final class ProtosTestToolCorpusRegistryTest {
                     fixture.activation(),
                     registry,
                     "protos/corpus/library/network/ip-endpoints",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/network/resolvers",
                     "repository-explicit",
                     "libraryFilesystem");
             assertBinding(

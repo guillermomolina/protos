@@ -430,6 +430,11 @@ standard prototype listed above.
 | `HostError` | `Error` | `std:http/Host` / `../io/HTTP.md` §15.10 |
 | `ClientError` | `Error` | `std:http/Client` / `../io/HTTP.md` §16 |
 | `TlsError` | `Error` | `std:tls/Client` / `../io/TLS.md` §9 |
+| `ResolutionError` | `Error` | `std:network/Resolvers` / `../io/NETWORK.md` §14.7 |
+
+Every `ResolutionError` occurrence is fresh and carries an own `kind` slot whose
+value is exactly one of `"noAddress"`, `"unavailable"`, `"denied"` or
+`"limit"` (D223-A1). `ResolutionError` adds no member to the Core taxonomy.
 
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already
