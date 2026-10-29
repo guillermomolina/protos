@@ -19,14 +19,20 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyStore;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * I130-A: host certificate-material primitives. Trust policy (bounds, snapshots, selection, no
@@ -34,6 +40,8 @@ import org.junit.jupiter.api.Test;
  */
 final class ProtosTlsTrustTest {
     private static final byte[] ROOT = ProtosTlsTestPeer.der("root-ca.pem");
+    private static final String JAVA_HOME = "java.home";
+    private static final String TRUST_STORE = "javax.net.ssl.trustStore";
 
     @Test
     void exactDerDecodesOneCertificate() {
@@ -62,11 +70,107 @@ final class ProtosTlsTrustTest {
         assertEquals(2, ProtosTlsTrust.anchors(List.of(root, other)).size());
     }
 
+    /**
+     * I130-C2: the controlled java.home makes the result independent of the host JDK, and Native
+     * Image, which does not define java.home itself, can read an explicitly configured one.
+     */
     @Test
-    void javaCacertsReadsOnlyTheRuntimeStore() {
-        List<X509Certificate> certificates = ProtosTlsTrust.javaCacerts();
-        assertFalse(certificates.isEmpty());
-        assertFalse(certificates.contains(ProtosTlsTestPeer.certificate("root-ca.pem")));
+    void javaCacertsReadsOnlyTheRuntimeStore(@TempDir Path javaHome) throws Exception {
+        X509Certificate root = ProtosTlsTestPeer.certificate("root-ca.pem");
+        writeCacerts(cacertsOf(javaHome), root);
+        String originalJavaHome = System.getProperty(JAVA_HOME);
+        try {
+            System.setProperty(JAVA_HOME, javaHome.toString());
+            assertEquals(List.of(root), ProtosTlsTrust.javaCacerts());
+        } finally {
+            restoreProperty(JAVA_HOME, originalJavaHome);
+        }
+    }
+
+    /**
+     * I130-C2: the explicit Java cacerts source is java.home/lib/security/cacerts, never the
+     * ambient JSSE default trust store. Says nothing about which certificates the JSSE default
+     * trust store of a Native Image captured at build time.
+     */
+    @Test
+    void javaCacertsIgnoresAmbientTrustStoreProperty(@TempDir Path javaHome) throws Exception {
+        X509Certificate root = ProtosTlsTestPeer.certificate("root-ca.pem");
+        writeCacerts(cacertsOf(javaHome), root);
+        String originalJavaHome = System.getProperty(JAVA_HOME);
+        String originalTrustStore = System.getProperty(TRUST_STORE);
+        try {
+            System.setProperty(JAVA_HOME, javaHome.toString());
+            List<X509Certificate> reference = ProtosTlsTrust.javaCacerts();
+            assertEquals(List.of(root), reference);
+            System.setProperty(TRUST_STORE, "/nonexistent/protos-i130-c2-default-truststore");
+            assertEquals(reference, ProtosTlsTrust.javaCacerts());
+        } finally {
+            restoreProperty(TRUST_STORE, originalTrustStore);
+            restoreProperty(JAVA_HOME, originalJavaHome);
+        }
+    }
+
+    /** I130-C2: an undefined java.home is TRUST_MATERIAL_UNAVAILABLE, with no fallback source. */
+    @Test
+    void javaCacertsWithoutJavaHomeIsUnavailable() {
+        String originalJavaHome = System.getProperty(JAVA_HOME);
+        try {
+            System.clearProperty(JAVA_HOME);
+            ProtosTlsFailure failure =
+                    assertThrows(ProtosTlsFailure.class, ProtosTlsTrust::javaCacerts);
+            assertEquals(ProtosTlsFailure.Fact.TRUST_MATERIAL_UNAVAILABLE, failure.fact());
+        } finally {
+            restoreProperty(JAVA_HOME, originalJavaHome);
+        }
+    }
+
+    /**
+     * I130-C2: the explicit cacerts file is read afresh at each call, with no cache in {@link
+     * ProtosTlsTrust}, and its absence is TRUST_MATERIAL_UNAVAILABLE. Independent of the host's
+     * cacerts; says nothing about whether a Native distribution's java.home holds a usable file.
+     */
+    @Test
+    void javaCacertsReadsChangedFileAtRuntime(@TempDir Path directory) throws Exception {
+        X509Certificate root = ProtosTlsTestPeer.certificate("root-ca.pem");
+        X509Certificate other = ProtosTlsTestPeer.certificate("untrusted-ca.pem");
+        Path file = directory.resolve("cacerts");
+
+        writeCacerts(file, root);
+        assertEquals(List.of(root), ProtosTlsTrust.readCacerts(file));
+
+        writeCacerts(file, other);
+        List<X509Certificate> changed = ProtosTlsTrust.readCacerts(file);
+        assertEquals(List.of(other), changed);
+        assertFalse(changed.contains(root));
+
+        Files.delete(file);
+        ProtosTlsFailure failure =
+                assertThrows(ProtosTlsFailure.class, () -> ProtosTlsTrust.readCacerts(file));
+        assertEquals(ProtosTlsFailure.Fact.TRUST_MATERIAL_UNAVAILABLE, failure.fact());
+    }
+
+    /** A password-less store of the type readCacerts loads, holding exactly {@code certificate}. */
+    private static void writeCacerts(Path file, X509Certificate certificate) throws Exception {
+        KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
+        store.load(null, null);
+        store.setCertificateEntry("anchor", certificate);
+        try (OutputStream output = Files.newOutputStream(file)) {
+            store.store(output, null);
+        }
+    }
+
+    private static Path cacertsOf(Path javaHome) throws Exception {
+        Path file = javaHome.resolve("lib").resolve("security").resolve("cacerts");
+        Files.createDirectories(file.getParent());
+        return file;
+    }
+
+    private static void restoreProperty(String key, String original) {
+        if (original == null) {
+            System.clearProperty(key);
+        } else {
+            System.setProperty(key, original);
+        }
     }
 
     @Test

@@ -92,7 +92,16 @@ public final class ProtosTlsTrust {
             throw new ProtosTlsFailure(
                     ProtosTlsFailure.Fact.TRUST_MATERIAL_UNAVAILABLE, "java.home is not defined");
         }
-        Path file = Path.of(javaHome, "lib", "security", "cacerts");
+        return readCacerts(Path.of(javaHome, "lib", "security", "cacerts"));
+    }
+
+    /**
+     * Reads the certificate entries of {@code file} afresh, without caching. Internal separation of
+     * {@link #javaCacerts()}; Protos cannot select the path.
+     *
+     * @throws ProtosTlsFailure {@link ProtosTlsFailure.Fact#TRUST_MATERIAL_UNAVAILABLE}
+     */
+    static List<X509Certificate> readCacerts(Path file) {
         try (var input = Files.newInputStream(file)) {
             KeyStore store = KeyStore.getInstance(KeyStore.getDefaultType());
             store.load(input, null);

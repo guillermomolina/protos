@@ -98,6 +98,127 @@ python3 dist/build_artifact_set.py --verify target/artifact-set --expect-revisio
 This set is local construction evidence. Durable exact-revision publication
 of the D064 artifact is the separate explicit step below.
 
+### TLS under Native Image
+
+**Native check.** The Human Executor runs:
+
+```sh
+make -C build/native build
+make -C build/native test
+```
+
+The second command runs `build/native/test-native.sh` against the actual
+`target/native/protos` executable. The mandatory TLS suites are:
+
+- `protos/tests/library/tls/client-admission.protos`
+- `protos/tests/library/tls/client-handshake.protos`
+- `protos/tests/library/tls/identity.protos`
+
+Each must exit `0` and report at least one passed and zero failed tests;
+exactly three files must run, otherwise the script emits
+`NATIVE_TLS_CONFORMANCE=FAIL` and does not reach
+`NATIVE_REGRESSION_SUITE=PASS`. The suites cover admission, DER certificates,
+availability of the JSSE/X.509 primitives, ClientHello generation, identity,
+and controlled error paths. They use fixtures and simulated duplexes.
+
+`make -C build/native test` then runs two distinct Native checks:
+
+| Indicator | Executable | What runs |
+|---|---|---|
+| `NATIVE_TLS_CONFORMANCE` | `target/native/protos` (the distributed CLI) | the guest suites above |
+| `NATIVE_TLS_PEER_INTEGRATION`, `NATIVE_TLS_TRUST_PROVENANCE` | `target/native-tests` (Native JUnit) | `ProtosTlsClientIntegrationTest`, `ProtosTlsTrustTest` |
+
+The Native JUnit integration is a separate executable built by the
+`native-tls-tests` Maven profile (`native-maven-plugin:test`). It compiles and
+runs the selected Java TLS tests with the same Protos code, `SSLEngine`, PKIX
+verifier, and fixtures as the JVM tests: a real TLS 1.3 and TLS 1.2
+negotiation against the in-memory JSSE peer `ProtosTlsTestPeer`, without
+sockets or a Network capability. It is not the distributed binary. The test
+fixtures, including their private keys, are registered only in the test
+image's reachability metadata
+(`src/test/resources/META-INF/native-image/`) and are never part of
+`target/native/protos`. The two PASS indicators are printed only after the
+Native JUnit executable `target/native-tests` exists, its reports under
+`target/native-test-reports/` (and only there, never the JVM Surefire
+reports) contain both classes, and none records a failure or error.
+
+The trust checks it covers are:
+
+1. `Trust.anchors` uses only the given roots
+   (`ProtosTlsClientIntegrationTest`).
+2. A chain to an unrelated anchor is rejected as untrusted
+   (`anUnrelatedAnchorIsAnUntrustedPeer`).
+3. Explicitly reading a cacerts file observes its changes, with no cache in
+   `ProtosTlsTrust`, and a missing file is `TRUST_MATERIAL_UNAVAILABLE`
+   (`javaCacertsReadsChangedFileAtRuntime`, on a temporary file, not the
+   host's `cacerts`).
+
+**Trust sources.**
+
+`Trust.anchors(certificates)`:
+
+- receives explicit DER certificates;
+- does not automatically use the system certificate store.
+
+`Trust.javaCacerts()`:
+
+- is an explicit selection;
+- `ProtosTlsTrust.javaCacerts()` builds the path
+  `java.home/lib/security/cacerts` and reads it when the handshake trust
+  material is resolved;
+- does not use `javax.net.ssl.trustStore` as an alternative source;
+- does not substitute `jssecacerts` for `cacerts`;
+- does not use `SSLContext.getDefault()` to select the roots;
+- does not automatically include operating-system certificates;
+- applies no fallback between sources.
+
+The JVM regression
+`ProtosTlsTrustTest.javaCacertsIgnoresAmbientTrustStoreProperty` checks that
+changing `javax.net.ssl.trustStore` does not change the certificates returned
+by `ProtosTlsTrust.javaCacerts()`. It is JVM evidence only.
+
+`Trust.system()` currently fails closed with `trustUnavailable`.
+
+**GraalVM Native Image specifics.** Native Image may capture at build time:
+
+- the JSSE default trusted certificates;
+- blocked or untrusted certificate information;
+- cryptographic provider configuration and reachability.
+
+Two sources must be kept distinct:
+
+1. the JSSE default trust store, which may be captured when the Native image is
+   built; and
+2. the `java.home/lib/security/cacerts` file that Protos code explicitly tries
+   to open.
+
+They are not equivalent: the build-time JSSE default trust store is not the
+explicit Protos `Trust.javaCacerts` source.
+
+Native Image does not define `java.home` automatically. Without it,
+`Trust.javaCacerts()` fails closed with `trustUnavailable`. When `java.home`
+is configured explicitly and `java.home/lib/security/cacerts` is a readable
+file, the Native executable reads that file like the JVM does. The Native
+JUnit tests check both cases with a controlled `java.home` built from the test
+certificates, independent of the host JDK. Native Image may also capture
+blocked-certificate information at build time, and a later change to that
+information is not guaranteed to alter the executable's behavior. A missing
+explicit `cacerts` file must produce `trustUnavailable`, never a fallback.
+
+**Validation limits.** A PASS of the three guest suites on
+`target/native/protos` does not by itself demonstrate a complete handshake or
+positive chain verification; those are the subject of the separate Native
+JUnit integration. Neither check demonstrates:
+
+- a TLS handshake with a real networked server;
+- that a Native distribution defines `java.home` or ships a usable `cacerts`
+  file;
+- that a blocked-certificate list is updated at run time;
+- complete HTTPS interoperability;
+- compatibility with every cryptographic provider and cipher suite.
+
+Server TLS, implicit Network acquisition, and IDNA2008 are not supported.
+
 ## Exact-revision D064 publication (GHCR/OCI)
 
 `DIST010-B` publishes only the D064 member of an already-built, verified

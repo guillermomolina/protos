@@ -98,6 +98,37 @@ do
     native_numeric_cases=$((native_numeric_cases + 1))
 done
 
+# I130-C2: run the existing std:tls/Client suites on the actual Native
+# executable. They use fixtures and simulated duplexes: they exercise
+# admission, DER certificates, JSSE/X.509 primitive availability, ClientHello
+# generation, identity, and controlled error paths, but do not prove a
+# complete handshake with an authenticated server or cacerts provenance.
+native_tls_status=0
+native_tls_cases=0
+
+for tls_file in \
+    "protos/tests/library/tls/client-admission.protos" \
+    "protos/tests/library/tls/client-handshake.protos" \
+    "protos/tests/library/tls/identity.protos"
+do
+    case_log="${tmp_dir}/tls-${native_tls_cases}.log"
+
+    PROTOS_HOME="${root}" \
+        "${native_bin}" \
+        test --file "${root}/${tls_file}" \
+        >"${case_log}" 2>&1
+    case_status=$?
+
+    if [[ "${case_status}" -ne 0 ]] || \
+       ! grep -Eq '^[[:space:]]*[1-9][0-9]* passed, 0 failed[[:space:]]*$' "${case_log}"; then
+        cat "${case_log}" >&2
+        echo "NATIVE_TLS_CASE_FAILURE=${tls_file}" >&2
+        native_tls_status=1
+    fi
+
+    native_tls_cases=$((native_tls_cases + 1))
+done
+
 test_tool_output_ok=1
 for expected_line in \
     "[library/uri] 0/4" \
@@ -236,6 +267,8 @@ echo "NATIVE_GUEST_SMOKE_STATUS=${smoke_status}"
 echo "NATIVE_TEST_TOOL_STATUS=${test_tool_status}"
 echo "NATIVE_NUMERIC_CONFORMANCE_STATUS=${native_numeric_status}"
 echo "NATIVE_NUMERIC_CONFORMANCE_FILES=${native_numeric_cases}"
+echo "NATIVE_TLS_CONFORMANCE_STATUS=${native_tls_status}"
+echo "NATIVE_TLS_CONFORMANCE_FILES=${native_tls_cases}"
 echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
 echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
 cat "${dap_log}"
@@ -283,6 +316,11 @@ fi
 
 if [[ "${native_numeric_status}" -ne 0 ]]; then
     echo "NATIVE_NUMERIC_CONFORMANCE=FAIL" >&2
+    exit 1
+fi
+
+if [[ "${native_tls_status}" -ne 0 ]] || [[ "${native_tls_cases}" -ne 3 ]]; then
+    echo "NATIVE_TLS_CONFORMANCE=FAIL" >&2
     exit 1
 fi
 
@@ -344,6 +382,7 @@ echo "NATIVE_HELP_SMOKE=PASS"
 echo "NATIVE_GUEST_SMOKE=PASS"
 echo "NATIVE_TEST_TOOL_SMOKE=PASS"
 echo "NATIVE_NUMERIC_CONFORMANCE=PASS"
+echo "NATIVE_TLS_CONFORMANCE=PASS"
 echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
 echo "NATIVE_INSPECT=PASS"
 echo "NATIVE_INTERPRETER_ONLY=PASS"

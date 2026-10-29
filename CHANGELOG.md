@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.419-SNAPSHOT
+
+- `I130-C2` (#977, D220–S12): Native Image TLS execution gate and
+  trust-source isolation.
+  - `make -C build/native test` requires the `client-admission`,
+    `client-handshake` and `identity` TLS guest suites to pass on the
+    distributed `target/native/protos` (`NATIVE_TLS_CONFORMANCE`).
+  - Add the `native-tls-tests` Maven profile, which compiles
+    `ProtosTlsClientIntegrationTest` and `ProtosTlsTrustTest` into a separate
+    Native JUnit executable (`target/native-tests`). The gate requires both
+    classes in its reports with no failure (`NATIVE_TLS_PEER_INTEGRATION`,
+    `NATIVE_TLS_TRUST_PROVENANCE`). It covers real TLS 1.3/1.2 negotiation
+    with the in-memory JSSE peer, untrusted-chain rejection and SAN identity
+    in native code. Test fixtures, including private keys, are registered
+    only in the test image.
+  - `ProtosTlsTrust.javaCacerts()` delegates the file read to an internal
+    `readCacerts(Path)`, with unchanged behavior. Tests cover a fresh re-read
+    of a changed `cacerts`, a controlled `java.home`, independence from
+    `javax.net.ssl.trustStore`, and `TRUST_MATERIAL_UNAVAILABLE` when
+    `java.home` is undefined (the default under Native Image), without
+    fallback.
+  - The PLAT045 guard admits the fallback runtime exactly once in each Native
+    Image profile and nowhere else.
+  - Document TLS under Native Image in `dist/README.md`: trust sources, the
+    build-time JSSE default trust store versus explicit `Trust.javaCacerts`,
+    and what remains unproven.
+
 ## 0.3.418-SNAPSHOT
 
 - `I130-C1` (#977, D220–S12): classify oversized inbound TLS records as

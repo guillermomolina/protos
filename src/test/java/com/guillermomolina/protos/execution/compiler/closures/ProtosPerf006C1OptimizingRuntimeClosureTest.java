@@ -16,13 +16,16 @@ import org.junit.jupiter.api.Test;
 
 /**
  * PERF006-C1 optimizing-runtime closure, PLAT033 packaging-boundary evidence, and the PLAT045
- * boundary: only the Native profile selects the fallback runtime.
+ * boundary: only the Native Image profiles select the fallback runtime.
  */
 final class ProtosPerf006C1OptimizingRuntimeClosureTest {
     private static final String EXPECTED_RUNTIME =
             "com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime";
     private static final String FALLBACK_BUILD_ARG =
             "<buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>";
+    /** The Native Image profiles: the distributed executable and the I130-C2 JUnit test image. */
+    private static final String NATIVE_PROFILE = "native";
+    private static final String NATIVE_TLS_TESTS_PROFILE = "native-tls-tests";
 
     @Test
     void surefireUsesExactOptimizingRuntimeWithoutSuppression() {
@@ -58,17 +61,24 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         assertFalse(launcher.contains("-jar \"$JAR\""));
 
         assertFalse(pom.contains("WarnInterpreterOnly=false"));
+        String nativeProfile = profile(pom, NATIVE_PROFILE);
+        String nativeTlsTestsProfile = profile(pom, NATIVE_TLS_TESTS_PROFILE);
         assertEquals(
-                pom.indexOf(FALLBACK_BUILD_ARG),
-                pom.lastIndexOf(FALLBACK_BUILD_ARG),
-                "fallback runtime must be selected exactly once");
-        String nativeProfile = nativeProfile(pom);
-        assertTrue(nativeProfile.contains(FALLBACK_BUILD_ARG));
+                1,
+                occurrences(nativeProfile, FALLBACK_BUILD_ARG),
+                "native profile must select the fallback runtime exactly once");
+        assertEquals(
+                1,
+                occurrences(nativeTlsTestsProfile, FALLBACK_BUILD_ARG),
+                "native-tls-tests profile must select the fallback runtime exactly once");
         assertTrue(
                 nativeProfile.contains(
                         "<classesDirectory>${project.build.outputDirectory}</classesDirectory>"));
         assertFalse(nativeProfile.contains("<protos.shade.skip>true</protos.shade.skip>"));
-        assertFalse(withoutNativeProfile(pom).contains("UseFallbackRuntime"));
+        assertFalse(
+                pom.replace(nativeProfile, "")
+                        .replace(nativeTlsTestsProfile, "")
+                        .contains("UseFallbackRuntime"));
         assertFalse(launcher.contains("WarnInterpreterOnly=false"));
         assertFalse(launcher.contains("UseFallbackRuntime=true"));
 
@@ -100,16 +110,19 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         System.out.println("PLAT045_NATIVE_GUEST_JIT_CLAIM=UNAVAILABLE_NOT_PASS");
     }
 
-    private static String nativeProfile(String pom) {
-        int start = pom.indexOf("<id>native</id>");
-        assertTrue(start >= 0, "native profile missing");
+    private static String profile(String pom, String id) {
+        int start = pom.indexOf("<id>" + id + "</id>");
+        assertTrue(start >= 0, id + " profile missing");
         int end = pom.indexOf("</profile>", start);
-        assertTrue(end > start, "native profile unterminated");
+        assertTrue(end > start, id + " profile unterminated");
         return pom.substring(start, end);
     }
 
-    private static String withoutNativeProfile(String pom) {
-        String profile = nativeProfile(pom);
-        return pom.replace(profile, "");
+    private static int occurrences(String text, String fragment) {
+        int count = 0;
+        for (int at = text.indexOf(fragment); at >= 0; at = text.indexOf(fragment, at + 1)) {
+            count++;
+        }
+        return count;
     }
 }
