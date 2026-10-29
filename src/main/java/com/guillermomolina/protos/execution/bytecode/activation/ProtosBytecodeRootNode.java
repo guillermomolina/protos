@@ -714,12 +714,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind ProtosBytecodeRootNode root,
                 @Bind BytecodeNode bytecodeNode) {
             /*
-             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn): every root,
-             * an experimental callee context root included, returns or
-             * projects its value the same way.
+             * I115-H4-B EXPERIMENTAL (GraalPy EpilogForReturn). I115-H5: an
+             * experimental callee context root never projects.
              */
             if (root.needsTraceAndProfileInstrumentation()) {
                 root.traceOrProfileReturn(frame, bytecodeNode, value);
+            }
+            // I115-H5 EXPERIMENTAL: the callee's value, primitive included, as is.
+            if (root.isExperimentalCalleeContextRoot()) {
+                return value;
             }
             if (!root.epilogProjectsReturnCarrier()) {
                 return value;
@@ -9535,24 +9538,66 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * I115-H4-B EXPERIMENTAL: the Bytecode DSL adapter of {@link
-     * ProtosExperimentalCallUnaryNode}. A proxied node cannot bind the typed
-     * caller root, the BytecodeNode or the bytecode index, so this operation
-     * binds them and delegates; it carries no call semantics of its own.
+     * I115-H5 EXPERIMENTAL: the admitted terminal Call1 of an experimental
+     * caller root. The direct tier resolves the receiver's target once, at
+     * installation, in the Context entered then, and afterwards only calls it
+     * with the reduced static unary layout ({@link
+     * ProtosFrameArguments#experimentalStaticUnaryCall}), the ABI of {@link
+     * InvokeStaticClosureOneTail}.
+     *
+     * <p>NORMATIVE DIVERGENCE (owner-authorized): the receiver identity, the
+     * Context and {@code Object.call} are not re-checked after installation;
+     * no caller, Prelude, Task or ReturnHome is passed; suspension, control
+     * transfer and result projection are not handled. A receiver without a
+     * direct target is an internal error at installation.
      */
     @Operation
     public static final class InvokeExperimentalClosureOneTail {
-        @Specialization
-        public static Object invoke(
+        @Specialization(
+                excludeForUncached = true,
+                guards = "cachedTarget != null")
+        public static Object direct(
                 Object receiver,
                 Object supplied0,
-                @Bind VirtualFrame frame,
-                @Bind ProtosBytecodeRootNode callerRoot,
-                @Bind BytecodeNode bytecodeNode,
-                @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Cached ProtosExperimentalCallUnaryNode callUnary) {
-            return callUnary.execute(
-                    frame, callerRoot, bytecodeNode, bytecodeIndex, receiver, supplied0);
+                @Cached("experimentalTarget(receiver, currentEnteredContext($bytecodeNode))")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)") DirectCallNode node) {
+            return node.call(ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+        }
+
+        /* The uncached interpreter only: the same resolution and ABI, per call. */
+        @Specialization
+        @InliningCutoff
+        public static Object uncached(
+                Object receiver,
+                Object supplied0,
+                @Bind("currentEnteredContext($node)") ProtosLanguageContext enteredContext,
+                @Cached IndirectCallNode indirectCall) {
+            return indirectCall.call(
+                    experimentalTarget(receiver, enteredContext),
+                    ProtosFrameArguments.experimentalStaticUnaryCall(supplied0));
+        }
+
+        /** Installation only: the receiver's direct target, or an internal error. */
+        @TruffleBoundary
+        static RootCallTarget experimentalTarget(
+                Object receiver, ProtosLanguageContext enteredContext) {
+            DirectClosureExecutableFacts facts =
+                    receiver instanceof ProtosClosureValue closure
+                            ? ProtosClosureCallPreparation
+                                    .establishDirectClosureExecutableFactsOrNull(
+                                            closure, enteredContext)
+                            : null;
+            if (facts == null || facts.target() == null) {
+                throw new IllegalStateException(
+                        "I115-H5 experimental Call1 receiver has no direct Closure target");
+            }
+            return facts.target();
+        }
+
+        @NonIdempotent
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
     }
 

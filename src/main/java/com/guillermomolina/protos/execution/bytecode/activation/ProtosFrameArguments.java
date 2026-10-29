@@ -127,7 +127,7 @@ final class ProtosFrameArguments {
      *
      *   [0] EXPERIMENTAL_STATIC_UNARY_CALL (private marker, never a guest value)
      *   [1..3] null (unconsumed header slots)
-     *   [4] the unobservable primitive-accepting ReturnHome marker
+     *   [4] null (I115-H5: no ReturnHome is carried)
      *   [5] supplied0
      *
      * I115-H3: supplied0 sits at the B5 supplied position, so the direct
@@ -423,71 +423,17 @@ final class ProtosFrameArguments {
             null,
             null,
             null,
-            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
+            null,
             supplied0
         };
     }
 
     /**
      * I115-H3 (EXPERIMENTAL): supplied argument 0 of either the static unary
-     * layout or B5, read without any layout test. I115-H4-B: the
-     * experimental Call1 enters its callee with B5, so no other layout
-     * exists.
+     * layout or B5, read without any layout test.
      */
     static Object experimentalSuppliedArgument0(Object[] arguments) {
         return arguments[SUPPLIED_ARGUMENT_OFFSET];
-    }
-
-    /**
-     * I115-H4-B (EXPERIMENTAL, GraalPy PArguments.create(1) +
-     * setArgument): the B5+ header of {@link
-     * #compactAdmittedTerminalClosureCallOneNoHome} with the invoked Closure
-     * (slot 0) and the caller slot (slot 3) still to be installed. It is the
-     * same B5 contract, not another layout: before the call, {@link
-     * #installAdmittedClosure} (GraalPy FunctionDirectInvokeNode
-     * setFunctionObject) and {@link #installAdmittedCallerSlot} (GraalPy
-     * CallContext.prepareCall) complete it, and no callee ever receives it
-     * incomplete. Only the direct tier of ProtosExperimentalCallUnaryNode
-     * uses it, after guards that proved the canonical {@code call} selection
-     * and the unobservable ReturnHome of the Closure it installs.
-     */
-    static Object[] admittedTerminalClosureCallOneToInstall(Object supplied0) {
-        return new Object[] {
-            null,
-            DIRECT_CLOSURE_CALL,
-            null,
-            null,
-            ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime(),
-            supplied0
-        };
-    }
-
-    /** I115-H4-B (EXPERIMENTAL): installs the invoked Closure of a staged B5 header. */
-    static void installAdmittedClosure(Object[] arguments, ProtosClosureValue closure) {
-        arguments[CLOSURE_INDEX] = closure;
-    }
-
-    /** I115-H4-B (EXPERIMENTAL): the invoked Closure of an unpublished admitted B5 header. */
-    static ProtosClosureValue admittedInvokedClosure(Object[] arguments) {
-        return (ProtosClosureValue) arguments[CLOSURE_INDEX];
-    }
-
-    /**
-     * I115-H4-B (EXPERIMENTAL): installs the caller slot of a staged B5
-     * header: a caller reference exactly as an admitted terminal call passes
-     * it (see InvokeClosureOneTail#callerArgument).
-     */
-    static void installAdmittedCallerSlot(Object[] arguments, Object callerReference) {
-        arguments[CALLER_INDEX] = callerReference;
-    }
-
-    /**
-     * I115-H4-B (EXPERIMENTAL, GraalPy CalleeContext): the raw B5 caller
-     * slot of a call header, as its caller stored it. Nothing is resolved,
-     * validated or published.
-     */
-    static Object admittedCallerSlot(Object[] arguments) {
-        return arguments[CALLER_INDEX];
     }
 
     /** I115-H (EXPERIMENTAL): whether {@code arguments} use the static unary layout. */

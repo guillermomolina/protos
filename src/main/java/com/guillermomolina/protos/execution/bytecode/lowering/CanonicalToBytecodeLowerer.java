@@ -294,6 +294,13 @@ final class CanonicalToBytecodeLowerer {
      */
     private final java.util.Map<CanonicalClosure, CanonicalBindingIdentity>
             experimentalRecursiveBindings = new java.util.IdentityHashMap<>();
+    /*
+     * I115-H5 EXPERIMENTAL: the module ROOT bindings whose Closure was
+     * lowered as an experimentalRecursiveInteger root, the only callees the
+     * static unary ABI of InvokeExperimentalClosureOneTail can enter.
+     */
+    private final java.util.Set<CanonicalBindingIdentity>
+            experimentalDirectUnaryBindings = new java.util.HashSet<>();
     private CanonicalClosure currentExperimentalRootDefinition;
 
     /*
@@ -855,6 +862,7 @@ final class CanonicalToBytecodeLowerer {
                         bindingAnalysisFor(sequence, activationDefinition));
         // I115-R2: discover the module binding before nested root lowering.
         if (activationDefinition == null) {
+            experimentalDirectUnaryBindings.clear();
             CanonicalBindingAnalysis analysis =
                     rootPlan.rootFacts().bindingAnalysis();
             CanonicalLexicalScope scope = rootPlan.rootFacts().scope();
@@ -1117,6 +1125,16 @@ final class CanonicalToBytecodeLowerer {
         ExperimentalCompactRoot experimentalCompact =
                 admitExperimentalCompactRoot(
                         sequence, activationDefinition, rootFacts);
+        // I115-H5: record the binding of an admitted recursive Integer callee.
+        if (activationDefinition != null
+                && experimentalCompact != null
+                && experimentalCompact.experimentalRecursiveInteger()) {
+            CanonicalBindingIdentity binding =
+                    experimentalRecursiveBindings.get(activationDefinition);
+            if (binding != null) {
+                experimentalDirectUnaryBindings.add(binding);
+            }
+        }
 
         builder.beginSourceSection(
                 rootSpan.startOffset(),
@@ -1682,6 +1700,12 @@ final class CanonicalToBytecodeLowerer {
                         && (loweringRefinementAccepted
                                 || rootPlan.plannedEffectiveRoot().proven()));
         result.recordDirectScalarLocalCarrierBody(directScalarLocalBody);
+        // I115-H5 EXPERIMENTAL: the focal run root and the recursive Integer roots never project.
+        if (experimentalCallRoot
+                || (experimentalCompact != null
+                        && experimentalCompact.experimentalRecursiveInteger())) {
+            epilogProjectsReturnCarrier = false;
+        }
         result.recordEpilogProjectsReturnCarrier(epilogProjectsReturnCarrier);
         if (ProtosDiagnosticRootIdentity.ENABLED) {
             ProtosDiagnosticRootIdentity.record(
@@ -4379,6 +4403,10 @@ final class CanonicalToBytecodeLowerer {
      * argument stays a carrier exactly as for {@code InvokeClosureOne}. The
      * call keeps its CallTag over the exact call span of the statement.
      * Answers whether the I115-H4-B experimental Call1 was emitted.
+     * I115-H5: the experimental Call1, with the static unary ABI, is emitted
+     * only for a ROOT binding whose Closure was admitted as
+     * experimentalRecursiveInteger; every other Call1 keeps the ordinary
+     * InvokeClosureOneTail, decided here during lowering.
      */
     private boolean emitTerminalClosureCall(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4400,9 +4428,9 @@ final class CanonicalToBytecodeLowerer {
                 && admitsExperimentalTerminalUnaryCall(
                         call, sequence, activationDefinition)) {
             /*
-             * I115-H4-B EXPERIMENTAL (GraalPy CallUnaryMethod): the call
-             * preparation lives in the operation's helper nodes; no other
-             * operation is emitted. InstrumentCallReturn and InstrumentCall
+             * I115-H5 EXPERIMENTAL: a direct call with the static unary ABI
+             * to an admitted recursive Integer callee; no other operation is
+             * emitted. InstrumentCallReturn and InstrumentCall
              * emit instructions only under EXPERIMENTAL_TRACE_CONFIG.
              */
             experimental = true;
@@ -4439,13 +4467,11 @@ final class CanonicalToBytecodeLowerer {
      * admission localized to the focal run shape: the terminal Call1 of a
      * parameterless Closure root whose body is only that call, whose
      * receiver is a captured lookup of a module ROOT binding and whose
-     * argument is an Integer literal. I115-H4-B: nothing about the callee
-     * root is certified, and the emission order of the group is not
-     * consulted: the operation enters any callee with the universal B5
-     * contract, and its direct tier admits, at run time, exactly the
-     * receivers the ordinary InvokeClosureOneTail direct tier admits
-     * (Object.call selection, Context, ReturnHome and projection);
-     * every other receiver takes the ordinary D013 fallback.
+     * argument is an Integer literal. I115-H5: the operation enters its
+     * callee only with the static unary ABI, so the binding must also be one
+     * whose Closure was already lowered as an experimentalRecursiveInteger
+     * root (experimentalDirectUnaryBindings). Any other Call1 keeps the
+     * ordinary InvokeClosureOneTail; nothing is decided at run time.
      */
     private boolean admitsExperimentalTerminalUnaryCall(
             CanonicalCall call,
@@ -4468,7 +4494,8 @@ final class CanonicalToBytecodeLowerer {
         return currentRootAnalysis.resolutionOf(lookup).orElse(null)
                         instanceof CanonicalBindingResolution.CapturedResolved captured
                 && captured.identity().owner().kind()
-                        == CanonicalLexicalScope.Kind.ROOT;
+                        == CanonicalLexicalScope.Kind.ROOT
+                && experimentalDirectUnaryBindings.contains(captured.identity());
     }
 
     /** The single Call1 argument; a number literal stays a primitive carrier. */
