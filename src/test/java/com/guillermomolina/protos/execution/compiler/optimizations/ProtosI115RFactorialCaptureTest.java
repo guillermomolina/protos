@@ -18,13 +18,14 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.oracle.truffle.api.bytecode.Instruction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Arrays;
 import java.util.List;
 import org.graalvm.polyglot.Value;
 import org.junit.jupiter.api.Disabled;
@@ -462,9 +463,9 @@ final class ProtosI115RFactorialCaptureTest {
                         "Unexpected retired operation: " + retired);
             }
 
-            // I115-H4-B: any admitted shape uses the experimental B5 Call1.
-            assertExperimentalUnaryCall(session, "runZero");
-            assertExperimentalUnaryCall(session, "runThree");
+            // I115-H5: compute is not an admitted recursive Integer callee.
+            assertOrdinaryUnaryCall(session, "runZero");
+            assertOrdinaryUnaryCall(session, "runThree");
 
             assertEquals(
                     1,
@@ -760,8 +761,8 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H4-B: the experimental Call1 is emitted and the ordinary terminal
-     * Call1 is not. Both enter their callee with the same B5 contract.
+     * I115-H5: the experimental Call1 (static unary ABI) is emitted and the
+     * ordinary terminal Call1 is not.
      */
     private static void assertExperimentalUnaryCall(
             ProtosStandaloneHostedSession session, String name)
@@ -769,7 +770,7 @@ final class ProtosI115RFactorialCaptureTest {
         List<String> names = instructionNames(session, name);
         assertTrue(
                 names.contains("c.InvokeExperimentalClosureOneTail"),
-                name + " must use the experimental B5 Call1: " + names);
+                name + " must use the experimental Call1: " + names);
         assertTrue(
                 names.stream().noneMatch(
                         instruction -> instruction.endsWith(
@@ -778,13 +779,28 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H4-B: the experimental Call1 enters any callee root with B5, so
-     * an ordinary (non-H3) root such as compute is entered by its direct
-     * tier and binds its parameter exactly as from the ordinary call; no
-     * lowering fact certifies the callee.
+     * I115-H5: the ordinary terminal Call1 is emitted and the experimental
+     * Call1 is not.
+     */
+    private static void assertOrdinaryUnaryCall(
+            ProtosStandaloneHostedSession session, String name)
+            throws Exception {
+        List<String> names = instructionNames(session, name);
+        assertTrue(
+                names.contains("c.InvokeClosureOneTail"),
+                name + " must use the ordinary Call1: " + names);
+        assertTrue(
+                !names.contains("c.InvokeExperimentalClosureOneTail"),
+                name + " must not use the experimental Call1: " + names);
+    }
+
+    /*
+     * I115-H5: compute is not an experimentalRecursiveInteger callee, so
+     * runZero and runThree keep the ordinary Call1 and its B5 ABI, while
+     * run keeps the experimental Call1 to the recursive factorial.
      */
     @Test
-    void experimentalUnaryCallEntersOrdinaryRootWithB5()
+    void ordinaryUnaryCallEntersNonRecursiveRootWithB5()
             throws Exception {
         String source = I115_R2_SOURCE + """
                 compute: (n) => {
@@ -816,8 +832,8 @@ final class ProtosI115RFactorialCaptureTest {
                     I115_R6_RUN_DSL_FULL,
                     instructionNames(session, "run"),
                     "I115-R6 run() FULL DSL sequence");
-            assertExperimentalUnaryCall(session, "runZero");
-            assertExperimentalUnaryCall(session, "runThree");
+            assertOrdinaryUnaryCall(session, "runZero");
+            assertOrdinaryUnaryCall(session, "runThree");
 
             // Module, factorial, run, compute, compute's dispatching ifTrue
             // callback (MaterializeCurrentClosure), runZero and runThree.
@@ -859,7 +875,7 @@ final class ProtosI115RFactorialCaptureTest {
                                 .executable().execute().asLong());
             }
 
-            System.out.println("I115_H4B_B5_ORDINARY_CALLEE=PASS");
+            System.out.println("I115_H5_ORDINARY_CALLEE=PASS");
         }
     }
 
@@ -924,44 +940,42 @@ final class ProtosI115RFactorialCaptureTest {
     }
 
     /*
-     * I115-H4-B: the header the experimental direct tier stages and
-     * completes is exactly the B5+ header of the ordinary admitted terminal
-     * Call1 (same length, positions and markers), and the H3 parameter read
-     * finds supplied0 at the B5 supplied position.
+     * I115-H5: run()'s experimental Call1 and factorial's recursive call
+     * both build their arguments with experimentalStaticUnaryCall: the
+     * marker, header slots 1..4 null (no receiver, caller, Prelude, Task or
+     * ReturnHome; slot 4 is the B5 ReturnHome position), and supplied0 at the
+     * B5 supplied position.
      */
     @Test
-    void experimentalDirectHeaderIsTheOrdinaryB5Header() {
-        Object[] caller = new Object[ProtosFrameArguments.HEADER_LENGTH];
-        Object supplied0 = 7L;
+    void experimentalStaticUnaryCallIsTheSharedRunAndRecursionAbi() {
+        Object supplied0 = 20L;
 
-        Object[] staged =
-                ProtosFrameArguments.admittedTerminalClosureCallOneToInstall(supplied0);
-        ProtosFrameArguments.installAdmittedClosure(staged, null);
-        ProtosFrameArguments.installAdmittedCallerSlot(staged, caller);
+        Object[] fromRun = ProtosFrameArguments.experimentalStaticUnaryCall(supplied0);
+        Object[] fromRecursion = ProtosFrameArguments.experimentalStaticUnaryCall(supplied0);
 
-        Object[] ordinary =
-                ProtosFrameArguments.compactAdmittedTerminalClosureCallOneNoHome(
-                        null, caller, supplied0);
+        assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, fromRun.length);
+        assertTrue(ProtosFrameArguments.isExperimentalStaticUnaryCall(fromRun));
+        for (int slot = 1; slot < ProtosFrameArguments.HEADER_LENGTH; slot++) {
+            assertNull(fromRun[slot], "header slot " + slot + " must carry nothing");
+        }
+        assertNull(fromRun[4], "slot 4 (ReturnHome) must be null");
+        assertSame(supplied0, fromRun[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
+        assertSame(supplied0, ProtosFrameArguments.experimentalSuppliedArgument0(fromRun));
 
-        assertEquals(ProtosFrameArguments.HEADER_LENGTH + 1, staged.length);
-        assertEquals(Arrays.asList(ordinary), Arrays.asList(staged));
-        assertTrue(ProtosFrameArguments.admittedCallerSlot(staged) == caller);
-        assertEquals(
-                supplied0,
-                staged[ProtosFrameArguments.SUPPLIED_ARGUMENT_OFFSET]);
-        assertEquals(
-                supplied0,
-                ProtosFrameArguments.experimentalSuppliedArgument0(staged));
-        assertTrue(ProtosFrameArguments.acceptsPrimitiveResult(staged));
+        // Same layout, element by element, including the identical marker.
+        assertEquals(fromRecursion.length, fromRun.length);
+        for (int slot = 0; slot < fromRun.length; slot++) {
+            assertSame(fromRecursion[slot], fromRun[slot], "slot " + slot);
+        }
     }
 
     /*
-     * I115-H4-B: a receiver the direct tier does not admit (an object whose
-     * call is a method, not a ProtosClosureValue) takes the generic tier,
-     * the ordinary D013 terminal Call1 fallback, with valid guest values.
+     * I115-H5: the doubler object is not an admitted recursive Integer
+     * Closure. Its Call1 is emitted with the ordinary operator, never through
+     * the experimental one.
      */
     @Test
-    void experimentalUnaryCallGenericFallback() throws Exception {
+    void nonClosureCallableUsesOrdinaryTerminalCall() throws Exception {
         String source = """
                 doubler: { call: (n) => { n * 2 } }
 
@@ -979,7 +993,7 @@ final class ProtosI115RFactorialCaptureTest {
                     ProtosExecutionOutcome.State.COMPLETED,
                     session.initialOutcome().state());
 
-            assertExperimentalUnaryCall(session, "runDoubler");
+            assertOrdinaryUnaryCall(session, "runDoubler");
             for (int i = 0; i < 3; i++) {
                 assertEquals(
                         42,
@@ -987,7 +1001,7 @@ final class ProtosI115RFactorialCaptureTest {
                                 .executable().execute().asInt());
             }
 
-            System.out.println("I115_H4B_GENERIC=PASS");
+            System.out.println("I115_H5_NON_CLOSURE_CALLABLE=PASS");
         }
     }
 

@@ -8,6 +8,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.19-SNAPSHOT
+
+- `I115-H5` (experimental factorial hot-path reductions): retain the physical
+  factorial root while removing experimental unary dispatcher/context helpers
+  and restoring one direct `InvokeExperimentalClosureOneTail` Bytecode DSL
+  operation for statically admitted recursive Integer callees.
+  - The optimized Call1 resolves the target once when installing its direct
+    specialization and invokes it with a reduced static unary header, without
+    transporting the caller, Prelude, Task or ReturnHome. Non-admitted callees
+    continue through the ordinary Call1 path.
+  - Simplify module `ReadGlobal` to an unguarded specialization-installation
+    value cache; an uncached interpreter still resolves each execution.
+    Remove primitive return-carrier projection for experimental callee roots.
+  - Update factorial and structural oracles, removing three experimental
+    call-dispatch/context source files no longer used by this iteration.
+  - **Historical semantic divergences:** the cached global value does not
+    observe later rebinding, module/Context changes or authority mutations;
+    the direct static invocation does not recheck `Object.call`, receiver
+    identity or Context, and omits suspension and bridged control-transfer
+    handling. The existing H3 wrapping `long` arithmetic and D179 C0 late
+    lexical-retargeting divergence remain. This is not normative conformance.
+  - Reconstructed from original I115 commit
+    `d319618e17e7c36a9f1713784ac0564a284d2f36`. No behavioral tests
+    were run on this versioned historical replay.
+
 ## 0.4.18-SNAPSHOT
 
 - `I115-H4-B` (converge experimental unary Closure dispatch on B5):
