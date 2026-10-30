@@ -8,6 +8,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.26-SNAPSHOT
+
+- **I115-H8 — experimental GraalPy-shaped compact object-slot writes.**
+  Introduce `ExperimentalSetAttribute` in the Bytecode DSL for a compact
+  explicit assignment to an existing member of a module-captured object.
+  The receiver is evaluated before the right-hand side, and the write
+  executes as one specialized bytecode operation, not a prepared send.
+  - At specialization installation, cache the identity of an exact
+    `ProtosObjectValue` and its stable physical `SlotCell` through
+    `ProtosValueLookup.experimentalWritableSelection`. A valid Truffle
+    assumption protects the selected location, while slot-value changes
+    invalidate value-lookup dependencies. The slow tier uses ordinary
+    `assignLocalSlot` and emits a guest error for an invalid mutation.
+  - Expand compact-root admission and emission for explicit member stores
+    and selected member reads. Reuse `ReadGlobal`, `ReadMemberAtRoot`, and
+    the R5 raw-Integer return convention on the experimental path.
+  - Extend `ProtosPrimitiveSlotWriteRegressionTest` to assert the physical
+    `ExperimentalSetAttribute` shape and that the stored value may remain
+    an internal Java `Integer` carrier. These are historical source tests;
+    none were executed in this versioned replay.
+  - **Historical semantic limitations:** the optimized write intentionally
+    bypasses frozen-state checks and guest numeric normalization, allowing
+    mutation that ordinary Protos would reject and permitting raw `int`
+    (`Integer`) storage rather than the guest long-only Integer contract.
+    It is NOT a normative implementation of `slotAtPut` or ordinary slot
+    mutation. Prior experimental divergences in dynamic `Object.call`
+    selection, `ReturnHome`, suspension, and D179 C0 lexical authority
+    remain unproven or unresolved. No successful compilation, complete
+    semantic test gate, or performance improvement is claimed.
+  - Original implementation: `ba680dd2c93c9994f81164dc4b395279a455a1d6`.
+    All five original source/test blobs remain unchanged in this replay.
+
 ## 0.4.25-SNAPSHOT
 
 - **I115-H7-R5 — retain raw Integer carriers across compact returns and Polyglot host entry.**

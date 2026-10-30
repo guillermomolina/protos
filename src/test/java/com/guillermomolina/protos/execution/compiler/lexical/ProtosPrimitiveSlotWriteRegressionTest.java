@@ -18,12 +18,146 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 final class ProtosPrimitiveSlotWriteRegressionTest {
+
+    /**
+     * I115-H8: the primitive-object-slot-write workload must use
+     * the compact SetAttribute path, not generic slot mutation.
+     */
+    @Test
+    void h8ObjectSlotWriteUsesDirectCompactBytecode() throws Exception {
+        Path directory = Path.of("target", "i115-h8-slot-write");
+        Files.createDirectories(directory);
+
+        Path source = directory.resolve("primitive-object-slot-write.protos");
+        Files.writeString(source, """
+                holder: {
+                    value: 1
+                }
+
+                run: () => {
+                    holder.value = 2
+                    holder.value
+                }
+                """, StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(
+                        Path.of("protos", "lib", "core"), source)) {
+
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    session.initialOutcome().state());
+
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+
+            ProtosBytecodeRootNode root = assertInstanceOf(
+                    ProtosBytecodeRootNode.class,
+                    prepared.hostExecutableForTesting()
+                            .target.getRootNode());
+
+            List<String> instructions =
+                    root.getBytecodeNode()
+                            .getInstructionsAsList()
+                            .stream()
+                            .map(ProtosInstructionNames::of)
+                            .map(name -> {
+                                int index = name.indexOf('$');
+                                return index < 0
+                                        ? name
+                                        : name.substring(0, index);
+                            })
+                            .toList();
+
+            System.out.println(
+                    "I115_H8_RUN_INSTRUCTIONS=" + instructions);
+
+            assertEquals(
+                    1L,
+                    instructions.stream()
+                            .filter("c.ExperimentalSetAttribute"::equals)
+                            .count(),
+                    "Exactly one direct SetAttribute is required");
+
+            assertEquals(
+                    2L,
+                    instructions.stream()
+                            .filter("c.ReadGlobal"::equals)
+                            .count(),
+                    "Write and read must use direct global access");
+
+            assertEquals(
+                    1L,
+                    instructions.stream()
+                            .filter("c.ReadMemberAtRoot"::equals)
+                            .count(),
+                    "Read must use the existing compact member PIC");
+
+            for (String forbidden : List.of(
+                    "MutateLocalSlot",
+                    "RequireObjectMutationTarget",
+                    "PrepareSend",
+                    "AccessNamedLexical",
+                    "PromoteFrameLexicalAuthority")) {
+                assertTrue(
+                        instructions.stream()
+                                .noneMatch(name -> name.contains(forbidden)),
+                        "Generic operation remains: " + forbidden
+                                + " in " + instructions);
+            }
+
+            assertTrue(
+                    root.isExperimentalH7RawIntegerReturn(),
+                    "H8 must reuse R5 raw Integer return transport");
+
+            for (int iteration = 0; iteration < 48; iteration++) {
+                assertEquals(
+                        2L,
+                        prepared.executable().execute().asLong());
+            }
+
+            ProtosClosureValue closure =
+                    prepared.closureForTesting();
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        closure.capturedLexicalEnvironmentForRuntime();
+
+                ProtosObjectValue holder = assertInstanceOf(
+                        ProtosObjectValue.class,
+                        module.readLocalSlotForRuntime("holder")
+                                .orElseThrow());
+
+                Object stored =
+                        holder.readLocalSlot("value").orElseThrow();
+
+                assertEquals(
+                        2,
+                        assertInstanceOf(Integer.class, stored).intValue(),
+                        "Direct store must retain its raw Integer carrier");
+
+                return null;
+            });
+
+            System.out.println("I115_H8_COMPACT_WRITE=PASS");
+            System.out.println("I115_H8_EXPECTED_RESULT=2");
+        }
+    }
+
     @Test
     void repeatedWriteThenReadReturnsCurrentPrimitive() {
         String core =
