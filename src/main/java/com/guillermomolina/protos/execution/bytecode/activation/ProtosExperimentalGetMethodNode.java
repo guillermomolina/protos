@@ -139,24 +139,7 @@ abstract class ProtosExperimentalGetMethodNode extends Node {
 
     /** The caller prelude by the admitted B5 accessors, registering the need once. */
     static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, Object caller) {
-        // TEMPORARY I115-H7-R1 DIAGNOSTIC: remove before commit.
-        if (System.getenv("PROTOS_I115_TRACE_CALLER_NEEDS") != null) {
-            traceCallerRead(root, caller);
-        }
         return ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller);
-    }
-
-    // TEMPORARY I115-H7-R1 DIAGNOSTIC: remove before commit.
-    @TruffleBoundary
-    private static void traceCallerRead(ProtosBytecodeRootNode root, Object caller) {
-        String slot = caller instanceof Object[] arguments && arguments.length > 3
-                ? String.valueOf(arguments[3] == null ? null : arguments[3].getClass().getSimpleName())
-                : "-";
-        System.out.println("I115_TRACE_GETMETHOD_CALLER root=" + root
-                + " caller=" + caller.getClass().getSimpleName()
-                + " callerSlot=" + slot
-                + " untransported=" + (caller instanceof Object[] arguments
-                        && ProtosFrameArguments.inheritsUntransportedCallerPrelude(arguments)));
     }
 
     /* Installation only: the guarded physical selection, or null. */

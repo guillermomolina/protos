@@ -700,16 +700,22 @@ final class ProtosFrameArguments {
      * PERF038-H: final zero-argument method frame for a guarded
      * source call with a proven unobservable ReturnHome.
      */
+    /**
+     * PERF038-H / I115-H7-R2: admitted synchronous Send0 with the B5 caller
+     * slot holding either the published activation or a deferred caller.
+     * The supplied caller reference has already been selected by the
+     * producer; constructing this header never publishes it.
+     */
     static Object[] compactImmediateMethodCallZeroNoHome(
             ProtosClosureValue closure,
             Object receiver,
             ProtosObjectValue methodHome,
-            ProtosActivation caller) {
+            Object callerReference) {
         return new Object[] {
             closure,
             receiver,
             methodHome,
-            caller,
+            callerReference,
             ProtosReturnHome.unobservableAcceptingPrimitiveResultForRuntime()
         };
     }
@@ -855,6 +861,7 @@ final class ProtosFrameArguments {
 
         ProtosClosureValue closure =
                 (ProtosClosureValue) arguments[CLOSURE_INDEX];
+
         /*
          * I115-B: a deferred caller is resolved here, so materializing this
          * invocation publishes its caller's single activation first.

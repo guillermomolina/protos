@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -27,6 +28,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.Instruction;
 import java.nio.charset.StandardCharsets;
@@ -656,6 +658,62 @@ final class ProtosI115H7MethodCallConvergenceTest {
                         "root " + index + ": no repeated invalidation");
                 assertTrue(settled.get(index).isValid());
             }
+        }
+    }
+
+    /**
+     * R2: the experimental B5 method-call header uses an unobservable
+     * ReturnHome. A selected Closure with a materialized captured home
+     * must therefore bypass the direct and indirect H7 tiers.
+     */
+    @Test
+    void observableReturnHomeIsNotAdmittedToH7DirectHeader() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("return-home-admission", METHOD_CALL)) {
+            ProtosClosureValue anchor =
+                    session.prepareTopLevel("run").closureForTesting();
+
+            session.processContextForTesting().callForRuntime(() -> {
+                ProtosLexicalEnvironment module =
+                        anchor.capturedLexicalEnvironmentForRuntime();
+                ProtosObjectValue receiver =
+                        assertInstanceOf(ProtosObjectValue.class,
+                                module.readLocalSlotForRuntime("receiver").orElseThrow());
+                ProtosClosureValue identity =
+                        assertInstanceOf(ProtosClosureValue.class,
+                                receiver.readLocalSlot("identity").orElseThrow());
+
+                ProtosLanguageContext context = ProtosLanguageContext.current();
+
+                assertTrue(identity.hasUnobservableInvocationReturnHomeForRuntime(),
+                        "identity retains the unobservable-home fast path");
+                assertTrue(
+                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
+                                identity, context) != null,
+                        "identity must still admit a direct target");
+
+                ProtosReturnHome capturedHome = new ProtosReturnHome();
+                ProtosClosureValue captured =
+                        new ProtosClosureValue(
+                                identity.definition(),
+                                identity.capturedLexicalContexts(),
+                                identity.capturedReceiver(),
+                                identity.methodHome().orElse(null),
+                                capturedHome,
+                                identity.prelude().orElse(null),
+                                identity.executionPlan().orElseThrow());
+
+                assertFalse(
+                        captured.hasUnobservableInvocationReturnHomeForRuntime(),
+                        "a real captured ReturnHome is observable");
+                assertNull(
+                        ProtosExperimentalCallBinaryMethodNode.admittedTargetOrNull(
+                                captured, context),
+                        "the unobservable B5 header must not receive a real home");
+                assertTrue(capturedHome.isActive(),
+                        "rejected admission must not complete the captured home");
+                return null;
+            });
         }
     }
 

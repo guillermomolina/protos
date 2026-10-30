@@ -500,11 +500,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return;
             }
             registered |= need;
-            // TEMPORARY I115-H7-R1 DIAGNOSTIC: remove before commit.
-            if (System.getenv("PROTOS_I115_TRACE_CALLER_NEEDS") != null) {
-                new Throwable("I115_TRACE_CALLER_NEED need=" + need
-                        + " registered=" + registered).printStackTrace(System.out);
-            }
             Assumption previous = stable;
             stable = com.oracle.truffle.api.Truffle.getRuntime()
                     .createAssumption("Protos root caller needs");
@@ -8929,7 +8924,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "enteredContext == cachedContext",
                     "prelude == cachedPrelude",
                     "cachedSend != null",
-                    "admitted(cachedSend)"
+                    "admitted(cachedSend)",
+                    "cachedCallee != null"
                 },
                 assumptions = "cachedSend.stability()",
                 limit = "3")
@@ -8937,9 +8933,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 String selector,
                 Object caller,
+                @Bind ProtosBytecodeRootNode root,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
-                @Bind("callerPrelude(caller)")
+                @Bind("callerPrelude(root, caller)")
                         ProtosPrelude prelude,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("selector") String cachedSelector,
@@ -8948,10 +8945,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedSendForPrelude(receiver, selector, prelude, enteredContext)")
                         GuardedSendTarget cachedSend,
+                @Cached(value = "calleeRootOrNull(cachedSend)", adopt = false)
+                        ProtosBytecodeRootNode cachedCallee,
                 @Cached("create(cachedSend.target())")
                         DirectCallNode node) {
-            ProtosActivation exactCaller =
-                    PrepareSendArguments.exactCaller(caller);
+            /*
+             * I115-H7-R2: a Prelude-inheriting source root may pass its
+             * admitted B5 header directly. No caller activation is
+             * published merely to execute this synchronous Send0.
+             *
+             * Own-Prelude roots retain the established exact-caller route
+             * until their independent admission rules are audited.
+             */
+            Object callerReference = deferInheritedCaller(caller)
+                    ? caller
+                    : PrepareSendArguments.exactCaller(caller);
+
+            /*
+             * If the selected callee requested its caller's Prelude,
+             * transport it with the B5 reference. Otherwise pass the
+             * caller unchanged; the callee registers its own need on
+             * the first untransported read.
+             */
+            Object calleeCaller = InvokeMethodOneTail.callerArgument(
+                    cachedCallee, cachedSend.closure(), callerReference, prelude);
 
             Object[] frameArguments =
                     ProtosFrameArguments
@@ -8959,7 +8976,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     cachedSend.closure(),
                                     receiver,
                                     cachedSend.methodHome(),
-                                    exactCaller);
+                                    calleeCaller);
 
             try {
                 return ProtosNumericValueSupport.guestValue(
@@ -8994,8 +9011,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     receiver, selector, prelude, enteredContext);
         }
 
-        static ProtosPrelude callerPrelude(Object caller) {
-            return TryDirectSendOne.callerPrelude(caller);
+        /*
+         * A still-compact source root that inherits its Prelude is the
+         * deferred-caller case. Publication is not required for the
+         * synchronous, source-backed Send0 admitted above.
+         */
+        static boolean deferInheritedCaller(Object caller) {
+            return caller instanceof Object[] arguments
+                    && arguments.length >= ProtosFrameArguments.HEADER_LENGTH
+                    && arguments[0] instanceof ProtosClosureValue closure
+                    && closure.preludeOrNullForRuntime() == null;
+        }
+
+        static ProtosBytecodeRootNode calleeRootOrNull(
+                GuardedSendTarget selected) {
+            return InvokeMethodOneTail.calleeRootOrNull(selected);
+        }
+
+        /*
+         * The current root's effective Prelude. Register its own
+         * NEEDS_CALLER_PRELUDE if an inherited Prelude was not transported.
+         */
+        static ProtosPrelude callerPrelude(
+                ProtosBytecodeRootNode root, Object caller) {
+            return InvokeClosureOneTail.admittedCallerPrelude(root, caller);
         }
 
         static boolean isForeignReceiver(Object receiver) {
@@ -9957,10 +9996,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * invocation's single activation through the existing mechanism.
          */
         static ProtosActivation exactCaller(ProtosBytecodeRootNode root, Object caller) {
+            // The generic fallback requires the exact caller regardless of
+            // whether this invocation arrived already published. Record the
+            // root's need on first use, independently of the incoming ABI.
+            // A published caller still returns without materialization.
+            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
             if (caller instanceof ProtosActivation activation) {
                 return activation;
             }
-            root.requestCallerNeed(NEEDS_EXACT_ACTIVATION);
             return ProtosFrameArguments.resolveAdmittedCaller(caller);
         }
 

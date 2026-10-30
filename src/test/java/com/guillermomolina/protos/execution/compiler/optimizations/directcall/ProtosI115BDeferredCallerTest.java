@@ -1685,10 +1685,13 @@ final class ProtosI115BDeferredCallerTest {
      * guarded source send (which, unlike a native send such as indexing,
      * does not publish the sender) and ends in an admitted terminal Call1. The callee root each terminal site caches is the root of the
      * target its DirectCallNode invokes, and the needs land on exactly
-     * those roots: D and C, which read an inherited prelude their caller
-     * did not transport. A reads its own prelude; B's caller is the
-     * activation the top-level call publishes for A, which answers
-     * directly. After the needs settle, further runs invalidate nothing.
+     * those roots: B, C and D, which initially read an inherited
+     * prelude through a caller reference that has not transported it.
+     * I115-H7-R2 preserves the deferred B5 caller across admitted Send0
+     * instead of publishing A merely for method selection.
+     * A does not request an inherited caller prelude. Once the needs
+     * settle, later calls transport the requested Prelude without
+     * repeated invalidation or unnecessary caller publication.
      */
     @Test
     void realChainRegistersNeedsOnTheInvokedRootsAndConverges() throws Exception {
@@ -1751,7 +1754,8 @@ final class ProtosI115BDeferredCallerTest {
 
             assertTrue(rootD.hasCallerNeed(need), "D reads an untransported inherited prelude");
             assertTrue(rootC.hasCallerNeed(need), "C computes the prelude D requested");
-            assertFalse(rootB.hasCallerNeed(need), "B's caller is A's published activation");
+            assertTrue(rootB.hasCallerNeed(need),
+                    "B also reads an initially untransported inherited prelude");
             assertFalse(rootA.hasCallerNeed(need), "A owns its prelude");
 
             List<com.oracle.truffle.api.Assumption> settled = new ArrayList<>();
