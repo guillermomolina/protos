@@ -121,6 +121,46 @@ public final class ProtosValueLookup {
         }
     }
 
+    /**
+     * I115-H8 EXPERIMENTAL: select an existing local slot once, during
+     * specialization. The selected SlotCell remains the authoritative
+     * storage location. No alternate object store is introduced.
+     *
+     * Only exact ordinary objects are admitted; other representations
+     * retain the generic path.
+     */
+    public static GuardedSlotSelection experimentalWritableSelection(
+            Object receiver, String name) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (receiver == null
+                || receiver.getClass() != ProtosObjectValue.class) {
+            return null;
+        }
+        ProtosObjectValue object = (ProtosObjectValue) receiver;
+        if (!object.hasLocalSlot(name)) {
+            return null;
+        }
+        GuardedSlotSelection selection =
+                lookupGuardedSlotSelection(receiver, name, null);
+        return selection != null && selection.home() == object
+                ? selection
+                : null;
+    }
+
+    /**
+     * I115-H8 EXPERIMENTAL: write the selected physical location.
+     * No nominal lookup, writable-state guard, or guest Integer
+     * projection occurs at this site.
+     */
+    public static Object experimentalWriteSelected(
+            GuardedSlotSelection selection,
+            String name,
+            Object value) {
+        selection.home().experimentalAssignSelectedLocation(
+                name, selection.location(), value);
+        return value;
+    }
+
     public static GuardedSlotSelection lookupGuardedSlotSelection(
             Object receiver,
             String name,

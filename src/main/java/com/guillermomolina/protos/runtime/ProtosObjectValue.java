@@ -625,6 +625,23 @@ public class ProtosObjectValue implements TruffleObject {
         ProtosLexicalBindingAuthorityCalls.put(lexicalBindingAuthority, name, value);
     }
 
+    /**
+     * I115-H8 EXPERIMENTAL: direct write of a previously selected,
+     * stable local SlotCell.
+     *
+     * The caller's Truffle assumption protects the selected location
+     * against remove/recreate. Value-lookup dependencies are invalidated,
+     * while frozen-state admission and guest numeric normalization are
+     * intentionally bypassed to reproduce the GraalPy physical path.
+     */
+    final void experimentalAssignSelectedLocation(
+            String name,
+            ProtosMapBackedLexicalBindingAuthority.SlotCell location,
+            Object value) {
+        invalidateValueLookupDependencies(name);
+        location.replace(value);
+    }
+
     public Object removeLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
 

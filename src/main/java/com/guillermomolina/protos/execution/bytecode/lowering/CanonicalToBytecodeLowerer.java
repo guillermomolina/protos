@@ -10379,7 +10379,12 @@ final class CanonicalToBytecodeLowerer {
             return experimentalCompactInvokes(create.value());
         }
         if (expression instanceof CanonicalAssign assign) {
-            return experimentalCompactInvokes(assign.value());
+            return assign.target().isPresent()
+                    || experimentalCompactInvokes(assign.value());
+        }
+        if (expression instanceof CanonicalMember) {
+            // H8: explicit member access participates in compact return transport.
+            return true;
         }
         if (!(expression instanceof CanonicalSend send)) {
             return false;
@@ -10724,6 +10729,16 @@ final class CanonicalToBytecodeLowerer {
             }
             return kinds.get(identity);
         }
+        if (expression instanceof CanonicalMember member) {
+            // I115-H8: admit an ordinary member read from a captured
+            // module binding, without the generic member-read lowerer.
+            if (currentExperimentalRecursiveIntegerAdmission
+                    || !(member.receiver() instanceof CanonicalLookup receiver)
+                    || experimentalCompactGlobal(receiver, scope) == null) {
+                return null;
+            }
+            return ExperimentalCompactKind.OBJECT;
+        }
         if (expression instanceof CanonicalCreate
                 || expression instanceof CanonicalAssign) {
             return admitExperimentalCompactBinding(
@@ -10834,7 +10849,18 @@ final class CanonicalToBytecodeLowerer {
         }
         if (binding instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
-                return null;
+                // I115-H8: compact explicit assignment to an existing
+                // member of a captured module object. The destination
+                // is evaluated before the RHS, but its full semantic
+                // validation is deliberately delegated to SetAttribute.
+                if (currentExperimentalRecursiveIntegerAdmission
+                        || !(assign.target().orElseThrow()
+                                instanceof CanonicalLookup receiver)
+                        || experimentalCompactGlobal(receiver, scope) == null) {
+                    return null;
+                }
+                return admitExperimentalCompactExpression(
+                        assign.value(), scope, kinds, callback);
             }
             CanonicalBindingIdentity identity =
                     experimentalCompactIdentity(
@@ -11188,6 +11214,12 @@ final class CanonicalToBytecodeLowerer {
         beginStatement(builder, expression);
         if (expression instanceof CanonicalCreate create) {
             emitExperimentalCompactStore(builder, create, create.name(), create.value());
+        } else if (expression instanceof CanonicalAssign assign
+                && assign.target().isPresent()) {
+            // The explicit assignment's result is discarded by this statement.
+            builder.beginDiscardValue();
+            emitExperimentalCompactValue(builder, assign);
+            builder.endDiscardValue();
         } else if (expression instanceof CanonicalAssign assign) {
             emitExperimentalCompactStore(builder, assign, assign.name(), assign.value());
         } else if (expression instanceof CanonicalSend send
@@ -11315,6 +11347,20 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 builder.emitLoadLocal(experimentalCompactLocal(lookup.name()));
             }
+        } else if (expression instanceof CanonicalMember member) {
+            // I115-H8: reuse the already specialized root-level read.
+            builder.beginReadMemberAtRoot(member.name());
+            emitExperimentalCompactValue(builder, member.receiver());
+            builder.endReadMemberAtRoot();
+        } else if (expression instanceof CanonicalAssign assign
+                && assign.target().isPresent()) {
+            // I115-H8: GraalPy-shaped SetAttribute.
+            // Receiver first, RHS second, one physical store operation.
+            builder.beginExperimentalSetAttribute(assign.name());
+            emitExperimentalCompactValue(
+                    builder, assign.target().orElseThrow());
+            emitExperimentalCompactValue(builder, assign.value());
+            builder.endExperimentalSetAttribute();
         } else if (expression instanceof CanonicalCreate
                 || expression instanceof CanonicalAssign) {
             // The stored value is the result; the RHS is not reevaluated.

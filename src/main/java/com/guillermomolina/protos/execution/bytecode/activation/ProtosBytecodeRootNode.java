@@ -2642,6 +2642,66 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
+     * I115-H8 EXPERIMENTAL: GraalPy-shaped SetAttribute.
+     *
+     * The common specialization caches one receiver and its existing
+     * physical SlotCell. The slow path handles unsupported representations
+     * and errors. This deliberately relaxes frozen-state checking and
+     * permits an internal Integer carrier to inhabit the selected slot.
+     */
+    @Operation
+    @ConstantOperand(type = String.class, name = "name")
+    public static final class ExperimentalSetAttribute {
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "cachedSelection != null"
+                },
+                assumptions = "cachedSelection.stability()",
+                limit = "3")
+        public static Object direct(
+                String name,
+                Object receiver,
+                Object value,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("writableSelection(receiver, name)")
+                        ProtosValueLookup.GuardedSlotSelection cachedSelection) {
+            return ProtosValueLookup.experimentalWriteSelected(
+                    cachedSelection, name, value);
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object generic(
+                String name,
+                Object receiver,
+                Object value,
+                @Bind VirtualFrame frame) {
+            if (receiver instanceof ProtosObjectValue object
+                    && !ProtosNumericValueSupport.isCurrentNumber(receiver)) {
+                try {
+                    // Non-admitted receivers keep their ordinary guest
+                    // value representation and mutation checks.
+                    object.assignLocalSlot(
+                            name, ProtosNumericValueSupport.guestValue(value));
+                    return value;
+                } catch (IllegalStateException invalidMutation) {
+                    // The exact activation is needed on an error only.
+                }
+            }
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(
+                            ProtosFrameArguments.activation(
+                                    frame.getArguments())));
+        }
+
+        static ProtosValueLookup.GuardedSlotSelection writableSelection(
+                Object receiver, String name) {
+            return ProtosValueLookup.experimentalWritableSelection(
+                    receiver, name);
+        }
+    }
+
+    /**
      * Consumes an evaluated expression whose value is not the Sequence
      * result. The child still executes, including errors and effects.
      */
