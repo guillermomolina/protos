@@ -65,6 +65,33 @@ final class ProtosMapBackedLexicalBindingAuthority
         }
     }
 
+    /*
+     * I115-H10-A: the physical store uses a Java long for every
+     * ordinary signed-64 Protos Integer. A Java Integer carrier
+     * from an older experimental operation is widened, never
+     * truncated. Other guest values keep their object storage.
+     */
+    private static Object toStorageValue(Object value) {
+        if (value instanceof ProtosIntegerValue integer) {
+            return Long.valueOf(integer.longValue());
+        }
+        if (value instanceof Integer integer) {
+            return Long.valueOf(integer.longValue());
+        }
+        return value;
+    }
+
+    /*
+     * The guest-facing authority never exposes an internal long.
+     * The stored location, not this projected guest value, is the
+     * single authoritative source of the binding.
+     */
+    private static Object toGuestValue(Object value) {
+        return value instanceof Long integer
+                ? ProtosNumericValueSupport.integer(integer.longValue())
+                : value;
+    }
+
     static final class SlotCell {
         private final Store store;
         private final String key;
@@ -76,7 +103,9 @@ final class ProtosMapBackedLexicalBindingAuthority
         }
 
         Object value() {
-            return DynamicObject.GetNode.getUncached().execute(store, key, null);
+            return toGuestValue(
+                    DynamicObject.GetNode.getUncached()
+                            .execute(store, key, null));
         }
 
         Store storage() {
@@ -113,24 +142,18 @@ final class ProtosMapBackedLexicalBindingAuthority
             if (token != null && replacement instanceof ProtosClosureValue) {
                 token.invalidate();
             }
-            put.execute(store, key, replacement);
+            put.execute(store, key, toStorageValue(replacement));
         }
 
-        /** I115-only admission: represent existing signed-32 guest integers as
-         * the same primitive storage form as compact SetAttribute writes. */
-        void normalizeExperimentalInt() {
-            Object value = value();
-            if (value instanceof ProtosIntegerValue integer) {
-                long raw = integer.longValue();
-                if (raw >= Integer.MIN_VALUE && raw <= Integer.MAX_VALUE) {
-                    replace(Integer.valueOf((int) raw));
-                }
-            }
-        }
     }
 
     /* A name index, NOT a second value store. Null = unselected PIC location. */
     private LinkedHashMap<String, SlotCell> bindings;
+    /*
+     * I115-H10-C: retain the same authoritative Store and shared
+     * Shape tree. Truffle is allowed to preserve generalized
+     * property locations across removal and recreation.
+     */
     private final Store store = new Store();
     private boolean localCallPresent;
 
@@ -164,8 +187,9 @@ final class ProtosMapBackedLexicalBindingAuthority
             return Optional.empty();
         }
         // DynamicObject property keys compare by identity. Canonicalize keys.
-        return Optional.of(DynamicObject.GetNode.getUncached()
-                .execute(store, name.intern(), null));
+        return Optional.of(toGuestValue(
+                DynamicObject.GetNode.getUncached()
+                        .execute(store, name.intern(), null)));
     }
 
     @Override
@@ -180,8 +204,9 @@ final class ProtosMapBackedLexicalBindingAuthority
         }
         LinkedHashMap<String, Object> snapshot = new LinkedHashMap<>();
         for (String name : bindings.keySet()) {
-            snapshot.put(name, DynamicObject.GetNode.getUncached()
-                    .execute(store, name.intern(), null));
+            snapshot.put(name, toGuestValue(
+                    DynamicObject.GetNode.getUncached()
+                            .execute(store, name.intern(), null)));
         }
         return Collections.unmodifiableMap(snapshot);
     }
@@ -195,8 +220,9 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (bindings != null) {
             for (String name : bindings.keySet()) {
                 names.add(name);
-                values.add(DynamicObject.GetNode.getUncached()
-                        .execute(store, name.intern(), null));
+                values.add(toGuestValue(
+                        DynamicObject.GetNode.getUncached()
+                                .execute(store, name.intern(), null)));
             }
         }
     }
@@ -216,7 +242,7 @@ final class ProtosMapBackedLexicalBindingAuthority
             cell.replace(value);
         } else {
             DynamicObject.PutNode.getUncached().execute(
-                    store, name.intern(), value);
+                    store, name.intern(), toStorageValue(value));
         }
         if ("call".equals(name)) {
             localCallPresent = true;
@@ -229,8 +255,9 @@ final class ProtosMapBackedLexicalBindingAuthority
         if (!containsBinding(name)) {
             return null;
         }
-        Object previous = DynamicObject.GetNode.getUncached()
-                .execute(store, name.intern(), null);
+        Object previous = toGuestValue(
+                DynamicObject.GetNode.getUncached()
+                        .execute(store, name.intern(), null));
         DynamicObject.RemoveKeyNode.getUncached().execute(store, name.intern());
         bindings.remove(name);
         if ("call".equals(name)) {

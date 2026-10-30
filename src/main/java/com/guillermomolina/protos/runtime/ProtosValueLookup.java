@@ -185,16 +185,14 @@ public final class ProtosValueLookup {
         return value;
     }
 
-    /** The compact GetAttribute PIC selects the same authoritative storage
-     * as SetAttribute, normalizing its initial guest integer only once. */
+    /**
+     * I115-H10-A: GetAttribute and SetAttribute share the selected
+     * physical location. Selection is read-only: integer storage
+     * representation is established by the first PutNode.
+     */
     public static GuardedSlotSelection experimentalPrimitiveReadableSelection(
             Object receiver, String name, ProtosPrelude prelude) {
-        GuardedSlotSelection selected =
-                lookupGuardedSlotSelection(receiver, name, prelude);
-        if (selected != null && selected.home() == receiver) {
-            selected.location().normalizeExperimentalInt();
-        }
-        return selected;
+        return lookupGuardedSlotSelection(receiver, name, prelude);
     }
 
     public static GuardedSlotSelection lookupGuardedSlotSelection(

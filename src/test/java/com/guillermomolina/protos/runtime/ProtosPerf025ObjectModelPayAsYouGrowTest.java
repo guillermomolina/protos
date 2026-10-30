@@ -111,6 +111,130 @@ final class ProtosPerf025ObjectModelPayAsYouGrowTest {
         assertSame(selected, object.localSlotsSnapshot().get("selected"));
     }
 
+
+    /**
+     * I115-H10-A: the first insertion must establish a genuine
+     * primitive long Shape location, before any GetAttribute PIC
+     * is selected. Reads and snapshots remain guest-facing.
+     */
+
+    private static long checkedLongLocation(
+            ProtosValueLookup.GuardedSlotSelection selection,
+            String phase) {
+        var storage = selection.storage();
+        var getter = selection.propertyGetter();
+        var property = storage.getShape().getProperty(
+                selection.propertyKey());
+
+        Object raw = getter.get(storage);
+
+        String type = raw == null
+                ? "null"
+                : raw.getClass().getName();
+
+        String location = property == null
+                ? "MISSING"
+                : property.getLocation().getClass().getName();
+
+        System.out.println(
+                "I115_H10_LONG_PHASE=" + phase
+                + " VALUE_TYPE=" + type
+                + " LOCATION=" + location);
+
+        try {
+            return getter.getLong(storage);
+        } catch (com.oracle.truffle.api.nodes.UnexpectedResultException e) {
+            throw new AssertionError(
+                    "I115_H10_LONG_FAILURE phase=" + phase
+                    + " valueType=" + type
+                    + " location=" + location,
+                    e);
+        }
+    }
+
+    @Test
+    void i115LongStorageStartsPrimitiveAndSurvivesUpdates() throws Exception {
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        object.createLocalSlot(
+                "value", ProtosNumericValueSupport.integer(1L));
+
+        var selected = ProtosValueLookup.lookupGuardedSlotSelection(
+                object, "value", null);
+
+        assertNotNull(selected);
+        assertEquals(
+                1L,
+                checkedLongLocation(selected, "INITIAL"));
+        assertEquals(
+                1L,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        object.readLocalSlot("value").orElseThrow())
+                        .longValue());
+
+        long wide = 1L << 42;
+        object.assignLocalSlot(
+                "value", ProtosNumericValueSupport.integer(wide));
+
+        assertEquals(
+                wide,
+                checkedLongLocation(selected, "WIDE_UPDATE"));
+        assertEquals(
+                wide,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        object.localSlotsSnapshot().get("value"))
+                        .longValue());
+
+        object.assignLocalSlot(
+                "value", ProtosNumericValueSupport.integer(Long.MIN_VALUE));
+
+        assertEquals(
+                Long.MIN_VALUE,
+                checkedLongLocation(selected, "MIN_VALUE"));
+
+        Object other = new Object();
+        object.assignLocalSlot("value", other);
+        assertSame(other, object.readLocalSlot("value").orElseThrow());
+
+        assertSame(other, object.removeLocalSlot("value"));
+        assertFalse(selected.stability().isValid());
+
+        object.createLocalSlot(
+                "value", ProtosNumericValueSupport.integer(Long.MAX_VALUE));
+
+        var recreated = ProtosValueLookup.lookupGuardedSlotSelection(
+                object, "value", null);
+
+        assertNotNull(recreated);
+        /*
+         * A previously generalized Shape may retain ObjectLocation
+         * after removal and recreation. The typed GetAttribute path
+         * must then fall back to Object without truncating the value.
+         */
+        Object recreatedRaw =
+                recreated.propertyGetter().get(recreated.storage());
+
+        assertEquals(
+                Long.MAX_VALUE,
+                assertInstanceOf(Long.class, recreatedRaw).longValue());
+
+        assertEquals(
+                Long.MAX_VALUE,
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        object.readLocalSlot("value").orElseThrow())
+                        .longValue());
+
+        System.out.println(
+                "I115_H10_RECREATED_FALLBACK=PASS LOCATION="
+                + recreated.storage().getShape()
+                        .getProperty(recreated.propertyKey())
+                        .getLocation().getClass().getName());
+    }
+
     @Test
     void singleOrderedMapPreservesCreateAssignRemoveRecreateHistory() {
         ProtosObjectValue object =

@@ -11359,7 +11359,15 @@ final class CanonicalToBytecodeLowerer {
             builder.beginExperimentalSetAttribute(assign.name());
             emitExperimentalCompactValue(
                     builder, assign.target().orElseThrow());
-            emitExperimentalCompactValue(builder, assign.value());
+            if (assign.value() instanceof CanonicalLiteral literal
+                    && literal.kind() == CanonicalLiteral.Kind.NUMBER
+                    && primitiveNumberLiteralOrNull(literal) instanceof Long integer) {
+                // The attribute lane is signed-64, even when other
+                // experimental roots still admit int carriers.
+                builder.emitLoadConstant(integer);
+            } else {
+                emitExperimentalCompactValue(builder, assign.value());
+            }
             builder.endExperimentalSetAttribute();
         } else if (expression instanceof CanonicalCreate
                 || expression instanceof CanonicalAssign) {
