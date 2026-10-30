@@ -183,6 +183,8 @@ class InstallNativeManifestInspectionTest(i131_unittest.TestCase):
         glibc="glibc 2.40",
         arch="x86_64",
         arguments=None,
+        uid="10001",
+        prefix_name=None,
     ):
         if manifest is None:
             manifest = self._manifest()
@@ -264,6 +266,21 @@ esac
             )
             fake_uname.chmod(0o755)
 
+            fake_id = commands / "id"
+            fake_id.write_text(
+                "#!/bin/sh\n"
+                "printf '%s\\n' \"$PROTOS_TEST_UID\"\n",
+                encoding="utf-8",
+            )
+            fake_id.chmod(0o755)
+
+            if prefix_name is not None:
+                arguments = [
+                    *arguments,
+                    "--prefix",
+                    str(root / prefix_name),
+                ]
+
             environment = i131_os.environ.copy()
             environment["PATH"] = (
                 str(commands) + i131_os.pathsep +
@@ -273,6 +290,8 @@ esac
             environment["PROTOS_TEST_MANIFEST"] = str(manifest_file)
             environment["PROTOS_TEST_GLIBC"] = glibc
             environment["PROTOS_TEST_ARCH"] = arch
+            environment["PROTOS_TEST_UID"] = uid
+            environment["HOME"] = str(root / "isolated home")
 
             return i131_subprocess.run(
                 ["sh", str(self.INSTALLER), *arguments],
@@ -283,6 +302,103 @@ esac
                 check=False,
                 timeout=15,
             )
+
+
+    def test_root_default_prefix_is_usr_local(self):
+        result = self._run_inspection(uid="0")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("INSTALL_PREFIX=/usr/local\n", result.stdout)
+        self.assertIn(
+            "INSTALL_VERSIONS=/usr/local/share/protos/versions\n",
+            result.stdout,
+        )
+        self.assertIn(
+            "PROTOS_COMMAND=/usr/local/bin/protos\n",
+            result.stdout,
+        )
+        self.assertIn("INSPECTION=PASS", result.stdout)
+
+    def test_user_default_prefix_uses_local_home(self):
+        result = self._run_inspection(uid="10001")
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertRegex(
+            result.stdout,
+            r"INSTALL_PREFIX=.*/isolated home/\.local\n",
+        )
+        self.assertRegex(
+            result.stdout,
+            r"PROTOS_COMMAND=.*/isolated home/\.local/bin/protos\n",
+        )
+
+    def test_explicit_prefix_overrides_root_default(self):
+        result = self._run_inspection(
+            uid="0",
+            prefix_name="custom prefix",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertRegex(
+            result.stdout,
+            r"INSTALL_PREFIX=.*/custom prefix\n",
+        )
+        self.assertNotIn(
+            "INSTALL_PREFIX=/usr/local\n",
+            result.stdout,
+        )
+
+    def test_explicit_prefix_overrides_user_default(self):
+        result = self._run_inspection(
+            uid="10001",
+            prefix_name="alternative installation",
+        )
+
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertRegex(
+            result.stdout,
+            r"INSTALL_PREFIX=.*/alternative installation\n",
+        )
+
+    def test_relative_prefix_is_rejected_before_network(self):
+        result = self._run_inspection(
+            arguments=["--inspect", "--prefix", "relative/path"],
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("absolute path", result.stderr)
+
+    def test_filesystem_root_prefix_is_rejected(self):
+        result = self._run_inspection(
+            arguments=["--inspect", "--prefix", "/"],
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("filesystem-root prefix", result.stderr)
+
+    def test_parent_traversal_prefix_is_rejected(self):
+        result = self._run_inspection(
+            arguments=[
+                "--inspect",
+                "--prefix",
+                "/tmp/protos/../foreign",
+            ],
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("unsafe prefix", result.stderr)
+
+    def test_missing_prefix_value_is_rejected(self):
+        result = self._run_inspection(
+            arguments=["--inspect", "--prefix"],
+        )
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual("", result.stdout)
+        self.assertIn("--prefix requires a path", result.stderr)
 
     def test_newest_published_version_is_selected_numerically(self):
         result = self._run_inspection()
@@ -622,6 +738,7 @@ class InstallNativeInstallationTest(i131_unittest.TestCase):
         failing_smoke=False,
         repeat=False,
         post_install=None,
+        custom_prefix_name=None,
     ):
         fixture = self.RELEASE()
 
@@ -800,7 +917,13 @@ esac
             )
             fake_uname.chmod(0o755)
 
-            bin_dir = home / ".local" / "bin"
+            install_prefix = (
+                root / custom_prefix_name
+                if custom_prefix_name is not None
+                else home / ".local"
+            )
+
+            bin_dir = install_prefix / "bin"
             wrapper = bin_dir / "protos"
 
             if existing_wrapper is not None:
@@ -824,7 +947,13 @@ esac
 
             def invoke(*args):
                 return i131_subprocess.run(
-                    ["sh", str(self.INSTALLER), *args],
+                    [
+                        "sh",
+                        str(self.INSTALLER),
+                        "--prefix",
+                        str(install_prefix),
+                        *args,
+                    ],
                     cwd=unrelated_cwd,
                     env=environment,
                     capture_output=True,
@@ -843,7 +972,7 @@ esac
             )
 
             version_directory = (
-                home / ".local" / "share" / "protos" /
+                install_prefix / "share" / "protos" /
                 "versions" / fixture.TAG
             )
 
@@ -1570,6 +1699,339 @@ esac
             lifecycle["wrapper_unchanged"]
         )
 
+
+    def test_custom_prefix_installs_and_runs_from_unrelated_cwd(self):
+        result = self._run_case(
+            custom_prefix_name="custom installation prefix",
+        )
+
+        self.assertEqual(
+            0,
+            result["first"].returncode,
+            result["first"].stderr,
+        )
+        self.assertTrue(result["version_dir"])
+        self.assertTrue(result["launcher"])
+        self.assertEqual(
+            0,
+            result["version"].returncode,
+            result["version"].stderr,
+        )
+        self.assertEqual(
+            0,
+            result["relative"].returncode,
+            result["relative"].stderr,
+        )
+        self.assertIn("RELATIVE_FILE=PASS", result["relative"].stdout)
+
+    def test_managed_wrapper_does_not_depend_on_runtime_home(self):
+        def operation(
+            *, wrapper, environment, unrelated_cwd, **_
+        ):
+            changed_environment = environment.copy()
+            changed_environment["HOME"] = "/"
+
+            launched = self._invoke_managed(
+                wrapper,
+                changed_environment,
+                unrelated_cwd,
+            )
+
+            return {"launched": launched}
+
+        result = self._run_case(
+            post_install=operation,
+            custom_prefix_name="prefix with spaces",
+        )
+
+        self.assertEqual(
+            0,
+            result["first"].returncode,
+            result["first"].stderr,
+        )
+
+        launched = result["lifecycle"]["launched"]
+
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        self.assertIn("Protos 0.3.398", launched.stdout)
+
+    def test_shell_special_characters_in_prefix_are_not_executed(self):
+        result = self._run_case(
+            custom_prefix_name='literal $HOME `id` "quoted" path',
+        )
+
+        self.assertEqual(
+            0,
+            result["first"].returncode,
+            result["first"].stderr,
+        )
+        self.assertTrue(result["version_dir"])
+        self.assertEqual(
+            0,
+            result["version"].returncode,
+            result["version"].stderr,
+        )
+        self.assertIn("Protos 0.3.398", result["version"].stdout)
+
+    def test_list_installed_shows_active_and_inactive(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            self._create_older_installed_version(version_directory)
+            self._deny_network(commands)
+            return invoke("--list-installed")
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        listed = result["lifecycle"]
+        self.assertEqual(0, listed.returncode, listed.stderr)
+        self.assertIn("INSTALLED_VERSION=v0.3.397 STATUS=inactive",
+                      listed.stdout)
+        self.assertIn("INSTALLED_VERSION=v0.3.398 STATUS=active",
+                      listed.stdout)
+        self.assertNotIn("UNEXPECTED_NETWORK_REQUEST", listed.stderr)
+
+    def test_list_installed_after_uninstall_marks_all_inactive(self):
+        def operation(*, commands, invoke, **_):
+            self._deny_network(commands)
+            removed = invoke("--uninstall")
+            listed = invoke("--list-installed")
+            return removed, listed
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        removed, listed = result["lifecycle"]
+        self.assertEqual(0, removed.returncode, removed.stderr)
+        self.assertEqual(0, listed.returncode, listed.stderr)
+        self.assertIn("INSTALLED_VERSION=v0.3.398 STATUS=inactive",
+                      listed.stdout)
+
+    def test_list_installed_rejects_foreign_entry_without_output(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            foreign = version_directory.parent / "foreign"
+            foreign.mkdir()
+            sentinel = foreign / "keep.txt"
+            sentinel.write_text("PRESERVE", encoding="utf-8")
+            self._deny_network(commands)
+            rejected = invoke("--list-installed")
+            return rejected, sentinel.read_text(encoding="utf-8")
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        rejected, sentinel = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertEqual("", rejected.stdout)
+        self.assertEqual("PRESERVE", sentinel)
+        self.assertIn("unrecognized managed version", rejected.stderr)
+
+    @staticmethod
+    def _write_removal_checksums(directory):
+        sums = directory / "SHA256SUMS"
+        lines = []
+        for file in sorted(directory.rglob("*")):
+            if file.is_file() and file != sums:
+                digest = i131_hashlib.sha256(file.read_bytes()).hexdigest()
+                relative = file.relative_to(directory).as_posix()
+                lines.append(f"{digest}  {relative}")
+        sums.write_text("\n".join(lines), encoding="utf-8")
+
+    def test_remove_inactive_version_preserves_active(self):
+        def operation(*, version_directory, wrapper, commands,
+                      environment, unrelated_cwd, invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._write_removal_checksums(older)
+            before = wrapper.read_bytes()
+            self._deny_network(commands)
+
+            removed = invoke("--remove-version", "--tag", "v0.3.397")
+            launched = self._invoke_managed(
+                wrapper, environment, unrelated_cwd
+            )
+            return removed, not older.exists(), before == wrapper.read_bytes(), launched
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+
+        removed, gone, unchanged, launched = result["lifecycle"]
+        self.assertEqual(0, removed.returncode, removed.stderr)
+        self.assertIn("REMOVE_STATUS=REMOVED", removed.stdout)
+        self.assertTrue(gone)
+        self.assertTrue(unchanged)
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        self.assertIn("Protos 0.3.398", launched.stdout)
+
+    def test_remove_active_version_is_refused(self):
+        def operation(*, wrapper, version_directory, commands, invoke, **_):
+            self._deny_network(commands)
+            before = wrapper.read_bytes()
+            rejected = invoke("--remove-version", "--tag", "v0.3.398")
+            return rejected, before == wrapper.read_bytes(), version_directory.is_dir()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+
+        rejected, unchanged, retained = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("refusing to remove active version", rejected.stderr)
+        self.assertTrue(unchanged)
+        self.assertTrue(retained)
+
+    def test_remove_version_preserves_foreign_file(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._write_removal_checksums(older)
+            foreign = older / "foreign-user-file"
+            foreign.write_text("DO_NOT_REMOVE", encoding="utf-8")
+            self._deny_network(commands)
+
+            rejected = invoke("--remove-version", "--tag", "v0.3.397")
+            return rejected, foreign.read_text(encoding="utf-8"), older.is_dir()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+        rejected, sentinel, retained = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("unverified version", rejected.stderr)
+        self.assertEqual("DO_NOT_REMOVE", sentinel)
+        self.assertTrue(retained)
+
+    def test_remove_version_rejects_modified_distribution(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._write_removal_checksums(older)
+            (older / "README.md").write_text("TAMPERED", encoding="utf-8")
+            self._deny_network(commands)
+
+            rejected = invoke("--remove-version", "--tag", "v0.3.397")
+            return rejected, (older / "README.md").read_text(encoding="utf-8")
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+        rejected, retained = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("unverified version", rejected.stderr)
+        self.assertEqual("TAMPERED", retained)
+
+    def test_remove_version_rejects_symlinked_entry(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._write_removal_checksums(older)
+            outside = commands.parent / "foreign-target"
+            outside.write_text("PRESERVE", encoding="utf-8")
+            (older / "foreign-link").symlink_to(outside)
+            self._deny_network(commands)
+
+            rejected = invoke("--remove-version", "--tag", "v0.3.397")
+            return rejected, outside.read_text(encoding="utf-8")
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+        rejected, sentinel = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertEqual("PRESERVE", sentinel)
+
+    def test_remove_version_after_uninstall_is_offline(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            self._write_removal_checksums(version_directory)
+            self._deny_network(commands)
+            uninstalled = invoke("--uninstall")
+            removed = invoke("--remove-version", "--tag", "v0.3.398")
+            return uninstalled, removed, not version_directory.exists()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode, result["first"].stderr)
+        uninstalled, removed, gone = result["lifecycle"]
+        self.assertEqual(0, uninstalled.returncode, uninstalled.stderr)
+        self.assertEqual(0, removed.returncode, removed.stderr)
+        self.assertTrue(gone)
+        self.assertNotIn("UNEXPECTED_NETWORK_REQUEST", removed.stderr)
+
+    def _create_inactive_snapshot(self, version_directory):
+        snapshot = (
+            version_directory.parent / "v0.3.398-SNAPSHOT"
+        )
+        i131_shutil.copytree(version_directory, snapshot)
+
+        source = snapshot / "SOURCE.txt"
+        value = source.read_text(encoding="utf-8")
+        value = value.replace(
+            "artifact_kind=public-prerelease",
+            "artifact_kind=development-native-distribution",
+        )
+        value = value.replace("public_release=true", "public_release=false")
+        lines = value.splitlines()
+
+        if (
+            lines.count("release_version=0.3.398") != 1
+            or lines.count("release_tag=v0.3.398") != 1
+        ):
+            raise AssertionError("Unexpected official SOURCE.txt fixture")
+
+        lines = [
+            (
+                "implementation_version=0.3.398-SNAPSHOT"
+                if line == "release_version=0.3.398"
+                else line
+            )
+            for line in lines
+            if line != "release_tag=v0.3.398"
+        ]
+
+        value = chr(10).join(lines) + chr(10)
+        source.write_text(value, encoding="utf-8")
+
+        self._write_removal_checksums(snapshot)
+        return snapshot
+
+    def test_list_installed_recognizes_inactive_snapshot(self):
+        def operation(*, version_directory, commands, invoke, **_):
+            self._create_inactive_snapshot(version_directory)
+            self._deny_network(commands)
+            return invoke("--list-installed")
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+
+        listed = result["lifecycle"]
+        self.assertEqual(0, listed.returncode, listed.stderr)
+        self.assertIn(
+            "INSTALLED_VERSION=v0.3.398-SNAPSHOT STATUS=inactive",
+            listed.stdout,
+        )
+        self.assertIn(
+            "INSTALLED_VERSION=v0.3.398 STATUS=active",
+            listed.stdout,
+        )
+
+    def test_remove_inactive_snapshot_preserves_official_active(self):
+        def operation(*, version_directory, commands, wrapper,
+                      environment, unrelated_cwd, invoke, **_):
+            snapshot = self._create_inactive_snapshot(version_directory)
+            self._deny_network(commands)
+
+            removed = invoke(
+                "--remove-version",
+                "--tag",
+                "v0.3.398-SNAPSHOT",
+            )
+            launched = self._invoke_managed(
+                wrapper, environment, unrelated_cwd
+            )
+            return removed, not snapshot.exists(), launched
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+
+        removed, absent, launched = result["lifecycle"]
+        self.assertEqual(0, removed.returncode, removed.stderr)
+        self.assertIn("REMOVE_STATUS=REMOVED", removed.stdout)
+        self.assertTrue(absent)
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        self.assertIn("Protos 0.3.398", launched.stdout)
+
     def test_native_install_and_unrelated_cwd(self):
         result = self._run_case()
         self.assertEqual(
@@ -1663,3 +2125,157 @@ esac
             "smoke",
             result["first"].stderr.lower(),
         )
+
+    def test_installed_tree_and_wrapper_have_explicit_safe_modes(self):
+        def operation(*, wrapper, version_directory, **_):
+            data = version_directory.parent.parent
+            unsafe = [
+                path for path in [data, *data.rglob("*")]
+                if path.stat().st_mode & 0o022
+            ]
+            unreadable = [
+                path for path in version_directory.rglob("*")
+                if not path.stat().st_mode & 0o004
+            ]
+            staging = list(version_directory.parent.glob(".staging-*"))
+            return (unsafe, unreadable, staging,
+                    i131_stat.S_IMODE(wrapper.stat().st_mode),
+                    i131_stat.S_IMODE(
+                        (version_directory / "bin" / "protos").stat().st_mode
+                    ))
+
+        result = self._run_case(post_install=operation,
+                                custom_prefix_name="admin like prefix")
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        unsafe, unreadable, staging, wrapper_mode, launcher_mode = (
+            result["lifecycle"]
+        )
+        self.assertEqual([], unsafe)
+        self.assertEqual([], unreadable)
+        self.assertEqual([], staging)
+        self.assertEqual(0o755, wrapper_mode)
+        self.assertEqual(0o755, launcher_mode)
+
+    def test_explicit_prefix_does_not_touch_default_user_prefix(self):
+        def operation(*, commands, **_):
+            return (commands.parent / "isolated user home" / ".local").exists()
+
+        result = self._run_case(post_install=operation,
+                                custom_prefix_name="explicit prefix")
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        self.assertFalse(result["lifecycle"])
+
+    def test_world_writable_managed_tree_is_refused(self):
+        def operation(*, wrapper, version_directory, commands, invoke, **_):
+            self._deny_network(commands)
+            data = version_directory.parent.parent
+            before = wrapper.read_bytes()
+            data.chmod(0o777)
+            try:
+                rolled = invoke("--rollback", "--tag", "v0.3.398")
+                uninstalled = invoke("--uninstall")
+            finally:
+                data.chmod(0o755)
+            return rolled, uninstalled, before == wrapper.read_bytes()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        rolled, uninstalled, unchanged = result["lifecycle"]
+        self.assertNotEqual(0, rolled.returncode)
+        self.assertIn("writable by others", rolled.stderr)
+        self.assertNotEqual(0, uninstalled.returncode)
+        self.assertIn("writable by others", uninstalled.stderr)
+        self.assertTrue(unchanged)
+
+    def test_world_writable_version_is_not_reactivated(self):
+        def operation(*, wrapper, version_directory, commands, invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._deny_network(commands)
+            before = wrapper.read_bytes()
+            older.chmod(0o777)
+            try:
+                rolled = invoke("--rollback", "--tag", "v0.3.397")
+            finally:
+                older.chmod(0o755)
+            return rolled, before == wrapper.read_bytes()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        rolled, unchanged = result["lifecycle"]
+        self.assertNotEqual(0, rolled.returncode)
+        self.assertIn("writable by others", rolled.stderr)
+        self.assertTrue(unchanged)
+
+    def test_reinstall_with_different_existing_official_tree_is_refused(self):
+        def operation(*, wrapper, version_directory, invoke, **_):
+            uninstalled = invoke("--uninstall")
+            inventory = version_directory / "SHA256SUMS"
+            inventory.write_text("LOCAL_CHANGE\n", encoding="utf-8")
+            rejected = invoke()
+            return (uninstalled, rejected, wrapper.exists(),
+                    inventory.read_text(encoding="utf-8"))
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        uninstalled, rejected, wrapper_present, retained = result["lifecycle"]
+        self.assertEqual(0, uninstalled.returncode, uninstalled.stderr)
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("existing version identity differs", rejected.stderr)
+        self.assertFalse(wrapper_present)
+        self.assertEqual("LOCAL_CHANGE\n", retained)
+
+    def test_interrupted_staging_is_preserved_and_active_kept(self):
+        def operation(*, wrapper, version_directory, environment,
+                      unrelated_cwd, invoke, **_):
+            # Leftover of an interrupted run by another installer process.
+            stale = version_directory.parent / ".staging-v0.3.399-1"
+            stale.mkdir()
+            (stale / "partial").write_text("PARTIAL", encoding="utf-8")
+            before = wrapper.read_bytes()
+            listed = invoke("--list-installed")
+            repeated = invoke()
+            launched = self._invoke_managed(
+                wrapper, environment, unrelated_cwd
+            )
+            return (listed, repeated, launched,
+                    (stale / "partial").read_text(encoding="utf-8"),
+                    before == wrapper.read_bytes())
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        listed, repeated, launched, partial, unchanged = result["lifecycle"]
+        self.assertEqual(0, listed.returncode, listed.stderr)
+        self.assertNotIn("staging", listed.stdout)
+        self.assertEqual(0, repeated.returncode, repeated.stderr)
+        self.assertIn("INSTALL_STATUS=ALREADY_ACTIVE", repeated.stdout)
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        self.assertEqual("PARTIAL", partial)
+        self.assertTrue(unchanged)
+
+    def test_remove_version_requires_absolute_path_entries(self):
+        def operation(*, version_directory, commands, environment,
+                      invoke, **_):
+            older = self._create_older_installed_version(version_directory)
+            self._write_removal_checksums(older)
+            self._deny_network(commands)
+            original = environment["PATH"]
+            environment["PATH"] = "relative-bin" + i131_os.pathsep + original
+            try:
+                rejected = invoke("--remove-version", "--tag", "v0.3.397")
+            finally:
+                environment["PATH"] = original
+            return rejected, (older / "README.md").is_file()
+
+        result = self._run_case(post_install=operation)
+        self.assertEqual(0, result["first"].returncode,
+                         result["first"].stderr)
+        rejected, retained = result["lifecycle"]
+        self.assertNotEqual(0, rejected.returncode)
+        self.assertIn("absolute entries only", rejected.stderr)
+        self.assertTrue(retained)

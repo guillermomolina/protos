@@ -321,6 +321,7 @@ class InstallNativePreflightTest(unittest.TestCase):
 
     REQUIRED_COMMANDS = (
         "sh",
+        "id",
         "curl",
         "awk",
         "mktemp",
@@ -339,6 +340,7 @@ class InstallNativePreflightTest(unittest.TestCase):
         "mkdir",
         "rmdir",
         "sed",
+        "find",
     )
 
     def _run_missing_tool(self, missing, arguments):
@@ -431,6 +433,19 @@ class InstallNativePreflightTest(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn(
             "missing required command: cat",
+            result.stderr,
+        )
+        self.assertNotIn(
+            "UNEXPECTED_NETWORK_REQUEST",
+            result.stderr,
+        )
+
+    def test_install_requires_find_before_network(self):
+        result = self._run_missing_tool("find", [])
+
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn(
+            "missing required command: find",
             result.stderr,
         )
         self.assertNotIn(

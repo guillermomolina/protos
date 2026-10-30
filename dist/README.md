@@ -1,14 +1,14 @@
 # Protos portable development distribution
 
 This directory owns the build-time layout for `DIST001` and the independent
-user-local Linux Native installer (`dist/install.sh`, I131).
+prefix-aware Linux Native installer (`dist/install.sh`, I131, DIST019).
 
 For a published first-run installation, prefer the Native installer described
 in [Try Protos](../docs/guide/00-try-protos.md). Its stable URL is
 `https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh`;
 the script selects a compatible published Native prerelease, verifies the
-official manifest and ZIP, and activates a versioned tree under the user's
-home directory. Re-running the same script checks for updates without changing
+official manifest and ZIP, and activates a versioned tree under the selected
+installation prefix. Re-running the same script checks for updates without changing
 its URL. It never installs the portable JVM/JAR, Java, GraalVM, or Maven.
 
 The manual published-archive path is still available from
@@ -20,19 +20,79 @@ remains unpublished until its separately approved release-candidate gates pass.
 
 ## Linux Native installer commands
 
+Every command except `--list-releases` accepts `--prefix PATH`.
+
 | Purpose | Command |
 |---|---|
 | Install or check for an eligible Native update | `sh dist/install.sh` |
-| Inspect the selected published Native identity | `sh dist/install.sh --inspect` |
+| Inspect the selected published Native identity and target paths | `sh dist/install.sh --inspect` |
 | Verify the official ZIP without activation | `sh dist/install.sh --verify-download` |
 | Show published numeric release tags | `sh dist/install.sh --list-releases` |
 | Install a specific published version | `sh dist/install.sh --tag vMAJOR.MINOR.PATCH` |
-| Activate a retained Native version offline | `sh dist/install.sh --rollback --tag vMAJOR.MINOR.PATCH` |
+| List retained versions and the active one (offline) | `sh dist/install.sh --list-installed` |
+| Activate a retained Native version offline | `sh dist/install.sh --rollback --tag vTAG` |
+| Delete one inactive, fully verified retained version (offline) | `sh dist/install.sh --remove-version --tag vTAG` |
 | Deactivate the managed command, retaining installed versions | `sh dist/install.sh --uninstall` |
+| Verify a local Native SNAPSHOT ZIP without installing (offline) | `sh dist/install.sh --inspect --local-native /abs/protos-X.Y.Z-SNAPSHOT-native-linux-x86_64.zip` |
+| Install a local Native SNAPSHOT ZIP (offline) | `sh dist/install.sh --local-native /abs/protos-X.Y.Z-SNAPSHOT-native-linux-x86_64.zip` |
+
+`vTAG` is `vMAJOR.MINOR.PATCH` or `vMAJOR.MINOR.PATCH-SNAPSHOT`.
 
 `dist/install.sh` is a distribution **consumer**, not a Native builder or a
 publication command. It makes no implicit changes to the current shell's
-`PATH`, host package manager, glibc, or shell profile.
+`PATH`, host package manager, glibc, or shell profile, and never invokes
+`sudo`.
+
+### Installer contract
+
+- **Prefix.** `$HOME/.local` for an ordinary user, `/usr/local` for effective
+  UID 0, or the absolute `--prefix PATH`. Relative paths, `/`, `.`/`..`/empty
+  components, newlines, and symbolic links in the prefix or in
+  `bin`, `share`, `share/protos`, `share/protos/versions` are rejected.
+- **Layout.** Command `<prefix>/bin/protos`; trees
+  `<prefix>/share/protos/versions/<tag>/`; marker
+  `.native-installer-managed` and lock `.installer.lock` in
+  `<prefix>/share/protos/`. An existing command or data directory without the
+  managed signature is never adopted, replaced, or removed.
+- **Wrapper.** A managed `sh` script containing only the validated tag and the
+  escaped absolute tree path; it `exec`s that tree's `bin/protos` so the
+  launcher resolves its own distribution root. It does not depend on `HOME`,
+  preserves the caller's working directory and arguments.
+- **Identity channels.** Official releases require `vMAJOR.MINOR.PATCH`,
+  `artifact_kind=public-prerelease`, `public_release=true`, matching
+  `release_tag`/`release_version`, and the verified published manifest and
+  checksums. Local SNAPSHOTs require `vMAJOR.MINOR.PATCH-SNAPSHOT`,
+  `artifact_kind=development-native-distribution`, `public_release=false`,
+  matching `implementation_version`, a 40-hex `source_revision`, a boolean
+  `source_dirty`, an adjacent `.sha256`, exact internal `SHA256SUMS` coverage,
+  and no `release_tag`/`release_version`. Identity keys must occur exactly
+  once. SNAPSHOT installation never contacts the network.
+- **Activation.** Under the lock: extract into a private (mode 700)
+  `versions/.staging-<tag>-<pid>`, set the tree to `u+rwX,go+rX,go-w`, require
+  both Native executables, run the `--version` and `-e` smokes, move the tree
+  into place without overwriting, then replace the wrapper with an atomic
+  rename. Any earlier failure leaves the previously active version and wrapper
+  intact. An existing version is reused only if its `SOURCE.txt` and
+  `SHA256SUMS` equal the verified archive's (SNAPSHOTs also pass the full tree
+  audit); otherwise installation fails without modifying it. Leftover staging
+  paths are reported and never adopted or deleted. Official updates do not
+  downgrade and do not replace an active SNAPSHOT; channels change only
+  through `--rollback` or `--uninstall`.
+- **Ownership.** The installer runs with `umask 022`. Managed paths must be
+  owned by the effective user and not world writable; as root they must also
+  not be group writable. No `chown` is performed.
+- **Removal.** `--remove-version` refuses the active version, malformed tags,
+  untrusted or symlinked trees, and any tree that fails the identity,
+  exact-inventory, and SHA-256 audit. It requires a `PATH` with absolute
+  entries only, deletes only inventoried regular files through
+  `find -P ... -execdir` (names passed as `./name` arguments, never as shell
+  code), never uses `rm -r` on a version tree, removes directories only when
+  empty, and reports `version removal incomplete` when anything is retained.
+- **Security limit.** The installer protects against stale, foreign, and
+  symlinked content and simulated swap races, but shell and POSIX/GNU tools
+  cannot fully exclude a malicious writer that already has write access to the
+  managed tree during an operation. The ownership checks exist to refuse such
+  trees before any operation.
 
 ## Which command
 

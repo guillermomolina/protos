@@ -50,12 +50,49 @@ curl -fsSL https://raw.githubusercontent.com/guillermomolina/protos/main/dist/in
 
 Re-running the first command checks for a newer eligible Native release. It
 does not silently downgrade an active installation. The whole verified Native
-tree, including its Standard Library, tools, and tests, stays together under
-`~/.local/share/protos/versions/`; the managed launcher lives at
-`~/.local/bin/protos`. No Java/JAR is installed.
+tree, including its Standard Library, tools, and tests, stays together under a
+versioned directory, and a small managed command runs that tree's own launcher.
+No Java/JAR is installed.
 
-If the installer reports that `~/.local/bin` is not on your shell `PATH`, you
-can use the absolute command shown above or update your current shell manually:
+### Installation prefix and layout
+
+| Case | Prefix |
+|---|---|
+| Ordinary user, no `--prefix` | `$HOME/.local` |
+| Effective UID 0 (root), no `--prefix` | `/usr/local` |
+| Any user with `--prefix PATH` | `PATH` (absolute) |
+
+Under the selected prefix:
+
+- `<prefix>/bin/protos` is the managed command;
+- `<prefix>/share/protos/versions/<tag>/` holds each installed Native tree;
+- `<prefix>/share/protos/` holds the installer marker and lock.
+
+The managed command contains the absolute path of its versioned tree. It does
+not read `HOME`, keeps the caller's working directory, and passes all
+arguments unchanged. `--prefix` must be absolute and must not be `/`, contain
+`..`, `.`, empty components, a newline, or symbolic links in the prefix or
+managed directories. Every lifecycle command accepts `--prefix`; without it, the
+same UID-based default applies.
+
+### Administrative installation
+
+Run the installer as root (for example, from a root shell) to install under
+`/usr/local`; the installer never invokes `sudo` itself:
+
+```sh
+sh protos-install.sh                       # as root: /usr/local
+/usr/local/bin/protos --version            # as any ordinary user
+```
+
+The installed tree is readable and executable by everyone and writable only by
+its owner. As root, the installer refuses managed paths that are not owned by
+root or are group/world writable, so a tree prepared by another user cannot be
+adopted. An ordinary user's `$HOME/.local` installation and an administrative
+`/usr/local` installation are independent; neither modifies the other.
+
+If the installer reports that `<prefix>/bin` (for example `~/.local/bin`) is
+not on your shell `PATH`, you can use the absolute command shown above or update your current shell manually:
 
 ```sh
 export PATH="$HOME/.local/bin:$PATH"
@@ -73,32 +110,84 @@ curl -fsSLo protos-install.sh https://raw.githubusercontent.com/guillermomolina/
 less protos-install.sh
 sh protos-install.sh --list-releases
 sh protos-install.sh --inspect
+sh protos-install.sh --inspect --prefix "$HOME/opt/protos"
 sh protos-install.sh --verify-download
 sh protos-install.sh
 ```
 
 `--inspect` selects the release and reports its platform/runtime identity
-without installing it. `--verify-download` additionally downloads and checks
+without installing it, together with the prefix, versions directory, and
+command path that installation would use. `--verify-download` additionally downloads and checks
 the Native checksum and ZIP without activating anything. Neither command
 requires Java or Maven.
 
-### Pin, roll back, and uninstall
+### Pin, list, roll back, remove, and uninstall
 
 To choose a specific **published numeric** tag, assign it to `TAG` (for example,
 `TAG=v0.3.398`) before using these commands:
 
 ```sh
 sh protos-install.sh --tag "$TAG"
+sh protos-install.sh --list-installed
 sh protos-install.sh --rollback --tag "$TAG"
+sh protos-install.sh --remove-version --tag "$TAG"
 sh protos-install.sh --uninstall
 ```
 
-`--tag` installs only that published Native version and rejects an unsupported
-host or invalid release. `--rollback` operates offline and activates only a
-previously installed, verified Native tree. `--uninstall` deactivates and
-removes the installer-managed `protos` command but **retains versioned trees**
-for recovery; it does not purge them or remove unrelated user files.
+- `--tag` installs only that published Native version and rejects an
+  unsupported host or invalid release.
+- `--list-installed` prints `INSTALLED_VERSION=<tag> STATUS=active|inactive`
+  for each retained tree. It fails without output if the versions directory
+  contains an unrecognized entry.
+- `--rollback` operates offline and activates only a previously installed
+  Native tree with a valid identity that passes `--version` and `-e` smokes.
+  Use it to switch between retained releases and SNAPSHOTs.
+- `--remove-version` operates offline and deletes one **inactive** retained
+  version. It refuses the active version, malformed tags, symbolic links, and
+  any tree whose identity, `SHA256SUMS` inventory, or file contents do not match
+  exactly; a refused tree is left untouched.
+- `--uninstall` deactivates and removes the installer-managed `protos` command
+  but **retains versioned trees** for recovery with `--rollback`; it does not
+  purge them or remove unrelated user files.
+
 An existing command not owned by this installer is never replaced or removed.
+All lifecycle commands accept `--prefix PATH` and act only on that prefix.
+
+### Install a locally built Native SNAPSHOT
+
+A locally built `protos-X.Y.Z-SNAPSHOT-native-linux-x86_64.zip`, with its
+adjacent `.zip.sha256` file, can be inspected or installed fully offline:
+
+```sh
+ZIP=/absolute/path/protos-X.Y.Z-SNAPSHOT-native-linux-x86_64.zip
+sh protos-install.sh --inspect --local-native "$ZIP"
+sh protos-install.sh --local-native "$ZIP"
+```
+
+The path must be absolute. The installer checks the adjacent checksum, the
+archive layout, every internal `SHA256SUMS` entry with exact file coverage,
+the development identity (`artifact_kind=development-native-distribution`,
+`public_release=false`, matching `implementation_version`, valid
+`source_revision` and `source_dirty`), the Native runtime identity, Linux
+x86_64, and the host glibc. It never contacts GitHub. A SNAPSHOT is installed
+as `v<version>-SNAPSHOT` and is never treated as a published release.
+
+While a SNAPSHOT is active, the normal update command refuses to replace it.
+Switch channels explicitly with `--rollback --tag <tag>` (or `--uninstall`
+followed by a normal install). Reinstalling the same SNAPSHOT tag with
+different content fails without changing the installed tree or the command.
+
+### Recovery after a failure
+
+A new version is extracted into a private staging directory, checked, smoke
+tested, and then published; the managed command is replaced atomically only
+at the end. If any earlier step fails, the previously active version keeps
+working. Installations and lifecycle commands hold an exclusive lock on the
+prefix, so a concurrent run fails immediately instead of waiting. An
+interrupted run may leave a `versions/.staging-<tag>-<pid>` directory; it is
+ignored and never deleted automatically, because its ownership is not proven.
+Inspect it and remove it manually if it is yours. An existing installed version
+whose identity differs from the archive is never overwritten.
 
 ### Run Protos from another directory
 

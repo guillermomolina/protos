@@ -50,7 +50,7 @@ for durable implementation/closure history.
 
 On supported **Linux x86_64 with dynamic glibc**, install the latest eligible
 published Native Image with the stable installer URL. No JDK, GraalVM, Maven,
-root privileges, or Protos source checkout is required:
+or Protos source checkout is required, and an ordinary user does not need root:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/guillermomolina/protos/main/dist/install.sh | sh
@@ -59,13 +59,19 @@ curl -fsSL https://raw.githubusercontent.com/guillermomolina/protos/main/dist/in
 ```
 
 The installer verifies the official Native manifest, checksum, and archive,
-then activates a versioned user-local installation. Running the same command
-later checks for a compatible update; the script URL does not change with
-the release version. It does not install the JAR or change your shell profile.
-If `~/.local/bin` is missing from `PATH`, the installer prints a setup hint.
+then atomically activates a versioned Native tree. The installation prefix is
+`$HOME/.local` for an ordinary user, `/usr/local` when run as root (effective
+UID 0), or any absolute path given with `--prefix PATH`; the command is
+`<prefix>/bin/protos`. A root installation does not depend on `/root`, so other
+users can run `/usr/local/bin/protos`. The installer never escalates with
+`sudo`. Running the same command later checks for a compatible update; the
+script URL does not change with the release version. It does not install the
+JAR or change your shell profile. If `<prefix>/bin` is missing from `PATH`, the
+installer prints a setup hint.
 
-To review the script before executing it, to pin a release, or to roll back
-and uninstall safely, see the [Try Protos guide](docs/guide/00-try-protos.md).
+To review the script before executing it, to pin a release, to list, roll
+back, or remove installed versions, or to install a locally built Native
+SNAPSHOT offline, see the [Try Protos guide](docs/guide/00-try-protos.md).
 Manual Native ZIP extraction and the separate portable JVM distribution remain
 available from [published releases](https://github.com/guillermomolina/protos/releases).
 
