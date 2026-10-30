@@ -8,6 +8,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.21-SNAPSHOT
+
+- **I115-H7 Unfinished** — experimental GraalPy-shaped physical convergence for a
+  `receiver.identity(i)` method-call workload inside a literal `whileTrue`
+  (reference result `499500`). This is a historical *unfinished* checkpoint,
+  not a validated implementation or a normative specification change.
+  - Add experimental Bytecode DSL operations `GetMethod`, `CallBinaryMethod`,
+    `NumberAdd`, `NumberInPlaceAdd`, `Lt` and `CopyArguments`; introduce guarded
+    method selection, small direct/indirect Closure call caches, and generic
+    send fallbacks. Existing source-level message syntax remains unchanged.
+  - Lower admitted literal `whileTrue` expressions as an internal `While`
+    without creating condition/body Closure objects. Overrides of `whileTrue`
+    and observable callback identity, capture and lifetime are not respected.
+  - Replace H5's frozen `ReadGlobal` specialization with a module binding
+    read that can observe later module mutations; late nearer lexical
+    retargeting required by D179 C0 is still not fully preserved.
+  - Specialize arithmetic and local storage on `int`, `long`, and `double`,
+    with selected exact-overflow promotion and generic fallbacks. **Historical
+    nonconformance:** `int` guest carriers contradict Protos's long-only
+    Integer architecture. Primitive numeric fast paths bypass the Prelude
+    protocol / overridden operators, and some mixed `int`/`long` pairs fall
+    through to generic dispatch. This is not an endorsed long-only design.
+  - The generic dispatch paths may publish a caller activation without
+    promoting its frame-local bindings to lexical authority; nonterminal
+    suspension has no correct continuation in the experimental compact root.
+    Dynamic method selection, caller authority, cancellation and ReturnHome
+    are not established as equivalent by the new optimization.
+  - Add the non-normative experiment report and H7 regression tests. The
+    original H7 note explicitly says that instruction censuses, Tier 1/Tier 2
+    graphs and timings were pending human execution. A temporary
+    `PROTOS_I115_TRACE_CALLER_NEEDS` diagnostic remains in the original code.
+  - Reconstructed byte-for-byte (for original files) from commit
+    `b51a9a5f82271dc0c6b41897a0afc25e3105e3cc`. No behavioral tests or
+    compilation were performed during this versioned historical replay.
+
 ## 0.4.20-SNAPSHOT
 
 - `I115-H6` (experimental collapse of source-backed Java/Polyglot host entry):

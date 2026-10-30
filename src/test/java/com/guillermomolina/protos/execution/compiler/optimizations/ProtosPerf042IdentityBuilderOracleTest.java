@@ -119,22 +119,32 @@ final class ProtosPerf042IdentityBuilderOracleTest {
             // I104-A has its own independent complete Builder oracle
             // in ProtosI101ProfileSpecializedLoweringTest. Here we
             // separately pin the physical unary entry operations.
+            /*
+             * I115-H7 EXPERIMENTAL: identity is an admitted non-dispatching
+             * compact unary root. Its prologue is the GraalPy-shaped
+             * CopyArguments and its body a plain LoadLocal (any quickened
+             * variant), replacing the I104-A BindUnaryFrameParameter and
+             * ReadRootFrameLocal shape. The return epilogue still owns the
+             * carrier projection.
+             */
             assertEquals(
                     List.of(
-                            // I112: the binding name is a constant operand and
-                            // the return epilogue owns the carrier projection.
                             "c.EnterRoot",
-                            "c.BindUnaryFrameParameter",
-                            "c.ReadRootFrameLocal",
+                            "c.CopyArguments",
+                            "load.local",
                             "c.EpilogForReturn",
                             "return"),
-                    executionPrefixNames(actual),
-                    "I104-A must retain its fused unary entry and "
-                            + "semantically correct local read; D203/I105 "
-                            + "emits no excess-argument check");
+                    executionPrefixNames(actual).stream()
+                            .map(name -> name.startsWith("load.local")
+                                            && !name.contains(".mat")
+                                    ? "load.local"
+                                    : name)
+                            .toList(),
+                    "I115-H7 compact unary entry: CopyArguments and a direct "
+                            + "local read; D203/I105 emits no excess-argument check");
 
             System.out.println("PERF042_BOUND_ARGUMENT_LOWER_BOUND=PASS");
-            System.out.println("PERF042_I104_A_BYTECODE_SHAPE=PASS");
+            System.out.println("PERF042_I115_H7_BYTECODE_SHAPE=PASS");
             System.out.println("PERF042_IDENTITY_SEMANTICS=PASS");
         });
     }
