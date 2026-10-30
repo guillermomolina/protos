@@ -8,6 +8,45 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.23-SNAPSHOT
+
+- **I115-H7-R3 — converge primitive-method-call bytecode with GraalPy 25.4.4.1.1.**
+  Continue the experimental H7 `primitive-method-call` workload using the
+  GraalPy-shaped `ReadGlobal`, `GetMethod`, `CallBinaryMethod`, `CopyArguments`
+  and return epilogue, without changing the normative specification.
+  - Introduce `ExperimentalGlobalReadLocation`: cache the exact physical
+    frame-backed module-binding location at specialization installation;
+    guard the selected BytecodeNode with `isCurrent()` and read its current
+    value directly. The fast path does **not** recheck binding presence or
+    layout; deletion and late lexical retargeting are not guaranteed (D179 C0).
+  - Make `GetMethod` return the selected physical slot **value**, rather than
+    a `Method` descriptor; retain identity and slot-stability guards but
+    remove caller-Prelude selection and its cache guard from this hot path.
+    Thus some inherited-Prelude needs are no longer registered there.
+  - Lower the receiver once with `BindStackValue`, reload for `GetMethod`
+    and `CallBinaryMethod`, and evaluate the explicit argument once, after
+    method selection. `CallBinaryMethod` consumes `(callable, receiver,
+    argument)`, with generic fallback retained for non-admitted selections.
+    Direct compact method calls omit `methodHome` and normally carry no
+    caller reference unless a callee root has registered a caller need.
+  - Simplify the admitted `CopyArguments` and return paths: the unary
+    parameter is copied directly from its B5 slot, without a per-call arity
+    or publication fallback; experimental roots return primitive results
+    without a caller-side carrier projection test. An internal `int` carrier
+    may escape. H7's `int` paths conflict with Protos's `long`-only design.
+  - Update H7 structural tests and B5 deferred-caller expectations. The
+    original experiment document cites **R2** After TruffleTier 417/329,
+    Final IR 866/714 (Tier 1/Tier 2) and five Tier 2 invokes. R3 has no new graph capture,
+    invocation-count or timing measurement. These R2
+    numbers are historical observations, not measurements of this replay.
+  - **Historical limitations:** dynamic message overrides, Caller/Prelude
+    transport, nonterminal suspension, `ReturnHome`, binding presence and
+    D179 C0 lexical semantics are not established as equivalent. This is
+    an experimental checkpoint, not an accepted semantic/performance gate.
+  - Original implementation: `94e321dbb94ff8d6f65e380cd80a71bbdff3048f`.
+    No compilation or behavioral tests were run on this historical replay;
+    the ten original source, test and experiment files retain their Git blobs.
+
 ## 0.4.22-SNAPSHOT
 
 - **I115-H7-R2 — preserve deferred B5 callers across direct sends.**

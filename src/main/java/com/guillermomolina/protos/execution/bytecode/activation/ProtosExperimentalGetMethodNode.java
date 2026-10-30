@@ -27,12 +27,12 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.HostCompilerDirectives.InliningCutoff;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.ForceQuickening;
 import com.oracle.truffle.api.bytecode.OperationProxy;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.GenerateInline;
 import com.oracle.truffle.api.dsl.GenerateUncached;
-import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
@@ -41,26 +41,24 @@ import com.oracle.truffle.api.strings.TruffleString;
 /**
  * I115-H7 EXPERIMENTAL, proxied as the {@code GetMethod} operation (GraalPy
  * {@code GetMethod.doFastPath} shape): the selection half of an ordinary
- * one-argument send. The receiver is evaluated once by the caller bytecode;
- * the selector is a constant operand. The result is a compact {@link
- * Method} descriptor consumed by {@code CallBinaryMethod}; no prepared call
- * is created.
- *
- * <p>Caller protocol (I115-H7-R1): the caller reference and the caller
- * prelude are read exactly as every other send selection of a compact root
- * reads them ({@code CurrentActivation(callerReference)} and {@code
- * InvokeClosureOneTail#admittedCallerPrelude}): a published activation
- * answers directly; an unpublished invocation whose inherited prelude was
- * not transported registers this root's {@code NEEDS_CALLER_PRELUDE} once,
- * so its callers transport it from then on. Nothing is published here.
+ * one-argument send. The receiver is evaluated once by the caller bytecode
+ * and kept on the stack as a separate operand of {@code CallBinaryMethod};
+ * the selector is a constant operand. I115-H7-R3: the result is the selected
+ * slot value itself (or {@code null} when nothing was selected), never a
+ * descriptor; no prepared call is created.
  *
  * <p>{@link #doCached} is the monomorphic/polymorphic selection cache (at
- * most three entries), guarded by receiver identity, the caller prelude and
- * the selection's stability {@link com.oracle.truffle.api.Assumption}. It
- * reads the current value of the cached physical slot location ({@link
+ * most three entries), guarded by receiver identity and the selection's
+ * stability {@link com.oracle.truffle.api.Assumption}. It reads the current
+ * value of the cached physical slot location ({@link
  * GuardedSlotSelection#currentValue()}), so a reassignment of the same slot
- * is observed and a removal or recreation invalidates the entry. {@link
- * #doGeneric} is the separated fallback with the complete lookup.
+ * is observed and a removal or recreation invalidates the entry. It reads
+ * neither the caller reference nor the caller prelude. {@link #doGeneric} is
+ * the separated fallback with the complete lookup.
+ *
+ * <p>RECORDED DIVERGENCE (I115-H7-R3): the cached selection is installed
+ * with a {@code null} prelude and is not re-validated against a later change
+ * of the caller's prelude.
  */
 @GenerateUncached
 @GenerateInline(false)
@@ -68,110 +66,65 @@ import com.oracle.truffle.api.strings.TruffleString;
 @ConstantOperand(type = TruffleString.class, name = "selector")
 abstract class ProtosExperimentalGetMethodNode extends Node {
 
-    /**
-     * I115-H7: the immutable selection result (GraalPy's bound-descriptor
-     * stack pair). {@code callable} is the selected slot value, or null when
-     * no slot was selected; {@code home} is the selected owner, or null.
-     * {@code selector} lets the generic call tier repeat the ordinary send.
-     * {@code caller} is this root's caller reference (its published
-     * activation or its own B5 array) and {@code callerPrelude} the prelude
-     * the selection used; the call half builds the callee's caller slot from
-     * them through the existing B5 producer contract.
-     */
-    record Method(
-            Object callable,
-            Object receiver,
-            ProtosObjectValue home,
-            String selector,
-            Object caller,
-            ProtosPrelude callerPrelude) {}
-
     abstract Object execute(VirtualFrame frame, TruffleString selector, Object receiver);
 
     @Specialization(
             excludeForUncached = true,
             guards = {
                 "receiver == cachedReceiver",
-                "prelude == cachedPrelude",
                 "cachedSelection != null"
             },
             assumptions = "cachedSelection.stability()",
             limit = "3")
-    static Method doCached(
+    @ForceQuickening
+    static Object doCached(
             VirtualFrame frame,
             TruffleString selector,
             Object receiver,
-            @Bind("rootOf($node)") ProtosBytecodeRootNode root,
-            @Bind("callerReference(frame)") Object caller,
-            @Bind("callerPrelude(root, caller)") ProtosPrelude prelude,
             @Cached("receiver") Object cachedReceiver,
-            @Cached("prelude") ProtosPrelude cachedPrelude,
-            @Cached("selector.toJavaStringUncached()") String cachedSelector,
-            @Cached("selectOrNull(receiver, cachedSelector, prelude)")
+            @Cached("selectOrNull(receiver, selector)")
                     GuardedSlotSelection cachedSelection) {
-        return new Method(
-                cachedSelection.currentValue(),
-                receiver,
-                cachedSelection.home(),
-                cachedSelector,
-                caller,
-                prelude);
+        return cachedSelection.currentValue();
     }
 
     @Specialization(replaces = "doCached")
     @InliningCutoff
-    static Method doGeneric(
+    static Object doGeneric(
             VirtualFrame frame,
             TruffleString selector,
             Object receiver,
             @Bind("rootOf($node)") ProtosBytecodeRootNode root) {
-        Object caller = callerReference(frame);
-        ProtosPrelude prelude = callerPrelude(root, caller);
-        return selectGeneric(
-                receiver, selector.toJavaStringUncached(), caller, prelude);
+        Object caller = ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
+        ProtosPrelude prelude =
+                ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller);
+        return selectGeneric(receiver, selector.toJavaStringUncached(), prelude);
     }
 
-    /** This root's caller reference, unpublished when still compact. */
-    @NonIdempotent
-    static Object callerReference(VirtualFrame frame) {
-        return ProtosBytecodeRootNode.InvokeClosureOneTail.callerReference(frame);
-    }
-
-    /** The caller prelude by the admitted B5 accessors, registering the need once. */
-    static ProtosPrelude callerPrelude(ProtosBytecodeRootNode root, Object caller) {
-        return ProtosBytecodeRootNode.InvokeClosureOneTail.admittedCallerPrelude(root, caller);
-    }
-
-    /* Installation only: the guarded physical selection, or null. */
+    /* Installation only: the guarded physical selection without a prelude, or null. */
     @TruffleBoundary
-    static GuardedSlotSelection selectOrNull(
-            Object receiver, String selector, ProtosPrelude prelude) {
+    static GuardedSlotSelection selectOrNull(Object receiver, TruffleString selector) {
         if (!(receiver instanceof ProtosObjectValue)) {
             return null;
         }
         try {
-            return ProtosValueLookup.lookupGuardedSlotSelection(receiver, selector, prelude);
+            return ProtosValueLookup.lookupGuardedSlotSelection(
+                    receiver, selector.toJavaStringUncached(), null);
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             return null;
         }
     }
 
-    /* The complete lookup; a missing or unsupported selection yields no callable. */
+    /* The complete lookup; a missing or unsupported selection yields null. */
     @TruffleBoundary
-    static Method selectGeneric(
-            Object receiver, String selector, Object caller, ProtosPrelude prelude) {
-        java.util.Optional<ProtosSlotLookupResult> selected;
+    static Object selectGeneric(Object receiver, String selector, ProtosPrelude prelude) {
         try {
-            selected = ProtosValueLookup.lookup(
-                    ProtosNumericValueSupport.guestValue(receiver), selector, prelude);
+            return ProtosValueLookup.lookup(
+                            ProtosNumericValueSupport.guestValue(receiver), selector, prelude)
+                    .map(ProtosSlotLookupResult::value)
+                    .orElse(null);
         } catch (UnsupportedOperationException unsupportedRepresentation) {
-            selected = java.util.Optional.empty();
+            return null;
         }
-        if (selected.isEmpty()) {
-            return new Method(null, receiver, null, selector, caller, prelude);
-        }
-        ProtosSlotLookupResult result = selected.orElseThrow();
-        return new Method(result.value(), receiver, result.home(), selector, caller, prelude);
     }
 
     /*
