@@ -229,6 +229,11 @@ code is resolved and executed inside the destination Actor while only permitted
 values cross the isolation boundary. It does not create a second transferable
 function kind.
 
+The same bootstrap representation, with a host-selected module identity and
+binding name and no initialization arguments, initializes the existing RootActor
+when the host explicitly selects the optional message-service bootstrap entry of
+§32. No Actor is created by that selection.
+
 ### Core public Actor surface
 
 Core v0.1 exposes the ordinary frozen-prelude object `Actor` with exactly these
@@ -334,6 +339,12 @@ If initialization fails with an unhandled error, that is an unhandled fatal
 failure of that Actor incarnation. The Actor never reaches READY and instead
 terminates. Its failure authority observes the failure and applies the ordinary
 Actor-failure policy.
+
+A RootActor started through the optional message-service bootstrap entry of §32
+follows this lifecycle exactly: it dispatches no external message while
+`INITIALIZING`, and its initialization failure is RootActor failure, which
+terminates the Process. A RootActor in the default direct-entry mode is not
+thereby given a behavior or a `READY` cutover.
 
 ### Fatal Actor Error does not become an implicit remote Error channel
 
@@ -1135,6 +1146,11 @@ This section closes the former open ledger item `Behavior requirements before
 READY`. Actor creation/bootstrap acquisition and establishment of the initial
 behavior are defined by §8; this section introduces no second bootstrap or
 behavior-installation API.
+
+The same requirement governs a RootActor started through the optional
+message-service bootstrap entry of §32: its bootstrap result must be one ordinary
+behavior object, installed once for the `READY` cutover, and a `null`, Number,
+or other non-behavior result is initialization failure.
 
 ## 19. Buffers
 
@@ -2267,6 +2283,64 @@ state as required.
 A future application identity may exist for deployment, configuration,
 observability, or ownership without becoming an Actor or a mandatory
 execution-hierarchy level.
+
+### RootActor message-service bootstrap entry (D225-B1)
+
+A RootActor starts in one of two entry modes. The host or launcher selects the
+mode explicitly before the RootActor's initial module begins executing, and the
+selection is not revisited for that Process incarnation.
+
+- **Direct entry** (the default). The RootActor evaluates its initial program as
+  a direct entry, including ordinary standalone top-level evaluation and the
+  host-initiated evaluations of `../semantics/MODULES.md`. This mode is
+  unchanged by this subsection. A top-level binding that happens to be callable
+  is never invoked merely because it exists, and no mode is inferred from source
+  contents.
+- **Message-service bootstrap entry** (optional). The host selects this mode
+  together with exactly one canonical initial module identity and exactly one
+  bootstrap binding name. The RootActor then initializes exactly like an Actor
+  created by `Actor.spawn` (§8) with an empty initialization argument vector:
+
+  1. There is exactly one RootActor incarnation per Process. The existing
+     RootActor performs the bootstrap; no additional Actor is created and no
+     second RootActor incarnation exists.
+  2. The initial module executes once, in its own RootActor module context,
+     under the importable initial-module lifecycle of
+     `../semantics/MODULES.md` (The Initial Module of an Actor), with the
+     bootstrap-local capabilities of `../io/PROCESS_IO.md` §22.
+  3. After that module initializes successfully, bootstrap selects the binding
+     as a local slot of that module instance exactly as §8 specifies; delegated
+     or inherited slots do not satisfy it.
+  4. Bootstrap invokes the binding within the RootActor, using ordinary Protos
+     invocation semantics, while the RootActor is `INITIALIZING`.
+  5. The normal result must be one ordinary behavior object under §11A. It is
+     installed once and the RootActor performs the single
+     `INITIALIZING -> READY` cutover.
+  6. No external message is dispatched to the RootActor before that cutover
+     (§9). Deliveries to the RootActor, including those routed through a Group
+     whose member it is, follow the ordinary readiness and Group-routing rules.
+  7. Once `READY`, the RootActor dispatches ordinary external messages against
+     that same behavior object under §§11 and 12. Its behavior identity is
+     stable; nothing installs or replaces a behavior again for that
+     incarnation.
+
+  A missing binding, an inherited-only binding, a non-invokable binding, a
+  result that is not an ordinary behavior object (including `null` and a
+  Number), failed initial-module initialization, or an `Error` escaping the
+  bootstrap invocation is ordinary RootActor initialization failure (§9): the
+  RootActor never reaches `READY` and, because it is the RootActor, the Process
+  terminates. No second bootstrap attempt is made.
+
+The message-service entry adds no `Actor` operation, no special RootActor
+subtype, no sentinel or placeholder behavior, no service object, and no global
+service binding. After `READY` the RootActor is an ordinary Actor with ordinary
+Actor-local state, message turns, and failure semantics; this section's rule
+that a fatal RootActor failure terminates the Process applies unchanged. The
+RootActor may give other Actors a communication-only capability to itself with
+the existing `Actor.group(Actor.current())` (`DISTRIBUTED_RUNTIME.md` §50A); an
+`ActorRef` from `Actor.current()` remains a full `ActorRef`, including its
+`stop()` surface. Process lifetime, Group ownership, Actor transfer rules, module
+caching, and the Error taxonomy are unchanged.
 ## 33. Global State
 
 **CLOSED**

@@ -34,9 +34,22 @@ first for the Context lifecycle, class path, and authority model.
 | Filesystem/classpath lookup, relative `app:` imports, aliases | Not available by design |
 | Native Image embedding hosts / Native CLI | Not supported |
 | `app:` in the CLI, Test Tool, or other Protos-owned drivers | Not available: installation is rejected on driver-owned Contexts |
+| `applicationModules` of `ProtosRootActorServiceSession.open` (D225-B1 RootActor service entry) | Implemented: the session composes the same catalog itself |
 
 Verified scope: this repository's `0.3.312-SNAPSHOT` development revision; no
 release containing it is implied.
+
+The two hosting APIs share one `app:` identity and module semantics but have
+different installation boundaries. `ProtosEmbeddedModules.install(...)` applies
+only to a standard Polyglot `Context` you build, before its first evaluation,
+and is still rejected on driver-owned Contexts. The explicit RootActor service
+session ([Hosting a RootActor message service](java.md#hosting-a-rootactor-message-service))
+does not use `install`: you pass the catalog as the `applicationModules`
+argument of `ProtosRootActorServiceSession.open(...)`, and the session validates
+it with the same rules before it opens anything. It then resolves the entry
+file and its `./` modules first, then the catalog, then `std:`, for its whole
+Process lifetime. HTTP Workers, which import their factory module inside their
+own Actor, name it by its exact `app:` identity.
 
 ## Example
 
@@ -169,9 +182,9 @@ Error escapes a host entry unhandled, it terminates the Process as described in
 
 Supplying code grants no authority. A catalog module:
 
-- does not receive `process`, `filesystem`, or `network` slots; only the
-  initial module of the first host evaluation receives the bootstrap-local
-  slots;
+- does not receive `process`, `filesystem`, `network`, or `resolver` slots;
+  only the initial module of the first host evaluation (or, in the RootActor
+  service session, the entry module) receives the bootstrap-local slots;
 - cannot reach Filesystem, Network, host access, or thread creation beyond
   what the Context itself allows;
 - receives capabilities only when Protos code passes them explicitly, for

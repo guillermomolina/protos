@@ -1300,6 +1300,7 @@ Process. At the current revision and in the 0.3.312 release:
 | Java Polyglot embedding (portable JVM only) | Bound | Only when the Context allows file access | Only when the Context allows socket access | Not bound |
 | Bundled Tools | Bound | Only confined capabilities that the Tool's launcher contract grants | Not bound | Not bound |
 | A Java host using `ProtosPolyglotRuntimeHost.provisionHostResolver` explicitly | Bound | As selected | As selected | Bound |
+| `ProtosRootActorServiceSession.open` (RootActor message-service entry) | Bound | Not bound | Only with `NetworkGrant.HOST_NETWORK` | Only with `ResolverGrant.HOST_RESOLVER` |
 
 The Native and portable JVM command lines grant the same authority. There is no
 command-line option that grants a Filesystem or a Network to an application.
@@ -1310,6 +1311,33 @@ The embedding rules, including the `IOAccess` settings that grant each slot, are
 in [Embedding Protos in a Java application](embedding/java.md#authority-and-thread-policy).
 Code supplied through the [`app:` catalog](embedding/application-modules.md)
 receives no authority either: it must be passed capabilities explicitly.
+
+## The RootActor service entry receives the same grants
+
+A host may start the RootActor through the optional message-service bootstrap
+entry (D225-B1, `spec/io/PROCESS_IO.md`; see [Actors, ActorRefs, and Actor
+Groups](10-actors-actorrefs-and-groups.md#the-rootactor-has-two-entry-modes)).
+Its initial module receives exactly the bootstrap-local slots an ordinary
+initial module would receive under the same host grants: always `process`, and
+`network` or `resolver` only when the host grants each one. The two grants are
+independent, and choosing the service entry grants nothing by itself.
+
+The slots stay RootActor-local for the whole life of the service. Its behavior
+methods can use them because they close over the initial module, but nothing
+else can reach them:
+
+- imported modules, including the module a Worker or other Actor loads, do not
+  receive them;
+- Actors the service creates start without them;
+- a GroupRef or ActorRef denoting the RootActor carries no capability; and
+- passing `network` or `resolver` in a message or `Actor.spawn` argument fails
+  with `NonTransferableValue`, because neither has an Actor-transfer contract.
+
+So when an HTTP Worker needs something that requires the network or name
+resolution, it asks the RootActor service by message, and the service performs
+the operation with its own capability. Process termination, including after a
+fatal RootActor failure, and closing the hosting session retire the granted
+capabilities and their resources.
 
 ## Name resolution is a separate capability
 

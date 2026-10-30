@@ -151,6 +151,84 @@ The Context's own Polyglot permissions bound what Protos may do:
 Neither slot is injected into later host entries; pass the capability
 explicitly if other code needs it.
 
+## Hosting a RootActor message service
+
+Everything above is ordinary Polyglot embedding: each `eval` is a direct entry
+that evaluates source and returns its result, and that does not change. A Java
+host that instead wants the RootActor itself to be a long-lived message service
+(D225-B1, `spec/concurrency/ACTORS.md` §32) opts in explicitly with
+`com.guillermomolina.protos.execution.ProtosRootActorServiceSession` from
+`protos.jar`. It is a separate host API, not a `Context` option, and the
+`protos` command line does not offer it.
+
+```java
+try (ProtosRootActorServiceSession service =
+        ProtosRootActorServiceSession.open(
+                coreRoot,                    // the distribution's protos/lib/core
+                Path.of("service.protos"),   // the entry module
+                "service",                   // its own top-level bootstrap binding
+                List.of(),                   // process.args()
+                System.in, System.out, System.err,
+                NetworkGrant.HOST_NETWORK,   // or NetworkGrant.NONE
+                ResolverGrant.NONE)) {       // or ResolverGrant.HOST_RESOLVER
+    service.awaitTermination();             // until the Protos program ends it
+}
+```
+
+`open` resolves the file as the entry module, bootstraps one Process with
+exactly the selected grants, and lets the existing RootActor execute that module
+once and invoke its `service` binding. The returned Protos object becomes the
+RootActor's behavior, and `open` returns once the RootActor is `READY`. If the
+binding is missing, inherited, not callable, returns `null` or a Number, or an
+Error escapes, the Process terminates and `open` throws
+`ProtosRootActorServiceSession.InitializationFailedException`; nothing is left
+open.
+
+After `open` the application is Protos code: the service creates its own Actors
+and hands them `Actor.group(Actor.current())`, and they send it ordinary
+messages. The session has no message API and runs no Java receive loop or
+callback. It owns the Process, its Context, the runtime host (and with it any
+granted Network or Resolver) until you call `close()`, which terminates the
+Process, waits for it and releases those resources; `close()` is idempotent.
+`awaitTermination()` and `isTerminated()` observe a Process that ended by itself,
+for example after a fatal RootActor failure; `close()` is still required.
+
+A second overload adds one last argument, `Map<String, String>
+applicationModules`: exact `app:` identifiers mapped to Protos source text, the
+same catalog rules as [Supplying application modules from Java](application-modules.md).
+The session validates and copies it before it opens anything (an invalid entry
+throws `IllegalArgumentException` or `NullPointerException`), then resolves the
+entry file and its `./` modules first, the catalog next and `std:` last, for the
+whole Process lifetime. The catalog is source, not authority or a service
+registry. It is how code that other Actors import by name, such as an HTTP
+Worker factory, reaches them, because a Worker resolves that name inside its own
+Actor, where a `./` path has no meaning:
+
+```java
+String handler = Files.readString(Path.of("root-service-handler.protos")); // Protos source
+try (ProtosRootActorServiceSession session =
+        ProtosRootActorServiceSession.open(
+                coreRoot, Path.of("root-service-host.protos"), "service", List.of(),
+                System.in, System.out, System.err,
+                NetworkGrant.HOST_NETWORK, ResolverGrant.NONE,
+                Map.of("app:root-service-handler", handler))) {
+    session.awaitTermination();
+}
+```
+
+The service, its HTTP Host and the handler factory all stay Protos source; Java
+only selects the entry, the grants and the catalog. Neither
+`ProtosStandaloneHostedSession` nor a Polyglot `Context.eval` changes: both
+remain direct entries, and a Polyglot `Context` still receives `app:` modules
+only through `ProtosEmbeddedModules.install`.
+
+`NetworkGrant` (`ProtosWorkspacePackageApplicationExecution.NetworkGrant`) and
+`ResolverGrant` (`ProtosStandaloneHostedExecution.ResolverGrant`) are
+independent, and choosing the service entry grants neither. Granted capabilities
+are bound only in the RootActor's initial module; Actors the service creates
+never receive them (see [Process, I/O, Filesystems, and
+Authority](../11-process-io-filesystems-and-authority.md#the-rootactor-service-entry-receives-the-same-grants)).
+
 ## Common mistakes
 
 | Symptom | Cause |

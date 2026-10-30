@@ -19,7 +19,8 @@ package com.guillermomolina.protos.execution;
 /**
  * Protos sources of {@link ProtosHttpHostFactoryIntegrationTest}: the application service Actor
  * module {@code app:service}, the factory module {@code app:factory} and the program whose
- * top-level bindings are the fixture entry points.
+ * top-level bindings are the fixture entry points, plus the D225-B1 RootActor service entry and
+ * its Worker factory.
  */
 final class ProtosHttpHostFactoryFixtureSources {
     private ProtosHttpHostFactoryFixtureSources() {}
@@ -100,6 +101,166 @@ final class ProtosHttpHostFactoryFixtureSources {
                     }
                 }
                 behavior
+            }
+            """;
+
+    /**
+     * D225-B1: an entry module started through the RootActor service bootstrap. The RootActor
+     * itself is the application service; it hands a single-member GroupRef to itself to HTTP
+     * Workers as their factory initialization, naming the factory by its exact {@code app:}
+     * identity because each Worker imports it inside its own Actor. Host startup awaits, so it runs in an ordinary
+     * message turn after READY; every outcome is reported on the Process standard output.
+     */
+    static final String ROOT_SERVICE =
+            """
+            http: import("std:http/Host")
+            IpAddress: import("std:network/IpAddresses").IpAddress
+            IpEndpoints: import("std:network/IpEndpoints")
+            IpEndpoint: IpEndpoints.IpEndpoint
+            ProcessStreams: import("std:io/ProcessStreams")
+            out: ProcessStreams.stdoutWriter(process)
+            loopback: IpAddress(4, 2130706433)
+            hits: 0
+            host: null
+            // Names an Error by its prototype, with its kind when present.
+            describeError: (error) => {
+                names: ["HostError", "NonTransferableValue", "InvalidIOArgument", "IOLifecycleError", "SlotNotFound", "Error"]
+                prototypes: [http.HostError, NonTransferableValue, InvalidIOArgument, IOLifecycleError, SlotNotFound, Error]
+                found: "unknown"
+                index: 0
+                while((found == "unknown") && (index < names.size())) {
+                    prototype: prototypes[index]
+                    name: names[index]
+                    Error.handle(
+                        () => {
+                            prototype.handle(
+                                () => {
+                                    error.signal()
+                                },
+                                (matched) => {
+                                    found = name
+                                    matched
+                                }
+                            )
+                        },
+                        (unmatched) => {
+                            unmatched
+                        }
+                    )
+                    index = index + 1
+                }
+                if(error.hasSlot("kind")) {
+                    found = found + " kind=" + error.kind
+                }
+                found
+            }
+            service: () => {
+                self: Actor.group(Actor.current())
+                Actor.current().send("start", self)
+                behavior: {
+                    // A startup Error is reported, not fatal, so a failing test
+                    // names it instead of only timing out.
+                    start: (group) => {
+                        phase: "listen"
+                        Error.handle(
+                            () => {
+                                request: {
+                                    ipVersion: 4
+                                    address: loopback
+                                    port: null
+                                }
+                                listener: network.listenTcp(request).value()
+                                options: {
+                                    workers: 2
+                                    maxConnections: 4
+                                }
+                                dependencies: {
+                                    service: group
+                                }
+                                phase = "construction"
+                                host = http.Host.owningWithFactory(listener, "app:root-service-factory", "make", dependencies, options)
+                                phase = "host.ready()"
+                                host.ready().value()
+                                phase = "report"
+                                out.writeLine("listening " + IpEndpoints.format(IpEndpoint(loopback, listener.localPort()))).value()
+                            },
+                            (error) => {
+                                out.writeLine("start-failed " + describeError(error) + " in phase " + phase).value()
+                                error
+                            }
+                        )
+                        null
+                    }
+                    hit: () => {
+                        hits = hits + 1
+                        hits
+                    }
+                    shutdown: (mode) => {
+                        host.shutdown(mode).value()
+                        out.writeLine("host " + mode).value()
+                        null
+                    }
+                    // Reports its own dispatch before failing fatally.
+                    fail: () => {
+                        out.writeLine("failing").value()
+                        Error().signal()
+                    }
+                }
+                behavior
+            }
+            """;
+
+    /**
+     * The Worker-side factory of {@link #ROOT_SERVICE}, supplied as {@code
+     * app:root-service-factory} through the service session's application module catalog. Each
+     * Worker imports its own instance, so {@code factoryRuns} counts that Worker's run only.
+     */
+    static final String ROOT_SERVICE_FACTORY =
+            """
+            factoryRuns: 0
+            ambient: context.hasSlot("process") || context.hasSlot("filesystem") || context.hasSlot("network") || context.hasSlot("resolver")
+            flag: (condition) => {
+                text: "0"
+                if(condition) {
+                    text = "1"
+                }
+                text
+            }
+            make: (dependencies) => {
+                factoryRuns = factoryRuns + 1
+                service: dependencies.service
+                (request) => {
+                    target: Encoding.Latin1.decode(request.target)
+                    body: Encoding.Latin1.encode("")
+                    if(target == "/hit") {
+                        body.add(48 + service.request("hit").value())
+                    }
+                    if(target == "/isolation") {
+                        noStop: Error.handle(
+                            () => {
+                                service.stop()
+                                false
+                            },
+                            (error) => { true }
+                        )
+                        body = Encoding.Latin1.encode(flag(factoryRuns == 1) + flag(!ambient) + flag(noStop))
+                    }
+                    if(target == "/drain") {
+                        service.send("shutdown", "drain")
+                    }
+                    if(target == "/abort") {
+                        service.send("shutdown", "abort")
+                    }
+                    if(target == "/fail") {
+                        service.send("fail")
+                    }
+                    response: {
+                        status: 200
+                        headers: []
+                        body: body
+                    }
+                    response
+                }
             }
             """;
 

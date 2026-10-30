@@ -18,16 +18,22 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution.ResolverGrant;
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
@@ -48,6 +54,9 @@ import org.junit.jupiter.api.Timeout;
  *
  * <p>A Resolver cannot be provisioned in this embedding; its rejection is the same ordinary Actor
  * transfer rule exercised here for Network, Closures, Futures, listeners and TcpAcceptors.
+ *
+ * <p>The D225-B1 cases instead open a {@link ProtosRootActorServiceSession}: the RootActor itself is
+ * the application service, and its Workers reach it through a single-member GroupRef.
  */
 @Timeout(value = 10, unit = TimeUnit.SECONDS)
 final class ProtosHttpHostFactoryIntegrationTest {
@@ -270,6 +279,68 @@ final class ProtosHttpHostFactoryIntegrationTest {
         }
     }
 
+    // ------------------------------------------- D225-B1 RootActor service composition
+
+    @Test
+    void workersReachTheRootActorServiceThroughAGroupRefAndDrainLeavesItRunning()
+            throws Exception {
+        try (RootService x = new RootService()) {
+            // Two Workers, each with its own handler, share the one RootActor counter.
+            assertEquals(body("1"), x.get("/hit"));
+            assertEquals(body("2"), x.get("/hit"));
+            assertEquals(body("3"), x.get("/hit"));
+            for (int index = 0; index < 4; index++) {
+                // Each Worker's factory ran once, sees no ambient authority, and its GroupRef
+                // has no stop().
+                assertEquals(body("111"), x.get("/isolation"), "request " + index);
+            }
+            assertEquals(body(""), x.get("/drain"));
+            x.out.awaitLine("host drain");
+            assertThrows(IOException.class, () -> x.get("/hit"), "the listener is closed");
+            // Host shutdown did not terminate the RootActor service or its Process.
+            assertFalse(x.session.isTerminated());
+        }
+    }
+
+    @Test
+    void abortingTheHostLeavesTheRootActorServiceRunning() throws Exception {
+        try (RootService x = new RootService()) {
+            assertEquals(body("1"), x.get("/hit"));
+            // The aborting session itself may be cancelled before it answers.
+            try (Socket socket = x.connect()) {
+                send(socket, "GET /abort HTTP/1.1\r\nHost: a\r\n\r\n");
+                readAll(socket);
+            }
+            x.out.awaitLine("host abort");
+            assertFalse(x.session.isTerminated());
+        }
+    }
+
+    @Test
+    void rootActorFailureTerminatesTheProcessAndRetiresEveryWorker() throws Exception {
+        try (RootService x = new RootService()) {
+            assertEquals(body("1"), x.get("/hit"));
+            try (Socket socket = x.connect()) {
+                send(socket, "GET /fail HTTP/1.1\r\nHost: a\r\n\r\n");
+                readAll(socket);
+            }
+            // The fail message reached the RootActor; nothing on the host side requests
+            // termination: the RootActor fails by itself and so ends its Process.
+            x.out.awaitLine("failing");
+            Entry terminated =
+                    new Entry(
+                            () -> {
+                                x.session.awaitTermination();
+                                return true;
+                            });
+            Object outcome = terminated.await();
+            assertEquals(Boolean.TRUE, outcome, "the Process terminated");
+            assertTrue(x.session.isTerminated());
+            x.close();
+            assertThrows(IOException.class, () -> x.get("/hit"), "no Worker accepts any more");
+        }
+    }
+
     // ------------------------------------------------------------ fixture
 
     private static String body(String value) {
@@ -404,6 +475,101 @@ final class ProtosHttpHostFactoryIntegrationTest {
         @Override
         public void close() {
             context.close(true);
+        }
+    }
+
+    /**
+     * D225-B1: {@link ProtosHttpHostFactoryFixtureSources#ROOT_SERVICE} opened through the explicit
+     * RootActor service session with only Network granted and the Worker factory supplied as
+     * {@code app:root-service-factory} through its application module catalog; its Host listens
+     * on an ephemeral loopback port reported on the Process standard output.
+     */
+    private static final class RootService implements AutoCloseable {
+        final ProtosRootActorServiceBootstrapIntegrationTest.ServiceOutput out =
+                new ProtosRootActorServiceBootstrapIntegrationTest.ServiceOutput();
+        final Path directory;
+        final ProtosRootActorServiceSession session;
+        final int port;
+
+        RootService() throws Exception {
+            directory = Files.createTempDirectory("protos-root-service");
+            ProtosRootActorServiceSession opened = null;
+            try {
+                Path entry = directory.resolve("root-service.protos");
+                Files.writeString(entry, ProtosHttpHostFactoryFixtureSources.ROOT_SERVICE);
+                opened =
+                        ProtosRootActorServiceSession.open(
+                                Path.of(CORE),
+                                entry,
+                                "service",
+                                List.of(),
+                                InputStream.nullInputStream(),
+                                out,
+                                OutputStream.nullOutputStream(),
+                                NetworkGrant.HOST_NETWORK,
+                                ResolverGrant.NONE,
+                                Map.of(
+                                        "app:root-service-factory",
+                                        ProtosHttpHostFactoryFixtureSources.ROOT_SERVICE_FACTORY));
+                String listening = out.awaitLineOrFailure("listening ", "start-failed ");
+                port = Integer.parseInt(listening.substring(listening.lastIndexOf(':') + 1));
+                session = opened;
+            } catch (Exception | Error failure) {
+                if (opened != null) {
+                    try {
+                        opened.close();
+                    } catch (Exception | Error cleanupFailure) {
+                        failure.addSuppressed(cleanupFailure);
+                    }
+                }
+                try {
+                    Files.deleteIfExists(directory.resolve("root-service.protos"));
+                    Files.deleteIfExists(directory);
+                } catch (IOException cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+                throw failure;
+            }
+        }
+
+        Socket connect() throws IOException {
+            Socket socket = new Socket(InetAddress.getByAddress(new byte[] {127, 0, 0, 1}), port);
+            socket.setSoTimeout(SAFETY_MILLIS);
+            return socket;
+        }
+
+        String get(String path) throws IOException {
+            try (Socket socket = connect()) {
+                send(socket, "GET " + path + " HTTP/1.1\r\nHost: a\r\n\r\n");
+                return readAll(socket);
+            }
+        }
+
+        /** Closes the session within the safety bound, so a stuck termination fails the test. */
+        @Override
+        public void close() throws IOException {
+            try {
+                Entry closed =
+                        new Entry(
+                                () -> {
+                                    try {
+                                        session.close();
+                                    } catch (IOException failure) {
+                                        throw new java.io.UncheckedIOException(failure);
+                                    }
+                                    return true;
+                                });
+                Object outcome;
+                try {
+                    outcome = closed.await();
+                } catch (Exception timeout) {
+                    throw new AssertionError("the service session did not close", timeout);
+                }
+                assertEquals(Boolean.TRUE, outcome, "the service session closed");
+            } finally {
+                Files.deleteIfExists(directory.resolve("root-service.protos"));
+                Files.deleteIfExists(directory);
+            }
         }
     }
 

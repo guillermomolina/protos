@@ -48,7 +48,10 @@ module's `moduleContext`. Its value is the RootActor's Process capability and
 delegates to `Process`. The slot is bootstrap-local state, not a prelude/global
 binding, import side effect, intrinsic, or service locator. The same rule applies
 to a standalone non-importable initial entry. Imported modules receive no such
-slot and can use Process only when ordinary code passes them a capability.
+slot and can use Process only when ordinary code passes them a capability. It also
+applies, together with the other bootstrap-local grants, to the initial module of
+a RootActor started through the optional message-service bootstrap entry; see
+RootActor message-service bootstrap entry authority (D225-B1).
 
 The Process is the custodian of Process-local host authority. Its capability grants
 only operations standardized here and authority explicitly returned by them; it
@@ -592,3 +595,35 @@ provisioning host. Its host resources are retired when it is closed or when the
 host that provisioned it is closed; Process termination makes it unusable and
 no guest callback runs afterwards. A Resolver has no Actor- or P-transfer
 contract (`NETWORK.md` §§11, 14.9).
+
+### RootActor message-service bootstrap entry authority (D225-B1)
+
+When the host explicitly selects the optional RootActor message-service bootstrap
+entry (`../concurrency/ACTORS.md` §32), the RootActor's initial module receives
+exactly the bootstrap-local capabilities that an ordinary initial RootActor
+module receives under the same host grants: `process` always, and each of
+`filesystem`, `network`, `resolver` and, where applicable, `resources` only when
+the existing host policy provisions it, under Root bootstrap acquisition, Root
+filesystem capability provisioning, Root network capability provisioning and Root
+resolver capability provisioning. These grants remain independent of one another.
+
+Selecting the message-service entry is not itself a grant. In particular it is
+not authorization to grant Network or Resolver, it creates no capability that the
+host policy would not otherwise provision, and it does not imply any other grant.
+Module source that the host makes resolvable for the Process, such as an
+embedding's application module catalog, is code, not authority: modules loaded
+from it are ordinary imported modules and receive none of these slots.
+
+The slots are installed on that initial module's `moduleContext` before its first
+source expression, remain bootstrap-local RootActor state while the RootActor
+later serves messages, and are not reachable through the RootActor's behavior,
+an `ActorRef` or `GroupRef` denoting the RootActor, or message dispatch. Imported
+modules, Actors created by the service, and their module contexts do not acquire
+them; such an Actor receives authority only through an explicit transfer or
+delegation contract, and `Network`, `Resolver` and the other live resources
+without such a contract still fail ordinary Actor transfer with
+`NonTransferableValue`.
+
+Process termination, including termination after a fatal RootActor failure, and
+the host's release of the Process retire these capabilities and their resources
+exactly as for a direct-entry Process.

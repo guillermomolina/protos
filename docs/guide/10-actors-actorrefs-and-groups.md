@@ -1007,6 +1007,72 @@ sharded/routed capacity where the Group contract is appropriate
 Do not use Group routing when correctness depends on one particular Actor's
 private state unless the higher-level protocol makes that relationship explicit.
 
+## The RootActor has two entry modes
+
+Every Process starts with one RootActor. By default the RootActor runs its
+initial program as a **direct entry**: `protos file.protos`, `protos run`, `-e`,
+the REPL, `ProtosStandaloneHostedSession` and ordinary Polyglot `Context.eval`
+all evaluate top-level source and return its result. Nothing is installed as a
+behavior, and a callable top-level binding is never invoked merely because it
+exists.
+
+A host can instead select the optional **message-service bootstrap entry**
+(D225-B1, `spec/concurrency/ACTORS.md` §32). It names the initial module and one
+of its own top-level bindings, and the existing RootActor then initializes
+exactly like an Actor created by `Actor.spawn`:
+
+1. it executes the initial module once, with its usual bootstrap-local
+   capabilities;
+2. it reads the named binding as a local slot of that module (an inherited
+   same-named slot does not count) and invokes it;
+3. the result must be an ordinary behavior object, installed once at the
+   `INITIALIZING -> READY` cutover; and
+4. from then on, messages sent to the RootActor dispatch against that same
+   object.
+
+A missing, inherited or non-callable binding, a `null` or Number result, or an
+escaping Error is RootActor initialization failure, which terminates the
+Process. There is no `Actor.serve`, no special RootActor object and no new
+syntax: the selection is made by the host, today through the Java
+`ProtosRootActorServiceSession` (see [Embedding Protos in a Java
+application](embedding/java.md)); the command line does not offer it.
+
+```protos
+visits: 0
+
+// The bootstrap binding: runs once, in the RootActor.
+service: () => {
+    // A communication-only capability to this RootActor.
+    self: Actor.group(Actor.current())
+    visitor: Actor.spawn("./visitor.protos", "start")
+    visitor.send("visit", self)
+
+    behavior: {
+        greet: (name) => {
+            visits = visits + 1
+            "Hello, " + name
+        }
+    }
+    behavior
+}
+```
+
+A bootstrap invocation runs while the RootActor is still `INITIALIZING`; work
+that must await a Future belongs in an ordinary message turn after `READY`, for
+example one the bootstrap sends to `Actor.current()`.
+
+### Share a GroupRef, not the RootActor's ActorRef
+
+`Actor.group(Actor.current())` is the existing Group acquisition operation
+applied to one member. The resulting GroupRef carries only `send` and
+`request`; it has no `stop()`, so an Actor holding it can use the service but
+cannot request its termination. Handing out `Actor.current()` instead shares a
+full `ActorRef`, whose `stop()` would let any holder request the RootActor's
+graceful stop. Neither reference
+exposes the RootActor's module context, `network`, `resolver` or other
+bootstrap-local capabilities; those stay RootActor-local and are never sent by
+messaging. The Group belongs to the RootActor's Process and is retired with it.
+
 ## Runnable learning path
 
 The existing executable tutorials are deliberately split so each step introduces

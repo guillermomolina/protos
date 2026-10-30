@@ -1,0 +1,34 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// The Worker factory of `root-service-host.protos`, supplied to the RootActor
+// service session as `app:root-service-handler`. Each Worker imports its own
+// instance and calls `makeHandler` once with its own copy of the
+// initialization; the handler then asks the RootActor service by message.
+
+// Factory binding: runs once in each Worker, with that Worker's own copy of
+// the initialization. It returns the Worker-local handler.
+makeHandler: (dependencies) => {
+    service: dependencies.service
+    (request) => {
+        count: service.request("visit").value()
+        body: Encoding.Latin1.encode("visit ")
+        if(count < 10) {
+            body.add(48 + count)
+        }
+        response: {
+            status: 200
+            headers: []
+            body: body
+        }
+        response
+    }
+}

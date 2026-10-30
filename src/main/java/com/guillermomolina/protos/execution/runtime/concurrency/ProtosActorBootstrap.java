@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
+import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
@@ -32,6 +33,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * Destination-local Actor bootstrap machinery.
@@ -97,20 +99,28 @@ public final class ProtosActorBootstrap {
             Object bootstrapBinding =
                     module.readLocalSlot(bindingName)
                             .orElseThrow(() -> bootstrapError(activation));
+            // The binding runs in its own module's environment, as every later message turn of
+            // this Actor does: specifiers it resolves are relative to that canonical module.
+            ProtosActivation invocation =
+                    prelude.newModuleActivation(
+                            actor.moduleState(),
+                            canonicalModuleKey,
+                            bootstrapContext,
+                            actor.executionDomain());
             Object result =
                     ProtosInvocation.invoke(
                             bootstrapBinding,
                             List.copyOf(
                                     ProtosActorValueTransfer.materializeArguments(
-                                            transferredArguments, activation)),
-                            activation);
+                                            transferredArguments, invocation)),
+                            invocation);
             // A represented Number is a semantic value, not an ordinary
             // Actor behavior object. Check semantic membership, not the Java
             // representation: BigInteger, Fraction and Complex all extend
             // ProtosObjectValue, while ordinary delegates remain admissible.
             if (!(result instanceof ProtosObjectValue behavior)
                     || ProtosNumericValueSupport.isCurrentNumber(result)) {
-                throw bootstrapError(activation);
+                throw bootstrapError(invocation);
             }
             actor.bindMessageEnvironmentForRuntime(prelude, canonicalModuleKey);
             return actor.completeInitialization(behavior);
@@ -118,6 +128,77 @@ public final class ProtosActorBootstrap {
             terminateFailedInitialization(actor, failure.error());
             throw failure;
         }
+    }
+
+    /**
+     * D225-B1: starts the explicitly selected message-service bootstrap of the existing RootActor
+     * of a hosted Process.
+     *
+     * <p>No new Actor is created and no second bootstrap algorithm exists: the RootActor is
+     * attached to the Process host's ordinary Actor scheduler and {@link #initialize} runs as that
+     * Actor's control turn, exactly as for a spawned Actor. It therefore executes entered in the
+     * Process Context, loads the canonical initial module once with the RootActor's
+     * bootstrap-local slots, selects {@code bindingName} as a local slot of that module, validates
+     * the result and performs the single READY cutover. After READY the same scheduler dispatches
+     * ordinary external messages against the installed behavior.
+     *
+     * <p>The returned Future completes with the result of {@link #initialize}: true for the READY
+     * cutover, false when initialization failed with a Protos Error (the RootActor failure has
+     * already begun Process termination) or termination won first. A host failure inside the turn
+     * requests Process termination and completes it exceptionally. The control turn is the only
+     * completion path; it is submitted while the RootActor is still INITIALIZING and before any
+     * guest code of this Process runs, so it is never discarded unexecuted.
+     */
+    static CompletableFuture<Boolean> startRootService(
+            ProtosProcessRuntime process,
+            ProtosPrelude prelude,
+            ProtosModuleKey canonicalModuleKey,
+            String bindingName) {
+        Objects.requireNonNull(process, "process");
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(canonicalModuleKey, "canonicalModuleKey");
+        Objects.requireNonNull(bindingName, "bindingName");
+        ProtosActor root = process.rootActorForRuntime();
+        if (root.lifecycleState() != ProtosActor.LifecycleState.INITIALIZING) {
+            throw new IllegalStateException(
+                    "RootActor service bootstrap requires INITIALIZING lifecycle");
+        }
+        ProtosActorScheduler scheduler =
+                process.executionHostForRuntime()
+                        .flatMap(host -> host.actorSchedulerForRuntime())
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "RootActor service bootstrap requires a hosted Process"));
+        ProtosModuleRuntime moduleRuntime = ProtosStandardImportProtocol.runtimeForPrelude(prelude);
+        if (moduleRuntime == null) {
+            throw new IllegalStateException("Core prelude has no standard import facility");
+        }
+        ProtosActorBootstrap bootstrap = new ProtosActorBootstrap(moduleRuntime);
+        CompletableFuture<Boolean> outcome = new CompletableFuture<>();
+        Runnable turn =
+                () -> {
+                    try {
+                        outcome.complete(
+                                bootstrap.initialize(
+                                        root, prelude, canonicalModuleKey, bindingName, List.of()));
+                    } catch (ProtosSignalException initializationFailure) {
+                        // initialize already made this RootActor failure terminate the Process.
+                        outcome.complete(false);
+                    } catch (RuntimeException | Error hostFailure) {
+                        process.requestTerminationForRuntime();
+                        outcome.completeExceptionally(hostFailure);
+                        if (hostFailure instanceof Error error) throw error;
+                    }
+                };
+        scheduler.attach(root);
+        try {
+            scheduler.submitControl(root, turn);
+        } catch (RuntimeException admissionFailure) {
+            scheduler.detach(root);
+            throw admissionFailure;
+        }
+        return outcome;
     }
 
     /**

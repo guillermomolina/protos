@@ -1,0 +1,76 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// The RootActor is the application service; HTTP Workers reach it through a
+// GroupRef (D225-B1 with the I133 Host.owningWithFactory).
+//
+// Start it through the explicit RootActor service entry with the bootstrap
+// binding "service", an explicit Network grant, and the Worker factory module
+// `root-service-handler.protos` supplied as `app:root-service-handler` in the
+// session's application module catalog, for example from Java:
+//
+//     ProtosRootActorServiceSession.open(coreRoot, path, "service", List.of(),
+//         in, out, err, NetworkGrant.HOST_NETWORK, ResolverGrant.NONE,
+//         Map.of("app:root-service-handler", handlerSource))
+//
+// Each Worker imports the factory module inside its own Actor, so it is named
+// by its exact `app:` identity, never by a `./` path. `network` exists only in
+// this RootActor's initial module.
+
+Host: import("std:http/Host").Host
+IpAddress: import("std:network/IpAddresses").IpAddress
+
+loopback: IpAddress(4, 2130706433)    // 127.0.0.1
+
+// RootActor-local state, owned by the service. The Host owns its listener and
+// Workers, not this service.
+visits: 0
+host: null
+
+// Bootstrap binding: runs once in the RootActor. Startup that must await (the
+// listener and Host readiness) is an ordinary message turn after READY.
+service: () => {
+    self: Actor.group(Actor.current())
+    Actor.current().send("start", self)
+
+    behavior: {
+        start: (group) => {
+            listenRequest: {
+                ipVersion: 4
+                address: loopback
+                port: 8080
+            }
+            listener: network.listenTcp(listenRequest).value()
+            options: {
+                workers: 2
+                maxConnections: 8
+            }
+            // The initialization crosses the Actor boundary by value: a
+            // communication-only GroupRef, never `network` or this behavior.
+            dependencies: {
+                service: group
+            }
+            host = Host.owningWithFactory(listener, "app:root-service-handler", "makeHandler", dependencies, options)
+            host.ready().value()
+            null
+        }
+        visit: () => {
+            visits = visits + 1
+            visits
+        }
+        // Host shutdown is explicit; it does not stop this service.
+        stopHosting: () => {
+            host.shutdown("drain").value()
+            null
+        }
+    }
+    behavior
+}

@@ -23,6 +23,30 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.483] - 2026-10-30
+
+### D225-B1 — Optional RootActor message-service bootstrap
+- `spec/concurrency/ACTORS.md` §32: a host selects either the unchanged
+  direct RootActor entry or an explicit message-service bootstrap entry.
+  The existing RootActor initializes one canonical module and invokes one
+  local binding with no arguments, installs exactly one ordinary behavior
+  object before `READY`, and then handles ordinary messages. Invalid or
+  failing bootstrap terminates the RootActor and its Process. No extra Actor,
+  bootstrap operation, implicit service locator or behavior replacement.
+- `spec/semantics/MODULES.md`: the service entry uses the importable initial
+  module cache, canonical `ModuleKey`, initial-module context, local binding
+  selection and the existing failed-initialization lifecycle. Recursive
+  imports share the same module instance; default direct entry is unchanged.
+- `spec/io/PROCESS_IO.md`: the service initial module receives only the
+  existing bootstrap-local Process and independently host-granted resource
+  slots. Imports, application module catalogs and child Actors do not gain
+  them, and GroupRef/message transfer does not leak them.
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` §50A: explanatory cross-reference
+  to the existing single-member `Actor.group(Actor.current())` GroupRef;
+  routing, Process ownership and the no-`stop()` surface remain unchanged.
+- `spec/io/HTTP.md`, the `Host.owningWithFactory` API, Actor transfer rules
+  and the existing committed `Closable.close()` semantics are unchanged.
+
 ## [0.1.482] - 2026-10-30
 
 ### D222-C — HTTP Router and explicit-authority URL client (LIB026)

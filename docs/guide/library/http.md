@@ -414,6 +414,75 @@ fail, each as an ordinary handler failure. Several hosts may share one
 service. Creating a service with outbound `network` or Resolver authority is
 your program's business; `Host` provides no mechanism for it.
 
+**The RootActor as the application service (D225-B1).** When a Java host
+starts your program through the explicit RootActor message-service entry
+(`ProtosRootActorServiceSession`, see [Actors, ActorRefs, and Actor
+Groups](../10-actors-actorrefs-and-groups.md#the-rootactor-has-two-entry-modes)),
+the RootActor itself can be the service the Workers call. Pass the Workers a
+single-member GroupRef to it, which lets them `request` and `send` but not
+`stop()` it:
+
+```protos
+Host: import("std:http/Host").Host
+
+hits: 0
+host: null
+
+// Bootstrap binding: runs once in the RootActor. Host startup awaits, so it
+// happens in an ordinary message turn after READY.
+service: () => {
+    Actor.current().send("start", Actor.group(Actor.current()))
+    behavior: {
+        start: (self) => {
+            // listenRequest: a loopback listen request, as in the Host example above.
+            listener: network.listenTcp(listenRequest).value()
+            host = Host.owningWithFactory(listener, "app:handler", "make", { service: self }, { workers: 4 })
+            host.ready().value()
+            null
+        }
+        hit: () => {
+            hits = hits + 1
+            hits
+        }
+    }
+    behavior
+}
+
+```
+
+```protos
+// app:handler, supplied in the session's application module catalog.
+// Each Worker imports its own instance and calls make once.
+make: (dependencies) => {
+    service: dependencies.service
+    (request) => {
+        service.request("hit").value()
+        response: {
+            status: 200
+            headers: []
+            body: Encoding.UTF8.encode("counted")
+        }
+        response
+    }
+}
+```
+
+A Worker imports its factory module inside its own Actor, so the factory is
+named by an exact `app:` identity whose source the Java host passes as the
+`applicationModules` argument of `ProtosRootActorServiceSession.open(...)` (see
+[Hosting a RootActor message service](../embedding/java.md#hosting-a-rootactor-message-service));
+a `./` path would not resolve there. Every Worker reaches the same RootActor
+state through its copy of the GroupRef, and the RootActor keeps `network` (and `resolver`, when granted) to
+itself: neither can travel in `initialization` or in a message. The Host owns
+its listener and Workers but **not** the RootActor service. `shutdown("drain")`
+or `shutdown("abort")` follows the usual lifecycle below and leaves the
+RootActor running; terminating the RootActor's Process (for example closing the
+session, or a fatal RootActor failure) ends the Host and its Workers with it.
+A complete version is `protos/examples/http/root-service-host.protos` with its
+factory `protos/examples/http/root-service-handler.protos`. This is
+a composition pattern, not a REST framework: routing, retries and deadlines
+remain your program's business.
+
 **The host owns the listener.** After a valid `Host.owning` or
 `Host.owningWithFactory`, do not accept from or close the listener yourself.
 The host closes it exactly once on every path.
@@ -544,6 +613,7 @@ hostile Internet traffic.
 | [`examples/io/http-loopback-hosting.protos`](../../../protos/examples/io/http-loopback-hosting.protos) | Bounded hosting with limits, concurrent clients, drain | Java embedding with `network` |
 | [`examples/io/http-router.protos`](../../../protos/examples/io/http-router.protos) | A compiled Router handler with literal and capture routes, params, and query | standalone CLI |
 | [`examples/io/http-url-client.protos`](../../../protos/examples/io/http-url-client.protos) | An HTTPS `UrlClient` request with explicit `network`, `resolver`, and trust | Java embedding with `network` and `resolver` |
+| [`examples/http/root-service-host.protos`](../../../protos/examples/http/root-service-host.protos) with [`root-service-handler.protos`](../../../protos/examples/http/root-service-handler.protos) | The RootActor as the application service of factory-built Workers, through a GroupRef | `ProtosRootActorServiceSession` with `network` and the handler as `app:root-service-handler` (the same composition is tested in `ProtosHttpHostFactoryIntegrationTest`) |
 
 The CLI sources run with `bin/protos <file>` from the repository root. The
 embedding sources run in

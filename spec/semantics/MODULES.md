@@ -461,6 +461,34 @@ The recursive import must not create `main#2`.
 
 If the Actor's initial module was registered in the cache because it has an importable canonical `ModuleKey`, and its initialization fails, the same failure rule applies as to any other failed module initialization: the cache entry is removed, no successful-looking cache entry is preserved, effects already performed are not rolled back, and the runtime does not invent an automatic retry as part of Actor startup. Whether failure of the Actor's initial module terminates that Actor or its Process remains governed by the existing Actor and root failure semantics, which this section does not redefine.
 
+#### RootActor message-service bootstrap entry
+
+When the host explicitly selects the optional RootActor message-service bootstrap
+entry (`../concurrency/ACTORS.md` §32), the RootActor's initial module is always
+an importable initial module of the lifecycle above:
+
+1. its canonical `ModuleKey` is fixed by the host before execution begins and is
+   not re-resolved afterwards;
+2. exactly one module instance is created for it in the RootActor;
+3. that instance is inserted into the RootActor's module cache in state
+   `INITIALIZING` before its body executes;
+4. the RootActor's bootstrap-local slots are installed on that instance's
+   `moduleContext` before the first source expression (RootActor Process
+   bootstrap slot below);
+5. only after the module initializes successfully is the bootstrap binding
+   selected, as a local slot of that exact instance, with no delegated lookup and
+   no inherited fallback; and
+6. the binding is invoked in the same RootActor, with that module instance's
+   environment, and the module body is not executed a second time to obtain the
+   behavior.
+
+Cyclic imports of the initial module return that same cached instance, and failed
+initialization follows the failed-initialization rule above; failure is RootActor
+initialization failure under the Actor specification. This mode adds no export
+system, alternative module namespace, or global service binding, and it does not
+change the semantics of host evaluations in the default direct-entry mode
+(Host-initiated evaluations in an embedded RootActor).
+
 ### RootActor Process bootstrap slot
 
 `../io/PROCESS_IO.md` owns the capability/authority contract for the RootActor's

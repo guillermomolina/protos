@@ -1,0 +1,65 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+// A RootActor message service (D225-B1, ACTORS.md §32).
+//
+// Start it through the explicit RootActor service entry with the bootstrap
+// binding "service", for example from Java:
+//
+//     ProtosRootActorServiceSession.open(coreRoot, path, "service", ...)
+//
+// Ordinary `protos <file>` evaluation is a direct entry: it runs the top level
+// below and never invokes `service`.
+//
+// The module body is capability-free on purpose: the visitor Actor loads this
+// same module in its own Actor, where `process` does not exist.
+
+ProcessStreams: import("std:io/ProcessStreams")
+
+// RootActor-local mutable state; other Actors reach it only through messages.
+visits: 0
+
+// Bootstrap binding: runs once in the RootActor, during INITIALIZING. Its
+// result is the RootActor's behavior from READY on.
+service: () => {
+    out: ProcessStreams.stdoutWriter(process)
+
+    // A single-member GroupRef: send/request only, no stop().
+    self: Actor.group(Actor.current())
+
+    visitor: Actor.spawn("./root-message-service.protos", "visitor")
+    // Accepted now, dispatched by the RootActor once it is READY.
+    visitor.send("visit", self, "Ada")
+
+    behavior: {
+        greet: (name) => {
+            visits = visits + 1
+            "Hello, " + name
+        }
+        log: (line) => {
+            out.writeLine(line).value()
+            null
+        }
+    }
+    behavior
+}
+
+// Bootstrap binding of the visitor Actor.
+visitor: () => {
+    behavior: {
+        visit: (service, name) => {
+            greeting: service.request("greet", name).value()
+            service.send("log", "visitor received: " + greeting)
+            null
+        }
+    }
+    behavior
+}

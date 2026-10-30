@@ -1003,6 +1003,16 @@ discovery worker, Cluster membership, distributed coordinator, network
 transport, or other Group-acquisition machinery. This operation therefore
 preserves the Core pay-only-for-what-you-use boundary.
 
+Explanatory cross-reference (D225-B1): a RootActor serving messages after the
+optional message-service bootstrap entry (`ACTORS.md` §32), like any other Actor,
+obtains a single-member GroupRef to itself with the existing
+`Actor.group(Actor.current())`. No new Group operation is required, and this
+section is unchanged by that use: the GroupRef has its ordinary identity and
+communication-only `send`/`request` surface, the Group is owned by the
+RootActor's Process, routing, backpressure, failure and uncertainty follow the
+existing rules, no member is replaced automatically, and no discovery or registry
+is involved.
+
 ## 51. Capacity and Infrastructure Boundary
 
 **CLOSED --- REVISED**

@@ -46,11 +46,13 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Spawn an Actor and request a reply | `concurrency/actor-request-reply.protos` |
 | Observe same-sender FIFO with send then request | `concurrency/actor-send-fifo.protos` |
 | Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
+| Serve messages from the RootActor through a single-member GroupRef (RootActor service entry) | `actors/root-message-service.protos` |
 | Execute work in an isolated parallel domain | `concurrency/parallel-execution.protos` |
 | Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |
 | Answer one HTTP request and observe a rejected request (`std:http/Server`) | `io/http-minimal-response.protos` |
 | Perform an HTTP GET over an application-opened TCP connection (`std:http/Client`, requires `network`) | `io/http-get.protos` |
 | Host HTTP on loopback with explicit bounds and drain it (`std:http/Host`, requires `network`) | `io/http-loopback-hosting.protos` with `io/http-echo-handler.protos` |
+| Host HTTP Workers that call a RootActor service (`std:http/Host`, RootActor service entry, requires `network`) | `http/root-service-host.protos` with `http/root-service-handler.protos` as `app:root-service-handler` |
 
 Run the metadata example normally from the product repository root:
 `bin/protos protos/examples/runtime-introspection/info.protos`. The
@@ -59,9 +61,14 @@ inspection example requires explicit authority:
 The inspection command produces implementation-specific diagnostic text;
 do not treat its contents as a stable output format.
 
-The standalone CLI grants no `network`. The two examples marked "requires
+The standalone CLI grants no `network`. The two `io/` examples marked "requires
 `network`" therefore contain no `print(...)` call and are not run by the CLI
 regression suite; they end with a Boolean verdict and are executed by
 `ProtosHttpLearningMaterialIntegrationTest` in a Java Polyglot embedding with
 socket access, which also installs `http-echo-handler.protos` as `app:echo`.
+The two "RootActor service entry" examples are started through the explicit
+`ProtosRootActorServiceSession` Java entry with their `service` bootstrap
+binding; `protos <file>` would only evaluate their top level. The HTTP one also
+supplies `root-service-handler.protos` through that session's application
+module catalog.
 See the [HTTP guide](../../docs/guide/library/http.md).

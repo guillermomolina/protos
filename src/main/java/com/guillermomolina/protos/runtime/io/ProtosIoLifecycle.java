@@ -297,8 +297,10 @@ public final class ProtosIoLifecycle {
      * the direct path. With it, only an outcome reported synchronously inside the owner-domain
      * close's own release start is direct; any other outcome (a later backend callback, another
      * thread, or a release started by an operation retirement) is published through a targeted
-     * completion in the owner domain, where any IOError is constructed. An owner that is
-     * terminating or discards it gets a host-only terminal transition without guest execution.
+     * completion in the owner domain, where any IOError is constructed. A terminating owner
+     * with live cleanup Tasks may still publish a committed close outcome in its own domain,
+     * allowing those Tasks to finish. Without live cleanup Tasks, or after the owner terminates,
+     * the discarded outcome takes the host-only terminal path without guest execution.
      */
     private void completeClose(ProtosObjectValue error, boolean constructIoError) {
         boolean deferred;
@@ -318,7 +320,7 @@ public final class ProtosIoLifecycle {
         if (carrier == null) { finishCloseHostOnly(success); return; }
         try {
             ProtosFutureValue published=carrier;
-            domain.enqueueTargetedFutureCompletionForRuntime(
+            domain.enqueueCommittedLifecycleCloseCompletionForRuntime(
                     published,
                     () -> {
                         // Owner domain: the IOError and every close follower outcome are built here.

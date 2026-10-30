@@ -18,12 +18,15 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosResolverCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
+import com.guillermomolina.protos.runtime.modules.ProtosModuleKey;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,6 +36,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 
 /**
  * Shared standalone hosted-execution authority for the CLI and JVM embedders.
@@ -41,7 +46,9 @@ import java.util.Objects;
  * Polyglot Context binding and canonical initial-module execution, together with the host
  * Environment/stream/UTF-8 provisioning that sequence needs. The supported embedding contracts are
  * {@link #executeFile} (one-shot) and {@link ProtosStandaloneHostedSession} (reusable session,
- * which {@code executeFile} itself is built on). The remaining public members are the building
+ * which {@code executeFile} itself is built on), plus the explicitly opted-in D225-B1 {@link
+ * ProtosRootActorServiceSession} built on {@link #bootstrapRootActorService}. The remaining public
+ * members are the building
  * blocks the CLI composes around its own Session (it lives in another package); they are shared
  * support, not an embedding contract, and embedders should not need them.
  *
@@ -340,6 +347,53 @@ public final class ProtosStandaloneHostedExecution {
                                                 "direct-file entry requires an owning Core prelude"));
         return ProtosCanonicalInitialModuleExecution.execute(
                 prelude, resolver, resolver.entryModule(), activation);
+    }
+
+    /**
+     * D225-B1 explicit host opt-in: runs the RootActor message-service bootstrap of the
+     * bootstrapped, already hosted Process instead of a direct-file entry, and waits for its
+     * outcome.
+     *
+     * <p>The existing RootActor loads {@code entryModule} once as its canonical initial module,
+     * with exactly the bootstrap-local slots the Process was provisioned with, invokes the local
+     * slot {@code bootstrapBinding} and installs its result as its behavior at the single READY
+     * cutover; the RootActor then serves ordinary Actor messages. Nothing is parsed per message and
+     * no behavior is created here. This method neither closes nor terminates a Process that
+     * reached READY.
+     *
+     * @return true when the RootActor reached READY with its initial behavior; false when
+     *     initialization failed with a Protos Error, which terminated the Process
+     * @throws IOException when a host failure prevented initialization; the Process is terminated
+     */
+    public static boolean bootstrapRootActorService(
+            ProtosStandaloneProcessBootstrap.Result bootstrap,
+            ProtosModuleKey entryModule,
+            String bootstrapBinding)
+            throws IOException {
+        Objects.requireNonNull(bootstrap, "bootstrap");
+        Objects.requireNonNull(entryModule, "entryModule");
+        Objects.requireNonNull(bootstrapBinding, "bootstrapBinding");
+        ProtosProcessRuntime process = bootstrap.process();
+        ProtosPrelude prelude =
+                bootstrap.activation()
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "RootActor service bootstrap requires an owning Core prelude"));
+        CompletableFuture<Boolean> outcome =
+                ProtosActorBootstrap.startRootService(
+                        process, prelude, entryModule, bootstrapBinding);
+        boolean ready;
+        try {
+            ready = outcome.join();
+        } catch (CompletionException hostFailure) {
+            throw new IOException("RootActor service bootstrap failed", hostFailure.getCause());
+        }
+        ProtosActor root = process.rootActorForRuntime();
+        return ready
+                && root.lifecycleState() == ProtosActor.LifecycleState.READY
+                && root.currentBehavior().isPresent();
     }
 
     static ProtosEncodingValue utf8(ProtosPrelude prelude) {

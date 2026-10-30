@@ -45,14 +45,17 @@ public final class ProtosActorExecutionDomain {
         private final ProtosFutureValue future;
         private final BooleanSupplier completion;
         private final Runnable onDiscard;
+        private final boolean committedClose;
 
         private TargetedRuntimeCompletion(
                 ProtosFutureValue future,
                 BooleanSupplier completion,
-                Runnable onDiscard) {
+                Runnable onDiscard,
+                boolean committedClose) {
             this.future = Objects.requireNonNull(future, "future");
             this.completion = Objects.requireNonNull(completion, "completion");
             this.onDiscard = Objects.requireNonNull(onDiscard, "onDiscard");
+            this.committedClose = committedClose;
         }
     }
 
@@ -228,6 +231,31 @@ public final class ProtosActorExecutionDomain {
             ProtosFutureValue future,
             BooleanSupplier completion,
             Runnable onDiscard) {
+        enqueueTargetedFutureCompletionForRuntime(
+                future, completion, onDiscard, false);
+    }
+
+    /**
+     * Publishes the outcome of an already-committed lifecycle close.
+     *
+     * <p>Unlike an ordinary runtime completion, this publication may continue
+     * during TERMINATING while live Tasks still own cancellation cleanup.
+     * The callback executes in the Actor domain, never on the host thread.
+     * It cannot create a new Task, dispatch a message or revive a terminated Actor.
+     */
+    public void enqueueCommittedLifecycleCloseCompletionForRuntime(
+            ProtosFutureValue future,
+            BooleanSupplier completion,
+            Runnable onDiscard) {
+        enqueueTargetedFutureCompletionForRuntime(
+                future, completion, onDiscard, true);
+    }
+
+    private void enqueueTargetedFutureCompletionForRuntime(
+            ProtosFutureValue future,
+            BooleanSupplier completion,
+            Runnable onDiscard,
+            boolean committedClose) {
         Objects.requireNonNull(future, "future");
         Objects.requireNonNull(completion, "completion");
         Objects.requireNonNull(onDiscard, "onDiscard");
@@ -238,17 +266,24 @@ public final class ProtosActorExecutionDomain {
 
         Runnable wakeup;
         synchronized (this) {
-            if (actorTerminationBegun
-                    || (ownerActor != null
-                    && (ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
-                            || ownerActor.lifecycleState()
-                                    == ProtosActor.LifecycleState.TERMINATED))) {
+            ProtosActor.LifecycleState lifecycle =
+                    ownerActor == null ? null : ownerActor.lifecycleState();
+            boolean terminating =
+                    actorTerminationBegun
+                            || lifecycle == ProtosActor.LifecycleState.TERMINATING
+                            || lifecycle == ProtosActor.LifecycleState.TERMINATED;
+
+            if (terminating
+                    && (!committedClose
+                            || lifecycle != ProtosActor.LifecycleState.TERMINATING
+                            || liveTasks.isEmpty())) {
                 throw new IllegalStateException(
                         "terminating Actor cannot accept targeted runtime completion");
             }
+
             targetedRuntimeCompletions.addLast(
                     new TargetedRuntimeCompletion(
-                            future, completion, onDiscard));
+                            future, completion, onDiscard, committedClose));
             notifyAll();
             wakeup = schedulerWakeup;
         }
@@ -507,8 +542,18 @@ public final class ProtosActorExecutionDomain {
         java.util.List<TargetedRuntimeCompletion> dropped;
         synchronized (this) {
             actorTerminationBegun = true;
-            dropped = java.util.List.copyOf(targetedRuntimeCompletions);
-            targetedRuntimeCompletions.clear();
+            java.util.List<TargetedRuntimeCompletion> discarded =
+                    new java.util.ArrayList<>();
+            Iterator<TargetedRuntimeCompletion> pending =
+                    targetedRuntimeCompletions.iterator();
+            while (pending.hasNext()) {
+                TargetedRuntimeCompletion candidate = pending.next();
+                if (!candidate.committedClose || liveTasks.isEmpty()) {
+                    discarded.add(candidate);
+                    pending.remove();
+                }
+            }
+            dropped = java.util.List.copyOf(discarded);
             notifyAll();
             tasks = Set.copyOf(liveTasks);
             io = Set.copyOf(actorIoOperations);
@@ -559,6 +604,7 @@ public final class ProtosActorExecutionDomain {
     synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
     synchronized boolean hasTerminationCleanupForRuntime() {
         return activeTargetedRuntimeCompletions != 0
+                || (actorTerminationBegun && !targetedRuntimeCompletions.isEmpty())
                 || !actorIoLifecycleCleanup.isEmpty()
                 || !actorIoReleases.isEmpty();
     }

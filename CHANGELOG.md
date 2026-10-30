@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.426-SNAPSHOT
+
+- `D225-B1` (#992): explicit opt-in RootActor message-service bootstrap for
+  hosted standalone Processes (spec 0.1.483).
+  - Add `ProtosRootActorServiceSession.open(...)`: the existing RootActor
+    initializes one canonical importable module, selects and invokes exactly
+    one local bootstrap binding, installs its behavior and enters `READY`.
+    Direct CLI, REPL and ordinary embedding entry modes remain unchanged.
+  - Provision Network and Resolver independently, only by explicit host
+    grants. An optional `app:` source catalog supplies ordinary modules to
+    the RootActor and Workers without granting ambient authority.
+  - Transfer `Actor.group(Actor.current())` as a communication-only GroupRef
+    to `Host.owningWithFactory` Workers. No service registry, new Actor
+    protocol, implicit capability transfer or HTTP API change is introduced.
+  - Preserve the canonical module identity in Actor bootstrap invocations,
+    including relative imports, and publish committed listener-close outcomes
+    in the owning Actor domain during termination cleanup. The committed
+    close is never rewritten as cancellation.
+  - Add RootActor bootstrap/authority, application-catalog, GroupRef,
+    HTTP Worker, drain/abort, and fatal-termination integration tests.
+
 ## 0.3.425-SNAPSHOT
 
 - `TEST010` (#991): audit explicit Test Tool corpus registration and source
