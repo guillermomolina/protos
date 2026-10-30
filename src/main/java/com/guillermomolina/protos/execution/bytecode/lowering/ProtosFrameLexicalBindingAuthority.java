@@ -20,11 +20,14 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.CompilerDirectives.CompilationFinal;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
+import com.oracle.truffle.api.frame.FrameSlotTypeException;
 import com.oracle.truffle.api.frame.MaterializedFrame;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -93,6 +96,14 @@ import java.util.Optional;
  * reconciles its own local-kind metadata.
  */
 final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
+    /*
+     * I115-H7-R4 EXPERIMENTAL: Truffle 25.4.4.1.1 generates
+     * ProtosBytecodeRootNodeGen with USER_LOCALS_START_INDEX = 2.
+     * The generated physical index is this base plus the logical local offset.
+     * This is not a public Truffle API contract. Revalidate before upgrading.
+     */
+    private static final int EXPERIMENTAL_USER_LOCALS_START_INDEX = 2;
+
     private final ProtosFrameLexicalLayout frameBackedLayout;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeRootNode declaringRoot;
@@ -268,7 +279,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     }
 
     /**
-     * I115-H7-R3 EXPERIMENTAL: the physical location of the frame-backed
+     * I115-H7-R4 EXPERIMENTAL: the physical location of the frame-backed
      * binding {@code expectedName} at {@code ordinal}, for a cached direct
      * read, or {@code null} when the name, the ordinal and a PRESENT local do
      * not correspond. Installation only: every check happens here, never in
@@ -282,17 +293,49 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         if (!hasFrameBackedBindingAt(bytecodeNode, expectedName, ordinal)) {
             return null;
         }
+
+        int localOffset = frameBackedLayout.localOffsetAt(ordinal);
+        if (localOffset < 0
+                || localOffset > Integer.MAX_VALUE - EXPERIMENTAL_USER_LOCALS_START_INDEX) {
+            return null;
+        }
+
+        int physicalIndex = EXPERIMENTAL_USER_LOCALS_START_INDEX + localOffset;
+        if (physicalIndex >= frame.getFrameDescriptor().getNumberOfSlots()
+                || !frame.isObject(physicalIndex)) {
+            return null;
+        }
+
+        /*
+         * Installation-only validation against the official Bytecode API.
+         * Identity equality is a consistency check, not the source of the
+         * generated physical mapping. Never cache the binding's value.
+         */
+        try {
+            Object physicalValue = frame.getObject(physicalIndex);
+            Object logicalValue =
+                    bytecodeNode.getLocalValue(
+                            current.getBytecodeIndex(), frame, localOffset);
+            if (physicalValue != logicalValue
+                    || declaringRoot.getBytecodeNode() != bytecodeNode) {
+                return null;
+            }
+        } catch (FrameSlotTypeException incompatibleLayout) {
+            return null;
+        }
+
         return new ExperimentalGlobalReadLocation(
                 frame,
                 declaringRoot,
                 bytecodeNode,
                 current.getBytecodeIndex(),
-                frameBackedLayout.localOffsetAt(ordinal),
+                localOffset,
+                physicalIndex,
                 ordinal);
     }
 
     /**
-     * I115-H7-R3 EXPERIMENTAL (GraalPy {@code ReadGlobalOrBuiltinNode}
+     * I115-H7-R4 EXPERIMENTAL (GraalPy {@code ReadGlobalOrBuiltinNode}
      * fast-path shape): the selected physical location of one module
      * binding. It reads the original retained frame, never a copy, so the
      * current value is observed. It is valid only while the declaring root
@@ -308,7 +351,10 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         private final BytecodeNode bytecodeNode;
         private final int bytecodeIndex;
         private final int localOffset;
+        private final int physicalIndex;
         private final int ordinal;
+
+        @CompilationFinal private boolean physicalReadInvalidated;
 
         private ExperimentalGlobalReadLocation(
                 MaterializedFrame frame,
@@ -316,23 +362,40 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                 BytecodeNode bytecodeNode,
                 int bytecodeIndex,
                 int localOffset,
+                int physicalIndex,
                 int ordinal) {
             this.frame = frame;
             this.root = root;
             this.bytecodeNode = bytecodeNode;
             this.bytecodeIndex = bytecodeIndex;
             this.localOffset = localOffset;
+            this.physicalIndex = physicalIndex;
             this.ordinal = ordinal;
         }
 
-        /** True while the owning root still uses the selected bytecode node. */
+        /** Valid while the owner node and admitted Object storage remain current. */
         boolean isCurrent() {
-            return root.getBytecodeNode() == bytecodeNode;
+            return !physicalReadInvalidated
+                    && root.getBytecodeNode() == bytecodeNode;
         }
 
-        /** The current value of the binding, read directly from the frame. */
+        /** Reads the current Object directly, without lexical or carrier conversion. */
         Object read() {
-            // I091: a frame may retain a primitive carrier; observers see the guest value.
+            try {
+                return frame.getObject(physicalIndex);
+            } catch (FrameSlotTypeException changedType) {
+                CompilerDirectives.transferToInterpreterAndInvalidate();
+                physicalReadInvalidated = true;
+                return readAfterPhysicalTypeChange();
+            }
+        }
+
+        /*
+         * Cold recovery only. The invalidated location will no longer satisfy
+         * the PIC guard, so subsequent executions use the generic path.
+         */
+        @TruffleBoundary
+        private Object readAfterPhysicalTypeChange() {
             return ProtosNumericValueSupport.guestValue(
                     bytecodeNode.getLocalValue(bytecodeIndex, frame, localOffset));
         }

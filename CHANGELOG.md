@@ -8,6 +8,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.24-SNAPSHOT
+
+- **I115-H7-R4 — validated direct Object-frame ReadGlobal fast path.**
+  Specialize the experimental H7 module-global read for compact Closure
+  invocations using a PIC of up to three Closure identities, instead of
+  repeatedly traversing the captured module's lexical chain on every read.
+  - Resolve the module and its frame-backed physical `Object` location at
+    PIC installation behind `TruffleBoundary`. Require that the selected
+    binding, bytecode root, frame offset and physical Object value agree
+    with the public Bytecode local-value API before admitting the fast path.
+  - Use a hardcoded `USER_LOCALS_START_INDEX = 2` in the frame indexing:
+    this is an internal generated layout assumption for Truffle 25.4.4.1.1,
+    **not a portable Truffle API guarantee**. Revalidate on upgrades.
+  - On the hot path, read `MaterializedFrame.getObject(physicalIndex)`
+    directly, without `ProtosNumericValueSupport.guestValue` or a lexical
+    lookup. Read the current slot value rather than caching a prior value,
+    so an Object rebinding remains visible. A primitive frame-tag change
+    invalidates the optimized site and recovers via a cold generic read.
+  - Published invocations, non-Object physical slots, and locations without
+    a valid admission use `readGeneric`. Extend the H7 tests with Object
+    rebinding, layout/guard and primitive-tag transition probes.
+  - **Historical limitations:** the cached frame mapping does not recheck
+    binding presence or lexical layout on every read; deletion or late
+    retargeting may violate D179 C0. This step does not resolve H7's `int`
+    carriers versus Protos's `long`-only contract, `Object.call` dispatch,
+    Caller/Prelude transport, nonterminal suspension or `ReturnHome`.
+    The original source and tests are experimental; no new performance or
+    comprehensive semantic acceptance is claimed for this replay.
+  - Original implementation: `bb8fab40beacb1514bc9713bbf7642e2d985767b`.
+    No compilation or behavioral tests were run on this historical replay;
+    three original files retain their Git blobs unchanged.
+
 ## 0.4.23-SNAPSHOT
 
 - **I115-H7-R3 — converge primitive-method-call bytecode with GraalPy 25.4.4.1.1.**
