@@ -20,17 +20,27 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.io.ProtosFileValue;
 import com.guillermomolina.protos.runtime.io.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumericValueSupport;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSealedValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -177,6 +187,185 @@ final class ProtosDiagnosticInspectorTest {
 
         assertEquals("\"" + value + "\"", rendered);
         assertFalse(rendered.contains("\n"), rendered);
+    }
+
+    @Test
+    void canonicalFractionsRenderExactly() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertEquals("1/5", inspector.render(fraction(1, 5, prelude)));
+        assertEquals("1/2", inspector.render(fraction(2, 4, prelude)));
+        assertEquals("-2/3", inspector.render(fraction(-2, 3, prelude)));
+        assertEquals("-2/3", inspector.render(fraction(2, -3, prelude)));
+        assertEquals("3", inspector.render(fraction(6, 2, prelude)));
+
+        String largeDigits = "123456789012345678901234567890123456789";
+        Object large = bigInteger(largeDigits, prelude);
+        Object largeFraction =
+                ProtosNumericValueSupport.divideIntegersExactly(large, integer(2), prelude);
+        assertTrue(ProtosNumericValueSupport.isFraction(largeFraction));
+        assertEquals(largeDigits + "/2", inspector.render(largeFraction));
+        Object largeDenominator =
+                ProtosNumericValueSupport.divideIntegersExactly(integer(1), large, prelude);
+        assertEquals("1/" + largeDigits, inspector.render(largeDenominator));
+    }
+
+    @Test
+    void canonicalComplexComponentsRenderExactly() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertEquals("Complex(0, 1)", inspector.render(complex(integer(0), integer(1), prelude)));
+        assertEquals(
+                "Complex(1/2, -0.0)",
+                inspector.render(complex(fraction(1, 2, prelude), floating(-0.0), prelude)));
+        assertEquals("3", inspector.render(complex(integer(3), integer(0), prelude)));
+        assertEquals(
+                "Complex(3, 0.0)",
+                inspector.render(complex(integer(3), floating(0.0), prelude)));
+        assertEquals(
+                "Complex(3, -0.0)",
+                inspector.render(complex(integer(3), floating(-0.0), prelude)));
+        assertEquals(
+                "Complex(NaN, Infinity)",
+                inspector.render(
+                        complex(floating(Double.NaN), floating(Double.POSITIVE_INFINITY), prelude)));
+        assertEquals(
+                "Complex(-Infinity, 1)",
+                inspector.render(
+                        complex(floating(Double.NEGATIVE_INFINITY), integer(1), prelude)));
+
+        String largeDigits = "98765432109876543210987654321";
+        assertEquals(
+                "Complex(" + largeDigits + ", 1)",
+                inspector.render(complex(bigInteger(largeDigits, prelude), integer(1), prelude)));
+    }
+
+    @Test
+    void numericFamiliesInsideStructuresKeepTheirRepresentations() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object ratio = fraction(1, 5, prelude);
+        Object point = complex(integer(0), integer(1), prelude);
+
+        String array =
+                inspector.render(
+                        new ProtosArrayValue(ProtosObjectValue.rootObject(), List.of(ratio, point)));
+        assertEquals("[1/5, Complex(0, 1)]", array);
+        assertFalse(array.contains("<value>"), array);
+
+        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        parent.createLocalSlot("inherited", ratio);
+        ProtosObjectValue object = new ProtosObjectValue(parent);
+        object.createLocalSlot("ratio", ratio);
+        object.createLocalSlot("point", point);
+        object.createLocalSlot("self", object);
+
+        String rendered = inspector.render(object);
+        assertEquals("Object {ratio: 1/5, point: Complex(0, 1), self: <cycle>}", rendered);
+        assertFalse(rendered.contains("inherited"), rendered);
+
+        // The container reached at depth MAX_DEPTH is elided; its content is never traversed.
+        ProtosObjectValue beyond = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        beyond.createLocalSlot("ratio", ratio);
+        beyond.createLocalSlot("point", point);
+        String deep = inspector.render(nest(beyond, ProtosDiagnosticInspector.MAX_DEPTH));
+        assertTrue(deep.contains("next: ..."), deep);
+        assertFalse(deep.contains("ratio"), deep);
+        assertFalse(deep.contains("1/5"), deep);
+        assertFalse(deep.contains("Complex("), deep);
+
+        // Scalars held by the deepest traversed container keep their exact representations.
+        ProtosObjectValue within = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        within.createLocalSlot("ratio", ratio);
+        within.createLocalSlot("point", point);
+        String allowed = inspector.render(nest(within, ProtosDiagnosticInspector.MAX_DEPTH - 1));
+        assertTrue(allowed.contains("ratio: 1/5"), allowed);
+        assertTrue(allowed.contains("point: Complex(0, 1)"), allowed);
+        assertFalse(allowed.contains("..."), allowed);
+    }
+
+    @Test
+    void delegatingAndUnrecognizedSealedObjectsAreNotNumericValues() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        ProtosObjectValue fakeFraction = new ProtosObjectValue(prelude.fractionPrototype());
+        fakeFraction.createLocalSlot("numerator", integer(1));
+        fakeFraction.createLocalSlot("denominator", integer(5));
+        fakeFraction.freeze();
+        assertFalse(ProtosNumericValueSupport.isFraction(fakeFraction));
+        assertEquals(
+                "Object {numerator: 1, denominator: 5}", inspector.render(fakeFraction));
+
+        ProtosObjectValue fakeComplex = new ProtosObjectValue(prelude.complexPrototype());
+        fakeComplex.createLocalSlot("re", integer(0));
+        fakeComplex.createLocalSlot("im", integer(1));
+        fakeComplex.freeze();
+        assertFalse(ProtosComplexNumericSupport.isComplex(fakeComplex));
+        assertEquals("Object {re: 0, im: 1}", inspector.render(fakeComplex));
+
+        ProtosObjectValue template = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        template.createLocalSlot("visible", new ProtosStringValue("slot"));
+        ProtosSealedValue sealed =
+                ProtosSealedValue.seal(new Object(), template, "private-payload-1/5");
+        String rendered = inspector.render(sealed);
+        assertEquals("<value>", rendered);
+        assertFalse(rendered.contains("private-payload"), rendered);
+    }
+
+    @Test
+    void coreScalarFamilyCoverageIsExplicit() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        String largeDigits = "18446744073709551616";
+
+        assertEquals("null", inspector.render(ProtosNullValue.INSTANCE));
+        assertEquals("true", inspector.render(ProtosBooleanValue.TRUE));
+        assertEquals("false", inspector.render(ProtosBooleanValue.FALSE));
+        assertEquals("42", inspector.render(integer(42)));
+        assertEquals(largeDigits, inspector.render(bigInteger(largeDigits, prelude)));
+        assertEquals("1.5", inspector.render(floating(1.5)));
+        assertEquals("1/5", inspector.render(fraction(1, 5, prelude)));
+        assertEquals(
+                "Complex(0, 1)", inspector.render(complex(integer(0), integer(1), prelude)));
+        assertEquals("\"text\"", inspector.render(new ProtosStringValue("text")));
+
+        assertEquals("<filesystem>", inspector.render(new ProtosFilesystemValue()));
+        assertEquals("<file>", inspector.render(new ProtosFileValue()));
+    }
+
+    private static ProtosObjectValue nest(ProtosObjectValue leaf, int wrappers) {
+        ProtosObjectValue current = leaf;
+        for (int i = 0; i < wrappers; i++) {
+            ProtosObjectValue outer = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            outer.createLocalSlot("next", current);
+            current = outer;
+        }
+        return current;
+    }
+
+    private static ProtosPrelude corePrelude() throws IOException {
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+    }
+
+    private static Object integer(long value) {
+        return ProtosNumericValueSupport.integer(value);
+    }
+
+    private static Object bigInteger(String digits, ProtosPrelude prelude) {
+        Object value = ProtosNumericValueSupport.integerFromHost(new BigInteger(digits), prelude);
+        assertTrue(ProtosNumericValueSupport.isLargeInteger(value));
+        return value;
+    }
+
+    private static Object floating(double value) {
+        return new ProtosFloatValue(value);
+    }
+
+    private static Object fraction(long numerator, long denominator, ProtosPrelude prelude) {
+        return ProtosNumericValueSupport.divideIntegersExactly(
+                integer(numerator), integer(denominator), prelude);
+    }
+
+    private static Object complex(Object real, Object imaginary, ProtosPrelude prelude) {
+        return ProtosComplexNumericSupport.normalize(real, imaginary, prelude);
     }
 
     private static ProtosIntegerValue octet(int value) {

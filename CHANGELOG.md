@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.424-SNAPSHOT
+
+- `BUG031` (D063): the CLI/REPL diagnostic inspector renders Fraction and
+  Complex values instead of `<value>`.
+  - A genuine Fraction renders as its canonical `numerator/denominator`
+    (`1/5`, `-2/3`), with exact Integer digits.
+  - A genuine Complex renders as `Complex(real, imaginary)`, each component
+    through the existing scalar rendering (`Complex(0, 1)`,
+    `Complex(1/2, -0.0)`, `Complex(NaN, Infinity)`).
+  - Recognition uses only the Core numeric family authorities; objects that
+    merely delegate to `Fraction` or `Complex` and unrecognized sealed values
+    keep their ordinary or opaque rendering. `print(...)`, serialization and
+    the inspector bounds are unchanged.
+
 ## 0.3.423-SNAPSHOT
 
 - `LIB026` (#996, D222-C): optional `std:http/Router` and `std:http/UrlClient`

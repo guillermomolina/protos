@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosComplexNumericSupport;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
@@ -113,6 +114,23 @@ final class ProtosDiagnosticInspector {
         }
         if (ProtosNumericValueSupport.isCurrentFloat(value)) {
             state.append(Double.toString(ProtosNumericValueSupport.currentFloatValue(value)));
+            return;
+        }
+        if (ProtosNumericValueSupport.isFraction(value)) {
+            state.append(ProtosNumericValueSupport.integerDecimalText(
+                    ProtosNumericValueSupport.fractionNumerator(value)));
+            state.append("/");
+            state.append(ProtosNumericValueSupport.integerDecimalText(
+                    ProtosNumericValueSupport.fractionDenominator(value)));
+            return;
+        }
+        if (ProtosComplexNumericSupport.isComplex(value)) {
+            // Components are authenticated real Numbers, rendered through the scalar cases above.
+            state.append("Complex(");
+            appendValue(ProtosComplexNumericSupport.real(value), state, path, depth, layout);
+            state.append(", ");
+            appendValue(ProtosComplexNumericSupport.imaginary(value), state, path, depth, layout);
+            state.append(")");
             return;
         }
         if (value instanceof ProtosStringValue string) {

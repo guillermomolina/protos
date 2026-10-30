@@ -249,6 +249,72 @@ final class ProtosReplTest {
         assertTrue(r.e.isBlank(), r.e);
     }
 
+    @Test
+    void fractionAndComplexResultsAreShownInTheRepl() {
+        R r = repl("0\n"
+                + "1/5\n"
+                + "(1/5)+(4/5)\n"
+                + "a: Complex(0,1)\n"
+                + "a\n"
+                + "Complex(1/2, -0.0)\n"
+                + ":quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> 0\n"
+                + "protos> 1/5\n"
+                + "protos> 1\n"
+                + "protos> Complex(0, 1)\n"
+                + "protos> Complex(0, 1)\n"
+                + "protos> Complex(1/2, -0.0)\n"), r.o);
+        assertFalse(r.o.contains("<value>"), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    @Test
+    void numericValuesNestedInReplCollectionsRenderExactly() {
+        R r = repl("[1/5, Complex(0,1)]\n"
+                + "%{\"ratio\": 1/5; \"point\": Complex(0,1)}\n"
+                + ":quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> [1/5, Complex(0, 1)]\n"), r.o);
+        assertTrue(r.o.contains("\"ratio\": 1/5"), r.o);
+        assertTrue(r.o.contains("\"point\": Complex(0, 1)"), r.o);
+        assertFalse(r.o.contains("<value>"), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    @Test
+    void ordinaryNetworkAndUriObjectsKeepStructuralInspection() {
+        R r = repl("IpAddress: import(\"std:network/IpAddresses\").IpAddress\n"
+                + "IpEndpoint: import(\"std:network/IpEndpoints\").IpEndpoint\n"
+                + "Uri: import(\"std:uri\")\n"
+                + "\"BUG031_VALUES_START\"\n"
+                + "address: IpAddress(4, 2130706433)\n"
+                + "endpoint: IpEndpoint(address, 8080)\n"
+                + "reference: Uri.parse(\"https://example.org/a?x=1\")\n"
+                + "\"https://example.org/a?x=1\"\n"
+                + ":quit\n");
+        assertEquals(0, r.c);
+        // Only the constructed values are under test; module bindings are out of scope.
+        String marker = "protos> \"BUG031_VALUES_START\"\n";
+        int start = r.o.indexOf(marker);
+        assertTrue(start >= 0, r.o);
+        String values = r.o.substring(start + marker.length());
+        assertTrue(values.contains("version: 4"), values);
+        assertTrue(values.contains("bits: 2130706433"), values);
+        assertTrue(values.contains("address: Object {"), values);
+        assertTrue(values.contains("port: 8080"), values);
+        for (String slot : new String[] {
+                "scheme: ", "userInfo: ", "host: ", "port: ", "path: ", "query: ", "fragment: "}) {
+            assertTrue(values.contains(slot), slot + " in " + values);
+        }
+        assertTrue(values.contains("scheme: \"https\""), values);
+        assertTrue(values.contains("host: \"example.org\""), values);
+        assertTrue(values.contains("protos> \"https://example.org/a?x=1\"\n"), values);
+        assertFalse(values.contains("com.guillermomolina"), values);
+        assertFalse(values.contains("<value>"), values);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
     private static void terminateSession(Object session) throws Exception {
         Method terminate = session.getClass().getDeclaredMethod("terminate");
         terminate.setAccessible(true);
