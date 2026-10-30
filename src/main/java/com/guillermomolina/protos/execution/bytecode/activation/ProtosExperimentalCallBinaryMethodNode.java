@@ -182,12 +182,16 @@ abstract class ProtosExperimentalCallBinaryMethodNode extends Node {
     /**
      * Installation (direct tier) or megamorphic (indirect tier): the
      * Context-owned Bytecode target of a source Closure whose root proves
-     * non-suspension, or null.
+     * non-suspension and whose invocation ReturnHome is unobservable, or null.
+     * The experimental B5 header uses the primitive-result unobservable
+     * marker, so observable ReturnHomes must use the ordinary send path.
      */
     @TruffleBoundary
     static RootCallTarget admittedTargetOrNull(
             ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
-        if (closure == null || closure.nativeBody().isPresent()) {
+        if (closure == null
+                || closure.nativeBody().isPresent()
+                || !closure.hasUnobservableInvocationReturnHomeForRuntime()) {
             return null;
         }
         RootCallTarget target =

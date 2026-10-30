@@ -8,6 +8,40 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.22-SNAPSHOT
+
+- **I115-H7-R2 — preserve deferred B5 callers across direct sends.**
+  A guarded, synchronous source `TryDirectSendZero` can retain the caller's
+  unmaterialized B5 frame when the caller inherits its Prelude, instead of
+  eagerly publishing a `ProtosActivation` merely for method dispatch. Roots
+  owning their own Prelude retain the existing exact-caller route.
+  - Query the selected callee root's `NEEDS_CALLER_PRELUDE` contract and
+    transport the inherited prelude through `InvokeMethodOneTail.callerArgument`
+    only when requested; otherwise keep the caller reference deferred. The
+    callee may register that need on its first untransported read.
+  - Change `compactImmediateMethodCallZeroNoHome` to accept a general B5
+    caller reference, not only an already materialized activation.
+  - Make the generic `InvokeClosureOneTail.exactCaller` request
+    `NEEDS_EXACT_ACTIVATION` even if its incoming caller is already published;
+    distinguish that conservative fallback from the direct Send0 route.
+  - Restrict experimental `CallBinaryMethod` direct/indirect target admission
+    to non-native, non-suspending source Closures with **unobservable**
+    invocation `ReturnHome`; an observable captured home stays on ordinary
+    send dispatch. This prevents silently discarding a materialized home.
+  - Remove temporary `PROTOS_I115_TRACE_CALLER_NEEDS` probes. Extend H7
+    method-call and deferred-caller structural tests: the A/B/C/D chain now
+    records inherited-prelude needs on B, C and D, not A, with convergence
+    after transport is established.
+  - **Historical limits:** this is a targeted correction within the unfinished
+    H7 experiment, not a complete semantic or performance gate. H7's `int`
+    carriers remain contrary to Protos's `long`-only integer design; generic
+    nonterminal suspension, dynamic message overrides and lexical authority
+    are not proven equivalent. Earlier D179 C0 lexical-retargeting and H6
+    host-entry / RootActor divergences are not resolved by this commit.
+  - Original implementation: `a38f551b39a7681ec05c4154142f16488278a264`.
+    Replayed without compilation or behavioral tests; all six original code
+    and test files are required to retain their historical Git blob IDs.
+
 ## 0.4.21-SNAPSHOT
 
 - **I115-H7 Unfinished** — experimental GraalPy-shaped physical convergence for a
