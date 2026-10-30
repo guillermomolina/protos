@@ -33,6 +33,8 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.control.ProtosReturnHome;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.interop.InteropException;
+import com.oracle.truffle.api.interop.InteropLibrary;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -356,6 +358,106 @@ final class ProtosI115H7MethodCallConvergenceTest {
             List<String> twiceNames = unquickened(names(twice));
             assertTrue(twiceNames.contains("c.CopyArguments"), twiceNames.toString());
             assertEquals(1, count(twiceNames, "c.NumberAdd"), twiceNames.toString());
+        }
+    }
+
+    // ---- I115-H7-R5 return representation ---------------------------------------------
+
+    /**
+     * An admitted H7 root and its host entry must BOTH return the raw Integer.
+     * Checking Value.asLong alone would miss an accidental ProtosIntegerValue
+     * allocation at either boundary.
+     */
+    @Test
+    void h7IntegerRemainsRawAcrossRootAndHostBoundary() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("r5-raw-integer", METHOD_CALL)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared =
+                    session.prepareTopLevel("run");
+            ProtosHostExecutableClosure host = prepared.hostExecutableForTesting();
+            ProtosBytecodeRootNode run = assertInstanceOf(
+                    ProtosBytecodeRootNode.class, host.target.getRootNode());
+
+            assertTrue(run.isExperimentalH7RawIntegerReturn(),
+                    "the compact H7 root must admit raw Integer transport");
+
+            for (int call = 0; call < WARM; call++) {
+                assertEquals(499500L, prepared.executable().execute().asLong());
+            }
+
+            session.processContextForTesting().callForRuntime(() -> {
+                Object rootResult = host.target.call(
+                        ProtosFrameArguments.compactDirectClosureCallZeroNoHome(
+                                host.closure, host.caller));
+
+                assertEquals(499500,
+                        assertInstanceOf(Integer.class, rootResult).intValue(),
+                        "EpilogForReturn must not allocate ProtosIntegerValue");
+
+                Object hostResult;
+                try {
+                    hostResult = InteropLibrary.getUncached().execute(host);
+                } catch (InteropException unexpected) {
+                    throw new AssertionError(unexpected);
+                }
+
+                assertEquals(499500,
+                        assertInstanceOf(Integer.class, hostResult).intValue(),
+                        "the Polyglot host boundary must preserve the raw Integer");
+                return null;
+            });
+        }
+    }
+
+    /**
+     * The R5 admission is narrow: ordinary guest-number returns still use
+     * the guest representation, and a result exceeding int is not truncated.
+     */
+    @Test
+    void r5RawIntegerAdmissionDoesNotChangeOtherNumericResults() throws Exception {
+        try (ProtosStandaloneHostedSession session =
+                open("r5-representation-boundaries", """
+                        plain: () => { 7 }
+
+                        wide: () => {
+                            a: 2147483647
+                            a + 1
+                        }
+                        """)) {
+            ProtosStandaloneHostedSession.PreparedTopLevel plain =
+                    session.prepareTopLevel("plain");
+            ProtosStandaloneHostedSession.PreparedTopLevel wide =
+                    session.prepareTopLevel("wide");
+
+            assertFalse(root(session, "plain").isExperimentalH7RawIntegerReturn(),
+                    "an ordinary literal root is not an H7 return root");
+            assertTrue(root(session, "wide").isExperimentalH7RawIntegerReturn(),
+                    "the H7 addition is admitted even when the result overflows int");
+
+            session.processContextForTesting().callForRuntime(() -> {
+                InteropLibrary interop = InteropLibrary.getUncached();
+                try {
+                    Object plainResult =
+                            interop.execute(plain.hostExecutableForTesting());
+                    Object wideResult =
+                            interop.execute(wide.hostExecutableForTesting());
+
+                    assertEquals(7L,
+                            assertInstanceOf(
+                                    ProtosIntegerValue.class, plainResult).longValue(),
+                            "ordinary results retain their guest representation");
+                    assertEquals(2147483648L,
+                            assertInstanceOf(
+                                    ProtosIntegerValue.class, wideResult).longValue(),
+                            "a wide result must not be narrowed to Java Integer");
+                } catch (InteropException unexpected) {
+                    throw new AssertionError(unexpected);
+                }
+                return null;
+            });
+
+            assertEquals(7L, plain.executable().execute().asLong());
+            assertEquals(2147483648L, wide.executable().execute().asLong());
         }
     }
 

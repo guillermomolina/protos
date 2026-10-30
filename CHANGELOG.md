@@ -8,6 +8,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.4.25-SNAPSHOT
+
+- **I115-H7-R5 — retain raw Integer carriers across compact returns and Polyglot host entry.**
+  Preserve an H7 compact result as a Java `Integer` through both the bytecode
+  root epilogue and the source-backed Polyglot host boundary, instead of
+  allocating a guest `ProtosIntegerValue` at either location.
+  - Add the compilation-final root flag `experimentalH7RawIntegerReturn`
+    when compact lowering admits an H7 invocation. `EpilogForReturn` preserves
+    raw `Integer` results for that root; other result types and generic roots
+    retain their preceding projection behavior.
+  - Use the same root flag in direct and indirect `ProtosHostExecutableClosure`
+    entry. A flagged root returns an `Integer` unchanged; a non-flagged root
+    still converts its `Integer` to a guest numeric value at the host edge.
+  - Extend the original tests to inspect the **actual Java return type** at
+    both boundaries and check that wider numbers and ordinary roots do not
+    accidentally use this special case. No tests were run on this historical
+    versioned replay; this is source-level reconstruction, not validation.
+  - **Historical semantic limitations:** R5 deliberately exposes a Java `int`
+    carrier (`Integer`) across the host boundary, conflicting with Protos's
+    long-only `Integer` design. This historical exception does not establish
+    preservation of guest Integer identity, dynamic `Object.call` selection,
+    `ReturnHome` lifecycle, suspension or all caller/Prelude transport.
+    Existing H7 numeric protocol deviations, D179 C0 lexical retargeting,
+    and R4's version-dependent physical Object-frame indexing remain open.
+    No compilation, comprehensive test acceptance, or performance gain is
+    asserted for this replay.
+  - Original implementation: `52e3f221bde99841c2a395a42af269bb8d98ca4c`.
+    The four original source/test files retain their exact Git blobs.
+
 ## 0.4.24-SNAPSHOT
 
 - **I115-H7-R4 — validated direct Object-frame ReadGlobal fast path.**
