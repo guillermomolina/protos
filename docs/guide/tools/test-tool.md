@@ -371,6 +371,45 @@ signals `Assertions.AssertionFailure` when `condition` is `false`, and
 Error. A suite-native source runs only when it belongs to a registered corpus;
 writing such a file elsewhere does not make `protos test` find it.
 
+## Repository test registration integrity
+
+Registration in the repository corpus stays explicit. Adding a new suite-native
+source under `protos/tests/` therefore also means adding it to the plan that owns
+its corpus: the corpus `manifest.tsv`, or the corpus entry in
+[`RepositoryCorpusPlans.protos`](../../../protos/tools/test/RepositoryCorpusPlans.protos)
+for the Standard Library suites. Until then, no plan contains it, so `protos test`
+never runs it. `--file` and `--directory` cannot work around this: they filter
+the existing plans and never discover files.
+
+The ordinary Java test run of `make test` includes a registration integrity
+check. It compares the physical `.protos` sources with the registrations of the
+real repository plans, using
+[`RepositoryCorpusAudit.protos`](../../../protos/tools/test/RepositoryCorpusAudit.protos).
+The check rejects:
+
+- a source that declares suite-native Tests but has no registration;
+- a registration whose source no longer exists;
+- the same registration listed twice;
+- a source that no ownership boundary accounts for.
+
+The check runs no Test body. It counts one registration per source, however many
+logical Cases that source declares. One fixture source may be registered several
+times only when each registration carries a distinct D133 project authority.
+
+The integrity check covers two kinds of source differently:
+
+- **Semantic tests executed by Protos.** These are the suite-native sources of
+  the `library/`, `conformance/`, and `package-tool/` corpora, and every one of
+  them must be registered.
+- **Fixtures and internal tests owned by Java/Truffle.** These must be accounted
+  for by their owner, but they are never registered:
+  - sources under `tooling/`, `parser/`, `filesystem/`, `cli/`, and
+    `foreign-provider/`;
+  - conformance sources whose JUnit owner needs host-specific filesystem,
+    Process, stream, or lifecycle setup;
+  - Package Tool project data and Java-hosted Package Tool cases;
+  - auxiliary modules imported by suite-native sources.
+
 ## What `protos test` does not mean yet
 
 With the current published executable surface:

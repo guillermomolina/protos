@@ -18,11 +18,36 @@ package com.guillermomolina.protos.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 /** TOOL009-G2 / D185 public `protos test --list-cases` surface. */
 final class ProtosTestToolCaseSelectionPublicIntegrationTest
         extends ProtosTestToolCaseSelectionPublicIntegrationTestSupport {
+    private static final String LOGGING_CORPUS = "protos/corpus/library/logging";
+    private static final String COLORED_FORMATTER_SOURCE = "logging/colored-formatter.protos";
+    private static final String COLORED_FORMATTER_FILE =
+            Path.of("protos", "tests", "library", "logging", "colored-formatter.protos").toString();
+
+    // The source's `tests` Array order, which is the authoritative Case plan order.
+    private static final String[] COLORED_FORMATTER_SELECTORS = {
+        "construction answers a fresh frozen formatter exposing only format",
+        "the module publishes only its constructor",
+        "every canonical mode with a Boolean constructs",
+        "an invalid mode signals Error",
+        "autoEnabled must be exactly a Boolean for every mode",
+        "styling follows the ColorMode resolution matrix",
+        "the fixed palette colors each level",
+        "only the LEVEL token is styled",
+        "disabled styling answers exactly the TextFormatter line",
+        "enabled styling keeps the TextFormatter line outside generated sequences",
+        "styled INFO generates no escape sequence",
+        "escape characters in event text never reach the output",
+        "TextFormatter failures are signalled unchanged",
+        "a text sink writes one colored line per event to a borrowed writer",
+        "a real TextWriter frames colored lines like plain ones",
+        "a Logger contains failures through a colored text sink"
+    };
     @Test
     void listCasesProjectsAuthoritativeCasePlanWithoutProgress() {
         R result = run("test", "--list-cases", "--file", PARSE_FILE);
@@ -52,6 +77,23 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest
         assertEquals(document(PARSE_SELECTORS[0], PARSE_SELECTORS[3]), result.out());
     }
 
+    /**
+     * TEST010: the colored formatter source is selectable through the official logging corpus and
+     * lists every one of its Logical Cases under that corpus and source, without progress or any
+     * Test body output.
+     */
+    @Test
+    void listCasesSelectsEveryColoredFormatterCaseThroughOfficialLoggingCorpus() {
+        R result = run("test", "--list-cases", "--file", COLORED_FORMATTER_FILE);
+
+        assertEquals(16, COLORED_FORMATTER_SELECTORS.length);
+        assertEquals(0, result.code(), result::err);
+        assertEquals("", result.err());
+        assertEquals(
+                caseDocument(LOGGING_CORPUS, COLORED_FORMATTER_SOURCE, COLORED_FORMATTER_SELECTORS),
+                result.out());
+    }
+
     @Test
     void listCasesWithRefOutsideActiveFileScopeFails() {
         assertFailsBeforeScheduling(
@@ -62,5 +104,25 @@ final class ProtosTestToolCaseSelectionPublicIntegrationTest
                         PARSE_FILE,
                         "--case",
                         ref(CORPUS, "uri/format.protos", "format constructed")));
+    }
+
+    /** The exact `protos.test.cases/v1` document for selectors needing no JSON escaping. */
+    private static String caseDocument(String corpus, String source, String... selectors) {
+        StringBuilder cases = new StringBuilder();
+        for (String selector : selectors) {
+            if (cases.length() > 0) {
+                cases.append(',');
+            }
+            cases.append("{\"ref\":\"")
+                    .append(ref(corpus, source, selector))
+                    .append("\",\"display\":\"")
+                    .append(corpus)
+                    .append(':')
+                    .append(source)
+                    .append("::")
+                    .append(selector)
+                    .append("\"}");
+        }
+        return "{\"schema\":\"protos.test.cases/v1\",\"cases\":[" + cases + "]}\n";
     }
 }

@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.425-SNAPSHOT
+
+- `TEST010` (#991): audit explicit Test Tool corpus registration and source
+  ownership across the repository without introducing filesystem-based
+  test discovery or executing Test bodies during the audit.
+  - Add a pure Protos `RepositoryCorpusAudit` with deterministic, fail-closed
+    diagnostics for missing, dangling and duplicate registrations,
+    unclassified sources, invalid exclusions and authority conflicts.
+  - Add repository-integrity JUnit coverage using actual `RepositorySuite`
+    TestPlans, physical source inventory and explicit Java-owned fixture
+    boundaries, preserving D133 project authority and source/Case identity.
+  - Register `library/logging/colored-formatter.protos` in the official
+    logging corpus: its 16 suite-native Cases are now selectable and run.
+  - Remove two obsolete, unowned `resolution-input/lockfile-{fresh,stale}`
+    sources; the registered `resolution-input-lock` fixtures already cover
+    both corresponding lockfile-staleness cases.
+  - Document the repository's explicit registration and ownership guard.
+
 ## 0.3.424-SNAPSHOT
 
 - `BUG031` (D063): the CLI/REPL diagnostic inspector renders Fraction and

@@ -32,7 +32,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
         assertPlan("protos/corpus/library/datetime", 10, "datetime/construction.protos", "datetime/rfc3339.protos");
         assertPlan("protos/corpus/library/regex", 13, "regex/compile.protos", "regex/split.protos");
-        assertPlan("protos/corpus/library/logging", 7, "logging/levels.protos", "logging/sinks.protos");
+        assertPlan("protos/corpus/library/logging", 8, "logging/levels.protos", "logging/sinks.protos");
         assertPlan("protos/corpus/library/http", 18, "http/request-head.protos", "http/url-client-admission.protos");
         assertPlan("protos/corpus/library/tls", 3, "tls/client-admission.protos", "tls/identity.protos");
     }
@@ -59,6 +59,25 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
             "math/linear-algebra/construction-and-indexing.protos",
             "math/linear-algebra/algebra-and-reductions.protos",
             "math/linear-algebra/identity-and-state.protos"
+        };
+        for (int index = 0; index < paths.length; index++) {
+            assertEquals(paths[index], path(corpus, index));
+            assertEquals("suite-native", expectation(corpus, index));
+        }
+    }
+
+    @Test
+    void loggingCasesRemainOrderedAndAreSuiteNative() throws Exception {
+        String corpus = "protos/corpus/library/logging";
+        String[] paths = {
+            "logging/levels.protos",
+            "logging/events.protos",
+            "logging/logger.protos",
+            "logging/recognition.protos",
+            "logging/text-formatter.protos",
+            "logging/colored-formatter.protos",
+            "logging/json-formatter.protos",
+            "logging/sinks.protos"
         };
         for (int index = 0; index < paths.length; index++) {
             assertEquals(paths[index], path(corpus, index));
@@ -109,6 +128,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
             assertEquals("suite-native", expectation(corpus, index));
         }
         // A source added to the directory without a plan entry would never be discovered.
+        // Focal regression; ProtosTestToolRepositoryCompletenessTest guards every corpus.
         try (java.util.stream.Stream<Path> sources =
                 java.nio.file.Files.list(Path.of("protos", "tests", "library", "network", "resolvers"))) {
             assertEquals(

@@ -5,10 +5,14 @@
 //! TOOL005-B2 explicit Test Tool membership for existing Standard Library corpora.
 //! No filesystem discovery is used.
 //!
-//! TOOL009-C: every case in these seven corpora is now `suite-native`; the
+//! TOOL009-C: every case in every corpus of this module is `suite-native`; the
 //! authoritative test behavior lives in each source's own `std:test/Test`
 //! declaration (D152/D153/LIB018/D155), not in this manifest's expectation
 //! column.
+//!
+//! TEST010: membership stays explicit. A new suite-native source joins its
+//! corpus only through an entry here; RepositoryCorpusAudit rejects a source
+//! left out of, stale in, or repeated in these plans.
 
 Manifest: import("self:Manifest")
 
@@ -210,6 +214,7 @@ load: (corpusId) => {
             Array("logger.protos", "suite-native", "-"),
             Array("recognition.protos", "suite-native", "-"),
             Array("text-formatter.protos", "suite-native", "-"),
+            Array("colored-formatter.protos", "suite-native", "-"),
             Array("json-formatter.protos", "suite-native", "-"),
             Array("sinks.protos", "suite-native", "-")
             )

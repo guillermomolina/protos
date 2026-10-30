@@ -1,0 +1,353 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! TEST010 repository test-registration integrity audit.
+//!
+//! A pure reconciliation of inert data already obtained from the existing
+//! authorities: the physical source inventory, the sources whose execution
+//! belongs to the production corpus, the ownership exclusions, and the
+//! registrations materialized from the authorized TestPlans. This module opens
+//! no directory, discovers no Test, imports no test module and runs no Test
+//! body; it adds no registration rule of its own.
+//!
+//! Every path is a source path relative to `protos/tests/` and is compared
+//! exactly as given: no normalization is applied and a file name alone never
+//! identifies a source. Membership is set-based and diagnostics are sorted, so
+//! the result does not depend on the order in which any input was enumerated.
+
+Arrays: import("std:collections/Array")
+ArrayAccumulator: import("self:ArrayAccumulator")
+
+/// An intended production source that no registration names.
+missingRegistration: "MISSING_REGISTRATION"
+/// A registration naming a source absent from the physical inventory.
+danglingRegistration: "DANGLING_REGISTRATION"
+/// A registration repeating exactly an earlier registration.
+duplicateRegistration: "DUPLICATE_REGISTRATION"
+/// A physical source that is neither registered, intended nor excluded.
+unclassifiedSource: "UNCLASSIFIED_SOURCE"
+/// An exclusion that is repeated, has no reason, names no physical source, or
+/// names a registered or intended production source.
+invalidExclusion: "INVALID_EXCLUSION"
+/// Registrations and classification disagree about which authority owns a
+/// source: an intended source is absent, a registered source is not intended,
+/// one registration identity names two sources, or one source is shared by
+/// registrations that are not distinct D133 project authorities.
+authorityMismatch: "AUTHORITY_MISMATCH"
+
+requireText: (value) => {
+    String.recognizes(value).ifFalse(() => {
+        fail()
+    })
+    (value.size() > 0).ifFalse(() => {
+        fail()
+    })
+    value
+}
+
+/// Answers a frozen registration of the source at `path` by one authorized
+/// TestPlan case. Its identity is `suite`, the D123 SuiteId of the plan's leaf;
+/// `corpus`, the D126 CorpusId; `caseId`, the plan's CaseSpec identity; and
+/// `authority`, the D133 project identity of the case's CaseAuthority
+/// descriptor, or `null` when the case carries none.
+registration: (path, suite, corpus, caseId, authority) => {
+    (authority === null).ifFalse(() => {
+        requireText(authority)
+    })
+    identity: {
+        suite: requireText(suite)
+        corpus: requireText(corpus)
+        caseId: requireText(caseId)
+        authority: authority
+    }
+    identity.freeze()
+
+    record: {
+        path: requireText(path)
+        identity: identity
+    }
+    record.freeze()
+}
+
+// Map keys compose several Strings. Escaping "\" and "|" inside each field
+// keeps the composition injective, so distinct fields never alias one key.
+keyField: (text) => {
+    result: ""
+    index: 0
+    while(index < text.size()) {
+        character: text[index]
+        if(character == "\\") {
+            result = result + "\\\\"
+        }
+        if(character == "|") {
+            result = result + "\\"
+        }
+        result = result + character
+        index = index + 1
+    }
+    result
+}
+
+// keyField never answers a lone "\" before "0", so this marker is distinct
+// from every escaped field.
+absentKey: "\\0"
+
+authorityKey: (authority) => {
+    key: absentKey
+    (authority === null).ifFalse(() => {
+        key = keyField(authority)
+    })
+    key
+}
+
+identityKey: (identity) => {
+    key: absentKey
+    (identity === null).ifFalse(() => {
+        key =
+            keyField(identity.suite) + "|" +
+            keyField(identity.corpus) + "|" +
+            keyField(identity.caseId) + "|" +
+            authorityKey(identity.authority)
+    })
+    key
+}
+
+diagnosticKey: (code, path, identity) => {
+    keyField(code) + "|" + keyField(path) + "|" + identityKey(identity)
+}
+
+// No Standard Library String ordering exists, so diagnostics are ordered by
+// the UTF-8 octets of their keys, as LockDocument orders its fields. Keys are
+// unique, so the order is total.
+textLess: (left, right) => {
+    leftOctets: Encoding.UTF8.encode(left)
+    rightOctets: Encoding.UTF8.encode(right)
+    result: leftOctets.size() < rightOctets.size()
+    decided: false
+    index: 0
+    while((decided == false) && (index < leftOctets.size()) && (index < rightOctets.size())) {
+        leftOctet: leftOctets[index]
+        rightOctet: rightOctets[index]
+        (leftOctet == rightOctet).ifFalse(() => {
+            result = leftOctet < rightOctet
+            decided = true
+        })
+        index = index + 1
+    }
+    result
+}
+
+textSet: (values) => {
+    set: Map()
+    values.each((value) => {
+        set[requireText(value)] = true
+    })
+    set
+}
+
+countAt: (counts, key) => {
+    count: 0
+    if(counts.containsKey(key)) {
+        count = counts[key]
+    }
+    count
+}
+
+diagnostic: (code, path, identity) => {
+    entry: {
+        code: code
+        path: path
+        identity: identity
+    }
+    entry.freeze()
+}
+
+/// Reconciles the four inert inputs and answers a frozen result with
+/// `physicalSourceCount`, `intendedSourceCount` and `exclusionCount`, the
+/// distinct paths of each input; `registrationCount`, the registrations given;
+/// `registeredSourceCount`, the distinct paths they name; and `diagnostics`,
+/// a frozen sorted Array of frozen `{code, path, identity}` entries, where
+/// `identity` is the registration identity involved or `null`.
+///
+/// `physicalSources` and `intendedSources` are Arrays of paths, `exclusions`
+/// an Array of `Array(path, reason)` pairs and `registrations` an Array of
+/// `registration` records. Several registrations may share one source only
+/// when each carries a distinct D133 project authority. Malformed input fails
+/// rather than producing a diagnostic.
+audit: (physicalSources, intendedSources, exclusions, registrations) => {
+    physical: textSet(physicalSources)
+    intended: textSet(intendedSources)
+
+    diagnostics: ArrayAccumulator.create()
+    reported: Map()
+    emit: (code, path, identity) => {
+        key: diagnosticKey(code, path, identity)
+        reported.containsKey(key).ifFalse(() => {
+            reported[key] = true
+            ArrayAccumulator.append(diagnostics, Array(key, diagnostic(code, path, identity)))
+        })
+    }
+
+    registeredPaths: Map()
+    seenRegistrations: Map()
+    identitySources: Map()
+    pathIdentityCounts: Map()
+    pathAuthorityCounts: Map()
+    distinctRegistrations: ArrayAccumulator.create()
+
+    registrations.each((record) => {
+        path: requireText(record.path)
+        identity: record.identity
+        identityText: identityKey(identity)
+        pathText: keyField(path)
+        registrationText: identityText + "|" + pathText
+        repeated: seenRegistrations.containsKey(registrationText)
+
+        if(repeated) {
+            emit(duplicateRegistration, path, identity)
+        }
+        repeated.ifFalse(() => {
+            seenRegistrations[registrationText] = true
+            ArrayAccumulator.append(distinctRegistrations, record)
+
+            known: identitySources.containsKey(identityText)
+            if(known) {
+                emit(authorityMismatch, identitySources[identityText], identity)
+                emit(authorityMismatch, path, identity)
+            }
+            known.ifFalse(() => {
+                identitySources[identityText] = path
+            })
+
+            pathIdentityCounts[path] = countAt(pathIdentityCounts, path) + 1
+            pathAuthorityText: pathText + "|" + authorityKey(identity.authority)
+            pathAuthorityCounts[pathAuthorityText] =
+                countAt(pathAuthorityCounts, pathAuthorityText) + 1
+        })
+
+        registeredPaths[path] = true
+        physical.containsKey(path).ifFalse(() => {
+            emit(danglingRegistration, path, identity)
+        })
+        if(physical.containsKey(path) && (intended.containsKey(path) == false)) {
+            emit(authorityMismatch, path, identity)
+        }
+    })
+
+    // A source shared by several distinct registrations is accepted only when
+    // every one carries its own D133 project authority.
+    ArrayAccumulator.finish(distinctRegistrations).each((record) => {
+        path: record.path
+        if(pathIdentityCounts[path] > 1) {
+            authority: record.identity.authority
+            shared: authority === null
+            shared.ifFalse(() => {
+                shared = pathAuthorityCounts[keyField(path) + "|" + authorityKey(authority)] > 1
+            })
+            if(shared) {
+                emit(authorityMismatch, path, record.identity)
+            }
+        }
+    })
+
+    excluded: Map()
+    exclusions.each((pair) => {
+        (pair.size() == 2).ifFalse(() => {
+            fail()
+        })
+        (path, reason): pair
+        requireText(path)
+        String.recognizes(reason).ifFalse(() => {
+            fail()
+        })
+
+        valid: (reason.size() > 0) && physical.containsKey(path)
+        if(excluded.containsKey(path)) {
+            valid = false
+        }
+        if(registeredPaths.containsKey(path) || intended.containsKey(path)) {
+            valid = false
+        }
+        excluded[path] = true
+        valid.ifFalse(() => {
+            emit(invalidExclusion, path, null)
+        })
+    })
+
+    intendedSources.each((path) => {
+        if(physical.containsKey(path)) {
+            registeredPaths.containsKey(path).ifFalse(() => {
+                emit(missingRegistration, path, null)
+            })
+        }
+        physical.containsKey(path).ifFalse(() => {
+            emit(authorityMismatch, path, null)
+        })
+    })
+
+    physicalSources.each((path) => {
+        classified:
+            registeredPaths.containsKey(path) ||
+            intended.containsKey(path) ||
+            excluded.containsKey(path)
+        classified.ifFalse(() => {
+            emit(unclassifiedSource, path, null)
+        })
+    })
+
+    ordered: Arrays.sort(
+        ArrayAccumulator.finish(diagnostics),
+        (left, right) => textLess(left[0], right[0])
+    )
+    sorted: Arrays.map(ordered, (entry) => entry[1])
+    sorted.freeze()
+
+    result: {
+        physicalSourceCount: physical.size()
+        intendedSourceCount: intended.size()
+        exclusionCount: excluded.size()
+        registrationCount: registrations.size()
+        registeredSourceCount: registeredPaths.size()
+        diagnostics: sorted
+    }
+    result.freeze()
+}
+
+diagnosticLine: (entry) => {
+    line: entry.code + " " + entry.path
+    identity: entry.identity
+    (identity === null).ifFalse(() => {
+        line = line +
+            " suite=" + identity.suite +
+            " corpus=" + identity.corpus +
+            " case=" + identity.caseId
+        (identity.authority === null).ifFalse(() => {
+            line = line + " authority=" + identity.authority
+        })
+    })
+    line
+}
+
+/// Answers the diagnostics of an `audit` result as text, one line per
+/// diagnostic in result order, each terminated by "\n": the code, the path
+/// and, when present, the registration identity. A result without
+/// diagnostics answers "".
+report: (result) => {
+    text: ""
+    result.diagnostics.each((entry) => {
+        text = text + diagnosticLine(entry) + "\n"
+    })
+    text
+}
